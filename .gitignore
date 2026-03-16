@@ -9,6 +9,7 @@ yarn-error.log*
 .vercel/
 .netlify/
 .claude/
+public/intro.mp4
 # Logs
 logs
 *.log

@@ -373,7 +373,7 @@ export default function InviteScreening() {
             </p>
             <div className="aspect-video rounded-xl overflow-hidden bg-black/60 flex items-center justify-center text-text-muted text-sm">
               <video
-                src="/intro.mp4"
+                src="https://drive.google.com/uc?export=download&id=1kAqIDnv142Nv7PSiS1usV7lfbBFsLk35"
                 className="w-full h-full object-cover"
                 controls
                 playsInline
