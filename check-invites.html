@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Check Invite Allocation</title>
+</head>
+<body>
+  <h1>Checking Invite Allocations...</h1>
+  <pre id="output">Loading...</pre>
+
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
+
+    const supabase = createClient(
+      'https://wmtjgpxhjtbocsmutqqc.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndtdGpncHhoanRib2NzbXV0cXFjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTg5NTkxNywiZXhwIjoyMDg3NDcxOTE3fQ.A0o5vJboUAT4ZjDvLY1PXv2XwukrSoOqUN9XQknd2u0'
+    )
+
+    const { data, error } = await supabase
+      .from('users')
+      .select('email, name, role, invite_allocation')
+
+    if (error) {
+      document.getElementById('output').textContent = 'Error: ' + error.message
+    } else {
+      document.getElementById('output').textContent = JSON.stringify(data, null, 2)
+    }
+  </script>
+</body>
+</html>

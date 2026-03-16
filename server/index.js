@@ -1,0 +1,631 @@
+import 'dotenv/config'
+import express from 'express'
+import cors from 'cors'
+import Mux from '@mux/mux-node'
+import { Resend } from 'resend'
+import { createClient } from '@supabase/supabase-js'
+import crypto from 'crypto'
+
+const app = express()
+app.use(cors())
+app.use(express.json())
+
+// Mux client
+const muxTokenId = process.env.MUX_TOKEN_ID
+const muxTokenSecret = process.env.MUX_TOKEN_SECRET
+if (!muxTokenId || !muxTokenSecret) {
+  console.warn('Missing MUX_TOKEN_ID or MUX_TOKEN_SECRET in environment.')
+}
+const mux = new Mux({
+  tokenId: muxTokenId,
+  tokenSecret: muxTokenSecret,
+})
+
+// Resend client
+const resendApiKey = process.env.RESEND_API_KEY
+if (!resendApiKey) {
+  console.warn('Missing RESEND_API_KEY in environment.')
+}
+const resend = new Resend(resendApiKey)
+
+// Supabase admin client
+const supabaseUrl = process.env.SUPABASE_URL
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
+if (!supabaseUrl || !supabaseKey) {
+  console.warn('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY/SUPABASE_ANON_KEY in environment.')
+}
+
+function getJwtRole(jwt) {
+  try {
+    const payload = jwt.split('.')[1]
+    const decoded = Buffer.from(payload, 'base64').toString('utf8')
+    return JSON.parse(decoded).role
+  } catch {
+    return null
+  }
+}
+
+const supabaseKeyRole = getJwtRole(supabaseKey)
+if (supabaseKeyRole !== 'service_role') {
+  console.warn('Supabase key is not service_role. Current role:', supabaseKeyRole)
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey)
+
+// App base URL
+const APP_URL = process.env.APP_URL || 'http://localhost:5173'
+
+// ============ MUX ROUTES ============
+
+// Create a Mux direct upload URL
+app.post('/api/mux/upload', async (req, res) => {
+  try {
+    const upload = await mux.video.uploads.create({
+      cors_origin: APP_URL,
+      new_asset_settings: {
+        playback_policy: ['public'],
+        encoding_tier: 'baseline',
+      },
+    })
+
+    // Store the asset creation info — we'll get the asset ID from the upload later
+    res.json({
+      uploadUrl: upload.url,
+      uploadId: upload.id,
+      assetId: upload.asset_id || upload.id, // asset may not exist yet
+    })
+  } catch (err) {
+    console.error('Mux upload error:', err)
+    res.status(500).json({ error: 'Failed to create upload URL' })
+  }
+})
+
+// Get Mux asset status
+app.get('/api/mux/asset/:id', async (req, res) => {
+  try {
+    // First try to get it as an upload (since we have upload IDs)
+    let assetId = req.params.id
+
+    try {
+      const upload = await mux.video.uploads.retrieve(assetId)
+      if (upload.asset_id) {
+        assetId = upload.asset_id
+      }
+    } catch {
+      // It's already an asset ID, continue
+    }
+
+    const asset = await mux.video.assets.retrieve(assetId)
+    const playbackId = asset.playback_ids?.[0]?.id || null
+
+    res.json({
+      status: asset.status,
+      playbackId,
+      assetId: asset.id,
+    })
+  } catch (err) {
+    console.error('Mux asset status error:', err)
+    res.status(500).json({ error: 'Failed to get asset status' })
+  }
+})
+
+// Get Mux playback info
+app.get('/api/mux/playback/:playbackId', async (req, res) => {
+  try {
+    // For public playback, return the stream URL
+    res.json({
+      playbackUrl: `https://stream.mux.com/${req.params.playbackId}.m3u8`,
+    })
+  } catch (err) {
+    console.error('Mux playback error:', err)
+    res.status(500).json({ error: 'Failed to get playback URL' })
+  }
+})
+
+// ============ INVITE ROUTES ============
+
+function generateToken() {
+  return crypto.randomBytes(4).toString('hex') // 8 char hex string
+}
+
+function resolveBaseUrl(appUrl, origin) {
+  const normalizedAppUrl = typeof appUrl === 'string' ? appUrl.trim() : ''
+  const normalizedOrigin = typeof origin === 'string' ? origin.trim() : ''
+  const isLocalUrl = (value) => /localhost|127\.0\.0\.1/i.test(value)
+  if (normalizedAppUrl && !isLocalUrl(normalizedAppUrl)) return normalizedAppUrl
+  if (normalizedOrigin && !isLocalUrl(normalizedOrigin)) return normalizedOrigin
+  return APP_URL
+}
+
+app.post('/api/invites/send', async (req, res) => {
+  try {
+    const {
+      filmId,
+      recipientEmail,
+      recipientName,
+      senderName,
+      senderId,
+      senderEmail,
+      personalNote,
+      appUrl,
+    } = req.body
+
+    if (!filmId || !recipientEmail) {
+      return res.status(400).json({ error: 'Film ID and recipient email are required' })
+    }
+
+    // Check sender's invite allocation if they're a registered user
+    if (senderId) {
+      const { data: sender, error: senderError } = await supabase
+        .from('users')
+        .select('invite_allocation, role')
+        .eq('id', senderId)
+        .single()
+
+      if (senderError) {
+        console.error('Invite allocation lookup error:', senderError.message || senderError)
+        return res.status(500).json({ error: 'Unable to verify invites' })
+      }
+
+      if (!sender) {
+        return res.status(404).json({ error: 'Sender not found' })
+      }
+
+      if (sender.role !== 'creator' && sender.invite_allocation <= 0) {
+        console.warn('No invites remaining for sender:', senderId, sender)
+        return res.status(400).json({
+          error: 'No invites remaining',
+          details: { senderId, invite_allocation: sender.invite_allocation },
+        })
+      }
+
+      if (sender.role !== 'creator') {
+        // Decrement invite allocation for viewers only
+        const { error: decrementError } = await supabase
+          .from('users')
+          .update({ invite_allocation: sender.invite_allocation - 1 })
+          .eq('id', senderId)
+
+        if (decrementError) {
+          console.error('Invite allocation decrement error:', decrementError.message || decrementError)
+          return res.status(500).json({ error: 'Unable to update invites' })
+        }
+      }
+    }
+
+    // Get the film details
+    const { data: film } = await supabase
+      .from('films')
+      .select('title, description, thumbnail_url')
+      .eq('id', filmId)
+      .single()
+
+    if (!film) {
+      return res.status(404).json({ error: 'Film not found' })
+    }
+
+    // Create invite
+    const token = generateToken()
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + 7)
+
+    const { data: invite, error: inviteError } = await supabase
+      .from('invites')
+      .insert({
+        film_id: filmId,
+        sender_id: senderId || null,
+        sender_name: senderName || null,
+        sender_email: senderEmail || null,
+        recipient_email: recipientEmail,
+        recipient_name: recipientName || null,
+        personal_note: personalNote || null,
+        token,
+        status: 'pending',
+        expires_at: expiresAt.toISOString(),
+      })
+      .select()
+      .single()
+
+    if (inviteError) throw inviteError
+
+    // Count invites for film to include in email
+    const { count: inviteCount, error: inviteCountError } = await supabase
+      .from('invites')
+      .select('*', { count: 'exact', head: true })
+      .eq('film_id', filmId)
+
+    if (inviteCountError) {
+      console.error('Invite count error:', inviteCountError.message || inviteCountError)
+    }
+
+    const inviteOrdinal = inviteCount || null
+
+    // Send email via Resend
+    const baseUrl = resolveBaseUrl(appUrl, req.get('origin'))
+    const inviteUrl = `${baseUrl}/i/${token}`
+    const displaySender = senderName || 'Someone'
+    const displaySenderEmail = senderEmail || null
+    const recipientFirstName = recipientName ? recipientName.trim().split(/\s+/)[0] : null
+
+    try {
+      const fromEmail = process.env.RESEND_FROM_EMAIL || 'Deepcast <onboarding@resend.dev>'
+      const emailResult = await resend.emails.send({
+        from: fromEmail,
+        to: recipientEmail,
+        subject: `${displaySender} has shared a film with you.`,
+        html: buildInviteEmailHtml(
+          displaySender,
+          recipientFirstName,
+          film.title,
+          film.description,
+          film.thumbnail_url,
+          inviteUrl,
+          displaySenderEmail,
+          inviteOrdinal,
+          personalNote || null
+        ),
+      })
+      console.log('Email sent:', JSON.stringify(emailResult))
+    } catch (emailErr) {
+      const message = emailErr?.message || 'Email send failed'
+      console.error('Email send error:', message, emailErr)
+      return res.status(502).json({ error: 'Email failed to send', details: message })
+    }
+
+    console.log(`Invite created: token=${token}, recipient=${recipientEmail}, inviteUrl=${inviteUrl}`)
+
+    res.json({ success: true, token })
+  } catch (err) {
+    console.error('Invite send error:', err)
+    res.status(500).json({ error: 'Failed to send invite' })
+  }
+})
+
+app.post('/api/invites/resend-last', async (req, res) => {
+  try {
+    const { filmId, senderId, appUrl } = req.body
+
+    if (!filmId || !senderId) {
+      return res.status(400).json({ error: 'Film ID and sender ID are required' })
+    }
+
+    const { data: invite, error: inviteError } = await supabase
+      .from('invites')
+      .select('*')
+      .eq('film_id', filmId)
+      .eq('sender_id', senderId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (inviteError || !invite) {
+      return res.status(404).json({ error: 'No invite found to resend' })
+    }
+
+    const { data: film, error: filmError } = await supabase
+      .from('films')
+      .select('title, description, thumbnail_url')
+      .eq('id', filmId)
+      .single()
+
+    if (filmError || !film) {
+      return res.status(404).json({ error: 'Film not found' })
+    }
+
+    const { count: inviteCount, error: inviteCountError } = await supabase
+      .from('invites')
+      .select('*', { count: 'exact', head: true })
+      .eq('film_id', filmId)
+
+    if (inviteCountError) {
+      console.error('Invite count error:', inviteCountError.message || inviteCountError)
+    }
+
+    const inviteOrdinal = inviteCount || null
+    const baseUrl = resolveBaseUrl(appUrl, req.get('origin'))
+    const inviteUrl = `${baseUrl}/i/${invite.token}`
+    const displaySender = invite.sender_name || 'Someone'
+    const displaySenderEmail = invite.sender_email || null
+    const recipientFirstName = invite.recipient_name
+      ? invite.recipient_name.trim().split(/\s+/)[0]
+      : null
+
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'Deepcast <hello@deepcast.com>'
+    await resend.emails.send({
+      from: fromEmail,
+      to: invite.recipient_email,
+      subject: `${displaySender} has shared a film with you.`,
+      html: buildInviteEmailHtml(
+        displaySender,
+        recipientFirstName,
+        film.title,
+        film.description,
+        film.thumbnail_url,
+        inviteUrl,
+        displaySenderEmail,
+        inviteOrdinal,
+        invite.personal_note || null
+      ),
+    })
+
+    res.json({ success: true, inviteId: invite.id })
+  } catch (err) {
+    console.error('Invite resend error:', err)
+    res.status(500).json({ error: 'Failed to resend invite' })
+  }
+})
+
+app.post('/api/invites/resend', async (req, res) => {
+  try {
+    const { inviteId, appUrl } = req.body
+
+    if (!inviteId) {
+      return res.status(400).json({ error: 'Invite ID is required' })
+    }
+
+    const { data: invite, error: inviteError } = await supabase
+      .from('invites')
+      .select('*')
+      .eq('id', inviteId)
+      .single()
+
+    if (inviteError || !invite) {
+      return res.status(404).json({ error: 'Invite not found' })
+    }
+
+    const { data: film, error: filmError } = await supabase
+      .from('films')
+      .select('title, description, thumbnail_url')
+      .eq('id', invite.film_id)
+      .single()
+
+    if (filmError || !film) {
+      return res.status(404).json({ error: 'Film not found' })
+    }
+
+    const { count: inviteCount, error: inviteCountError } = await supabase
+      .from('invites')
+      .select('*', { count: 'exact', head: true })
+      .eq('film_id', invite.film_id)
+
+    if (inviteCountError) {
+      console.error('Invite count error:', inviteCountError.message || inviteCountError)
+    }
+
+    const inviteOrdinal = inviteCount || null
+    const baseUrl = resolveBaseUrl(appUrl, req.get('origin'))
+    const inviteUrl = `${baseUrl}/i/${invite.token}`
+    const displaySender = invite.sender_name || 'Someone'
+    const displaySenderEmail = invite.sender_email || null
+    const recipientFirstName = invite.recipient_name
+      ? invite.recipient_name.trim().split(/\s+/)[0]
+      : null
+
+      const fromEmail = process.env.RESEND_FROM_EMAIL || 'Deepcast <hello@deepcast.com>'
+    await resend.emails.send({
+      from: fromEmail,
+      to: invite.recipient_email,
+      subject: `${displaySender} has shared a film with you.`,
+      html: buildInviteEmailHtml(
+        displaySender,
+        recipientFirstName,
+        film.title,
+        film.description,
+        film.thumbnail_url,
+        inviteUrl,
+        displaySenderEmail,
+        inviteOrdinal,
+        invite.personal_note || null
+      ),
+    })
+
+    res.json({ success: true, inviteId: invite.id })
+  } catch (err) {
+    console.error('Invite resend error:', err)
+    res.status(500).json({ error: 'Failed to resend invite' })
+  }
+})
+
+app.get('/api/invites/validate/:token', async (req, res) => {
+  try {
+    const { token } = req.params
+    if (!token) return res.status(400).json({ error: 'Token is required' })
+
+    const { data: inv, error } = await supabase
+      .from('invites')
+      .select('*, films(*)')
+      .eq('token', token)
+      .single()
+
+    if (error || !inv) {
+      return res.status(404).json({ error: 'Invite not found' })
+    }
+
+    if (new Date(inv.expires_at) < new Date()) {
+      return res.status(410).json({ error: 'Invite expired' })
+    }
+
+    if (inv.status === 'pending') {
+      await supabase
+        .from('invites')
+        .update({ status: 'opened' })
+        .eq('id', inv.id)
+    }
+
+    const { data: session, error: sessionError } = await supabase
+      .from('watch_sessions')
+      .insert({
+        film_id: inv.film_id,
+        invite_token: token,
+      })
+      .select()
+      .single()
+
+    if (sessionError) {
+      console.error('Watch session create error:', sessionError.message || sessionError)
+    }
+
+    return res.json({ invite: inv, film: inv.films, sessionId: session?.id || null })
+  } catch (err) {
+    console.error('Invite validate error:', err)
+    return res.status(500).json({ error: 'Failed to validate invite' })
+  }
+})
+
+// ============ EMAIL TEMPLATE ============
+
+function buildInviteEmailHtml(
+  senderName,
+  recipientName,
+  filmTitle,
+  filmDescription,
+  filmThumbnailUrl,
+  inviteUrl,
+  senderEmail,
+  inviteOrdinal,
+  personalNote
+) {
+  const senderFirstName = senderName ? senderName.trim().split(/\s+/)[0] : 'Someone'
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; background-color: #0a0a0a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0a0a0a; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 480px;">
+          <!-- Logo -->
+          <tr>
+            <td align="center" style="padding-bottom: 40px;">
+              <span style="color: #c8a96e; font-size: 12px; letter-spacing: 4px; text-transform: uppercase;">DEEPCAST</span>
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr>
+            <td align="center" style="padding-bottom: 40px;">
+              <div style="width: 40px; height: 1px; background-color: #2a2a2a;"></div>
+            </td>
+          </tr>
+
+          ${recipientName ? `
+          <tr>
+            <td align="center" style="padding-bottom: 10px;">
+              <p style="margin: 0; color: #c8a96e; font-size: 14px;">
+                Hi ${recipientName},
+              </p>
+            </td>
+          </tr>
+          ` : ''}
+
+          <tr>
+            <td align="center" style="padding-bottom: 16px;">
+              <p style="margin: 0; color: #f5f5f0; font-size: 14px; line-height: 1.6; max-width: 360px;">
+                ${senderFirstName} thought of you when they watched this film.${inviteOrdinal ? ` You are the ${inviteOrdinal}th person to be invited to see the exclusive screening of this film.` : ''}
+              </p>
+            </td>
+          </tr>
+
+          ${personalNote ? `
+          <tr>
+            <td align="center" style="padding-bottom: 16px;">
+              <p style="margin: 0; color: #8a8a85; font-size: 12px;">
+                Here is what they had to say,
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding-bottom: 20px;">
+              <p style="margin: 0; color: #f5f5f0; font-size: 14px; line-height: 1.6; max-width: 360px;">
+                &quot;${personalNote}&quot;
+              </p>
+            </td>
+          </tr>
+          ` : ''}
+
+          <tr>
+            <td align="center" style="padding-bottom: 24px;">
+              <p style="margin: 0; color: #c8a96e; font-size: 14px;">
+                - ${senderFirstName}
+              </p>
+            </td>
+          </tr>
+
+          <!-- Film title -->
+          <tr>
+            <td align="center" style="padding-bottom: 8px;">
+              <h2 style="margin: 0; color: #c8a96e; font-size: 18px; font-weight: 400;">
+                ${filmTitle}
+              </h2>
+            </td>
+          </tr>
+
+          ${filmThumbnailUrl ? `
+          <tr>
+            <td align="center" style="padding-bottom: 16px;">
+              <img src="${filmThumbnailUrl}" alt="${filmTitle}" style="width: 100%; max-width: 360px; border-radius: 10px; display: block;" />
+            </td>
+          </tr>
+          ` : ''}
+
+          ${filmDescription ? `
+          <!-- Description -->
+          <tr>
+            <td align="center" style="padding-bottom: 40px;">
+              <p style="margin: 0; color: #8a8a85; font-size: 14px; line-height: 1.6; max-width: 360px;">
+                ${filmDescription}
+              </p>
+            </td>
+          </tr>
+          ` : '<tr><td style="padding-bottom: 40px;"></td></tr>'}
+
+          <!-- CTA Button -->
+          <tr>
+            <td align="center" style="padding-bottom: 48px;">
+              <a href="${inviteUrl}" style="display: inline-block; background-color: #c8a96e; color: #0a0a0a; text-decoration: none; font-size: 14px; font-weight: 500; padding: 14px 32px; border-radius: 8px;">
+                Accept your invitation
+              </a>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding-bottom: 32px;">
+              <p style="margin: 0; color: #8a8a85; font-size: 12px; line-height: 1.6; max-width: 360px;">
+                If the button doesn&apos;t work, copy and paste this link:<br />
+                <a href="${inviteUrl}" style="color: #c8a96e; text-decoration: none;">${inviteUrl}</a>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr>
+            <td align="center" style="padding-bottom: 24px;">
+              <div style="width: 40px; height: 1px; background-color: #2a2a2a;"></div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td align="center">
+              <p style="margin: 0; color: #5a5a55; font-size: 12px; line-height: 1.6;">
+                You were invited by ${senderName}. This film is not publicly available. It travels only through people.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+}
+
+// ============ START SERVER ============
+
+const PORT = process.env.PORT || 3001
+app.listen(PORT, () => {
+  console.log(`Deepcast API server running on port ${PORT}`)
+})
