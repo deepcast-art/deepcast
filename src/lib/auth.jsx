@@ -36,28 +36,43 @@ export function AuthProvider({ children }) {
   }
 
   async function createProfile(userId, email, name, role, firstName, lastName) {
-    const newProfile = {
+    const baseProfile = {
       id: userId,
       email,
       name,
-      first_name: firstName || null,
-      last_name: lastName || null,
       role,
       invite_allocation: role === 'creator' ? 0 : 5,
     }
 
-    const { data, error } = await supabase
+    const fullProfile = {
+      ...baseProfile,
+      first_name: firstName || null,
+      last_name: lastName || null,
+    }
+
+    let { data, error } = await supabase
       .from('users')
-      .upsert(newProfile, { onConflict: 'id' })
+      .upsert(fullProfile, { onConflict: 'id' })
       .select()
       .single()
+
+    if (error) {
+      console.warn('Profile upsert with name fields failed, retrying without:', error.message)
+      const retry = await supabase
+        .from('users')
+        .upsert(baseProfile, { onConflict: 'id' })
+        .select()
+        .single()
+      data = retry.data
+      error = retry.error
+    }
 
     if (error) {
       console.error('Profile upsert failed:', error.message)
       throw error
     }
 
-    const saved = data || newProfile
+    const saved = data || baseProfile
     setProfile(saved)
     setProfileLoaded(true)
     return saved
@@ -198,19 +213,15 @@ export function AuthProvider({ children }) {
       currentProfile = await fetchProfile(data.user.id)
 
       if (!currentProfile) {
-        try {
-          const fallbackName = email.split('@')[0]
-          currentProfile = await createProfile(
-            data.user.id,
-            email,
-            fallbackName,
-            'viewer',
-            fallbackName,
-            ''
-          )
-        } catch (e) {
-          console.error('Auto-create profile on login failed:', e.message)
-        }
+        const fallbackName = email.split('@')[0]
+        currentProfile = await createProfile(
+          data.user.id,
+          email,
+          fallbackName,
+          'viewer',
+          fallbackName,
+          ''
+        )
       }
     }
 

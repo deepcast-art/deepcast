@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 
 export default function Login() {
@@ -8,7 +8,6 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const navigate = useNavigate()
   const { signIn } = useAuth()
 
   useEffect(() => {
@@ -30,10 +29,9 @@ export default function Login() {
       const result = await signIn(email, password)
 
       const role = result?.profile?.role
-      navigate(role === 'creator' ? '/dashboard' : '/profile')
+      window.location.href = role === 'creator' ? '/dashboard' : '/profile'
     } catch (err) {
-      setError(err.message)
-    } finally {
+      setError(err.message || 'Sign in failed. Please try again.')
       setLoading(false)
     }
   }

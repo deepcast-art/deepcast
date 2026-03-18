@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 
 export default function Signup() {
@@ -11,7 +11,6 @@ export default function Signup() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const navigate = useNavigate()
   const { signUp } = useAuth()
 
   const handleSubmit = async (e) => {
@@ -23,10 +22,9 @@ export default function Signup() {
       const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ')
       const result = await signUp(email, password, fullName, isCreator ? 'creator' : 'viewer', firstName.trim(), lastName.trim())
       const targetRole = result?.profile?.role || (isCreator ? 'creator' : 'viewer')
-      navigate(targetRole === 'creator' ? '/dashboard' : '/profile')
+      window.location.href = targetRole === 'creator' ? '/dashboard' : '/profile'
     } catch (err) {
       setError(err.message || 'Account creation failed. Please try again.')
-    } finally {
       setLoading(false)
     }
   }
