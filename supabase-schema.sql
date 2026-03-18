@@ -9,6 +9,8 @@ create table if not exists public.users (
   id uuid primary key default uuid_generate_v4(),
   email text unique not null,
   name text not null,
+  first_name text,
+  last_name text,
   role text not null default 'viewer' check (role in ('creator', 'viewer')),
   invite_allocation integer not null default 5,
   created_at timestamp with time zone default now()
