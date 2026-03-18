@@ -1,18 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
-import { supabase } from '../lib/supabase'
 
 export default function Login() {
   const [searchParams] = useSearchParams()
-  const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
-  const { signIn, fetchProfile } = useAuth()
+  const { signIn } = useAuth()
 
   useEffect(() => {
     if (email) return
@@ -31,16 +28,6 @@ export default function Login() {
     try {
       if (email) localStorage.setItem('deepcast:last_email', email)
       const result = await signIn(email, password)
-
-      const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ')
-      if (fullName && result?.user?.id) {
-        supabase
-          .from('users')
-          .update({ name: fullName })
-          .eq('id', result.user.id)
-          .then(() => fetchProfile(result.user.id))
-          .catch(() => {})
-      }
 
       const role = result?.profile?.role
       navigate(role === 'creator' ? '/dashboard' : '/profile')
@@ -80,28 +67,6 @@ export default function Login() {
               {error}
             </div>
           )}
-
-          <div>
-            <label className="block text-xs text-text-muted uppercase tracking-wider mb-2">
-              Name
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                className="w-1/2 bg-bg-card border border-border rounded-lg px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
-                placeholder="First name"
-              />
-              <input
-                type="text"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                className="w-1/2 bg-bg-card border border-border rounded-lg px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
-                placeholder="Last name"
-              />
-            </div>
-          </div>
 
           <div>
             <label className="block text-xs text-text-muted uppercase tracking-wider mb-2">
