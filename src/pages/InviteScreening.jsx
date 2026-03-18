@@ -472,7 +472,7 @@ export default function InviteScreening() {
                     role="img"
                     aria-label="Invite network map"
                   >
-                    <g className="text-border" stroke="currentColor" strokeWidth="1.2">
+                    <g stroke="#7C3AED" strokeWidth="1.4" strokeOpacity="0.6">
                       {networkLayout.edges.map((edge) => {
                         const fromNode = networkLayout.nodes.find((node) => node.id === edge.from)
                         const toNode = networkLayout.nodes.find((node) => node.id === edge.to)
@@ -484,31 +484,46 @@ export default function InviteScreening() {
                             y1={fromNode.y}
                             x2={toNode.x}
                             y2={toNode.y}
-                            stroke="currentColor"
                           />
                         )
                       })}
                     </g>
 
-                    {networkLayout.nodes.map((node) => (
-                      <g key={node.id}>
-                        <circle
-                          cx={node.x}
-                          cy={node.y}
-                          r={node.type === 'film' ? 16 : 11}
-                          className={node.type === 'film' ? 'text-accent' : node.statusClass}
-                          fill="currentColor"
-                        />
-                        <text
-                          x={node.x}
-                          y={node.y - 14}
-                          textAnchor="middle"
-                          className="fill-text text-[10px]"
-                        >
-                          {node.label}
-                        </text>
-                      </g>
-                    ))}
+                    {networkLayout.nodes.map((node) => {
+                      const fillColor =
+                        node.type === 'film'
+                          ? '#F59E0B'
+                          : node.type === 'creator'
+                          ? '#22D3EE'
+                          : node.type === 'recipient'
+                          ? '#F43F5E'
+                          : node.statusClass === 'text-success'
+                          ? '#22C55E'
+                          : node.statusClass === 'text-accent'
+                          ? '#A855F7'
+                          : '#94A3B8'
+                      const radius = node.type === 'film' ? 18 : node.type === 'creator' ? 14 : 11
+                      return (
+                        <g key={node.id}>
+                          <circle
+                            cx={node.x}
+                            cy={node.y}
+                            r={radius}
+                            fill={fillColor}
+                            stroke={node.type === 'recipient' ? '#FDE047' : 'none'}
+                            strokeWidth={node.type === 'recipient' ? 2.5 : 0}
+                          />
+                          <text
+                            x={node.x}
+                            y={node.y - radius - 6}
+                            textAnchor="middle"
+                            className="fill-text text-[10px]"
+                          >
+                            {node.label}
+                          </text>
+                        </g>
+                      )
+                    })}
                   </svg>
                 </div>
               ) : (
