@@ -18,6 +18,10 @@ export default function Dashboard() {
   const resendStatusTimeouts = useRef({})
   const [resendStatusByInvite, setResendStatusByInvite] = useState({})
   const resendInviteTimeouts = useRef({})
+  const [editingFilmId, setEditingFilmId] = useState(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
 
   useEffect(() => {
     if (profile) loadDashboard()
@@ -97,6 +101,34 @@ export default function Dashboard() {
       })
     }
   }, [])
+
+  const startEditing = (film) => {
+    setEditingFilmId(film.id)
+    setEditTitle(film.title)
+    setEditDescription(film.description || '')
+  }
+
+  const cancelEditing = () => {
+    setEditingFilmId(null)
+    setEditTitle('')
+    setEditDescription('')
+  }
+
+  const saveEdit = async (filmId) => {
+    setEditSaving(true)
+    try {
+      await supabase
+        .from('films')
+        .update({ title: editTitle.trim(), description: editDescription.trim() })
+        .eq('id', filmId)
+      setEditingFilmId(null)
+      loadDashboard()
+    } catch (err) {
+      console.error('Film update error:', err)
+    } finally {
+      setEditSaving(false)
+    }
+  }
 
   if (!profile) return null
 
@@ -251,14 +283,56 @@ export default function Dashboard() {
                           className="w-24 h-14 object-cover rounded"
                         />
                       )}
-                      <div>
-                        <h3 className="text-lg font-light">{film.title}</h3>
-                        {film.description && (
-                          <p className="text-text-muted text-xs mt-1 line-clamp-1">
-                            {film.description}
-                          </p>
-                        )}
-                      </div>
+                      {editingFilmId === film.id ? (
+                        <div className="flex-1 space-y-2">
+                          <input
+                            type="text"
+                            value={editTitle}
+                            onChange={(e) => setEditTitle(e.target.value)}
+                            className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+                            placeholder="Film title"
+                          />
+                          <textarea
+                            value={editDescription}
+                            onChange={(e) => setEditDescription(e.target.value)}
+                            rows={2}
+                            className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent transition-colors resize-none"
+                            placeholder="Description"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => saveEdit(film.id)}
+                              disabled={editSaving || !editTitle.trim()}
+                              className="text-accent text-xs uppercase tracking-wider hover:text-accent-hover transition-colors disabled:opacity-50"
+                            >
+                              {editSaving ? 'Saving...' : 'Save'}
+                            </button>
+                            <button
+                              onClick={cancelEditing}
+                              className="text-text-muted text-xs uppercase tracking-wider hover:text-text transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-light">{film.title}</h3>
+                            <button
+                              onClick={() => startEditing(film)}
+                              className="text-text-muted text-[10px] uppercase tracking-wider hover:text-accent transition-colors"
+                            >
+                              Edit
+                            </button>
+                          </div>
+                          {film.description && (
+                            <p className="text-text-muted text-xs mt-1 line-clamp-1">
+                              {film.description}
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-3">
                       <button

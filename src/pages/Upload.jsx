@@ -264,7 +264,7 @@ export default function Upload() {
             />
             {thumbnailPreview ? (
               <div
-                className="relative w-full aspect-video rounded-lg overflow-hidden bg-bg-card cursor-pointer"
+                className="relative w-[100px] h-[100px] rounded-md overflow-hidden bg-bg-card cursor-pointer"
                 onClick={() => thumbInputRef.current?.click()}
               >
                 <img
@@ -273,7 +273,7 @@ export default function Upload() {
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute inset-0 bg-bg/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                  <span className="text-sm">Change thumbnail</span>
+                  <span className="text-[10px]">Change</span>
                 </div>
               </div>
             ) : (
