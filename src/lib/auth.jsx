@@ -36,18 +36,22 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function createProfile(userId, email, name, role) {
+  async function createProfile(userId, email, name, role, firstName = '', lastName = '') {
     const safeName = name && name.trim() ? name.trim() : email.split('@')[0]
+    const safeFirst = firstName && firstName.trim() ? firstName.trim() : safeName.split(' ')[0]
+    const safeLast = lastName && lastName.trim() ? lastName.trim() : safeName.split(' ').slice(1).join(' ') || ''
 
     const profileRow = {
       id: userId,
       email,
       name: safeName,
+      first_name: safeFirst,
+      last_name: safeLast,
       role,
       invite_allocation: role === 'creator' ? 0 : 5,
     }
 
-    console.log('[createProfile] inserting via fetch:', profileRow)
+    console.log('[createProfile] inserting:', profileRow)
 
     const { data: sessionData } = await supabase.auth.getSession()
     const accessToken = sessionData?.session?.access_token
@@ -69,7 +73,7 @@ export function AuthProvider({ children }) {
 
     console.log('[createProfile] fetch status:', res.status)
 
-    if (res.status === 409 || res.status === 409) {
+    if (res.status === 409) {
       console.log('[createProfile] conflict, updating...')
       const updateRes = await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${userId}`, {
         method: 'PATCH',
@@ -79,7 +83,7 @@ export function AuthProvider({ children }) {
           'Authorization': `Bearer ${accessToken || supabaseAnonKey}`,
           'Prefer': 'return=minimal',
         },
-        body: JSON.stringify({ name: safeName, role, invite_allocation: profileRow.invite_allocation }),
+        body: JSON.stringify({ name: safeName, first_name: safeFirst, last_name: safeLast, role, invite_allocation: profileRow.invite_allocation }),
       })
       console.log('[createProfile] update status:', updateRes.status)
     } else if (!res.ok) {
@@ -136,7 +140,7 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  const signUp = async (email, password, name, role = 'viewer') => {
+  const signUp = async (email, password, name, role = 'viewer', firstName = '', lastName = '') => {
     isSigningUp.current = true
     setProfileLoaded(false)
 
@@ -196,7 +200,7 @@ export function AuthProvider({ children }) {
       if (activeUser) {
         await new Promise(resolve => setTimeout(resolve, 300))
         console.log('[signUp] creating profile for:', activeUser.id)
-        const createdProfile = await createProfile(activeUser.id, email, name, role)
+        const createdProfile = await createProfile(activeUser.id, email, name, role, firstName, lastName)
         console.log('[signUp] profile created:', createdProfile?.name)
 
         setUser(activeUser)
@@ -239,11 +243,14 @@ export function AuthProvider({ children }) {
       currentProfile = await fetchProfile(data.user.id)
 
       if (!currentProfile) {
+        const fallback = email.split('@')[0]
         currentProfile = await createProfile(
           data.user.id,
           email,
-          email.split('@')[0],
-          'viewer'
+          fallback,
+          'viewer',
+          fallback,
+          ''
         )
       }
     }

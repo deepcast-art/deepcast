@@ -24,7 +24,7 @@ export default function Signup() {
     try {
       const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ')
       setDebug('Calling signUp...')
-      const result = await signUp(email, password, fullName, isCreator ? 'creator' : 'viewer')
+      const result = await signUp(email, password, fullName, isCreator ? 'creator' : 'viewer', firstName.trim(), lastName.trim())
       setDebug('signUp returned: user=' + (result?.user?.id || 'none') + ' profile=' + (result?.profile?.name || 'none'))
       window.location.href = '/login'
     } catch (err) {
