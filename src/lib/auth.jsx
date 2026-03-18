@@ -17,16 +17,17 @@ export function AuthProvider({ children }) {
         .from('users')
         .select('*')
         .eq('id', userId)
-        .single()
+
+      const row = Array.isArray(data) ? data[0] : data
 
       if (error) {
         console.warn('Profile fetch failed:', error.message)
         setProfile(null)
       } else {
-        setProfile(data)
+        setProfile(row || null)
       }
       setProfileLoaded(true)
-      return data
+      return row || null
     } catch (err) {
       console.error('Profile fetch error:', err)
       setProfile(null)
@@ -46,41 +47,50 @@ export function AuthProvider({ children }) {
       invite_allocation: role === 'creator' ? 0 : 5,
     }
 
-    console.log('[createProfile] inserting:', profileRow)
+    console.log('[createProfile] inserting via fetch:', profileRow)
 
-    const { data, error } = await supabase
-      .from('users')
-      .insert(profileRow)
+    const { data: sessionData } = await supabase.auth.getSession()
+    const accessToken = sessionData?.session?.access_token
+    console.log('[createProfile] access token:', accessToken ? 'present' : 'MISSING')
 
-    console.log('[createProfile] insert result:', { data, error: error?.message })
+    const supabaseUrl = 'https://wmtjgpxhjtbocsmutqqc.supabase.co'
+    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndtdGpncHhoanRib2NzbXV0cXFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4OTU5MTcsImV4cCI6MjA4NzQ3MTkxN30.IeeS2KToh7YPsKcVhFtojcX5fuwjAwEzIt5_RO09tQg'
 
-    if (error && (error.code === '23505' || error.message?.includes('duplicate'))) {
-      console.log('[createProfile] duplicate, updating instead')
-      const { data: updated, error: updateErr } = await supabase
-        .from('users')
-        .update({ name: safeName, role, invite_allocation: profileRow.invite_allocation })
-        .eq('id', userId)
+    const res = await fetch(`${supabaseUrl}/rest/v1/users`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseAnonKey,
+        'Authorization': `Bearer ${accessToken || supabaseAnonKey}`,
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify(profileRow),
+    })
 
-      if (updateErr) {
-        console.error('[createProfile] update failed:', updateErr.message)
-        throw updateErr
-      }
+    console.log('[createProfile] fetch status:', res.status)
 
-      const saved = updated?.[0] || profileRow
-      setProfile(saved)
-      setProfileLoaded(true)
-      return saved
+    if (res.status === 409 || res.status === 409) {
+      console.log('[createProfile] conflict, updating...')
+      const updateRes = await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${userId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${accessToken || supabaseAnonKey}`,
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify({ name: safeName, role, invite_allocation: profileRow.invite_allocation }),
+      })
+      console.log('[createProfile] update status:', updateRes.status)
+    } else if (!res.ok) {
+      const body = await res.text()
+      console.error('[createProfile] insert failed:', res.status, body)
+      throw new Error(`Profile creation failed: ${body}`)
     }
 
-    if (error) {
-      console.error('[createProfile] insert failed:', error.message, error.code)
-      throw error
-    }
-
-    const saved = data?.[0] || profileRow
-    setProfile(saved)
+    setProfile(profileRow)
     setProfileLoaded(true)
-    return saved
+    return profileRow
   }
 
   useEffect(() => {
