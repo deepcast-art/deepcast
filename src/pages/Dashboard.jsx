@@ -336,10 +336,11 @@ export default function Dashboard() {
                     </div>
                     <div className="flex items-center gap-3">
                       <button
+                        type="button"
                         onClick={() => setInviteFilmId(isInviteOpen ? null : film.id)}
-                        className="text-accent text-xs uppercase tracking-wider hover:text-accent-hover transition-colors"
+                        className="text-accent text-xs uppercase tracking-wider hover:text-accent-hover transition-colors cursor-pointer"
                       >
-                        Invite friends
+                        {isInviteOpen ? 'Close' : 'Invite friends'}
                       </button>
                       <button
                         onClick={() => handleResendLastInvite(film.id)}
