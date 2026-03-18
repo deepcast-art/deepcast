@@ -61,7 +61,7 @@ const APP_URL = process.env.APP_URL || 'http://localhost:5173'
 app.post('/api/mux/upload', async (req, res) => {
   try {
     const upload = await mux.video.uploads.create({
-      cors_origin: APP_URL,
+      cors_origin: '*',
       new_asset_settings: {
         playback_policy: ['public'],
         encoding_tier: 'baseline',
