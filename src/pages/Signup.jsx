@@ -13,17 +13,23 @@ export default function Signup() {
   const [loading, setLoading] = useState(false)
   const { signUp } = useAuth()
 
+  const [debug, setDebug] = useState('')
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+    setDebug('')
     setLoading(true)
 
     try {
       const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ')
-      await signUp(email, password, fullName, isCreator ? 'creator' : 'viewer')
+      setDebug('Calling signUp...')
+      const result = await signUp(email, password, fullName, isCreator ? 'creator' : 'viewer')
+      setDebug('signUp returned: user=' + (result?.user?.id || 'none') + ' profile=' + (result?.profile?.name || 'none'))
       window.location.href = '/login'
     } catch (err) {
       setError(err.message || 'Account creation failed. Please try again.')
+      setDebug('Error caught: ' + String(err))
       setLoading(false)
     }
   }
@@ -46,8 +52,13 @@ export default function Signup() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5 animate-fade-in animate-delay-200">
+          {debug && (
+            <div className="text-accent text-xs text-center bg-accent/10 rounded-lg py-2 px-4 break-all">
+              {debug}
+            </div>
+          )}
           {error && (
-            <div className="text-error text-sm text-center bg-error/10 rounded-lg py-2 px-4">
+            <div className="text-error text-sm text-center bg-error/10 rounded-lg py-2 px-4 break-all">
               {error}
             </div>
           )}
