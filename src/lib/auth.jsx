@@ -44,15 +44,21 @@ export function AuthProvider({ children }) {
       invite_allocation: role === 'creator' ? 0 : 5,
     }
 
-    const { error } = await supabase.from('users').insert(newProfile)
+    const { data, error } = await supabase
+      .from('users')
+      .upsert(newProfile, { onConflict: 'id' })
+      .select()
+      .single()
+
     if (error) {
-      console.error('Profile insert failed:', error.message)
+      console.error('Profile upsert failed:', error.message)
       throw error
     }
 
-    setProfile(newProfile)
+    const saved = data || newProfile
+    setProfile(saved)
     setProfileLoaded(true)
-    return newProfile
+    return saved
   }
 
   useEffect(() => {
@@ -105,12 +111,16 @@ export function AuthProvider({ children }) {
     try {
       const { data, error } = await supabase.auth.signUp({ email, password })
 
-      // If user already exists in auth, sign them in and ensure profile exists
-      if (error && error.message?.includes('already registered')) {
+      const alreadyRegistered =
+        error && /already registered|already been registered|already exists/i.test(error.message)
+
+      const fakeUser =
+        !error && data?.user && (!data.user.identities || data.user.identities.length === 0)
+
+      if (alreadyRegistered || fakeUser) {
         isSigningUp.current = false
         const result = await signIn(email, password)
 
-        // If they signed in but profile was auto-created as viewer, update to requested role
         if (result.profile && result.profile.role !== role) {
           await supabase.from('users')
             .update({ role, invite_allocation: role === 'creator' ? 0 : 5 })
@@ -125,9 +135,10 @@ export function AuthProvider({ children }) {
 
       if (error) throw error
 
-      // If no session returned (email confirmation required), try auto sign-in
       let activeUser = data.user
-      if (!data.session && data.user) {
+      let activeSession = data.session
+
+      if (!activeSession && activeUser) {
         await new Promise(resolve => setTimeout(resolve, 500))
 
         const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
@@ -137,24 +148,22 @@ export function AuthProvider({ children }) {
 
         if (signInError) {
           isSigningUp.current = false
-          return { ...data, requiresEmailConfirmation: true }
+          throw new Error('Account created but email confirmation may be required. Please check your inbox and then sign in.')
         }
 
-        activeUser = signInData?.user || data.user
+        activeUser = signInData?.user || activeUser
+        activeSession = signInData?.session
       }
 
-      // Create the profile — this runs in ALL cases where we have a user
       if (activeUser) {
         await createProfile(activeUser.id, email, name, role)
 
-        // Best-effort: link existing invites
         void supabase
           .from('invites')
           .update({ status: 'signed_up' })
           .eq('recipient_email', email)
           .eq('status', 'watched')
 
-        // Best-effort: attach invites sent before signup
         void supabase
           .from('invites')
           .update({ sender_id: activeUser.id, sender_name: name, sender_email: email })
@@ -163,7 +172,7 @@ export function AuthProvider({ children }) {
       }
 
       isSigningUp.current = false
-      return data
+      return { ...data, session: activeSession, user: activeUser, profile }
     } catch (err) {
       isSigningUp.current = false
       throw err

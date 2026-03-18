@@ -21,10 +21,11 @@ export default function Signup() {
 
     try {
       const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ')
-      await signUp(email, password, fullName, isCreator ? 'creator' : 'viewer')
-      navigate(isCreator ? '/dashboard' : '/profile')
+      const result = await signUp(email, password, fullName, isCreator ? 'creator' : 'viewer')
+      const targetRole = result?.profile?.role || (isCreator ? 'creator' : 'viewer')
+      navigate(targetRole === 'creator' ? '/dashboard' : '/profile')
     } catch (err) {
-      setError(err.message)
+      setError(err.message || 'Account creation failed. Please try again.')
     } finally {
       setLoading(false)
     }
