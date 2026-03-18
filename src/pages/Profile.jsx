@@ -9,6 +9,7 @@ export default function Profile() {
   const [watchedFilms, setWatchedFilms] = useState([])
   const [sentInvites, setSentInvites] = useState([])
   const [filmInvitesById, setFilmInvitesById] = useState({})
+  const [creatorNameByFilmId, setCreatorNameByFilmId] = useState({})
   const [loading, setLoading] = useState(true)
   const [selectedFilm, setSelectedFilm] = useState(null)
 
@@ -48,6 +49,7 @@ export default function Profile() {
     setWatchedFilms(uniqueFilms)
 
     const watchedFilmIds = uniqueFilms.map((film) => film.id)
+    const creatorIds = uniqueFilms.map((film) => film.creator_id).filter(Boolean)
     if (watchedFilmIds.length > 0) {
       const { data: filmInvites } = await supabase
         .from('invites')
@@ -63,6 +65,26 @@ export default function Profile() {
       setFilmInvitesById(grouped)
     } else {
       setFilmInvitesById({})
+    }
+
+    if (creatorIds.length > 0) {
+      const { data: creators } = await supabase
+        .from('users')
+        .select('id, name')
+        .in('id', creatorIds)
+      const creatorMap = (creators || []).reduce((acc, creator) => {
+        acc[creator.id] = creator.name
+        return acc
+      }, {})
+      const filmCreatorMap = uniqueFilms.reduce((acc, film) => {
+        if (film.creator_id && creatorMap[film.creator_id]) {
+          acc[film.id] = creatorMap[film.creator_id]
+        }
+        return acc
+      }, {})
+      setCreatorNameByFilmId(filmCreatorMap)
+    } else {
+      setCreatorNameByFilmId({})
     }
 
     // Get sent invites
@@ -91,9 +113,10 @@ export default function Profile() {
     signed_up: 'text-success',
   }
 
-  const buildNetworkLayout = (invites, filmTitle) => {
+  const buildNetworkLayout = (invites, filmTitle, creatorName) => {
     if (!invites || invites.length === 0) return null
     const rootId = 'film-root'
+    const creatorId = 'creator-root'
     const nodes = new Map()
     const edges = []
     const statusByRecipient = new Map()
@@ -113,6 +136,10 @@ export default function Profile() {
     }
 
     ensureNode(rootId, filmTitle || 'Film', 'film')
+    if (creatorName) {
+      ensureNode(creatorId, toFirstName(creatorName, 'Creator'), 'creator')
+      edges.push({ from: rootId, to: creatorId })
+    }
 
     invites.forEach((invite) => {
       const senderKey =
@@ -130,7 +157,7 @@ export default function Profile() {
       )
 
       ensureNode(senderKey, senderLabel, 'person')
-      ensureNode(recipientKey, recipientLabel, 'person')
+      ensureNode(recipientKey, recipientLabel, 'recipient')
       edges.push({ from: senderKey, to: recipientKey })
       statusByRecipient.set(recipientKey, invite.status)
     })
@@ -271,7 +298,11 @@ export default function Profile() {
                         {filmInvitesById[film.id]?.length ? (
                           <div className="mt-4 rounded-2xl border border-border bg-bg/60 p-3">
                             {(() => {
-                              const layout = buildNetworkLayout(filmInvitesById[film.id], film.title)
+                              const layout = buildNetworkLayout(
+                                filmInvitesById[film.id],
+                                film.title,
+                                creatorNameByFilmId[film.id]
+                              )
                               if (!layout) return null
                               return (
                                 <svg
@@ -280,7 +311,7 @@ export default function Profile() {
                                   role="img"
                                   aria-label="Invite network map"
                                 >
-                                  <g className="text-border" stroke="currentColor" strokeWidth="1.2">
+                                  <g stroke="#7C3AED" strokeWidth="1.4" strokeOpacity="0.6">
                                     {layout.edges.map((edge) => {
                                       const fromNode = layout.nodes.find((node) => node.id === edge.from)
                                       const toNode = layout.nodes.find((node) => node.id === edge.to)
@@ -292,31 +323,46 @@ export default function Profile() {
                                           y1={fromNode.y}
                                           x2={toNode.x}
                                           y2={toNode.y}
-                                          stroke="currentColor"
                                         />
                                       )
                                     })}
                                   </g>
 
-                                  {layout.nodes.map((node) => (
-                                    <g key={node.id}>
-                                      <circle
-                                        cx={node.x}
-                                        cy={node.y}
-                                        r={node.type === 'film' ? 14 : 9}
-                                        className={node.type === 'film' ? 'text-accent' : node.statusClass}
-                                        fill="currentColor"
-                                      />
-                                      <text
-                                        x={node.x}
-                                        y={node.y - 12}
-                                        textAnchor="middle"
-                                        className="fill-text text-[9px]"
-                                      >
-                                        {node.label}
-                                      </text>
-                                    </g>
-                                  ))}
+                                  {layout.nodes.map((node) => {
+                                    const fillColor =
+                                      node.type === 'film'
+                                        ? '#F59E0B'
+                                        : node.type === 'creator'
+                                        ? '#22D3EE'
+                                        : node.type === 'recipient'
+                                        ? '#F43F5E'
+                                        : node.statusClass === 'text-success'
+                                        ? '#22C55E'
+                                        : node.statusClass === 'text-accent'
+                                        ? '#A855F7'
+                                        : '#94A3B8'
+                                    const radius = node.type === 'film' ? 16 : node.type === 'creator' ? 12 : 9
+                                    return (
+                                      <g key={node.id}>
+                                        <circle
+                                          cx={node.x}
+                                          cy={node.y}
+                                          r={radius}
+                                          fill={fillColor}
+                                          stroke={node.type === 'recipient' ? '#FDE047' : 'none'}
+                                          strokeWidth={node.type === 'recipient' ? 2 : 0}
+                                        />
+                                        <text
+                                          x={node.x}
+                                          y={node.y - radius - 6}
+                                          textAnchor="middle"
+                                          className="fill-text text-[9px]"
+                                        >
+                                          {node.label}
+                                        </text>
+                                      </g>
+                                    )
+                                  })}
                                 </svg>
                               )
                             })()}

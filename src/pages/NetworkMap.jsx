@@ -98,6 +98,14 @@ export default function NetworkMap() {
       }
     }
 
+    const toFirstName = (value, fallback = 'Invitee') => {
+      if (!value) return fallback
+      const trimmed = value.trim()
+      if (!trimmed) return fallback
+      const base = trimmed.includes('@') ? trimmed.split('@')[0] : trimmed
+      return base.split(/\s+/)[0] || fallback
+    }
+
     ensureNode(rootId, selectedFilmTitle || 'Film', 'film')
 
     filteredInvites.forEach((invite) => {
@@ -105,17 +113,18 @@ export default function NetworkMap() {
         invite.sender_email ||
         (invite.sender_id ? `member:${invite.sender_id}` : '') ||
         (invite.sender_name ? `name:${invite.sender_name}` : 'Unknown sender')
-      const senderLabel =
-        invite.sender_name ||
-        invite.sender_email ||
-        (invite.sender_id ? 'Member' : 'Unknown')
+      const senderLabel = toFirstName(
+        invite.sender_name || invite.sender_email || (invite.sender_id ? 'Member' : 'Unknown'),
+        'Member'
+      )
       const recipientKey = invite.recipient_email || `recipient:${invite.id}`
-      const recipientLabel =
-        invite.recipient_name ||
-        (invite.recipient_email ? invite.recipient_email.split('@')[0] : 'Invitee')
+      const recipientLabel = toFirstName(
+        invite.recipient_name || invite.recipient_email,
+        'Invitee'
+      )
 
       ensureNode(senderKey, senderLabel, 'person')
-      ensureNode(recipientKey, recipientLabel, 'person')
+      ensureNode(recipientKey, recipientLabel, 'recipient')
       edges.push({ from: senderKey, to: recipientKey })
       statusByRecipient.set(recipientKey, invite.status)
     })
@@ -311,7 +320,7 @@ export default function NetworkMap() {
                   role="img"
                   aria-label="Invite network map"
                 >
-                  <g className="text-border" stroke="currentColor" strokeWidth="1.2">
+                  <g stroke="#7C3AED" strokeWidth="1.4" strokeOpacity="0.6">
                     {mapLayout.edges.map((edge) => {
                       const fromNode = mapLayout.nodes.find((node) => node.id === edge.from)
                       const toNode = mapLayout.nodes.find((node) => node.id === edge.to)
@@ -323,31 +332,44 @@ export default function NetworkMap() {
                           y1={fromNode.y}
                           x2={toNode.x}
                           y2={toNode.y}
-                          stroke="currentColor"
                         />
                       )
                     })}
                   </g>
 
-                  {mapLayout.nodes.map((node) => (
-                    <g key={node.id}>
-                      <circle
-                        cx={node.x}
-                        cy={node.y}
-                        r={node.type === 'film' ? 18 : 12}
-                        className={node.type === 'film' ? 'text-accent' : node.statusClass}
-                        fill="currentColor"
-                      />
-                      <text
-                        x={node.x}
-                        y={node.y - 16}
-                        textAnchor="middle"
-                        className="fill-text text-[10px]"
-                      >
-                        {node.label}
-                      </text>
-                    </g>
-                  ))}
+                  {mapLayout.nodes.map((node) => {
+                    const fillColor =
+                      node.type === 'film'
+                        ? '#F59E0B'
+                        : node.type === 'recipient'
+                        ? '#F43F5E'
+                        : node.statusClass === 'text-success'
+                        ? '#22C55E'
+                        : node.statusClass === 'text-accent'
+                        ? '#A855F7'
+                        : '#94A3B8'
+                    const radius = node.type === 'film' ? 18 : 12
+                    return (
+                      <g key={node.id}>
+                        <circle
+                          cx={node.x}
+                          cy={node.y}
+                          r={radius}
+                          fill={fillColor}
+                          stroke={node.type === 'recipient' ? '#FDE047' : 'none'}
+                          strokeWidth={node.type === 'recipient' ? 2.5 : 0}
+                        />
+                        <text
+                          x={node.x}
+                          y={node.y - radius - 6}
+                          textAnchor="middle"
+                          className="fill-text text-[10px]"
+                        >
+                          {node.label}
+                        </text>
+                      </g>
+                    )
+                  })}
                 </svg>
                 <p className="text-text-muted text-xs mt-3 text-center">
                   Layers show who invited whom. Colors reflect invite status.
