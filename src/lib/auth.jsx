@@ -145,9 +145,7 @@ export function AuthProvider({ children }) {
     setProfileLoaded(false)
 
     try {
-      console.log('[signUp] start:', email, 'name:', name, 'role:', role)
       const { data, error } = await supabase.auth.signUp({ email, password })
-      console.log('[signUp] auth result:', { error: error?.message, userId: data?.user?.id, session: !!data?.session, identities: data?.user?.identities?.length })
 
       const alreadyRegistered =
         error && /already registered|already been registered|already exists/i.test(error.message)
@@ -156,10 +154,8 @@ export function AuthProvider({ children }) {
         !error && data?.user && (!data.user.identities || data.user.identities.length === 0)
 
       if (alreadyRegistered || fakeUser) {
-        console.log('[signUp] existing user detected, signing in...')
         isSigningUp.current = false
         const result = await signIn(email, password)
-        console.log('[signUp] signIn result:', { userId: result?.user?.id, profile: result?.profile?.name })
 
         if (result.profile && result.profile.role !== role) {
           await supabase.from('users')
@@ -179,7 +175,6 @@ export function AuthProvider({ children }) {
       let activeSession = data.session
 
       if (!activeSession && activeUser) {
-        console.log('[signUp] no session, trying auto sign-in...')
         await new Promise(resolve => setTimeout(resolve, 500))
 
         const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
@@ -188,7 +183,6 @@ export function AuthProvider({ children }) {
         })
 
         if (signInError) {
-          console.log('[signUp] auto sign-in failed:', signInError.message)
           isSigningUp.current = false
           throw new Error('Account created but email confirmation may be required. Please check your inbox and then sign in.')
         }
@@ -199,9 +193,7 @@ export function AuthProvider({ children }) {
 
       if (activeUser) {
         const token = activeSession?.access_token || null
-        console.log('[signUp] creating profile for:', activeUser.id, 'token:', token ? 'present' : 'MISSING')
-        const createdProfile = await createProfile(activeUser.id, email, name, role, firstName, lastName, token)
-        console.log('[signUp] profile created:', createdProfile?.name)
+        await createProfile(activeUser.id, email, name, role, firstName, lastName, token)
 
         setUser(activeUser)
         setSession(activeSession)
@@ -220,10 +212,8 @@ export function AuthProvider({ children }) {
       }
 
       isSigningUp.current = false
-      console.log('[signUp] done successfully')
       return { ...data, session: activeSession, user: activeUser, profile }
     } catch (err) {
-      console.error('[signUp] error:', err.message)
       isSigningUp.current = false
       throw err
     }
