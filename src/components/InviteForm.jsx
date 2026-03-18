@@ -91,9 +91,7 @@ export default function InviteForm({
               resolvedSenderEmail,
               senderPasswordInput,
               resolvedSenderName,
-              'viewer',
-              senderFirstNameInput.trim(),
-              senderLastNameInput.trim()
+              'viewer'
             )
             resolvedSenderId = resolvedSenderId || signUpResult?.user?.id || null
           } catch (signUpError) {

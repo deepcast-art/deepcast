@@ -35,44 +35,54 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function createProfile(userId, email, name, role, firstName, lastName) {
-    const baseProfile = {
+  async function createProfile(userId, email, name, role) {
+    const safeName = name && name.trim() ? name.trim() : email.split('@')[0]
+
+    const profileRow = {
       id: userId,
       email,
-      name,
+      name: safeName,
       role,
       invite_allocation: role === 'creator' ? 0 : 5,
     }
 
-    const fullProfile = {
-      ...baseProfile,
-      first_name: firstName || null,
-      last_name: lastName || null,
+    const { data: existing } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .single()
+
+    if (existing) {
+      const { data, error } = await supabase
+        .from('users')
+        .update({ name: safeName, role, invite_allocation: profileRow.invite_allocation })
+        .eq('id', userId)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Profile update failed:', error.message)
+        throw error
+      }
+
+      const saved = data || existing
+      setProfile(saved)
+      setProfileLoaded(true)
+      return saved
     }
 
-    let { data, error } = await supabase
+    const { data, error } = await supabase
       .from('users')
-      .upsert(fullProfile, { onConflict: 'id' })
+      .insert(profileRow)
       .select()
       .single()
 
     if (error) {
-      console.warn('Profile upsert with name fields failed, retrying without:', error.message)
-      const retry = await supabase
-        .from('users')
-        .upsert(baseProfile, { onConflict: 'id' })
-        .select()
-        .single()
-      data = retry.data
-      error = retry.error
-    }
-
-    if (error) {
-      console.error('Profile upsert failed:', error.message)
+      console.error('Profile insert failed:', error.message)
       throw error
     }
 
-    const saved = data || baseProfile
+    const saved = data || profileRow
     setProfile(saved)
     setProfileLoaded(true)
     return saved
@@ -121,7 +131,7 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  const signUp = async (email, password, name, role = 'viewer', firstName = '', lastName = '') => {
+  const signUp = async (email, password, name, role = 'viewer') => {
     isSigningUp.current = true
     setProfileLoaded(false)
 
@@ -140,9 +150,9 @@ export function AuthProvider({ children }) {
 
         if (result.profile && result.profile.role !== role) {
           await supabase.from('users')
-            .update({ role, first_name: firstName || undefined, last_name: lastName || undefined, invite_allocation: role === 'creator' ? 0 : 5 })
+            .update({ role, invite_allocation: role === 'creator' ? 0 : 5 })
             .eq('id', result.user.id)
-          const updated = { ...result.profile, role, first_name: firstName, last_name: lastName, invite_allocation: role === 'creator' ? 0 : 5 }
+          const updated = { ...result.profile, role, invite_allocation: role === 'creator' ? 0 : 5 }
           setProfile(updated)
           return { ...result, profile: updated }
         }
@@ -173,7 +183,7 @@ export function AuthProvider({ children }) {
       }
 
       if (activeUser) {
-        const createdProfile = await createProfile(activeUser.id, email, name, role, firstName, lastName)
+        const createdProfile = await createProfile(activeUser.id, email, name, role)
 
         setUser(activeUser)
         setSession(activeSession)
@@ -213,14 +223,11 @@ export function AuthProvider({ children }) {
       currentProfile = await fetchProfile(data.user.id)
 
       if (!currentProfile) {
-        const fallbackName = email.split('@')[0]
         currentProfile = await createProfile(
           data.user.id,
           email,
-          fallbackName,
-          'viewer',
-          fallbackName,
-          ''
+          email.split('@')[0],
+          'viewer'
         )
       }
     }
