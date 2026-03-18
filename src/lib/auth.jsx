@@ -11,21 +11,30 @@ export function AuthProvider({ children }) {
   const [profileLoaded, setProfileLoaded] = useState(false)
   const isSigningUp = useRef(false)
 
-  async function fetchProfile(userId) {
+  async function fetchProfile(userId, token) {
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-
-      const row = Array.isArray(data) ? data[0] : data
-
-      if (error) {
-        console.warn('Profile fetch failed:', error.message)
-        setProfile(null)
-      } else {
-        setProfile(row || null)
+      let accessToken = token
+      if (!accessToken) {
+        const stored = localStorage.getItem('sb-wmtjgpxhjtbocsmutqqc-auth-token')
+        if (stored) {
+          try { accessToken = JSON.parse(stored)?.access_token } catch { /* ignore */ }
+        }
       }
+
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=*`,
+        {
+          headers: {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${accessToken || SUPABASE_ANON_KEY}`,
+          },
+        }
+      )
+
+      const rows = await res.json()
+      const row = Array.isArray(rows) ? rows[0] : null
+
+      setProfile(row || null)
       setProfileLoaded(true)
       return row || null
     } catch (err) {
@@ -36,7 +45,10 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function createProfile(userId, email, name, role, firstName = '', lastName = '') {
+  const SUPABASE_URL = 'https://wmtjgpxhjtbocsmutqqc.supabase.co'
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndtdGpncHhoanRib2NzbXV0cXFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4OTU5MTcsImV4cCI6MjA4NzQ3MTkxN30.IeeS2KToh7YPsKcVhFtojcX5fuwjAwEzIt5_RO09tQg'
+
+  async function createProfile(userId, email, name, role, firstName = '', lastName = '', accessToken = null) {
     const safeName = name && name.trim() ? name.trim() : email.split('@')[0]
     const safeFirst = firstName && firstName.trim() ? firstName.trim() : safeName.split(' ')[0]
     const safeLast = lastName && lastName.trim() ? lastName.trim() : safeName.split(' ').slice(1).join(' ') || ''
@@ -51,44 +63,32 @@ export function AuthProvider({ children }) {
       invite_allocation: role === 'creator' ? 0 : 5,
     }
 
-    console.log('[createProfile] inserting:', profileRow)
+    const token = accessToken || SUPABASE_ANON_KEY
 
-    const { data: sessionData } = await supabase.auth.getSession()
-    const accessToken = sessionData?.session?.access_token
-    console.log('[createProfile] access token:', accessToken ? 'present' : 'MISSING')
-
-    const supabaseUrl = 'https://wmtjgpxhjtbocsmutqqc.supabase.co'
-    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndtdGpncHhoanRib2NzbXV0cXFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4OTU5MTcsImV4cCI6MjA4NzQ3MTkxN30.IeeS2KToh7YPsKcVhFtojcX5fuwjAwEzIt5_RO09tQg'
-
-    const res = await fetch(`${supabaseUrl}/rest/v1/users`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/users`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': supabaseAnonKey,
-        'Authorization': `Bearer ${accessToken || supabaseAnonKey}`,
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${token}`,
         'Prefer': 'return=minimal',
       },
       body: JSON.stringify(profileRow),
     })
 
-    console.log('[createProfile] fetch status:', res.status)
-
     if (res.status === 409) {
-      console.log('[createProfile] conflict, updating...')
-      const updateRes = await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${userId}`, {
+      await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': supabaseAnonKey,
-          'Authorization': `Bearer ${accessToken || supabaseAnonKey}`,
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${token}`,
           'Prefer': 'return=minimal',
         },
         body: JSON.stringify({ name: safeName, first_name: safeFirst, last_name: safeLast, role, invite_allocation: profileRow.invite_allocation }),
       })
-      console.log('[createProfile] update status:', updateRes.status)
     } else if (!res.ok) {
       const body = await res.text()
-      console.error('[createProfile] insert failed:', res.status, body)
       throw new Error(`Profile creation failed: ${body}`)
     }
 
@@ -114,7 +114,7 @@ export function AuthProvider({ children }) {
       setSession(session)
       setUser(session?.user ?? null)
       if (session?.user) {
-        await fetchProfile(session.user.id)
+        await fetchProfile(session.user.id, session.access_token)
       }
       setLoading(false)
     }).catch(async () => {
@@ -124,11 +124,11 @@ export function AuthProvider({ children }) {
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      (_event, session) => {
         setSession(session)
         setUser(session?.user ?? null)
         if (session?.user && !isSigningUp.current) {
-          await fetchProfile(session.user.id)
+          fetchProfile(session.user.id, session.access_token).catch(() => {})
         } else if (!session?.user) {
           setProfile(null)
           setProfileLoaded(false)
@@ -198,9 +198,9 @@ export function AuthProvider({ children }) {
       }
 
       if (activeUser) {
-        await new Promise(resolve => setTimeout(resolve, 300))
-        console.log('[signUp] creating profile for:', activeUser.id)
-        const createdProfile = await createProfile(activeUser.id, email, name, role, firstName, lastName)
+        const token = activeSession?.access_token || null
+        console.log('[signUp] creating profile for:', activeUser.id, 'token:', token ? 'present' : 'MISSING')
+        const createdProfile = await createProfile(activeUser.id, email, name, role, firstName, lastName, token)
         console.log('[signUp] profile created:', createdProfile?.name)
 
         setUser(activeUser)
@@ -240,7 +240,7 @@ export function AuthProvider({ children }) {
 
     let currentProfile = null
     if (data.user) {
-      currentProfile = await fetchProfile(data.user.id)
+      currentProfile = await fetchProfile(data.user.id, data.session?.access_token)
 
       if (!currentProfile) {
         const fallback = email.split('@')[0]
@@ -250,7 +250,8 @@ export function AuthProvider({ children }) {
           fallback,
           'viewer',
           fallback,
-          ''
+          '',
+          data.session?.access_token || null
         )
       }
     }
