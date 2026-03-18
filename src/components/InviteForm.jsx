@@ -124,7 +124,8 @@ export default function InviteForm({
         onInviteSent({ senderName: resolvedSenderName, senderEmail: resolvedSenderEmail })
       }
     } catch (err) {
-      setError(err.message)
+      console.error('Invite send error:', err)
+      setError(err.message || 'Failed to send invitation. Please try again.')
     } finally {
       setSending(false)
     }
