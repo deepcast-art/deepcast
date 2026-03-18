@@ -10,7 +10,7 @@ create table if not exists public.users (
   email text unique not null,
   name text not null,
   role text not null default 'viewer' check (role in ('creator', 'viewer')),
-  invite_allocation integer not null default 3,
+  invite_allocation integer not null default 5,
   created_at timestamp with time zone default now()
 );
 
