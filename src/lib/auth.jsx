@@ -46,43 +46,38 @@ export function AuthProvider({ children }) {
       invite_allocation: role === 'creator' ? 0 : 5,
     }
 
-    const { data: existing } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .single()
+    console.log('[createProfile] inserting:', profileRow)
 
-    if (existing) {
-      const { data, error } = await supabase
+    const { data, error } = await supabase
+      .from('users')
+      .insert(profileRow)
+
+    console.log('[createProfile] insert result:', { data, error: error?.message })
+
+    if (error && (error.code === '23505' || error.message?.includes('duplicate'))) {
+      console.log('[createProfile] duplicate, updating instead')
+      const { data: updated, error: updateErr } = await supabase
         .from('users')
         .update({ name: safeName, role, invite_allocation: profileRow.invite_allocation })
         .eq('id', userId)
-        .select()
-        .single()
 
-      if (error) {
-        console.error('Profile update failed:', error.message)
-        throw error
+      if (updateErr) {
+        console.error('[createProfile] update failed:', updateErr.message)
+        throw updateErr
       }
 
-      const saved = data || existing
+      const saved = updated?.[0] || profileRow
       setProfile(saved)
       setProfileLoaded(true)
       return saved
     }
 
-    const { data, error } = await supabase
-      .from('users')
-      .insert(profileRow)
-      .select()
-      .single()
-
     if (error) {
-      console.error('Profile insert failed:', error.message)
+      console.error('[createProfile] insert failed:', error.message, error.code)
       throw error
     }
 
-    const saved = data || profileRow
+    const saved = data?.[0] || profileRow
     setProfile(saved)
     setProfileLoaded(true)
     return saved
@@ -189,6 +184,7 @@ export function AuthProvider({ children }) {
       }
 
       if (activeUser) {
+        await new Promise(resolve => setTimeout(resolve, 300))
         console.log('[signUp] creating profile for:', activeUser.id)
         const createdProfile = await createProfile(activeUser.id, email, name, role)
         console.log('[signUp] profile created:', createdProfile?.name)
