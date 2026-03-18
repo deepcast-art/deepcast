@@ -144,7 +144,7 @@ export default function PostShare() {
             SHARE WITH FRIENDS
           </h3>
           <p className="text-text-muted text-sm mb-6">
-            You have 3 shares. Use them on the people who are genuinely ready for this.
+            You have 5 shares. Use them on the people who are genuinely ready for this.
           </p>
           <p className="text-text-muted text-sm mb-6 text-left">
             If you choose not to share, the film&apos;s journey ends here. That&apos;s okay — but know that
@@ -158,7 +158,7 @@ export default function PostShare() {
               senderName={profile.name}
               senderEmail={profile.email}
               senderId={profile.id}
-              maxInvites={3}
+              maxInvites={5}
               showSenderFields
               onInviteSent={() => {
                 window.location.href = '/profile'

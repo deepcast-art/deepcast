@@ -41,7 +41,7 @@ export function AuthProvider({ children }) {
       email,
       name,
       role,
-      invite_allocation: role === 'creator' ? 0 : 3,
+      invite_allocation: role === 'creator' ? 0 : 5,
     }
 
     const { error } = await supabase.from('users').insert(newProfile)
@@ -113,9 +113,9 @@ export function AuthProvider({ children }) {
         // If they signed in but profile was auto-created as viewer, update to requested role
         if (result.profile && result.profile.role !== role) {
           await supabase.from('users')
-            .update({ role, invite_allocation: role === 'creator' ? 0 : 3 })
+            .update({ role, invite_allocation: role === 'creator' ? 0 : 5 })
             .eq('id', result.user.id)
-          const updated = { ...result.profile, role, invite_allocation: role === 'creator' ? 0 : 3 }
+          const updated = { ...result.profile, role, invite_allocation: role === 'creator' ? 0 : 5 }
           setProfile(updated)
           return { ...result, profile: updated }
         }

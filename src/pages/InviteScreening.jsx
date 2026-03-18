@@ -18,6 +18,7 @@ export default function InviteScreening() {
   const [sessionId, setSessionId] = useState(null)
   const [isPaused, setIsPaused] = useState(false)
   const [filmInvites, setFilmInvites] = useState([])
+  const [creatorName, setCreatorName] = useState('')
   const [inviteCount, setInviteCount] = useState(null)
   const playerRef = useRef(null)
   const hasMarkedWatched = useRef(false)
@@ -69,6 +70,32 @@ export default function InviteScreening() {
   }, [invite?.film_id])
 
   useEffect(() => {
+    if (!film?.creator_id) {
+      setCreatorName('')
+      return
+    }
+    let isMounted = true
+
+    async function loadCreatorName() {
+      const { data } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', film.creator_id)
+        .single()
+
+      if (isMounted) {
+        setCreatorName(data?.name || '')
+      }
+    }
+
+    loadCreatorName()
+
+    return () => {
+      isMounted = false
+    }
+  }, [film?.creator_id])
+
+  useEffect(() => {
     if (!invite?.film_id) return
     let isMounted = true
 
@@ -94,6 +121,7 @@ export default function InviteScreening() {
   const networkLayout = useMemo(() => {
     if (!filmInvites.length) return null
     const rootId = 'film-root'
+    const creatorId = 'creator-root'
     const nodes = new Map()
     const edges = []
     const statusByRecipient = new Map()
@@ -113,6 +141,10 @@ export default function InviteScreening() {
     }
 
     ensureNode(rootId, film?.title || 'Film', 'film')
+    if (creatorName) {
+      ensureNode(creatorId, toFirstName(creatorName, 'Creator'), 'creator')
+      edges.push({ from: rootId, to: creatorId })
+    }
 
     filmInvites.forEach((invite) => {
       const senderKey =
@@ -124,13 +156,14 @@ export default function InviteScreening() {
         'Member'
       )
       const recipientKey = invite.recipient_email || `recipient:${invite.id}`
+      const isCurrentRecipient = invite.recipient_email === invite?.recipient_email
       const recipientLabel = toFirstName(
         invite.recipient_name || invite.recipient_email,
         'Invitee'
       )
 
       ensureNode(senderKey, senderLabel, 'person')
-      ensureNode(recipientKey, recipientLabel, 'person')
+      ensureNode(recipientKey, recipientLabel, isCurrentRecipient ? 'recipient' : 'person')
       edges.push({ from: senderKey, to: recipientKey })
       statusByRecipient.set(recipientKey, invite.status)
     })
@@ -195,7 +228,7 @@ export default function InviteScreening() {
     })
 
     return { width, height, nodes: positionedNodes, edges }
-  }, [filmInvites, film?.title])
+  }, [creatorName, filmInvites, film?.title, invite?.recipient_email])
 
   async function handleTimeUpdate(e) {
     const player = e.target
@@ -305,7 +338,7 @@ export default function InviteScreening() {
             Know someone who should see this?
           </h2>
           <p className="text-text-muted text-sm mb-8 text-center max-w-sm mx-auto">
-            Share this screening with up to 3 people. The film spreads only through personal invitation.
+            Share this screening with up to 5 people. The film spreads only through personal invitation.
           </p>
 
           <InviteForm
@@ -315,7 +348,7 @@ export default function InviteScreening() {
             senderName={recipientFirstName}
             senderEmail={invite?.recipient_email || ''}
             senderId={null}
-            maxInvites={3}
+            maxInvites={5}
             showSenderFields
             onInviteSent={(info) => {
               navigate('/profile')
@@ -386,9 +419,6 @@ export default function InviteScreening() {
             <p className="text-text-muted text-xs mt-4">
               This film has passed through {inviteCount ?? '...'} pairs of hands to reach you.
             </p>
-            <p className="text-text-muted text-xs mt-2">
-              You are the {inviteCount ?? '...'} person to be invited to see this film. Watch the network grow.
-            </p>
           </div>
 
           <button
@@ -442,7 +472,7 @@ export default function InviteScreening() {
                     role="img"
                     aria-label="Invite network map"
                   >
-                    <g className="text-border" stroke="currentColor" strokeWidth="1.2">
+                    <g stroke="#7C3AED" strokeWidth="1.4" strokeOpacity="0.6">
                       {networkLayout.edges.map((edge) => {
                         const fromNode = networkLayout.nodes.find((node) => node.id === edge.from)
                         const toNode = networkLayout.nodes.find((node) => node.id === edge.to)
@@ -454,31 +484,46 @@ export default function InviteScreening() {
                             y1={fromNode.y}
                             x2={toNode.x}
                             y2={toNode.y}
-                            stroke="currentColor"
                           />
                         )
                       })}
                     </g>
 
-                    {networkLayout.nodes.map((node) => (
-                      <g key={node.id}>
-                        <circle
-                          cx={node.x}
-                          cy={node.y}
-                          r={node.type === 'film' ? 16 : 11}
-                          className={node.type === 'film' ? 'text-accent' : node.statusClass}
-                          fill="currentColor"
-                        />
-                        <text
-                          x={node.x}
-                          y={node.y - 14}
-                          textAnchor="middle"
-                          className="fill-text text-[10px]"
-                        >
-                          {node.label}
-                        </text>
-                      </g>
-                    ))}
+                    {networkLayout.nodes.map((node) => {
+                      const fillColor =
+                        node.type === 'film'
+                          ? '#F59E0B'
+                          : node.type === 'creator'
+                          ? '#22D3EE'
+                          : node.type === 'recipient'
+                          ? '#F43F5E'
+                          : node.statusClass === 'text-success'
+                          ? '#22C55E'
+                          : node.statusClass === 'text-accent'
+                          ? '#A855F7'
+                          : '#94A3B8'
+                      const radius = node.type === 'film' ? 18 : node.type === 'creator' ? 14 : 11
+                      return (
+                        <g key={node.id}>
+                          <circle
+                            cx={node.x}
+                            cy={node.y}
+                            r={radius}
+                            fill={fillColor}
+                            stroke={node.type === 'recipient' ? '#FDE047' : 'none'}
+                            strokeWidth={node.type === 'recipient' ? 2.5 : 0}
+                          />
+                          <text
+                            x={node.x}
+                            y={node.y - radius - 6}
+                            textAnchor="middle"
+                            className="fill-text text-[10px]"
+                          >
+                            {node.label}
+                          </text>
+                        </g>
+                      )
+                    })}
                   </svg>
                 </div>
               ) : (
@@ -494,7 +539,7 @@ export default function InviteScreening() {
                   SHARE WITH FRIENDS
                 </h3>
                 <p className="text-text-muted text-sm mb-6">
-                  You have 3 shares. Use them on the people who are genuinely ready for this.
+                  You have 5 shares. Use them on the people who are genuinely ready for this.
                 </p>
                 <p className="text-text-muted text-sm mb-6 text-left">
                   If you choose not to share, the film&apos;s journey ends here. That&apos;s okay — but know
@@ -507,7 +552,7 @@ export default function InviteScreening() {
                   senderName={recipientFirstName}
                   senderEmail={invite?.recipient_email || ''}
                   senderId={null}
-                  maxInvites={3}
+                  maxInvites={5}
                   showSenderFields
                   onInviteSent={(info) => {
                     navigate('/profile')

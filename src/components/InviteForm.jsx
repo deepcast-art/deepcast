@@ -31,7 +31,7 @@ export default function InviteForm({
   const [senderPasswordInput, setSenderPasswordInput] = useState('')
 
   const addEmail = () => {
-    if (unlimited || recipients.length < maxInvites) {
+    if (unlimited || remainingInvites > 0) {
       setRecipients([...recipients, { firstName: '', lastName: '', email: '', note: '' }])
     }
   }
@@ -128,7 +128,9 @@ export default function InviteForm({
     }
   }
 
-  const remainingInvites = maxInvites - sent.length
+  const remainingInvites = unlimited
+    ? maxInvites
+    : Math.max(0, maxInvites - (sent.length + recipients.length))
 
   if (!unlimited && remainingInvites <= 0) {
     return (
@@ -206,7 +208,10 @@ export default function InviteForm({
         <p className="text-text-muted text-xs uppercase tracking-wider mb-3">To</p>
         <div className="space-y-3 bg-bg-card/60 border border-border rounded-2xl p-4">
           {recipients.map((recipient, i) => (
-            <div key={i} className="space-y-3">
+            <div
+              key={i}
+              className="space-y-3 rounded-xl border border-border bg-bg-card/70 p-4"
+            >
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -254,7 +259,7 @@ export default function InviteForm({
       </div>
 
       <div className="flex items-center justify-between mt-4">
-        {(unlimited || recipients.length < remainingInvites) && (
+        {(unlimited || remainingInvites > 0) && (
           <button
             onClick={addEmail}
             className="text-accent text-sm hover:text-accent-hover transition-colors cursor-pointer"
