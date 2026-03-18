@@ -159,8 +159,10 @@ export default function Upload() {
             filmTitle={title}
             filmDescription={description}
             senderName={profile.name}
+            senderEmail={profile.email}
             senderId={profile.id}
-            maxInvites={3}
+            maxInvites={10}
+            unlimited
           />
 
           <div className="mt-10">
