@@ -35,11 +35,13 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function createProfile(userId, email, name, role) {
+  async function createProfile(userId, email, name, role, firstName, lastName) {
     const newProfile = {
       id: userId,
       email,
       name,
+      first_name: firstName || null,
+      last_name: lastName || null,
       role,
       invite_allocation: role === 'creator' ? 0 : 5,
     }
@@ -104,7 +106,7 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  const signUp = async (email, password, name, role = 'viewer') => {
+  const signUp = async (email, password, name, role = 'viewer', firstName = '', lastName = '') => {
     isSigningUp.current = true
     setProfileLoaded(false)
 
@@ -123,9 +125,9 @@ export function AuthProvider({ children }) {
 
         if (result.profile && result.profile.role !== role) {
           await supabase.from('users')
-            .update({ role, invite_allocation: role === 'creator' ? 0 : 5 })
+            .update({ role, first_name: firstName || undefined, last_name: lastName || undefined, invite_allocation: role === 'creator' ? 0 : 5 })
             .eq('id', result.user.id)
-          const updated = { ...result.profile, role, invite_allocation: role === 'creator' ? 0 : 5 }
+          const updated = { ...result.profile, role, first_name: firstName, last_name: lastName, invite_allocation: role === 'creator' ? 0 : 5 }
           setProfile(updated)
           return { ...result, profile: updated }
         }
@@ -156,7 +158,10 @@ export function AuthProvider({ children }) {
       }
 
       if (activeUser) {
-        await createProfile(activeUser.id, email, name, role)
+        const createdProfile = await createProfile(activeUser.id, email, name, role, firstName, lastName)
+
+        setUser(activeUser)
+        setSession(activeSession)
 
         void supabase
           .from('invites')
@@ -192,14 +197,16 @@ export function AuthProvider({ children }) {
     if (data.user) {
       currentProfile = await fetchProfile(data.user.id)
 
-      // If auth user exists but no profile row, create one
       if (!currentProfile) {
         try {
+          const fallbackName = email.split('@')[0]
           currentProfile = await createProfile(
             data.user.id,
             email,
-            email.split('@')[0],
-            'viewer'
+            fallbackName,
+            'viewer',
+            fallbackName,
+            ''
           )
         } catch (e) {
           console.error('Auto-create profile on login failed:', e.message)

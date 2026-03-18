@@ -21,7 +21,7 @@ export default function Signup() {
 
     try {
       const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ')
-      const result = await signUp(email, password, fullName, isCreator ? 'creator' : 'viewer')
+      const result = await signUp(email, password, fullName, isCreator ? 'creator' : 'viewer', firstName.trim(), lastName.trim())
       const targetRole = result?.profile?.role || (isCreator ? 'creator' : 'viewer')
       navigate(targetRole === 'creator' ? '/dashboard' : '/profile')
     } catch (err) {
