@@ -155,7 +155,9 @@ export default function InviteScreening() {
         invite.sender_name || invite.sender_email || (invite.sender_id ? 'Member' : 'Unknown'),
         'Member'
       )
-      const recipientKey = invite.recipient_email || `recipient:${invite.id}`
+      const recipientKey = invite.recipient_name
+        ? `${invite.recipient_email || ''}:${invite.recipient_name.trim().toLowerCase()}`
+        : invite.recipient_email || `recipient:${invite.id}`
       const isCurrentRecipient = invite.recipient_email === invite?.recipient_email
       const recipientLabel = toFirstName(
         invite.recipient_name || invite.recipient_email,
