@@ -383,10 +383,16 @@ export default function NetworkMap() {
                     className="flex items-center gap-2 text-xs text-text-muted"
                   >
                     <span className="text-text">
-                      {invite.sender_id ? 'Member' : 'Anonymous'}
+                      {invite.sender_name
+                        ? invite.sender_name.trim().split(/\s+/)[0]
+                        : invite.sender_email
+                        ? invite.sender_email.split('@')[0]
+                        : 'Anonymous'}
                     </span>
                     <span>&rarr;</span>
-                    <span>{invite.recipient_email}</span>
+                    <span>{invite.recipient_name
+                      ? invite.recipient_name.trim().split(/\s+/)[0]
+                      : invite.recipient_email}</span>
                       <button
                         onClick={() => handleResendInvite(invite.id)}
                         className="text-text-muted text-[10px] uppercase tracking-wider hover:text-text transition-colors"
