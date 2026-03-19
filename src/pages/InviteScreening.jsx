@@ -85,6 +85,7 @@ export default function InviteScreening() {
   const [sessionId, setSessionId] = useState(null)
   const [isPaused, setIsPaused] = useState(false)
   const [filmInvites, setFilmInvites] = useState([])
+  const [creatorName, setCreatorName] = useState('')
   const [inviteCount, setInviteCount] = useState(null)
   const playerRef = useRef(null)
   const hasMarkedWatched = useRef(false)
@@ -136,6 +137,29 @@ export default function InviteScreening() {
   }, [invite?.film_id])
 
   useEffect(() => {
+    if (!film?.creator_id) {
+      setCreatorName('')
+      return
+    }
+    let isMounted = true
+
+    async function loadCreatorName() {
+      const { data } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', film.creator_id)
+        .single()
+
+      if (isMounted) setCreatorName(data?.name || '')
+    }
+
+    loadCreatorName()
+    return () => {
+      isMounted = false
+    }
+  }, [film?.creator_id])
+
+  useEffect(() => {
     if (!invite?.film_id) return
     let isMounted = true
 
@@ -161,6 +185,8 @@ export default function InviteScreening() {
   const networkLayout = useMemo(() => {
     if (!filmInvites.length || !invite) return null
 
+    const rootId = 'film-root'
+    const creatorId = 'creator-root'
     const nodes = new Map()
     const edges = []
     const statusByRecipient = new Map()
@@ -187,8 +213,13 @@ export default function InviteScreening() {
       (row.sender_id ? `member:${row.sender_id}` : '') ||
       (row.sender_name ? `name:${row.sender_name}` : 'Unknown sender')
 
-    /** Current viewer: the person this invite link is for (e.g. Vidya) — graph extends from them backward */
     const viewerKey = recipientKeyFromRow(invite)
+
+    ensureNode(rootId, film?.title || 'Film', 'film')
+    if (creatorName) {
+      ensureNode(creatorId, toFirstName(creatorName, 'Creator'), 'creator')
+      edges.push({ from: rootId, to: creatorId })
+    }
 
     filmInvites.forEach((row) => {
       const senderKey = senderKeyFromRow(row)
@@ -220,59 +251,59 @@ export default function InviteScreening() {
       nodes.set(viewerKey, { ...node, type: 'recipient' })
     }
 
-    /** Reverse edges: who sent to whom — walk backward from viewer (Lyra → … → Vidya) */
-    const rev = new Map()
-    edges.forEach(({ from, to }) => {
-      if (!rev.has(to)) rev.set(to, [])
-      rev.get(to).push(from)
+    /** Senders who never appear as recipients connect from the film (start of chains) */
+    const inviteRecipients = new Set(edges.map((e) => e.to))
+    const inviteSenders = new Set(edges.map((e) => e.from))
+    const rootSenders = Array.from(inviteSenders).filter((s) => !inviteRecipients.has(s))
+    rootSenders.forEach((sender) => {
+      if (sender !== rootId && sender !== creatorId) {
+        edges.push({ from: rootId, to: sender })
+      }
     })
 
-    const upstream = new Set([viewerKey])
-    const depthFromViewer = new Map([[viewerKey, 0]])
-    const queue = [viewerKey]
+    const depthById = new Map([[rootId, 0]])
+    const queue = [rootId]
+    const adjacency = new Map()
+    edges.forEach((edge) => {
+      if (!adjacency.has(edge.from)) adjacency.set(edge.from, [])
+      adjacency.get(edge.from).push(edge.to)
+    })
+
     while (queue.length) {
-      const n = queue.shift()
-      const depth = depthFromViewer.get(n) ?? 0
-      const preds = rev.get(n) || []
-      preds.forEach((pred) => {
-        if (!upstream.has(pred)) {
-          upstream.add(pred)
-          depthFromViewer.set(pred, depth + 1)
-          queue.push(pred)
+      const current = queue.shift()
+      const depth = depthById.get(current) || 0
+      const children = adjacency.get(current) || []
+      children.forEach((child) => {
+        if (!depthById.has(child)) {
+          depthById.set(child, depth + 1)
+          queue.push(child)
         }
       })
     }
 
-    const filteredEdges = edges.filter((e) => upstream.has(e.from) && upstream.has(e.to))
-    const maxD = Math.max(...Array.from(depthFromViewer.values()), 0)
-
     const layers = {}
-    upstream.forEach((id) => {
-      const node = nodes.get(id)
-      if (!node) return
-      const d = depthFromViewer.get(id) ?? 0
-      const col = maxD - d
-      if (!layers[col]) layers[col] = []
-      layers[col].push(node)
+    nodes.forEach((node) => {
+      const depth = depthById.get(node.id) ?? 1
+      if (!layers[depth]) layers[depth] = []
+      layers[depth].push(node)
     })
 
-    const colKeys = Object.keys(layers).map(Number)
-    const maxCol = colKeys.length ? Math.max(...colKeys) : 0
+    const maxDepth = Math.max(...Object.keys(layers).map((d) => Number(d)), 0)
     const horizontalGap = 160
     const verticalGap = 64
     const padding = 48
-    const width = Math.max(280, padding * 2 + maxCol * horizontalGap)
+    const width = Math.max(320, padding * 2 + maxDepth * horizontalGap)
     const maxLayerCount = Math.max(...Object.values(layers).map((layer) => layer.length), 1)
-    const height = Math.max(360, padding * 2 + maxLayerCount * verticalGap)
+    const height = Math.max(380, padding * 2 + maxLayerCount * verticalGap)
 
     const positionedNodes = []
-    Object.entries(layers).forEach(([colKey, layerNodes]) => {
-      const col = Number(colKey)
+    Object.entries(layers).forEach(([depthKey, layerNodes]) => {
+      const depth = Number(depthKey)
       const list = layerNodes.filter(Boolean)
       const totalHeight = (list.length - 1) * verticalGap
       const startY = height / 2 - totalHeight / 2
       list.forEach((node, index) => {
-        const x = padding + col * horizontalGap
+        const x = padding + depth * horizontalGap
         const y = startY + index * verticalGap
         const status = statusByRecipient.get(node.id)
         const statusClass =
@@ -285,8 +316,8 @@ export default function InviteScreening() {
       })
     })
 
-    return { width, height, nodes: positionedNodes, edges: filteredEdges }
-  }, [filmInvites, invite?.id])
+    return { width, height, nodes: positionedNodes, edges }
+  }, [creatorName, filmInvites, film?.title, invite?.id])
 
   async function handleTimeUpdate(e) {
     const player = e.target
