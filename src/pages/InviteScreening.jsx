@@ -424,7 +424,7 @@ export default function InviteScreening() {
           <button
             onClick={() => {
               setStage('screening')
-              setIsPaused(true)
+              setIsPaused(false)
             }}
             className="inline-flex items-center gap-3 bg-accent text-bg font-medium rounded-full px-8 py-4 text-sm hover:bg-accent-hover transition-colors cursor-pointer"
           >
@@ -447,7 +447,8 @@ export default function InviteScreening() {
                     onEnded={handleEnded}
                     onPause={() => setIsPaused(true)}
                     onPlay={() => setIsPaused(false)}
-                    autoPlay={!isPaused}
+                    autoPlay
+                    muted
                     style={{ width: '100%', height: '100%' }}
                   />
                 ) : (
@@ -456,16 +457,12 @@ export default function InviteScreening() {
                   </div>
                 )}
               </div>
-              <div className="mt-4 flex items-center justify-between text-xs text-text-muted">
-                <span>{film.title}</span>
-                <span>{watchPercentage}% watched</span>
-              </div>
-
               {networkLayout ? (
-                <div className="relative w-full aspect-video bg-bg-card/60 border border-border rounded-lg overflow-hidden mt-6">
-                  <div className="absolute top-3 left-3 right-3 text-text-muted text-xs">
-                    You are the {inviteCount ?? '...'} person to be invited to see this film. Watch the network grow.
-                  </div>
+                <div className="mt-8 mb-6">
+                  <p className="text-text text-sm font-light text-center mb-4">
+                    This film has passed through {networkLayout.nodes.filter(n => n.type !== 'film').length} pairs of hands to reach you.
+                  </p>
+                  <div className="relative w-full aspect-video bg-bg-card/60 border border-border rounded-lg overflow-hidden">
                   <svg
                     viewBox={`0 0 ${networkLayout.width} ${networkLayout.height}`}
                     className="w-full h-full"
@@ -525,12 +522,9 @@ export default function InviteScreening() {
                       )
                     })}
                   </svg>
+                  </div>
                 </div>
-              ) : (
-                <div className="mt-6 text-center text-xs text-text-muted">
-                  Network map will appear after invites are sent.
-                </div>
-              )}
+              ) : null}
             </div>
 
             {isPaused && (
