@@ -405,15 +405,18 @@ export default function InviteScreening() {
               Before you watch the film, take 60 seconds to understand what you&apos;ve been invited into.
             </p>
             <div className="aspect-video rounded-xl overflow-hidden bg-black/60 flex items-center justify-center text-text-muted text-sm">
-              <video
-                src="https://drive.google.com/uc?export=download&id=1kAqIDnv142Nv7PSiS1usV7lfbBFsLk35"
-                className="w-full h-full object-cover"
-                controls
+              <MuxPlayer
+                streamType="on-demand"
+                playbackId="m00OT01KqAvAR00BDNcCuCGMsvvfwKknTq68Z00yLW4myE8"
+                accentColor="#c8a96e"
+                autoPlay
+                muted
                 playsInline
                 onEnded={() => {
                   setStage('screening')
                   setIsPaused(false)
                 }}
+                style={{ width: '100%', height: '100%' }}
               />
             </div>
             <p className="text-text-muted text-xs mt-4">
