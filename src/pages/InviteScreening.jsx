@@ -85,7 +85,6 @@ export default function InviteScreening() {
   const [sessionId, setSessionId] = useState(null)
   const [isPaused, setIsPaused] = useState(false)
   const [filmInvites, setFilmInvites] = useState([])
-  const [creatorName, setCreatorName] = useState('')
   const [inviteCount, setInviteCount] = useState(null)
   const playerRef = useRef(null)
   const hasMarkedWatched = useRef(false)
@@ -137,32 +136,6 @@ export default function InviteScreening() {
   }, [invite?.film_id])
 
   useEffect(() => {
-    if (!film?.creator_id) {
-      setCreatorName('')
-      return
-    }
-    let isMounted = true
-
-    async function loadCreatorName() {
-      const { data } = await supabase
-        .from('users')
-        .select('name')
-        .eq('id', film.creator_id)
-        .single()
-
-      if (isMounted) {
-        setCreatorName(data?.name || '')
-      }
-    }
-
-    loadCreatorName()
-
-    return () => {
-      isMounted = false
-    }
-  }, [film?.creator_id])
-
-  useEffect(() => {
     if (!invite?.film_id) return
     let isMounted = true
 
@@ -186,17 +159,14 @@ export default function InviteScreening() {
   }, [invite?.film_id])
 
   const networkLayout = useMemo(() => {
-    if (!filmInvites.length) return null
-    const rootId = 'film-root'
-    const creatorId = 'creator-root'
+    if (!filmInvites.length || !invite) return null
+
     const nodes = new Map()
     const edges = []
     const statusByRecipient = new Map()
 
     const ensureNode = (id, label, type = 'person') => {
-      if (!nodes.has(id)) {
-        nodes.set(id, { id, label, type })
-      }
+      if (!nodes.has(id)) nodes.set(id, { id, label, type })
     }
 
     const toFirstName = (value, fallback = 'Invitee') => {
@@ -207,83 +177,102 @@ export default function InviteScreening() {
       return base.split(/\s+/)[0] || fallback
     }
 
-    ensureNode(rootId, film?.title || 'Film', 'film')
-    if (creatorName) {
-      ensureNode(creatorId, toFirstName(creatorName, 'Creator'), 'creator')
-      edges.push({ from: rootId, to: creatorId })
-    }
+    const recipientKeyFromRow = (row) =>
+      row.recipient_name
+        ? `${row.recipient_email || ''}:${row.recipient_name.trim().toLowerCase()}`
+        : row.recipient_email || `recipient:${row.id}`
 
-    filmInvites.forEach((invite) => {
-      const senderKey =
-        invite.sender_email ||
-        (invite.sender_id ? `member:${invite.sender_id}` : '') ||
-        (invite.sender_name ? `name:${invite.sender_name}` : 'Unknown sender')
-      const senderLabel = toFirstName(
-        invite.sender_name || invite.sender_email || (invite.sender_id ? 'Member' : 'Unknown'),
-        'Member'
-      )
-      const recipientKey = invite.recipient_name
-        ? `${invite.recipient_email || ''}:${invite.recipient_name.trim().toLowerCase()}`
-        : invite.recipient_email || `recipient:${invite.id}`
-      const isCurrentRecipient = invite.recipient_email === invite?.recipient_email
+    const senderKeyFromRow = (row) =>
+      row.sender_email ||
+      (row.sender_id ? `member:${row.sender_id}` : '') ||
+      (row.sender_name ? `name:${row.sender_name}` : 'Unknown sender')
+
+    /** Current viewer: the person this invite link is for (e.g. Vidya) — graph extends from them backward */
+    const viewerKey = recipientKeyFromRow(invite)
+
+    filmInvites.forEach((row) => {
+      const senderKey = senderKeyFromRow(row)
+      const recipientKey = recipientKeyFromRow(row)
       const recipientLabel = toFirstName(
-        invite.recipient_name || invite.recipient_email,
+        row.recipient_name || row.recipient_email,
         'Invitee'
       )
+      const senderLabel = toFirstName(
+        row.sender_name || row.sender_email || (row.sender_id ? 'Member' : 'Unknown'),
+        'Member'
+      )
+      const isViewer = recipientKey === viewerKey
 
       ensureNode(senderKey, senderLabel, 'person')
-      ensureNode(recipientKey, recipientLabel, isCurrentRecipient ? 'recipient' : 'person')
+      ensureNode(recipientKey, recipientLabel, isViewer ? 'recipient' : 'person')
       edges.push({ from: senderKey, to: recipientKey })
-      statusByRecipient.set(recipientKey, invite.status)
+      statusByRecipient.set(recipientKey, row.status)
     })
 
-    const recipients = new Set(edges.map((edge) => edge.to))
-    const senders = new Set(edges.map((edge) => edge.from))
-    const rootSenders = Array.from(senders).filter((sender) => !recipients.has(sender))
-    rootSenders.forEach((sender) => edges.push({ from: rootId, to: sender }))
+    if (!nodes.has(viewerKey)) {
+      ensureNode(
+        viewerKey,
+        toFirstName(invite.recipient_name || invite.recipient_email, 'You'),
+        'recipient'
+      )
+    } else {
+      const node = nodes.get(viewerKey)
+      nodes.set(viewerKey, { ...node, type: 'recipient' })
+    }
 
-    const depthById = new Map([[rootId, 0]])
-    const queue = [rootId]
-    const adjacency = new Map()
-    edges.forEach((edge) => {
-      if (!adjacency.has(edge.from)) adjacency.set(edge.from, [])
-      adjacency.get(edge.from).push(edge.to)
+    /** Reverse edges: who sent to whom — walk backward from viewer (Lyra → … → Vidya) */
+    const rev = new Map()
+    edges.forEach(({ from, to }) => {
+      if (!rev.has(to)) rev.set(to, [])
+      rev.get(to).push(from)
     })
 
+    const upstream = new Set([viewerKey])
+    const depthFromViewer = new Map([[viewerKey, 0]])
+    const queue = [viewerKey]
     while (queue.length) {
-      const current = queue.shift()
-      const depth = depthById.get(current) || 0
-      const children = adjacency.get(current) || []
-      children.forEach((child) => {
-        if (!depthById.has(child)) {
-          depthById.set(child, depth + 1)
-          queue.push(child)
+      const n = queue.shift()
+      const depth = depthFromViewer.get(n) ?? 0
+      const preds = rev.get(n) || []
+      preds.forEach((pred) => {
+        if (!upstream.has(pred)) {
+          upstream.add(pred)
+          depthFromViewer.set(pred, depth + 1)
+          queue.push(pred)
         }
       })
     }
 
+    const filteredEdges = edges.filter((e) => upstream.has(e.from) && upstream.has(e.to))
+    const maxD = Math.max(...Array.from(depthFromViewer.values()), 0)
+
     const layers = {}
-    nodes.forEach((node) => {
-      const depth = depthById.get(node.id) ?? 1
-      if (!layers[depth]) layers[depth] = []
-      layers[depth].push(node)
+    upstream.forEach((id) => {
+      const node = nodes.get(id)
+      if (!node) return
+      const d = depthFromViewer.get(id) ?? 0
+      const col = maxD - d
+      if (!layers[col]) layers[col] = []
+      layers[col].push(node)
     })
 
-    const maxDepth = Math.max(...Object.keys(layers).map((d) => Number(d)))
+    const colKeys = Object.keys(layers).map(Number)
+    const maxCol = colKeys.length ? Math.max(...colKeys) : 0
     const horizontalGap = 160
     const verticalGap = 64
     const padding = 48
-    const width = padding * 2 + maxDepth * horizontalGap
-    const maxLayerCount = Math.max(...Object.values(layers).map((layer) => layer.length))
+    const width = Math.max(280, padding * 2 + maxCol * horizontalGap)
+    const maxLayerCount = Math.max(...Object.values(layers).map((layer) => layer.length), 1)
     const height = Math.max(360, padding * 2 + maxLayerCount * verticalGap)
 
     const positionedNodes = []
-    Object.entries(layers).forEach(([depthKey, layerNodes]) => {
-      const depth = Number(depthKey)
-      const totalHeight = (layerNodes.length - 1) * verticalGap
+    Object.entries(layers).forEach(([colKey, layerNodes]) => {
+      const col = Number(colKey)
+      const list = layerNodes.filter(Boolean)
+      const totalHeight = (list.length - 1) * verticalGap
       const startY = height / 2 - totalHeight / 2
-      layerNodes.forEach((node, index) => {
-        const x = padding + depth * horizontalGap
+      list.forEach((node, index) => {
+        const x = padding + col * horizontalGap
         const y = startY + index * verticalGap
         const status = statusByRecipient.get(node.id)
         const statusClass =
@@ -296,8 +285,8 @@ export default function InviteScreening() {
       })
     })
 
-    return { width, height, nodes: positionedNodes, edges }
-  }, [creatorName, filmInvites, film?.title, invite?.recipient_email])
+    return { width, height, nodes: positionedNodes, edges: filteredEdges }
+  }, [filmInvites, invite?.id])
 
   async function handleTimeUpdate(e) {
     const player = e.target
