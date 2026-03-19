@@ -33,7 +33,7 @@ export default function Landing() {
           Deepcast
         </p>
 
-        <h1 className="text-3xl sm:text-5xl font-light leading-tight tracking-tight mb-8 animate-fade-in animate-delay-200">
+        <h1 className="text-3xl sm:text-5xl font-display leading-tight tracking-tight mb-8 animate-fade-in animate-delay-200">
           Some films are not for everyone.
           <br />
           <span className="text-text-muted">Just the right ones.</span>

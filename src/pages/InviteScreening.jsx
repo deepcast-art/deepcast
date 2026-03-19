@@ -237,7 +237,6 @@ export default function InviteScreening() {
     const percent = Math.round((player.currentTime / player.duration) * 100)
     setWatchPercentage(percent)
 
-    // Mark as watched at 70%
     if (percent >= 70 && !hasMarkedWatched.current) {
       hasMarkedWatched.current = true
 
@@ -253,13 +252,11 @@ export default function InviteScreening() {
           .eq('id', sessionId)
       }
 
-      // Replenish invites for sender
       if (invite.sender_id) {
         await checkAndReplenishInvites(invite.sender_id)
       }
     }
 
-    // Update watch session periodically
     if (sessionId && percent % 10 === 0) {
       await supabase
         .from('watch_sessions')
@@ -269,14 +266,12 @@ export default function InviteScreening() {
   }
 
   async function checkAndReplenishInvites(senderId) {
-    // Count how many of this sender's invites have been watched
     const { count } = await supabase
       .from('invites')
       .select('*', { count: 'exact', head: true })
       .eq('sender_id', senderId)
       .eq('status', 'watched')
 
-    // Every 3 watched invites, add 3 more to allocation
     if (count && count % 3 === 0) {
       const { data: sender } = await supabase
         .from('users')
@@ -305,7 +300,7 @@ export default function InviteScreening() {
 
   if (status === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center theme-inverse">
         <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
       </div>
     )
@@ -313,10 +308,10 @@ export default function InviteScreening() {
 
   if (status === 'invalid' || status === 'expired') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center theme-inverse text-warm">
         <p className="text-accent text-sm tracking-[0.3em] uppercase mb-6">Deepcast</p>
-        <div className="w-16 h-px bg-border mb-8" />
-        <h1 className="text-xl font-light mb-4">This screening is no longer available.</h1>
+        <div className="w-16 h-px bg-faint/20 mb-8" />
+        <h1 className="text-xl font-display mb-4">This screening is no longer available.</h1>
         <p className="text-text-muted text-sm max-w-xs">
           {status === 'expired'
             ? 'This invitation has expired. Ask the sender for a new one.'
@@ -328,13 +323,13 @@ export default function InviteScreening() {
 
   if (showPostFilm) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6 animate-fade-in">
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 animate-fade-in theme-inverse text-warm">
         <p className="text-accent text-sm tracking-[0.3em] uppercase mb-8">Deepcast</p>
-        <div className="w-full max-w-md bg-bg-card/70 border border-accent/50 rounded-2xl p-6 shadow-[0_0_40px_rgba(200,169,110,0.15)]">
+        <div className="w-full max-w-md bg-ink/70 border border-accent/50 rounded-none p-6">
           <p className="text-accent text-xs uppercase tracking-[0.3em] mb-3 text-center">
             Next step
           </p>
-          <h2 className="text-2xl font-light mb-3 text-center">
+          <h2 className="text-2xl font-display mb-3 text-center">
             Know someone who should see this?
           </h2>
           <p className="text-text-muted text-sm mb-8 text-center max-w-sm mx-auto">
@@ -361,7 +356,7 @@ export default function InviteScreening() {
         </div>
 
         <div className="mt-12 text-center">
-          <div className="w-px h-8 bg-border mx-auto mb-4" />
+          <div className="w-px h-8 bg-faint/20 mx-auto mb-4" />
         <p className="text-text-muted text-xs mb-2">
           Join Deepcast to unlock more invites and connect with others who&apos;ve watched.
         </p>
@@ -377,16 +372,16 @@ export default function InviteScreening() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden">
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden theme-inverse">
       {stage === 'intro' ? (
         <div className="relative w-full max-w-3xl text-center animate-fade-in">
           <div className="absolute inset-0 -z-10">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(200,169,110,0.15),transparent_60%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(196,130,42,0.15),transparent_60%)]" />
             <div className="absolute inset-0 opacity-40">
-              <div className="absolute top-8 left-10 h-2 w-2 rounded-full bg-accent/40" />
-              <div className="absolute top-16 right-16 h-1.5 w-1.5 rounded-full bg-accent/40" />
-              <div className="absolute bottom-16 left-24 h-1.5 w-1.5 rounded-full bg-accent/40" />
-              <div className="absolute bottom-8 right-28 h-2 w-2 rounded-full bg-accent/40" />
+              <div className="absolute top-8 left-10 h-2 w-2 rounded-none bg-accent/40" />
+              <div className="absolute top-16 right-16 h-1.5 w-1.5 rounded-none bg-accent/40" />
+              <div className="absolute bottom-16 left-24 h-1.5 w-1.5 rounded-none bg-accent/40" />
+              <div className="absolute bottom-8 right-28 h-2 w-2 rounded-none bg-accent/40" />
               <div className="absolute left-1/2 top-24 h-px w-32 bg-accent/20" />
               <div className="absolute left-1/3 bottom-20 h-px w-40 bg-accent/20" />
             </div>
@@ -394,17 +389,17 @@ export default function InviteScreening() {
 
           <p className="text-accent text-base tracking-[0.35em] uppercase mb-2">Deepcast</p>
           <p className="text-text-muted text-xs tracking-[0.3em] uppercase mb-6">Depth is the new viral</p>
-          <h1 className="text-3xl sm:text-5xl font-light leading-tight tracking-tight mb-6">
+          <h1 className="text-3xl sm:text-5xl font-display leading-tight tracking-tight mb-6 text-warm">
             No algorithm sent you here.
             <br />
             {invite?.sender_name || 'A friend'} did.
           </h1>
 
-          <div className="bg-bg-card/60 border border-border rounded-2xl p-6 mb-10">
+          <div className="bg-ink/60 border border-faint/20 rounded-none p-6 mb-10">
             <p className="text-text-muted text-sm mb-4">
               Before you watch the film, take 60 seconds to understand what you&apos;ve been invited into.
             </p>
-            <div className="aspect-video rounded-xl overflow-hidden bg-black/60 flex items-center justify-center text-text-muted text-sm">
+            <div className="aspect-video rounded-none overflow-hidden bg-ink/60 flex items-center justify-center text-text-muted text-sm">
               <MuxPlayer
                 streamType="on-demand"
                 playbackId="m00OT01KqAvAR00BDNcCuCGMsvvfwKknTq68Z00yLW4myE8"
@@ -429,7 +424,7 @@ export default function InviteScreening() {
               setStage('screening')
               setIsPaused(false)
             }}
-            className="inline-flex items-center gap-3 bg-accent text-bg font-medium rounded-full px-8 py-4 text-sm hover:bg-accent-hover transition-colors cursor-pointer"
+            className="inline-flex items-center gap-3 bg-accent text-warm font-medium rounded-none px-8 py-4 text-sm hover:bg-accent-hover transition-colors cursor-pointer"
           >
             Enter screening room
           </button>
@@ -438,7 +433,7 @@ export default function InviteScreening() {
         <div className="w-full max-w-6xl animate-fade-in mt-8">
           <div className={`flex flex-col ${isPaused ? 'lg:flex-row' : ''} gap-6`}>
             <div className={isPaused ? 'flex-1' : 'w-full'}>
-              <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden">
+              <div className="relative w-full aspect-video bg-ink rounded-none overflow-hidden">
                 {film.mux_playback_id ? (
                   <MuxPlayer
                     ref={playerRef}
@@ -462,10 +457,10 @@ export default function InviteScreening() {
               </div>
               {networkLayout ? (
                 <div className="mt-8 mb-6">
-                  <p className="text-text text-sm font-light text-center mb-4">
+                  <p className="text-warm text-sm text-center mb-4">
                     This film has passed through {networkLayout.nodes.filter(n => n.type !== 'film').length} pairs of hands to reach you.
                   </p>
-                  <div className="relative w-full aspect-video bg-bg-card/60 border border-border rounded-lg overflow-hidden">
+                  <div className="relative w-full aspect-video bg-ink/60 border border-faint/20 rounded-none overflow-hidden">
                   <svg
                     viewBox={`0 0 ${networkLayout.width} ${networkLayout.height}`}
                     className="w-full h-full"
@@ -517,7 +512,7 @@ export default function InviteScreening() {
                             x={node.x}
                             y={node.y - radius - 6}
                             textAnchor="middle"
-                            className="fill-text text-[10px]"
+                            className="fill-warm text-[10px]"
                           >
                             {node.label}
                           </text>
@@ -531,7 +526,7 @@ export default function InviteScreening() {
             </div>
 
             {isPaused && (
-              <div className="w-full lg:w-[360px] bg-bg-card/80 border border-accent/50 rounded-2xl p-6 h-fit shadow-[0_0_40px_rgba(200,169,110,0.18)]">
+              <div className="w-full lg:w-[360px] bg-ink/80 border border-accent/50 rounded-none p-6 h-fit">
                 <h3 className="text-sm uppercase tracking-wider text-text-muted mb-3">
                   SHARE WITH FRIENDS
                 </h3>

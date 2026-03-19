@@ -153,7 +153,7 @@ export default function InviteForm({
   return (
     <div className="w-full max-w-sm mx-auto">
       {error && (
-        <div className="text-error text-sm text-center mb-4 bg-error/10 rounded-lg py-2 px-4">
+        <div className="text-error text-sm text-center mb-4 bg-error/10 rounded-none py-2 px-4">
           {error}
         </div>
       )}
@@ -161,21 +161,21 @@ export default function InviteForm({
       {showSenderFields && (
         <div className="mb-6">
           <p className="text-text-muted text-xs uppercase tracking-wider mb-3">From</p>
-          <div className="space-y-3 bg-bg-card/60 border border-border rounded-2xl p-4">
+          <div className="space-y-3 bg-bg-card/60 border-[0.5px] border-border rounded-none p-4">
             <div className="flex gap-2">
               <input
                 type="text"
                 value={senderFirstNameInput}
                 onChange={(e) => setSenderFirstNameInput(e.target.value)}
                 placeholder="First name"
-                className="w-1/2 bg-bg-card border border-border rounded-lg px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+                className="w-1/2 bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
               />
               <input
                 type="text"
                 value={senderLastNameInput}
                 onChange={(e) => setSenderLastNameInput(e.target.value)}
                 placeholder="Last name"
-                className="w-1/2 bg-bg-card border border-border rounded-lg px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+                className="w-1/2 bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
               />
             </div>
             <input
@@ -183,7 +183,7 @@ export default function InviteForm({
               value={senderEmailInput}
               onChange={(e) => setSenderEmailInput(e.target.value)}
               placeholder="you@example.com"
-              className="w-full bg-bg-card border border-border rounded-lg px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+              className="w-full bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
             />
             <input
               type="password"
@@ -191,7 +191,7 @@ export default function InviteForm({
               onChange={(e) => setSenderPasswordInput(e.target.value)}
               placeholder="Password"
               minLength={6}
-              className="w-full bg-bg-card border border-border rounded-lg px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+              className="w-full bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
             />
           </div>
         </div>
@@ -209,11 +209,11 @@ export default function InviteForm({
 
       <div>
         <p className="text-text-muted text-xs uppercase tracking-wider mb-3">To</p>
-        <div className="space-y-3 bg-bg-card/60 border border-border rounded-2xl p-4">
+        <div className="space-y-3 bg-bg-card/60 border-[0.5px] border-border rounded-none p-4">
           {recipients.map((recipient, i) => (
             <div
               key={i}
-              className="space-y-3 rounded-xl border border-border bg-bg-card/70 p-4"
+              className="space-y-3 rounded-none border-[0.5px] border-border bg-bg-card/70 p-4"
             >
               <div className="flex gap-2">
                 <input
@@ -221,21 +221,21 @@ export default function InviteForm({
                   value={recipient.firstName}
                   onChange={(e) => updateRecipient(i, 'firstName', e.target.value)}
                   placeholder="First name"
-                  className="w-1/3 bg-bg-card border border-border rounded-lg px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+                  className="w-1/3 bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
                 />
                 <input
                   type="text"
                   value={recipient.lastName}
                   onChange={(e) => updateRecipient(i, 'lastName', e.target.value)}
                   placeholder="Last name"
-                  className="w-1/3 bg-bg-card border border-border rounded-lg px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+                  className="w-1/3 bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
                 />
                 <input
                   type="email"
                   value={recipient.email}
                   onChange={(e) => updateRecipient(i, 'email', e.target.value)}
                   placeholder="friend@example.com"
-                  className="w-1/3 bg-bg-card border border-border rounded-lg px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+                  className="w-1/3 bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
                 />
                 {recipients.length > 1 && (
                   <button
@@ -254,7 +254,7 @@ export default function InviteForm({
                 onChange={(e) => updateRecipient(i, 'note', e.target.value)}
                 placeholder="Add a short note (1-3 sentences)..."
                 rows={3}
-                className="w-full bg-bg-card border border-border rounded-lg px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+                className="w-full bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
               />
             </div>
           ))}
@@ -293,7 +293,7 @@ export default function InviteForm({
               !senderEmailInput.includes('@') ||
               !senderPasswordInput.trim()))
         }
-        className="w-full mt-4 bg-accent text-bg font-medium rounded-lg py-3 text-sm hover:bg-accent-hover transition-colors disabled:opacity-50 cursor-pointer"
+        className="w-full mt-4 bg-ink text-warm font-medium rounded-none py-3 text-sm hover:bg-ink/80 transition-colors disabled:opacity-50 cursor-pointer"
       >
         {sending ? 'Sending...' : 'Send the invitations.'}
       </button>

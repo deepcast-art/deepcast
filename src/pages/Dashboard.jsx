@@ -249,7 +249,7 @@ export default function Dashboard() {
             <Link to="/" className="text-accent text-sm tracking-[0.3em] uppercase">
               Deepcast
             </Link>
-            <h1 className="text-2xl font-light mt-4">Creator Dashboard</h1>
+            <h1 className="text-2xl font-display mt-4">Creator Dashboard</h1>
             <p className="text-text-muted text-sm mt-1">{profile.name}</p>
             {profile.role === 'creator' && (
               <p className="text-text-muted text-xs uppercase tracking-wider mt-2">
@@ -272,7 +272,7 @@ export default function Dashboard() {
             </Link>
             <Link
               to="/upload"
-              className="bg-accent text-bg text-sm font-medium rounded-lg px-5 py-2.5 hover:bg-accent-hover transition-colors"
+              className="bg-ink text-warm text-sm font-medium rounded-none px-5 py-2.5 hover:bg-accent-hover transition-colors"
             >
               Upload film
             </Link>
@@ -309,7 +309,7 @@ export default function Dashboard() {
               return (
                 <div
                   key={film.id}
-                  className="bg-bg-card border border-border rounded-lg p-6"
+                  className="bg-bg-card border border-border rounded-none p-6"
                 >
                   <div className="flex items-start justify-between mb-6">
                     <div className="flex items-center gap-4">
@@ -324,7 +324,7 @@ export default function Dashboard() {
                               className="hidden"
                             />
                             <div
-                              className="relative w-24 h-14 rounded bg-bg-card border border-border overflow-hidden cursor-pointer flex-shrink-0"
+                              className="relative w-24 h-14 rounded-none bg-bg-card border border-border overflow-hidden cursor-pointer flex-shrink-0"
                               onClick={() => editThumbInputRef.current?.click()}
                             >
                               {editThumbnailPreview ? (
@@ -347,14 +347,14 @@ export default function Dashboard() {
                                 type="text"
                                 value={editTitle}
                                 onChange={(e) => setEditTitle(e.target.value)}
-                                className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+                                className="w-full bg-bg border border-border rounded-none px-3 py-2 text-text text-sm focus:outline-none focus:border-accent transition-colors"
                                 placeholder="Film title"
                               />
                               <textarea
                                 value={editDescription}
                                 onChange={(e) => setEditDescription(e.target.value)}
                                 rows={2}
-                                className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent transition-colors resize-none"
+                                className="w-full bg-bg border border-border rounded-none px-3 py-2 text-text text-sm focus:outline-none focus:border-accent transition-colors resize-none"
                                 placeholder="Description"
                               />
                             </div>
@@ -381,12 +381,12 @@ export default function Dashboard() {
                             <img
                               src={film.thumbnail_url}
                               alt={film.title}
-                              className="w-24 h-14 object-cover rounded"
+                              className="w-24 h-14 object-cover rounded-none"
                             />
                           )}
                           <div>
                             <div className="flex items-center gap-2">
-                              <h3 className="text-lg font-light">{film.title}</h3>
+                              <h3 className="text-lg font-display">{film.title}</h3>
                               <button
                                 onClick={() => startEditing(film)}
                                 className="text-text-muted text-[10px] uppercase tracking-wider hover:text-accent transition-colors cursor-pointer"
@@ -436,7 +436,7 @@ export default function Dashboard() {
                         </span>
                       )}
                       <span
-                        className={`text-xs uppercase tracking-wider px-3 py-1 rounded-full ${statusBadge[film.status]}`}
+                        className={`text-xs uppercase tracking-wider px-3 py-1 rounded-none ${statusBadge[film.status]}`}
                       >
                         {film.status}
                       </span>

@@ -66,7 +66,7 @@ export default function PostShare() {
             <Link to="/" className="text-accent text-sm tracking-[0.3em] uppercase">
               Deepcast
             </Link>
-            <h1 className="text-2xl font-light mt-4">You&apos;ve just extended the movement.</h1>
+            <h1 className="text-2xl font-display mt-4">You&apos;ve just extended the movement.</h1>
             <p className="text-text-muted text-sm mt-2">
               Because of you, {shareCount} more people now have access to this film.
             </p>
@@ -83,7 +83,7 @@ export default function PostShare() {
           This is how the film has travelled. Every node is a person who chose to pass it on.
         </p>
 
-        <div className="bg-bg-card/60 border border-border rounded-2xl p-6 mb-8">
+        <div className="bg-bg-card/60 border border-border rounded-none p-6 mb-8">
           {loading ? (
             <div className="flex justify-center py-12">
               <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
@@ -139,7 +139,7 @@ export default function PostShare() {
           )}
         </div>
 
-        <div className="bg-bg-card/80 border border-accent/50 rounded-2xl p-6 shadow-[0_0_40px_rgba(200,169,110,0.18)] mb-8">
+        <div className="bg-bg-card/80 border border-accent/50 rounded-none p-6 mb-8">
           <h3 className="text-sm uppercase tracking-wider text-text-muted mb-3">
             SHARE WITH FRIENDS
           </h3>

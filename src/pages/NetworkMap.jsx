@@ -240,7 +240,7 @@ export default function NetworkMap() {
             <Link to="/" className="text-accent text-sm tracking-[0.3em] uppercase">
               Deepcast
             </Link>
-            <h1 className="text-2xl font-light mt-4">Network Map</h1>
+            <h1 className="text-2xl font-display mt-4">Network Map</h1>
             <p className="text-text-muted text-sm mt-1">
               See how each film travels through the network.
             </p>
@@ -274,10 +274,10 @@ export default function NetworkMap() {
           </div>
         ) : (
           <div className="space-y-8 animate-fade-in animate-delay-200">
-            <div className="bg-bg-card border border-border rounded-lg p-6">
+            <div className="bg-bg-card border border-border rounded-none p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h2 className="text-lg font-light">{selectedFilmTitle}</h2>
+                  <h2 className="text-lg font-display">{selectedFilmTitle}</h2>
                   <p className="text-text-muted text-xs mt-1">
                     {filteredInvites.length} invite{filteredInvites.length !== 1 ? 's' : ''}
                   </p>
@@ -302,7 +302,7 @@ export default function NetworkMap() {
                   <select
                     value={selectedFilmId || ''}
                     onChange={(e) => setSelectedFilmId(e.target.value)}
-                    className="w-full bg-bg-card border border-border rounded-lg px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+                    className="w-full bg-bg-card border border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
                   >
                     {filmOptions.map((film) => (
                       <option key={film.id} value={film.id}>
@@ -313,7 +313,7 @@ export default function NetworkMap() {
                 </div>
               )}
 
-              <div className="mb-6 rounded-2xl border border-border bg-bg/60 p-4">
+              <div className="mb-6 rounded-none border border-border bg-bg/60 p-4">
                 <svg
                   viewBox={`0 0 ${mapLayout.width} ${mapLayout.height}`}
                   className="w-full h-[420px]"

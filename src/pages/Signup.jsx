@@ -35,7 +35,7 @@ export default function Signup() {
           <Link to="/" className="text-accent text-sm tracking-[0.3em] uppercase">
             Deepcast
           </Link>
-          <h1 className="text-2xl font-light mt-6 mb-2">
+          <h1 className="text-2xl font-display mt-6 mb-2">
             {isCreator ? 'Creator signup' : 'Join Deepcast'}
           </h1>
           <p className="text-text-muted text-sm">
@@ -47,7 +47,7 @@ export default function Signup() {
 
         <form onSubmit={handleSubmit} className="space-y-5 animate-fade-in animate-delay-200">
           {error && (
-            <div className="text-error text-sm text-center bg-error/10 rounded-lg py-2 px-4">
+            <div className="text-error text-sm text-center bg-error/10 rounded-none py-2 px-4">
               {error}
             </div>
           )}
@@ -62,7 +62,7 @@ export default function Signup() {
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
                 required
-                className="w-1/2 bg-bg-card border border-border rounded-lg px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+                className="w-1/2 bg-bg-card border border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
                 placeholder="First name"
               />
               <input
@@ -70,7 +70,7 @@ export default function Signup() {
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
                 required
-                className="w-1/2 bg-bg-card border border-border rounded-lg px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+                className="w-1/2 bg-bg-card border border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
                 placeholder="Last name"
               />
             </div>
@@ -85,7 +85,7 @@ export default function Signup() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full bg-bg-card border border-border rounded-lg px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+              className="w-full bg-bg-card border border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
               placeholder="you@example.com"
             />
           </div>
@@ -100,7 +100,7 @@ export default function Signup() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
-              className="w-full bg-bg-card border border-border rounded-lg px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+              className="w-full bg-bg-card border border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
               placeholder="At least 6 characters"
             />
           </div>
@@ -108,7 +108,7 @@ export default function Signup() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-accent text-bg font-medium rounded-lg py-3 text-sm hover:bg-accent-hover transition-colors disabled:opacity-50 cursor-pointer"
+            className="w-full bg-ink text-warm font-medium rounded-none py-3 text-sm hover:bg-accent-hover transition-colors disabled:opacity-50 cursor-pointer"
           >
             {loading ? 'Creating account...' : 'Create account'}
           </button>

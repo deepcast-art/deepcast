@@ -149,7 +149,7 @@ export default function Upload() {
       <div className="min-h-screen px-6 py-12">
         <div className="max-w-lg mx-auto text-center animate-fade-in">
           <p className="text-accent text-sm tracking-[0.3em] uppercase mb-8">Deepcast</p>
-          <h1 className="text-2xl font-light mb-2">Your film is ready</h1>
+          <h1 className="text-2xl font-display mb-2">Your film is ready</h1>
           <p className="text-text-muted text-sm mb-10">
             Send your first seed invitations to start spreading the screening.
           </p>
@@ -186,10 +186,10 @@ export default function Upload() {
 
           {step === 'uploading' ? (
             <>
-              <h2 className="text-xl font-light mb-6">Uploading your film</h2>
-              <div className="w-full h-1 bg-border rounded-full overflow-hidden mb-4">
+              <h2 className="text-xl font-display mb-6">Uploading your film</h2>
+              <div className="w-full h-1 bg-border rounded-none overflow-hidden mb-4">
                 <div
-                  className="h-full bg-accent transition-all duration-300 rounded-full"
+                  className="h-full bg-accent transition-all duration-300 rounded-none"
                   style={{ width: `${uploadProgress}%` }}
                 />
               </div>
@@ -197,7 +197,7 @@ export default function Upload() {
             </>
           ) : (
             <>
-              <h2 className="text-xl font-light mb-6">Processing your film</h2>
+              <h2 className="text-xl font-display mb-6">Processing your film</h2>
               <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin mx-auto mb-4" />
               <p className="text-text-muted text-sm">
                 This may take a few moments. Your film is being encoded for optimal playback.
@@ -216,12 +216,12 @@ export default function Upload() {
           <Link to="/dashboard" className="text-text-muted text-sm hover:text-text transition-colors">
             &larr; Dashboard
           </Link>
-          <h1 className="text-2xl font-light mt-6">Upload a film</h1>
+          <h1 className="text-2xl font-display mt-6">Upload a film</h1>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6 animate-fade-in animate-delay-200">
           {error && (
-            <div className="text-error text-sm text-center bg-error/10 rounded-lg py-2 px-4">
+            <div className="text-error text-sm text-center bg-error/10 rounded-none py-2 px-4">
               {error}
             </div>
           )}
@@ -235,7 +235,7 @@ export default function Upload() {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
-              className="w-full bg-bg-card border border-border rounded-lg px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+              className="w-full bg-bg-card border border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
               placeholder="Film title"
             />
           </div>
@@ -248,7 +248,7 @@ export default function Upload() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              className="w-full bg-bg-card border border-border rounded-lg px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors resize-none"
+              className="w-full bg-bg-card border border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors resize-none"
               placeholder="A brief description of your film"
             />
           </div>
@@ -266,7 +266,7 @@ export default function Upload() {
             />
             {thumbnailPreview ? (
               <div
-                className="relative w-[100px] h-[100px] rounded-md overflow-hidden bg-bg-card cursor-pointer"
+                className="relative w-[100px] h-[100px] rounded-none overflow-hidden bg-bg-card cursor-pointer"
                 onClick={() => thumbInputRef.current?.click()}
               >
                 <img
@@ -282,7 +282,7 @@ export default function Upload() {
               <button
                 type="button"
                 onClick={() => thumbInputRef.current?.click()}
-                className="w-full aspect-video border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center gap-2 text-text-muted hover:border-accent hover:text-accent transition-colors cursor-pointer"
+                className="w-full aspect-video border-2 border-dashed border-border rounded-none flex flex-col items-center justify-center gap-2 text-text-muted hover:border-accent hover:text-accent transition-colors cursor-pointer"
               >
                 <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                   <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -306,7 +306,7 @@ export default function Upload() {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="w-full border-2 border-dashed border-border rounded-lg py-8 flex flex-col items-center justify-center gap-2 text-text-muted hover:border-accent hover:text-accent transition-colors cursor-pointer"
+              className="w-full border-2 border-dashed border-border rounded-none py-8 flex flex-col items-center justify-center gap-2 text-text-muted hover:border-accent hover:text-accent transition-colors cursor-pointer"
             >
               <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                 <path d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
@@ -322,7 +322,7 @@ export default function Upload() {
           <button
             type="submit"
             disabled={uploading || !title || !videoFile}
-            className="w-full bg-accent text-bg font-medium rounded-lg py-3 text-sm hover:bg-accent-hover transition-colors disabled:opacity-50 cursor-pointer"
+            className="w-full bg-ink text-warm font-medium rounded-none py-3 text-sm hover:bg-accent-hover transition-colors disabled:opacity-50 cursor-pointer"
           >
             Upload film
           </button>

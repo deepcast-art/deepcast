@@ -233,7 +233,7 @@ export default function Profile() {
             <Link to="/" className="text-accent text-sm tracking-[0.3em] uppercase">
               Deepcast
             </Link>
-            <h1 className="text-2xl font-light mt-4">{profile.name}</h1>
+            <h1 className="text-2xl font-display mt-4">{profile.name}</h1>
             <p className="text-text-muted text-sm mt-1">{profile.email}</p>
             <p className="text-text-muted text-xs uppercase tracking-wider mt-2">
               {profile.role}
@@ -279,7 +279,7 @@ export default function Profile() {
                   {watchedFilms.map((film) => (
                     <div
                       key={film.id}
-                      className="flex items-center gap-4 p-4 bg-bg-card rounded-lg border border-border"
+                      className="flex items-center gap-4 p-4 bg-bg-card rounded-none border border-border"
                     >
                       {film.thumbnail_url && (
                         <img
@@ -296,7 +296,7 @@ export default function Profile() {
                           </p>
                         )}
                         {filmInvitesById[film.id]?.length ? (
-                          <div className="mt-4 rounded-2xl border border-border bg-bg/60 p-3">
+                          <div className="mt-4 rounded-none border border-border bg-bg/60 p-3">
                             {(() => {
                               const layout = buildNetworkLayout(
                                 filmInvitesById[film.id],
@@ -422,7 +422,7 @@ export default function Profile() {
                   {sentInvites.map((inv) => (
                     <div
                       key={inv.id}
-                      className="flex items-center justify-between p-4 bg-bg-card rounded-lg border border-border"
+                      className="flex items-center justify-between p-4 bg-bg-card rounded-none border border-border"
                     >
                       <div>
                         <p className="text-sm">{inv.recipient_email}</p>

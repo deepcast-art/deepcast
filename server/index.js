@@ -493,29 +493,29 @@ function buildInviteEmailHtml(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="margin: 0; padding: 0; background-color: #0a0a0a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0a0a0a; padding: 40px 20px;">
+<body style="margin: 0; padding: 0; background-color: #f5f0e8; font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-weight: 300;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f0e8; padding: 40px 20px;">
     <tr>
       <td align="center">
         <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 480px;">
           <!-- Logo -->
           <tr>
             <td align="center" style="padding-bottom: 40px;">
-              <span style="color: #c8a96e; font-size: 12px; letter-spacing: 4px; text-transform: uppercase;">DEEPCAST</span>
+              <span style="color: #c4822a; font-family: 'DM Serif Display', Georgia, serif; font-size: 12px; letter-spacing: 4px; text-transform: uppercase;">DEEPCAST</span>
             </td>
           </tr>
 
           <!-- Divider -->
           <tr>
             <td align="center" style="padding-bottom: 40px;">
-              <div style="width: 40px; height: 1px; background-color: #2a2a2a;"></div>
+              <div style="width: 40px; height: 1px; background-color: #d4cfc4;"></div>
             </td>
           </tr>
 
           ${recipientName ? `
           <tr>
             <td align="center" style="padding-bottom: 10px;">
-              <p style="margin: 0; color: #c8a96e; font-size: 14px;">
+              <p style="margin: 0; color: #c4822a; font-size: 14px;">
                 Hi ${recipientName},
               </p>
             </td>
@@ -524,7 +524,7 @@ function buildInviteEmailHtml(
 
           <tr>
             <td align="center" style="padding-bottom: 16px;">
-              <p style="margin: 0; color: #f5f5f0; font-size: 14px; line-height: 1.6; max-width: 360px;">
+              <p style="margin: 0; color: #1a1714; font-size: 14px; line-height: 1.6; max-width: 360px;">
                 ${senderFirstName} thought of you when they watched this film.${inviteOrdinal ? ` You are the ${inviteOrdinal}th person to be invited to see the exclusive screening of this film.` : ''}
               </p>
             </td>
@@ -533,14 +533,14 @@ function buildInviteEmailHtml(
           ${personalNote ? `
           <tr>
             <td align="center" style="padding-bottom: 16px;">
-              <p style="margin: 0; color: #8a8a85; font-size: 12px;">
+              <p style="margin: 0; color: #8a8070; font-size: 12px;">
                 Here is what they had to say,
               </p>
             </td>
           </tr>
           <tr>
             <td align="center" style="padding-bottom: 20px;">
-              <p style="margin: 0; color: #f5f5f0; font-size: 14px; line-height: 1.6; max-width: 360px;">
+              <p style="margin: 0; color: #1a1714; font-size: 14px; line-height: 1.6; max-width: 360px;">
                 &quot;${personalNote}&quot;
               </p>
             </td>
@@ -549,7 +549,7 @@ function buildInviteEmailHtml(
 
           <tr>
             <td align="center" style="padding-bottom: 24px;">
-              <p style="margin: 0; color: #c8a96e; font-size: 14px;">
+              <p style="margin: 0; color: #c4822a; font-size: 14px;">
                 - ${senderFirstName}
               </p>
             </td>
@@ -558,7 +558,7 @@ function buildInviteEmailHtml(
           <!-- Film title -->
           <tr>
             <td align="center" style="padding-bottom: 8px;">
-              <h2 style="margin: 0; color: #c8a96e; font-size: 18px; font-weight: 400;">
+              <h2 style="margin: 0; color: #c4822a; font-family: 'DM Serif Display', Georgia, serif; font-size: 18px; font-weight: 400;">
                 ${filmTitle}
               </h2>
             </td>
@@ -567,7 +567,7 @@ function buildInviteEmailHtml(
           ${filmThumbnailUrl ? `
           <tr>
             <td align="center" style="padding-bottom: 16px;">
-              <img src="${filmThumbnailUrl}" alt="${filmTitle}" style="width: 100%; max-width: 360px; border-radius: 10px; display: block;" />
+              <img src="${filmThumbnailUrl}" alt="${filmTitle}" style="width: 100%; max-width: 360px; border-radius: 2px; display: block;" />
             </td>
           </tr>
           ` : ''}
@@ -576,7 +576,7 @@ function buildInviteEmailHtml(
           <!-- Description -->
           <tr>
             <td align="center" style="padding-bottom: 40px;">
-              <p style="margin: 0; color: #8a8a85; font-size: 14px; line-height: 1.6; max-width: 360px;">
+              <p style="margin: 0; color: #8a8070; font-size: 14px; line-height: 1.6; max-width: 360px;">
                 ${filmDescription}
               </p>
             </td>
@@ -586,16 +586,16 @@ function buildInviteEmailHtml(
           <!-- CTA Button -->
           <tr>
             <td align="center" style="padding-bottom: 48px;">
-              <a href="${inviteUrl}" style="display: inline-block; background-color: #c8a96e; color: #0a0a0a; text-decoration: none; font-size: 14px; font-weight: 500; padding: 14px 32px; border-radius: 8px;">
+              <a href="${inviteUrl}" style="display: inline-block; background-color: #1a1714; color: #f5f0e8; text-decoration: none; font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; font-weight: 500; padding: 14px 32px; border-radius: 0;">
                 Accept your invitation
               </a>
             </td>
           </tr>
           <tr>
             <td align="center" style="padding-bottom: 32px;">
-              <p style="margin: 0; color: #8a8a85; font-size: 12px; line-height: 1.6; max-width: 360px;">
+              <p style="margin: 0; color: #8a8070; font-size: 12px; line-height: 1.6; max-width: 360px;">
                 If the button doesn&apos;t work, copy and paste this link:<br />
-                <a href="${inviteUrl}" style="color: #c8a96e; text-decoration: none;">${inviteUrl}</a>
+                <a href="${inviteUrl}" style="color: #c4822a; text-decoration: none;">${inviteUrl}</a>
               </p>
             </td>
           </tr>
@@ -603,14 +603,14 @@ function buildInviteEmailHtml(
           <!-- Divider -->
           <tr>
             <td align="center" style="padding-bottom: 24px;">
-              <div style="width: 40px; height: 1px; background-color: #2a2a2a;"></div>
+              <div style="width: 40px; height: 1px; background-color: #d4cfc4;"></div>
             </td>
           </tr>
 
           <!-- Footer -->
           <tr>
             <td align="center">
-              <p style="margin: 0; color: #5a5a55; font-size: 12px; line-height: 1.6;">
+              <p style="margin: 0; color: #8a8070; font-size: 12px; line-height: 1.6;">
                 You were invited by ${senderName}. This film is not publicly available. It travels only through people.
               </p>
             </td>
