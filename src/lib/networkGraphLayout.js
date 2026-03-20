@@ -85,7 +85,53 @@ export function buildNetworkGraphLayout({
     }
   })
 
-  /** Longest parent_invite_id chain → ordered spine: Film, then each invite's recipient in chain order */
+  /** Adjacency for longest-path spine (left-to-right = depth along the main chain). */
+  const adjacency = new Map()
+  edges.forEach((edge) => {
+    if (!adjacency.has(edge.from)) adjacency.set(edge.from, [])
+    adjacency.get(edge.from).push(edge.to)
+  })
+
+  /**
+   * Longest simple path from `start` following edges.
+   * Picks the deepest branch at forks so e.g. Film → Vidya → Julia → Super wins over shorter branches.
+   */
+  function longestPathFrom(start, pathSet = new Set()) {
+    const outs = (adjacency.get(start) || []).filter((v) => !pathSet.has(v))
+    if (outs.length === 0) return [start]
+    outs.sort((a, b) => a.localeCompare(b))
+    const nextPath = new Set(pathSet)
+    nextPath.add(start)
+    let best = [start]
+    for (const v of outs) {
+      const sub = longestPathFrom(v, nextPath)
+      const candidate = [start, ...sub.slice(1)]
+      if (candidate.length > best.length) best = candidate
+      else if (candidate.length === best.length && candidate.length > 1) {
+        const tieA = lastInviteCreatedAtForPath(candidate)
+        const tieB = lastInviteCreatedAtForPath(best)
+        if (tieA && tieB && tieA > tieB) best = candidate
+      }
+    }
+    return best
+  }
+
+  /** Tie-break equal-length paths using latest invite along the path (when mappable). */
+  function lastInviteCreatedAtForPath(pathKeys) {
+    let maxTs = 0
+    for (let i = 0; i < pathKeys.length - 1; i++) {
+      const inv = filmInvites.find(
+        (r) => senderKeyFromRow(r) === pathKeys[i] && recipientKeyFromRow(r) === pathKeys[i + 1]
+      )
+      if (inv?.created_at) {
+        const t = new Date(inv.created_at).getTime()
+        if (t > maxTs) maxTs = t
+      }
+    }
+    return maxTs || null
+  }
+
+  /** Optional: parent_invite_id chain (when backfilled) — use if strictly longer than graph path. */
   const byId = new Map(filmInvites.map((r) => [r.id, r]))
   const referencedAsParent = new Set(
     filmInvites.map((r) => r.parent_invite_id).filter(Boolean)
@@ -102,24 +148,35 @@ export function buildNetworkGraphLayout({
     return chain
   }
 
-  let bestChain = []
+  let bestParentChain = []
   for (const leaf of leaves) {
     const c = chainFromLeaf(leaf)
-    if (c.length > bestChain.length) {
-      bestChain = c
-    } else if (c.length === bestChain.length && c.length > 0 && bestChain.length > 0) {
+    if (c.length > bestParentChain.length) bestParentChain = c
+    else if (c.length === bestParentChain.length && c.length > 0 && bestParentChain.length > 0) {
       const a = c[c.length - 1]?.created_at
-      const b = bestChain[bestChain.length - 1]?.created_at
-      if (a && b && new Date(a) > new Date(b)) bestChain = c
+      const b = bestParentChain[bestParentChain.length - 1]?.created_at
+      if (a && b && new Date(a) > new Date(b)) bestParentChain = c
     }
   }
 
-  /** Spine: Film → each recipient in the tracked chain (e.g. Vidya → Julia → Super). Last leaf = last recipient. */
-  const spineKeys = [rootId]
-  if (bestChain.length > 0) {
-    bestChain.forEach((inv) => {
-      spineKeys.push(recipientKeyFromRow(inv))
-    })
+  const pathFromGraph = longestPathFrom(rootId)
+  const spineFromParent =
+    bestParentChain.length > 0
+      ? [rootId, ...bestParentChain.map((inv) => recipientKeyFromRow(inv))]
+      : []
+
+  /** Prefer graph path; use parent_invite_id chain only when it is strictly longer. */
+  let spineKeys = pathFromGraph
+  if (spineFromParent.length > pathFromGraph.length) {
+    spineKeys = spineFromParent
+  }
+
+  const chainInviteIds = []
+  for (let i = 0; i < spineKeys.length - 1; i++) {
+    const inv = filmInvites.find(
+      (r) => senderKeyFromRow(r) === spineKeys[i] && recipientKeyFromRow(r) === spineKeys[i + 1]
+    )
+    if (inv) chainInviteIds.push(inv.id)
   }
 
   const spineSet = new Set(spineKeys)
@@ -128,35 +185,15 @@ export function buildNetworkGraphLayout({
     spineCol.set(key, i)
   })
 
-  const depthById = new Map([[rootId, 0]])
-  const queue = [rootId]
-  const adjacency = new Map()
-  edges.forEach((edge) => {
-    if (!adjacency.has(edge.from)) adjacency.set(edge.from, [])
-    adjacency.get(edge.from).push(edge.to)
-  })
-
-  while (queue.length) {
-    const current = queue.shift()
-    const depth = depthById.get(current) || 0
-    const children = adjacency.get(current) || []
-    children.forEach((child) => {
-      if (!depthById.has(child)) {
-        depthById.set(child, depth + 1)
-        queue.push(child)
-      }
-    })
-  }
-
-  const k = spineKeys.length
+  /** All nodes not on the spine go one column to the right of the spine (avoids Super before Vidya). */
+  const spineLen = spineKeys.length
   const maxColForNode = new Map()
 
   nodes.forEach((node) => {
     if (spineSet.has(node.id) && spineCol.has(node.id)) {
       maxColForNode.set(node.id, spineCol.get(node.id))
     } else {
-      const d = depthById.get(node.id) ?? 1
-      maxColForNode.set(node.id, k + Math.max(0, d - 1))
+      maxColForNode.set(node.id, spineLen)
     }
   })
 
@@ -192,7 +229,11 @@ export function buildNetworkGraphLayout({
           ? 'text-accent'
           : 'text-text-muted'
       const lastSpineKey = spineKeys[spineKeys.length - 1]
-      const isChainLeaf = lastSpineKey && node.id === lastSpineKey && node.type !== 'film'
+      const isChainLeaf =
+        lastSpineKey &&
+        node.id === lastSpineKey &&
+        node.type !== 'film' &&
+        node.type !== 'creator'
       positionedNodes.push({ ...node, x, y, statusClass, isChainLeaf })
     })
   })
@@ -203,6 +244,6 @@ export function buildNetworkGraphLayout({
     nodes: positionedNodes,
     edges,
     spineKeys,
-    chainInviteIds: bestChain.map((r) => r.id),
+    chainInviteIds,
   }
 }
