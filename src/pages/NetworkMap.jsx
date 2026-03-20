@@ -264,6 +264,28 @@ export default function NetworkMap() {
                   role="img"
                   aria-label="Invite network map"
                 >
+                  {(() => {
+                    const film = mapLayout.nodes.find((n) => n.type === 'film')
+                    if (!film) return null
+                    const maxD = Math.max(
+                      ...mapLayout.nodes.map((n) => n.propagationDepth ?? 0),
+                      1
+                    )
+                    const ringCount = Math.min(maxD, 8)
+                    return (
+                      <g aria-hidden stroke="#7C3AED" strokeOpacity={0.12} fill="none">
+                        {Array.from({ length: ringCount }, (_, i) => (
+                          <circle
+                            key={i}
+                            cx={film.x}
+                            cy={film.y}
+                            r={48 + i * 40}
+                            strokeWidth={0.75}
+                          />
+                        ))}
+                      </g>
+                    )
+                  })()}
                   <g stroke="#7C3AED" strokeWidth="1.4" strokeOpacity="0.6">
                     {mapLayout.edges.map((edge) => {
                       const fromNode = mapLayout.nodes.find((node) => node.id === edge.from)
@@ -325,7 +347,9 @@ export default function NetworkMap() {
                   })}
                 </svg>
                 <p className="text-text-muted text-xs mt-3 text-center">
-                  Layers show who invited whom. The yellow ring marks the end of the longest invite chain (last leaf). Colors reflect invite status.
+                  The film sits at the center; invitations propagate outward through the network. Faint rings
+                  suggest each wave of reach. The yellow ring marks the end of the longest invite chain (last
+                  leaf). Colors reflect invite status.
                 </p>
                 </>
                 )}

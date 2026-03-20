@@ -17,6 +17,28 @@ function InviteNetworkMapSvg({ networkLayout }) {
         role="img"
         aria-label="Invite network map"
       >
+        {(() => {
+          const film = networkLayout.nodes.find((n) => n.type === 'film')
+          if (!film) return null
+          const maxD = Math.max(
+            ...networkLayout.nodes.map((n) => n.propagationDepth ?? 0),
+            1
+          )
+          const ringCount = Math.min(maxD, 8)
+          return (
+            <g aria-hidden stroke="#7C3AED" strokeOpacity={0.1} fill="none">
+              {Array.from({ length: ringCount }, (_, i) => (
+                <circle
+                  key={i}
+                  cx={film.x}
+                  cy={film.y}
+                  r={48 + i * 40}
+                  strokeWidth={0.75}
+                />
+              ))}
+            </g>
+          )
+        })()}
         <g stroke="#7C3AED" strokeWidth="1.4" strokeOpacity="0.6">
           {networkLayout.edges.map((edge) => {
             const fromNode = networkLayout.nodes.find((node) => node.id === edge.from)
@@ -396,7 +418,7 @@ export default function InviteScreening() {
                 </h2>
                 <InviteNetworkMapSvg networkLayout={networkLayout} />
                 <p className="text-text-muted text-xs mt-3 text-center">
-                  Each node is a person. Each line is a personal invitation.
+                  Each node is a person; each line is an invitation spreading from the film at the center.
                 </p>
               </>
             ) : (

@@ -1,7 +1,7 @@
 /**
- * Build positioned nodes + edges for the invite network graph.
- * When invites include parent_invite_id, the longest chain is laid out as a left-to-right spine:
- * Film → recipient₁ → recipient₂ → … → last leaf (e.g. Vidya → Julia → Super).
+ * Invite network graph as propagation: force-directed layout from the film root,
+ * so the graph reads as a spreading network (not a single left-to-right spine).
+ * Longest path is still computed for chain highlighting (last leaf, chainInviteIds).
  */
 
 export function buildNetworkGraphLayout({
@@ -55,7 +55,6 @@ export function buildNetworkGraphLayout({
       'Member'
     )
     const isViewer = viewerRecipientKey && recipientKey === viewerRecipientKey
-    /** Dashboard: no viewer key → highlight all recipients. Screening: only viewer + chain leaf styling. */
     const recipientType = viewerRecipientKey
       ? isViewer
         ? 'recipient'
@@ -85,17 +84,12 @@ export function buildNetworkGraphLayout({
     }
   })
 
-  /** Adjacency for longest-path spine (left-to-right = depth along the main chain). */
   const adjacency = new Map()
   edges.forEach((edge) => {
     if (!adjacency.has(edge.from)) adjacency.set(edge.from, [])
     adjacency.get(edge.from).push(edge.to)
   })
 
-  /**
-   * Longest simple path from `start` following edges.
-   * Picks the deepest branch at forks so e.g. Film → Vidya → Julia → Super wins over shorter branches.
-   */
   function longestPathFrom(start, pathSet = new Set()) {
     const outs = (adjacency.get(start) || []).filter((v) => !pathSet.has(v))
     if (outs.length === 0) return [start]
@@ -116,7 +110,6 @@ export function buildNetworkGraphLayout({
     return best
   }
 
-  /** Tie-break equal-length paths using latest invite along the path (when mappable). */
   function lastInviteCreatedAtForPath(pathKeys) {
     let maxTs = 0
     for (let i = 0; i < pathKeys.length - 1; i++) {
@@ -131,7 +124,6 @@ export function buildNetworkGraphLayout({
     return maxTs || null
   }
 
-  /** Optional: parent_invite_id chain (when backfilled) — use if strictly longer than graph path. */
   const byId = new Map(filmInvites.map((r) => [r.id, r]))
   const referencedAsParent = new Set(
     filmInvites.map((r) => r.parent_invite_id).filter(Boolean)
@@ -165,7 +157,6 @@ export function buildNetworkGraphLayout({
       ? [rootId, ...bestParentChain.map((inv) => recipientKeyFromRow(inv))]
       : []
 
-  /** Prefer graph path; use parent_invite_id chain only when it is strictly longer. */
   let spineKeys = pathFromGraph
   if (spineFromParent.length > pathFromGraph.length) {
     spineKeys = spineFromParent
@@ -179,62 +170,150 @@ export function buildNetworkGraphLayout({
     if (inv) chainInviteIds.push(inv.id)
   }
 
-  const spineSet = new Set(spineKeys)
-  const spineCol = new Map()
-  spineKeys.forEach((key, i) => {
-    spineCol.set(key, i)
-  })
+  const lastSpineKey = spineKeys[spineKeys.length - 1]
 
-  /** All nodes not on the spine go one column to the right of the spine (avoids Super before Vidya). */
-  const spineLen = spineKeys.length
-  const maxColForNode = new Map()
-
-  nodes.forEach((node) => {
-    if (spineSet.has(node.id) && spineCol.has(node.id)) {
-      maxColForNode.set(node.id, spineCol.get(node.id))
-    } else {
-      maxColForNode.set(node.id, spineLen)
+  /** BFS propagation depth from film (for wave / styling). */
+  const propagationDepth = new Map([[rootId, 0]])
+  const q = [rootId]
+  while (q.length) {
+    const u = q.shift()
+    const d = propagationDepth.get(u) ?? 0
+    for (const v of adjacency.get(u) || []) {
+      if (!propagationDepth.has(v)) {
+        propagationDepth.set(v, d + 1)
+        q.push(v)
+      }
     }
-  })
+  }
 
-  const layers = {}
-  maxColForNode.forEach((col, id) => {
-    if (!layers[col]) layers[col] = []
-    layers[col].push(nodes.get(id))
-  })
+  const nodeIds = [...nodes.keys()]
+  const baseSize = Math.max(420, 120 + nodeIds.length * 28)
+  let cx = baseSize / 2
+  let cy = baseSize / 2
 
-  const colKeys = Object.keys(layers).map(Number)
-  const maxCol = colKeys.length ? Math.max(...colKeys) : 0
-  const horizontalGap = 160
-  const verticalGap = 64
-  const padding = 48
-  const width = Math.max(320, padding * 2 + maxCol * horizontalGap)
-  const maxLayerCount = Math.max(...Object.values(layers).map((layer) => layer.length), 1)
-  const height = Math.max(380, padding * 2 + maxLayerCount * verticalGap)
+  const pos = new Map()
+  const vel = new Map()
+  nodeIds.forEach((id, i) => {
+    const angle = (2 * Math.PI * i) / Math.max(nodeIds.length, 1)
+    const jitter = 40 + (i % 5) * 12
+    pos.set(id, {
+      x: cx + jitter * Math.cos(angle),
+      y: cy + jitter * Math.sin(angle),
+    })
+    vel.set(id, { vx: 0, vy: 0 })
+  })
+  pos.set(rootId, { x: cx, y: cy })
+
+  const repulsion = 5200
+  const idealEdge = 88
+  const springK = 0.034
+  const damping = 0.82
+  const centerPull = 0.012
+  const iterations = 160
+
+  for (let iter = 0; iter < iterations; iter++) {
+    const f = new Map()
+    nodeIds.forEach((id) => f.set(id, { fx: 0, fy: 0 }))
+
+    for (let i = 0; i < nodeIds.length; i++) {
+      for (let j = i + 1; j < nodeIds.length; j++) {
+        const a = nodeIds[i]
+        const b = nodeIds[j]
+        const pa = pos.get(a)
+        const pb = pos.get(b)
+        let dx = pb.x - pa.x
+        let dy = pb.y - pa.y
+        let distSq = dx * dx + dy * dy + 0.01
+        const dist = Math.sqrt(distSq)
+        const force = repulsion / distSq
+        const fx = (dx / dist) * force
+        const fy = (dy / dist) * force
+        f.get(a).fx -= fx
+        f.get(a).fy -= fy
+        f.get(b).fx += fx
+        f.get(b).fy += fy
+      }
+    }
+
+    for (const e of edges) {
+      const pa = pos.get(e.from)
+      const pb = pos.get(e.to)
+      if (!pa || !pb) continue
+      let dx = pb.x - pa.x
+      let dy = pb.y - pa.y
+      const dist = Math.sqrt(dx * dx + dy * dy) + 0.01
+      const displacement = dist - idealEdge
+      const force = springK * displacement
+      const fx = (dx / dist) * force
+      const fy = (dy / dist) * force
+      f.get(e.from).fx += fx
+      f.get(e.from).fy += fy
+      f.get(e.to).fx -= fx
+      f.get(e.to).fy -= fy
+    }
+
+    nodeIds.forEach((id) => {
+      if (id === rootId) return
+      const p = pos.get(id)
+      f.get(id).fx += (cx - p.x) * centerPull * (propagationDepth.get(id) ?? 1)
+      f.get(id).fy += (cy - p.y) * centerPull * (propagationDepth.get(id) ?? 1)
+    })
+
+    nodeIds.forEach((id) => {
+      if (id === rootId) {
+        pos.set(id, { x: cx, y: cy })
+        vel.set(id, { vx: 0, vy: 0 })
+        return
+      }
+      const v = vel.get(id)
+      v.vx = (v.vx + f.get(id).fx) * damping
+      v.vy = (v.vy + f.get(id).fy) * damping
+      const p = pos.get(id)
+      p.x += v.vx
+      p.y += v.vy
+    })
+  }
+
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  nodeIds.forEach((id) => {
+    const p = pos.get(id)
+    minX = Math.min(minX, p.x)
+    minY = Math.min(minY, p.y)
+    maxX = Math.max(maxX, p.x)
+    maxY = Math.max(maxY, p.y)
+  })
+  const pad = 56
+  const shiftX = pad - minX
+  const shiftY = pad - minY
+  const width = Math.max(320, maxX - minX + pad * 2)
+  const height = Math.max(320, maxY - minY + pad * 2)
 
   const positionedNodes = []
-  Object.entries(layers).forEach(([colKey, layerNodes]) => {
-    const col = Number(colKey)
-    const list = layerNodes.filter(Boolean)
-    const totalHeight = (list.length - 1) * verticalGap
-    const startY = height / 2 - totalHeight / 2
-    list.forEach((node, index) => {
-      const x = padding + col * horizontalGap
-      const y = startY + index * verticalGap
-      const status = statusByRecipient.get(node.id)
-      const statusClass =
-        status === 'watched' || status === 'signed_up'
-          ? 'text-success'
-          : status === 'opened'
-          ? 'text-accent'
-          : 'text-text-muted'
-      const lastSpineKey = spineKeys[spineKeys.length - 1]
-      const isChainLeaf =
-        lastSpineKey &&
-        node.id === lastSpineKey &&
-        node.type !== 'film' &&
-        node.type !== 'creator'
-      positionedNodes.push({ ...node, x, y, statusClass, isChainLeaf })
+  nodeIds.forEach((id) => {
+    const p = pos.get(id)
+    const node = nodes.get(id)
+    const status = statusByRecipient.get(node.id)
+    const statusClass =
+      status === 'watched' || status === 'signed_up'
+        ? 'text-success'
+        : status === 'opened'
+        ? 'text-accent'
+        : 'text-text-muted'
+    const isChainLeaf =
+      lastSpineKey &&
+      node.id === lastSpineKey &&
+      node.type !== 'film' &&
+      node.type !== 'creator'
+    positionedNodes.push({
+      ...node,
+      x: p.x + shiftX,
+      y: p.y + shiftY,
+      statusClass,
+      isChainLeaf,
+      propagationDepth: propagationDepth.get(id) ?? 0,
     })
   })
 
