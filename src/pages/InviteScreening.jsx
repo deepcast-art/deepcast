@@ -4,97 +4,8 @@ import MuxPlayer from '@mux/mux-player-react'
 import { supabase } from '../lib/supabase'
 import { api } from '../lib/api'
 import InviteForm, { parseInviteRecipientForPrefill } from '../components/InviteForm'
+import NetworkForceGraph2D from '../components/NetworkForceGraph2D'
 import { buildNetworkGraphLayout } from '../lib/networkGraphLayout'
-
-/** Shared SVG network graph for intro + screening (dark theme) */
-function InviteNetworkMapSvg({ networkLayout }) {
-  if (!networkLayout) return null
-  return (
-    <div className="relative w-full aspect-video bg-ink/60 border border-faint/20 rounded-none overflow-hidden">
-      <svg
-        viewBox={`0 0 ${networkLayout.width} ${networkLayout.height}`}
-        className="w-full h-full"
-        role="img"
-        aria-label="Invite network map"
-      >
-        {(() => {
-          const film = networkLayout.nodes.find((n) => n.type === 'film')
-          if (!film) return null
-          const maxD = Math.max(
-            ...networkLayout.nodes.map((n) => n.propagationDepth ?? 0),
-            1
-          )
-          const ringCount = Math.min(maxD, 8)
-          return (
-            <g aria-hidden stroke="#7C3AED" strokeOpacity={0.1} fill="none">
-              {Array.from({ length: ringCount }, (_, i) => (
-                <circle
-                  key={i}
-                  cx={film.x}
-                  cy={film.y}
-                  r={48 + i * 40}
-                  strokeWidth={0.75}
-                />
-              ))}
-            </g>
-          )
-        })()}
-        <g stroke="#7C3AED" strokeWidth="1.4" strokeOpacity="0.6">
-          {networkLayout.edges.map((edge) => {
-            const fromNode = networkLayout.nodes.find((node) => node.id === edge.from)
-            const toNode = networkLayout.nodes.find((node) => node.id === edge.to)
-            if (!fromNode || !toNode) return null
-            return (
-              <line
-                key={`edge-${edge.from}-${edge.to}`}
-                x1={fromNode.x}
-                y1={fromNode.y}
-                x2={toNode.x}
-                y2={toNode.y}
-              />
-            )
-          })}
-        </g>
-
-        {networkLayout.nodes.map((node) => {
-          const fillColor =
-            node.type === 'film'
-              ? '#F59E0B'
-              : node.type === 'creator'
-              ? '#22D3EE'
-              : node.type === 'recipient'
-              ? '#F43F5E'
-              : node.statusClass === 'text-success'
-              ? '#22C55E'
-              : node.statusClass === 'text-accent'
-              ? '#A855F7'
-              : '#94A3B8'
-          const radius = node.type === 'film' ? 18 : node.type === 'creator' ? 14 : 11
-          return (
-            <g key={node.id}>
-              <circle
-                cx={node.x}
-                cy={node.y}
-                r={radius}
-                fill={fillColor}
-                stroke={node.type === 'recipient' || node.isChainLeaf ? '#FDE047' : 'none'}
-                strokeWidth={node.type === 'recipient' || node.isChainLeaf ? 2.5 : 0}
-              />
-              <text
-                x={node.x}
-                y={node.y - radius - 6}
-                textAnchor="middle"
-                className="fill-warm text-[10px]"
-              >
-                {node.label}
-              </text>
-            </g>
-          )
-        })}
-      </svg>
-    </div>
-  )
-}
 
 export default function InviteScreening() {
   const navigate = useNavigate()
@@ -414,9 +325,16 @@ export default function InviteScreening() {
               <>
                 <h2 className="font-display text-warm text-lg sm:text-xl mt-6 mb-4 text-center leading-tight">
                   This film has passed through{' '}
-                  {networkLayout.nodes.filter((n) => n.type !== 'film').length} pairs of hands to reach you.
+                  {networkLayout.graphData.nodes.filter((n) => n.type !== 'film').length} pairs of hands to reach you.
                 </h2>
-                <InviteNetworkMapSvg networkLayout={networkLayout} />
+                <div className="relative w-full aspect-video bg-ink/60 border border-faint/20 rounded-none overflow-hidden">
+                  <NetworkForceGraph2D
+                    graphData={networkLayout.graphData}
+                    rootId="film-root"
+                    theme="dark"
+                    height={320}
+                  />
+                </div>
                 <p className="text-text-muted text-xs mt-3 text-center">
                   Each node is a person; each line is an invitation spreading from the film at the center.
                 </p>
@@ -468,9 +386,16 @@ export default function InviteScreening() {
                 <div className="mt-8 mb-6">
                   <h2 className="font-display text-warm text-lg sm:text-xl text-center mb-4 leading-tight">
                     This film has passed through{' '}
-                    {networkLayout.nodes.filter((n) => n.type !== 'film').length} pairs of hands to reach you.
+                    {networkLayout.graphData.nodes.filter((n) => n.type !== 'film').length} pairs of hands to reach you.
                   </h2>
-                  <InviteNetworkMapSvg networkLayout={networkLayout} />
+                  <div className="relative w-full min-h-[280px] bg-ink/40 border border-faint/20 rounded-none overflow-hidden">
+                    <NetworkForceGraph2D
+                      graphData={networkLayout.graphData}
+                      rootId="film-root"
+                      theme="dark"
+                      height={280}
+                    />
+                  </div>
                 </div>
               ) : null}
             </div>

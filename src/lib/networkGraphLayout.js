@@ -1,8 +1,17 @@
 /**
- * Invite network graph as propagation: force-directed layout from the film root,
- * so the graph reads as a spreading network (not a single left-to-right spine).
- * Longest path is still computed for chain highlighting (last leaf, chainInviteIds).
+ * Build invite network data for react-force-graph-2d (nodes + links).
+ * Longest path is computed for chain highlighting (last leaf, chainInviteIds).
  */
+
+function nodeFillColor(node, statusByRecipient) {
+  if (node.type === 'film') return '#F59E0B'
+  if (node.type === 'creator') return '#22D3EE'
+  if (node.type === 'recipient') return '#F43F5E'
+  const status = statusByRecipient.get(node.id)
+  if (status === 'watched' || status === 'signed_up') return '#22C55E'
+  if (status === 'opened') return '#A855F7'
+  return '#94A3B8'
+}
 
 export function buildNetworkGraphLayout({
   filmInvites,
@@ -172,7 +181,6 @@ export function buildNetworkGraphLayout({
 
   const lastSpineKey = spineKeys[spineKeys.length - 1]
 
-  /** BFS propagation depth from film (for wave / styling). */
   const propagationDepth = new Map([[rootId, 0]])
   const q = [rootId]
   while (q.length) {
@@ -186,115 +194,8 @@ export function buildNetworkGraphLayout({
     }
   }
 
-  const nodeIds = [...nodes.keys()]
-  const baseSize = Math.max(420, 120 + nodeIds.length * 28)
-  let cx = baseSize / 2
-  let cy = baseSize / 2
-
-  const pos = new Map()
-  const vel = new Map()
-  nodeIds.forEach((id, i) => {
-    const angle = (2 * Math.PI * i) / Math.max(nodeIds.length, 1)
-    const jitter = 40 + (i % 5) * 12
-    pos.set(id, {
-      x: cx + jitter * Math.cos(angle),
-      y: cy + jitter * Math.sin(angle),
-    })
-    vel.set(id, { vx: 0, vy: 0 })
-  })
-  pos.set(rootId, { x: cx, y: cy })
-
-  const repulsion = 5200
-  const idealEdge = 88
-  const springK = 0.034
-  const damping = 0.82
-  const centerPull = 0.012
-  const iterations = 160
-
-  for (let iter = 0; iter < iterations; iter++) {
-    const f = new Map()
-    nodeIds.forEach((id) => f.set(id, { fx: 0, fy: 0 }))
-
-    for (let i = 0; i < nodeIds.length; i++) {
-      for (let j = i + 1; j < nodeIds.length; j++) {
-        const a = nodeIds[i]
-        const b = nodeIds[j]
-        const pa = pos.get(a)
-        const pb = pos.get(b)
-        let dx = pb.x - pa.x
-        let dy = pb.y - pa.y
-        let distSq = dx * dx + dy * dy + 0.01
-        const dist = Math.sqrt(distSq)
-        const force = repulsion / distSq
-        const fx = (dx / dist) * force
-        const fy = (dy / dist) * force
-        f.get(a).fx -= fx
-        f.get(a).fy -= fy
-        f.get(b).fx += fx
-        f.get(b).fy += fy
-      }
-    }
-
-    for (const e of edges) {
-      const pa = pos.get(e.from)
-      const pb = pos.get(e.to)
-      if (!pa || !pb) continue
-      let dx = pb.x - pa.x
-      let dy = pb.y - pa.y
-      const dist = Math.sqrt(dx * dx + dy * dy) + 0.01
-      const displacement = dist - idealEdge
-      const force = springK * displacement
-      const fx = (dx / dist) * force
-      const fy = (dy / dist) * force
-      f.get(e.from).fx += fx
-      f.get(e.from).fy += fy
-      f.get(e.to).fx -= fx
-      f.get(e.to).fy -= fy
-    }
-
-    nodeIds.forEach((id) => {
-      if (id === rootId) return
-      const p = pos.get(id)
-      f.get(id).fx += (cx - p.x) * centerPull * (propagationDepth.get(id) ?? 1)
-      f.get(id).fy += (cy - p.y) * centerPull * (propagationDepth.get(id) ?? 1)
-    })
-
-    nodeIds.forEach((id) => {
-      if (id === rootId) {
-        pos.set(id, { x: cx, y: cy })
-        vel.set(id, { vx: 0, vy: 0 })
-        return
-      }
-      const v = vel.get(id)
-      v.vx = (v.vx + f.get(id).fx) * damping
-      v.vy = (v.vy + f.get(id).fy) * damping
-      const p = pos.get(id)
-      p.x += v.vx
-      p.y += v.vy
-    })
-  }
-
-  let minX = Infinity
-  let minY = Infinity
-  let maxX = -Infinity
-  let maxY = -Infinity
-  nodeIds.forEach((id) => {
-    const p = pos.get(id)
-    minX = Math.min(minX, p.x)
-    minY = Math.min(minY, p.y)
-    maxX = Math.max(maxX, p.x)
-    maxY = Math.max(maxY, p.y)
-  })
-  const pad = 56
-  const shiftX = pad - minX
-  const shiftY = pad - minY
-  const width = Math.max(320, maxX - minX + pad * 2)
-  const height = Math.max(320, maxY - minY + pad * 2)
-
-  const positionedNodes = []
-  nodeIds.forEach((id) => {
-    const p = pos.get(id)
-    const node = nodes.get(id)
+  const graphNodes = []
+  for (const [id, node] of nodes) {
     const status = statusByRecipient.get(node.id)
     const statusClass =
       status === 'watched' || status === 'signed_up'
@@ -307,22 +208,39 @@ export function buildNetworkGraphLayout({
       node.id === lastSpineKey &&
       node.type !== 'film' &&
       node.type !== 'creator'
-    positionedNodes.push({
+
+    const ringHighlight = node.type === 'recipient' || isChainLeaf
+
+    const fillColor = nodeFillColor(node, statusByRecipient)
+    const nodeRadius = node.type === 'film' ? 18 : node.type === 'creator' ? 14 : 12
+
+    graphNodes.push({
       ...node,
-      x: p.x + shiftX,
-      y: p.y + shiftY,
       statusClass,
       isChainLeaf,
       propagationDepth: propagationDepth.get(id) ?? 0,
+      fillColor,
+      ringHighlight,
+      nodeRadius,
     })
-  })
+  }
+
+  /** Pin film at origin so the network propagates outward from the film. */
+  const filmNode = graphNodes.find((n) => n.id === rootId)
+  if (filmNode) {
+    filmNode.fx = 0
+    filmNode.fy = 0
+  }
+
+  const graphLinks = edges.map((e) => ({
+    source: e.from,
+    target: e.to,
+  }))
 
   return {
-    width,
-    height,
-    nodes: positionedNodes,
-    edges,
+    graphData: { nodes: graphNodes, links: graphLinks },
     spineKeys,
     chainInviteIds,
+    rootId,
   }
 }

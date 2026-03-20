@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
 import { buildNetworkGraphLayout } from '../lib/networkGraphLayout'
+import NetworkForceGraph2D from '../components/NetworkForceGraph2D'
 
 export default function NetworkMap() {
   const { profile } = useAuth()
@@ -258,97 +259,17 @@ export default function NetworkMap() {
                   <p className="text-text-muted text-sm text-center py-12">No invites for this film yet.</p>
                 ) : (
                 <>
-                <svg
-                  viewBox={`0 0 ${mapLayout.width} ${mapLayout.height}`}
-                  className="w-full h-[420px]"
-                  role="img"
-                  aria-label="Invite network map"
-                >
-                  {(() => {
-                    const film = mapLayout.nodes.find((n) => n.type === 'film')
-                    if (!film) return null
-                    const maxD = Math.max(
-                      ...mapLayout.nodes.map((n) => n.propagationDepth ?? 0),
-                      1
-                    )
-                    const ringCount = Math.min(maxD, 8)
-                    return (
-                      <g aria-hidden stroke="#7C3AED" strokeOpacity={0.12} fill="none">
-                        {Array.from({ length: ringCount }, (_, i) => (
-                          <circle
-                            key={i}
-                            cx={film.x}
-                            cy={film.y}
-                            r={48 + i * 40}
-                            strokeWidth={0.75}
-                          />
-                        ))}
-                      </g>
-                    )
-                  })()}
-                  <g stroke="#7C3AED" strokeWidth="1.4" strokeOpacity="0.6">
-                    {mapLayout.edges.map((edge) => {
-                      const fromNode = mapLayout.nodes.find((node) => node.id === edge.from)
-                      const toNode = mapLayout.nodes.find((node) => node.id === edge.to)
-                      if (!fromNode || !toNode) return null
-                      return (
-                        <line
-                          key={`edge-${edge.from}-${edge.to}`}
-                          x1={fromNode.x}
-                          y1={fromNode.y}
-                          x2={toNode.x}
-                          y2={toNode.y}
-                        />
-                      )
-                    })}
-                  </g>
-
-                  {mapLayout.nodes.map((node) => {
-                    const fillColor =
-                      node.type === 'film'
-                        ? '#F59E0B'
-                        : node.type === 'creator'
-                        ? '#22D3EE'
-                        : node.type === 'recipient'
-                        ? '#F43F5E'
-                        : node.statusClass === 'text-success'
-                        ? '#22C55E'
-                        : node.statusClass === 'text-accent'
-                        ? '#A855F7'
-                        : '#94A3B8'
-                    const radius =
-                      node.type === 'film' ? 18 : node.type === 'creator' ? 14 : 12
-                    return (
-                      <g key={node.id}>
-                        <circle
-                          cx={node.x}
-                          cy={node.y}
-                          r={radius}
-                          fill={fillColor}
-                          stroke={
-                            node.type === 'recipient' || node.isChainLeaf
-                              ? '#FDE047'
-                              : 'none'
-                          }
-                          strokeWidth={
-                            node.type === 'recipient' || node.isChainLeaf ? 2.5 : 0
-                          }
-                        />
-                        <text
-                          x={node.x}
-                          y={node.y - radius - 6}
-                          textAnchor="middle"
-                          className="fill-text text-[10px]"
-                        >
-                          {node.label}
-                        </text>
-                      </g>
-                    )
-                  })}
-                </svg>
+                <div className="w-full min-h-[420px]" role="img" aria-label="Invite network map">
+                  <NetworkForceGraph2D
+                    graphData={mapLayout.graphData}
+                    rootId="film-root"
+                    theme="light"
+                    height={420}
+                  />
+                </div>
                 <p className="text-text-muted text-xs mt-3 text-center">
-                  The film sits at the center; invitations propagate outward through the network. Faint rings
-                  suggest each wave of reach. The yellow ring marks the end of the longest invite chain (last
+                  Force-directed layout: the film stays at the center; invitations spread through the network.
+                  Drag and scroll to explore. The yellow ring marks the end of the longest invite chain (last
                   leaf). Colors reflect invite status.
                 </p>
                 </>
