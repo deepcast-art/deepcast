@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
+import { buildNetworkGraphLayout } from '../lib/networkGraphLayout'
 
 export default function NetworkMap() {
   const { profile } = useAuth()
@@ -11,6 +12,7 @@ export default function NetworkMap() {
   const [films, setFilms] = useState([])
   const [selectedFilmId, setSelectedFilmId] = useState(null)
   const [resendStatusByInvite, setResendStatusByInvite] = useState({})
+  const [creatorName, setCreatorName] = useState('')
   const resendInviteTimeouts = useRef({})
 
   useEffect(() => {
@@ -24,6 +26,34 @@ export default function NetworkMap() {
       })
     }
   }, [])
+
+  useEffect(() => {
+    if (!selectedFilmId) {
+      setCreatorName('')
+      return
+    }
+    if (profile?.role === 'creator') {
+      setCreatorName(profile?.name || '')
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      const { data: film } = await supabase
+        .from('films')
+        .select('creator_id')
+        .eq('id', selectedFilmId)
+        .single()
+      if (!film?.creator_id || cancelled) {
+        setCreatorName('')
+        return
+      }
+      const { data: u } = await supabase.from('users').select('name').eq('id', film.creator_id).single()
+      if (!cancelled) setCreatorName(u?.name || '')
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedFilmId, profile?.role, profile?.name, profile?.id])
 
   async function loadNetwork() {
     setLoading(true)
@@ -63,6 +93,10 @@ export default function NetworkMap() {
       .order('created_at', { ascending: false })
 
     setInvites(viewerInvites || [])
+    const firstFilmId = viewerInvites?.[0]?.film_id
+    if (firstFilmId) {
+      setSelectedFilmId((prev) => prev ?? firstFilmId)
+    }
     setLoading(false)
   }
 
@@ -79,7 +113,8 @@ export default function NetworkMap() {
 
   const filteredInvites = useMemo(() => {
     if (!selectedFilmId) return []
-    return invites.filter((invite) => invite.film_id === selectedFilmId)
+    const sid = String(selectedFilmId)
+    return invites.filter((invite) => invite.film_id != null && String(invite.film_id) === sid)
   }, [invites, selectedFilmId])
 
   const selectedFilmTitle = useMemo(() => {
@@ -87,111 +122,14 @@ export default function NetworkMap() {
   }, [filmOptions, selectedFilmId])
 
   const mapLayout = useMemo(() => {
-    const rootId = 'film-root'
-    const nodes = new Map()
-    const edges = []
-    const statusByRecipient = new Map()
-
-    const ensureNode = (id, label, type = 'person') => {
-      if (!nodes.has(id)) {
-        nodes.set(id, { id, label, type })
-      }
-    }
-
-    const toFirstName = (value, fallback = 'Invitee') => {
-      if (!value) return fallback
-      const trimmed = value.trim()
-      if (!trimmed) return fallback
-      const base = trimmed.includes('@') ? trimmed.split('@')[0] : trimmed
-      return base.split(/\s+/)[0] || fallback
-    }
-
-    ensureNode(rootId, selectedFilmTitle || 'Film', 'film')
-
-    filteredInvites.forEach((invite) => {
-      const senderKey =
-        invite.sender_email ||
-        (invite.sender_id ? `member:${invite.sender_id}` : '') ||
-        (invite.sender_name ? `name:${invite.sender_name}` : 'Unknown sender')
-      const senderLabel = toFirstName(
-        invite.sender_name || invite.sender_email || (invite.sender_id ? 'Member' : 'Unknown'),
-        'Member'
-      )
-      const recipientKey = invite.recipient_name
-        ? `${invite.recipient_email || ''}:${invite.recipient_name.trim().toLowerCase()}`
-        : invite.recipient_email || `recipient:${invite.id}`
-      const recipientLabel = toFirstName(
-        invite.recipient_name || invite.recipient_email,
-        'Invitee'
-      )
-
-      ensureNode(senderKey, senderLabel, 'person')
-      ensureNode(recipientKey, recipientLabel, 'recipient')
-      edges.push({ from: senderKey, to: recipientKey })
-      statusByRecipient.set(recipientKey, invite.status)
+    if (!filteredInvites.length) return null
+    return buildNetworkGraphLayout({
+      filmInvites: filteredInvites,
+      filmTitle: selectedFilmTitle,
+      creatorName,
+      viewerRecipientKey: null,
     })
-
-    const recipients = new Set(edges.map((edge) => edge.to))
-    const senders = new Set(edges.map((edge) => edge.from))
-    const rootSenders = Array.from(senders).filter((sender) => !recipients.has(sender))
-    rootSenders.forEach((sender) => edges.push({ from: rootId, to: sender }))
-
-    const depthById = new Map([[rootId, 0]])
-    const queue = [rootId]
-    const adjacency = new Map()
-    edges.forEach((edge) => {
-      if (!adjacency.has(edge.from)) adjacency.set(edge.from, [])
-      adjacency.get(edge.from).push(edge.to)
-    })
-
-    while (queue.length) {
-      const current = queue.shift()
-      const depth = depthById.get(current) || 0
-      const children = adjacency.get(current) || []
-      children.forEach((child) => {
-        if (!depthById.has(child)) {
-          depthById.set(child, depth + 1)
-          queue.push(child)
-        }
-      })
-    }
-
-    const layers = {}
-    nodes.forEach((node) => {
-      const depth = depthById.get(node.id) ?? 1
-      if (!layers[depth]) layers[depth] = []
-      layers[depth].push(node)
-    })
-
-    const maxDepth = Math.max(...Object.keys(layers).map((d) => Number(d)))
-    const horizontalGap = 180
-    const verticalGap = 70
-    const padding = 60
-    const width = padding * 2 + maxDepth * horizontalGap
-    const maxLayerCount = Math.max(...Object.values(layers).map((layer) => layer.length))
-    const height = Math.max(360, padding * 2 + maxLayerCount * verticalGap)
-
-    const positionedNodes = []
-    Object.entries(layers).forEach(([depthKey, layerNodes]) => {
-      const depth = Number(depthKey)
-      const totalHeight = (layerNodes.length - 1) * verticalGap
-      const startY = height / 2 - totalHeight / 2
-      layerNodes.forEach((node, index) => {
-        const x = padding + depth * horizontalGap
-        const y = startY + index * verticalGap
-        const status = statusByRecipient.get(node.id)
-        const statusClass =
-          status === 'watched' || status === 'signed_up'
-            ? 'text-success'
-            : status === 'opened'
-            ? 'text-accent'
-            : 'text-text-muted'
-        positionedNodes.push({ ...node, x, y, statusClass })
-      })
-    })
-
-    return { width, height, nodes: positionedNodes, edges }
-  }, [filteredInvites, selectedFilmTitle])
+  }, [filteredInvites, selectedFilmTitle, creatorName])
 
   const handleResendInvite = async (inviteId) => {
     setResendStatusByInvite((prev) => ({ ...prev, [inviteId]: 'sending' }))
@@ -316,6 +254,10 @@ export default function NetworkMap() {
               )}
 
               <div className="mb-6 rounded-none border border-border bg-bg/60 p-4">
+                {!mapLayout ? (
+                  <p className="text-text-muted text-sm text-center py-12">No invites for this film yet.</p>
+                ) : (
+                <>
                 <svg
                   viewBox={`0 0 ${mapLayout.width} ${mapLayout.height}`}
                   className="w-full h-[420px]"
@@ -343,6 +285,8 @@ export default function NetworkMap() {
                     const fillColor =
                       node.type === 'film'
                         ? '#F59E0B'
+                        : node.type === 'creator'
+                        ? '#22D3EE'
                         : node.type === 'recipient'
                         ? '#F43F5E'
                         : node.statusClass === 'text-success'
@@ -350,7 +294,8 @@ export default function NetworkMap() {
                         : node.statusClass === 'text-accent'
                         ? '#A855F7'
                         : '#94A3B8'
-                    const radius = node.type === 'film' ? 18 : 12
+                    const radius =
+                      node.type === 'film' ? 18 : node.type === 'creator' ? 14 : 12
                     return (
                       <g key={node.id}>
                         <circle
@@ -358,8 +303,14 @@ export default function NetworkMap() {
                           cy={node.y}
                           r={radius}
                           fill={fillColor}
-                          stroke={node.type === 'recipient' ? '#FDE047' : 'none'}
-                          strokeWidth={node.type === 'recipient' ? 2.5 : 0}
+                          stroke={
+                            node.type === 'recipient' || node.isChainLeaf
+                              ? '#FDE047'
+                              : 'none'
+                          }
+                          strokeWidth={
+                            node.type === 'recipient' || node.isChainLeaf ? 2.5 : 0
+                          }
                         />
                         <text
                           x={node.x}
@@ -374,8 +325,10 @@ export default function NetworkMap() {
                   })}
                 </svg>
                 <p className="text-text-muted text-xs mt-3 text-center">
-                  Layers show who invited whom. Colors reflect invite status.
+                  Layers show who invited whom. The yellow ring marks the end of the longest invite chain (last leaf). Colors reflect invite status.
                 </p>
+                </>
+                )}
               </div>
 
               <div className="space-y-2">

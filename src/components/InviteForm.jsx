@@ -2,6 +2,29 @@ import { useState } from 'react'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 
+/**
+ * Split invite.recipient_name + email for prefilling the "To" row (film receiver / viewer).
+ */
+export function parseInviteRecipientForPrefill(invite) {
+  if (!invite) return { firstName: '', lastName: '', email: '' }
+  const name = invite.recipient_name?.trim() || ''
+  let firstName = ''
+  let lastName = ''
+  if (name) {
+    const parts = name.split(/\s+/)
+    firstName = parts[0] || ''
+    lastName = parts.slice(1).join(' ') || ''
+  } else {
+    const local = invite.recipient_email?.split('@')[0] || ''
+    firstName = local || ''
+  }
+  return {
+    firstName,
+    lastName,
+    email: invite.recipient_email?.trim() || '',
+  }
+}
+
 export default function InviteForm({
   filmId,
   filmTitle,
@@ -13,10 +36,17 @@ export default function InviteForm({
   unlimited = false,
   onInviteSent,
   showSenderFields = false,
+  /** Prefill first "To" row (e.g. film invite receiver’s name + email) */
+  initialRecipient = null,
 }) {
   const { signUp, signIn } = useAuth()
-  const [recipients, setRecipients] = useState([
-    { firstName: '', lastName: '', email: '', note: '' },
+  const [recipients, setRecipients] = useState(() => [
+    {
+      firstName: initialRecipient?.firstName?.trim() || '',
+      lastName: initialRecipient?.lastName?.trim() || '',
+      email: initialRecipient?.email?.trim() || '',
+      note: '',
+    },
   ])
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState([])

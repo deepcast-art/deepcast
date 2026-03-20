@@ -42,6 +42,7 @@ create table if not exists public.invites (
   token text unique not null,
   status text not null default 'pending' check (status in ('pending', 'opened', 'watched', 'signed_up')),
   expires_at timestamp with time zone not null,
+  parent_invite_id uuid references public.invites(id) on delete set null,
   created_at timestamp with time zone default now()
 );
 

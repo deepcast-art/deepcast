@@ -204,6 +204,22 @@ app.post('/api/invites/send', async (req, res) => {
       return res.status(404).json({ error: 'Film not found' })
     }
 
+    /** Chain: this invite continues from the invite where the sender was the recipient (e.g. Vidya → Julia → Super). */
+    let parentInviteId = null
+    if (senderEmail && String(senderEmail).trim()) {
+      const se = String(senderEmail).trim().toLowerCase()
+      const { data: priorInvites } = await supabase
+        .from('invites')
+        .select('id, recipient_email')
+        .eq('film_id', filmId)
+        .order('created_at', { ascending: false })
+        .limit(200)
+      const match = (priorInvites || []).find(
+        (row) => row.recipient_email && row.recipient_email.trim().toLowerCase() === se
+      )
+      if (match) parentInviteId = match.id
+    }
+
     // Create invite
     const token = generateToken()
     const expiresAt = new Date()
@@ -222,6 +238,7 @@ app.post('/api/invites/send', async (req, res) => {
         token,
         status: 'pending',
         expires_at: expiresAt.toISOString(),
+        parent_invite_id: parentInviteId,
       })
       .select()
       .single()
