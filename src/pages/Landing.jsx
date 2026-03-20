@@ -154,6 +154,14 @@ export default function Landing() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6">
       <div className="max-w-2xl mx-auto text-center">
+        <div className="mb-6 animate-fade-in">
+          <Link
+            to="/login"
+            className="text-text-muted text-xs hover:text-accent transition-colors duration-300"
+          >
+            Are you a filmmaker?
+          </Link>
+        </div>
         <p className="text-accent text-sm tracking-[0.3em] uppercase mb-8 animate-fade-in">
           Deepcast
         </p>
@@ -247,15 +255,6 @@ export default function Landing() {
             <div className="w-px h-16 bg-border mx-auto mb-8" />
           </div>
         )}
-      </div>
-
-      <div className="fixed bottom-8 left-0 right-0 text-center animate-fade-in animate-delay-600">
-        <Link
-          to="/login"
-          className="text-text-muted text-xs hover:text-accent transition-colors duration-300"
-        >
-          Are you a filmmaker?
-        </Link>
       </div>
     </div>
   )
