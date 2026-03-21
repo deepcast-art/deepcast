@@ -245,6 +245,7 @@ body {
 .dc-fade-in-3 { animation-delay: 120ms; }
 .dc-fade-in-4 { animation-delay: 180ms; }
 .dc-fade-in-5 { animation-delay: 240ms; }
+.dc-fade-in-6 { animation-delay: 300ms; }
 
 /* Legacy animation classes (used in existing components) */
 @keyframes fadeIn {
@@ -297,6 +298,14 @@ body {
 /* Screening invite intro (light paper, matches --color-bg-page) */
 .screening-intro-bg {
   background-color: var(--color-bg-page);
+  background-image: var(--grain);
+  background-size: 200px 200px;
+  color: var(--color-ink);
+}
+
+/* Post-share screen — explicit brand color-bg (#f5f0e8) + grain */
+.dc-share-page-bg {
+  background-color: var(--color-bg);
   background-image: var(--grain);
   background-size: 200px 200px;
   color: var(--color-ink);

@@ -19,13 +19,6 @@ export default function Dashboard() {
   const resendStatusTimeouts = useRef({})
   const [resendStatusByInvite, setResendStatusByInvite] = useState({})
   const resendInviteTimeouts = useRef({})
-  const [editingFilmId, setEditingFilmId] = useState(null)
-  const [editTitle, setEditTitle] = useState('')
-  const [editDescription, setEditDescription] = useState('')
-  const [editThumbnailFile, setEditThumbnailFile] = useState(null)
-  const [editThumbnailPreview, setEditThumbnailPreview] = useState(null)
-  const [editSaving, setEditSaving] = useState(false)
-  const editThumbInputRef = useRef(null)
 
   useEffect(() => {
     if (profile) loadDashboard()
@@ -105,68 +98,6 @@ export default function Dashboard() {
       })
     }
   }, [])
-
-  const startEditing = (film) => {
-    setEditingFilmId(film.id)
-    setEditTitle(film.title)
-    setEditDescription(film.description || '')
-    setEditThumbnailFile(null)
-    setEditThumbnailPreview(film.thumbnail_url || null)
-  }
-
-  const cancelEditing = () => {
-    setEditingFilmId(null)
-    setEditTitle('')
-    setEditDescription('')
-    setEditThumbnailFile(null)
-    setEditThumbnailPreview(null)
-  }
-
-  const handleEditThumbnailSelect = (e) => {
-    const file = e.target.files[0]
-    if (file) {
-      setEditThumbnailFile(file)
-      const reader = new FileReader()
-      reader.onload = (ev) => setEditThumbnailPreview(ev.target.result)
-      reader.readAsDataURL(file)
-    }
-  }
-
-  const saveEdit = async (filmId) => {
-    setEditSaving(true)
-    try {
-      const updates = { title: editTitle.trim(), description: editDescription.trim() }
-
-      if (editThumbnailFile) {
-        const ext = editThumbnailFile.name.split('.').pop()
-        const path = `thumbnails/${Date.now()}.${ext}`
-        const { error: thumbError } = await supabase.storage
-          .from('film-assets')
-          .upload(path, editThumbnailFile)
-
-        if (!thumbError) {
-          const { data: urlData } = supabase.storage
-            .from('film-assets')
-            .getPublicUrl(path)
-          updates.thumbnail_url = urlData.publicUrl
-        }
-      }
-
-      await supabase
-        .from('films')
-        .update(updates)
-        .eq('id', filmId)
-
-      setEditingFilmId(null)
-      setEditThumbnailFile(null)
-      setEditThumbnailPreview(null)
-      loadDashboard()
-    } catch (err) {
-      console.error('Film update error:', err)
-    } finally {
-      setEditSaving(false)
-    }
-  }
 
   if (!profile) return null
 
@@ -314,95 +245,29 @@ export default function Dashboard() {
                 >
                   <div className="flex items-start justify-between mb-6">
                     <div className="flex items-center gap-4">
-                      {editingFilmId === film.id ? (
-                        <div className="flex-1 space-y-2">
-                          <div className="flex items-start gap-3">
-                            <input
-                              ref={editThumbInputRef}
-                              type="file"
-                              accept="image/*"
-                              onChange={handleEditThumbnailSelect}
-                              className="hidden"
-                            />
-                            <div
-                              className="relative w-24 h-14 rounded-none bg-bg-card border border-border overflow-hidden cursor-pointer flex-shrink-0"
-                              onClick={() => editThumbInputRef.current?.click()}
-                            >
-                              {editThumbnailPreview ? (
-                                <img
-                                  src={editThumbnailPreview}
-                                  alt="Thumbnail"
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center">
-                                  <span className="text-text-muted text-[9px] uppercase tracking-wider">Add image</span>
-                                </div>
-                              )}
-                              <div className="absolute inset-0 bg-bg/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                                <span className="text-[9px] text-text uppercase tracking-wider">Change</span>
-                              </div>
-                            </div>
-                            <div className="flex-1 space-y-2">
-                              <input
-                                type="text"
-                                value={editTitle}
-                                onChange={(e) => setEditTitle(e.target.value)}
-                                className="w-full bg-bg border border-border rounded-none px-3 py-2 text-text text-sm focus:outline-none focus:border-accent transition-colors"
-                                placeholder="Film title"
-                              />
-                              <textarea
-                                value={editDescription}
-                                onChange={(e) => setEditDescription(e.target.value)}
-                                rows={2}
-                                className="w-full bg-bg border border-border rounded-none px-3 py-2 text-text text-sm focus:outline-none focus:border-accent transition-colors resize-none"
-                                placeholder="Description"
-                              />
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => saveEdit(film.id)}
-                              disabled={editSaving || !editTitle.trim()}
-                              className="text-accent text-xs uppercase tracking-wider hover:text-accent-hover transition-colors disabled:opacity-50 cursor-pointer"
-                            >
-                              {editSaving ? 'Saving...' : 'Save'}
-                            </button>
-                            <button
-                              onClick={cancelEditing}
-                              className="text-text-muted text-xs uppercase tracking-wider hover:text-text transition-colors cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          {film.thumbnail_url && (
-                            <img
-                              src={film.thumbnail_url}
-                              alt={film.title}
-                              className="w-24 h-14 object-cover rounded-none"
-                            />
-                          )}
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="text-lg font-display">{film.title}</h3>
-                              <button
-                                onClick={() => startEditing(film)}
-                                className="text-text-muted text-[10px] uppercase tracking-wider hover:text-accent transition-colors cursor-pointer"
-                              >
-                                Edit
-                              </button>
-                            </div>
-                            {film.description && (
-                              <p className="text-text-muted text-xs mt-1 line-clamp-1">
-                                {film.description}
-                              </p>
-                            )}
-                          </div>
-                        </>
+                      {film.thumbnail_url && (
+                        <img
+                          src={film.thumbnail_url}
+                          alt={film.title}
+                          className="w-24 h-14 object-cover rounded-none"
+                        />
                       )}
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-lg font-display">{film.title}</h3>
+                          <Link
+                            to={`/upload?edit=${film.id}`}
+                            className="text-text-muted text-[10px] uppercase tracking-wider hover:text-accent transition-colors"
+                          >
+                            Edit
+                          </Link>
+                        </div>
+                        {film.description && (
+                          <p className="text-text-muted text-xs mt-1 line-clamp-1">
+                            {film.description}
+                          </p>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-3">
                       <button

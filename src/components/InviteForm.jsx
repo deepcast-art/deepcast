@@ -40,6 +40,9 @@ export default function InviteForm({
   initialRecipient = null,
   /** Labels readable on dark screening surfaces (e.g. paused share column) */
   embedOnDarkBackground = false,
+  passwordPlaceholder = 'Create password',
+  noteLabel = 'Why did this film make you think of them specifically? Write 2–3 sentences.',
+  notePlaceholder = 'A uniquely personal note from you is what makes this different from everything else in their inbox.',
 }) {
   const { signUp, signIn } = useAuth()
   const [recipients, setRecipients] = useState(() => [
@@ -218,14 +221,14 @@ export default function InviteForm({
               type="email"
               value={senderEmailInput}
               onChange={(e) => setSenderEmailInput(e.target.value)}
-              placeholder="you@example.com"
+              placeholder="Email"
               className="w-full bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
             />
             <input
               type="password"
               value={senderPasswordInput}
               onChange={(e) => setSenderPasswordInput(e.target.value)}
-              placeholder="Password"
+              placeholder={passwordPlaceholder}
               minLength={6}
               className="w-full bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
             />
@@ -270,7 +273,7 @@ export default function InviteForm({
                   type="email"
                   value={recipient.email}
                   onChange={(e) => updateRecipient(i, 'email', e.target.value)}
-                  placeholder="friend@example.com"
+                  placeholder="Email"
                   className="w-1/3 bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
                 />
                 {recipients.length > 1 && (
@@ -283,12 +286,12 @@ export default function InviteForm({
                 )}
               </div>
               <label className="block text-xs text-text-muted">
-                Why did this film make you think of them? Write 1-3 sentences.
+                {noteLabel}
               </label>
               <textarea
                 value={recipient.note}
                 onChange={(e) => updateRecipient(i, 'note', e.target.value)}
-                placeholder="Add a short note (1-3 sentences)..."
+                placeholder={notePlaceholder}
                 rows={3}
                 className="w-full bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
               />

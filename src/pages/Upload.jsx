@@ -1,14 +1,18 @@
-import { useState, useRef } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import { api } from '../lib/api'
 import InviteForm from '../components/InviteForm'
 import DeepcastLogo from '../components/DeepcastLogo'
+import FilmForm from '../components/FilmForm'
 
 export default function Upload() {
   const { profile } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const editFilmId = searchParams.get('edit')
+
   const fileInputRef = useRef(null)
   const thumbInputRef = useRef(null)
 
@@ -23,47 +27,201 @@ export default function Upload() {
   const [film, setFilm] = useState(null)
   const [error, setError] = useState('')
   const [step, setStep] = useState('form') // form, uploading, processing, ready
+  const [loadingEditFilm, setLoadingEditFilm] = useState(!!editFilmId)
+  const [existingFilm, setExistingFilm] = useState(null)
 
-  function handleThumbnailSelect(e) {
-    const file = e.target.files[0]
+  const handleThumbnailSelect = useCallback((e) => {
+    const file = e.target.files?.[0]
     if (file) {
       setThumbnailFile(file)
       const reader = new FileReader()
       reader.onload = (ev) => setThumbnailPreview(ev.target.result)
       reader.readAsDataURL(file)
     }
+  }, [])
+
+  useEffect(() => {
+    if (!editFilmId || !profile?.id) {
+      setLoadingEditFilm(false)
+      return
+    }
+
+    let cancelled = false
+    ;(async () => {
+      setLoadingEditFilm(true)
+      const { data, error: fetchError } = await supabase
+        .from('films')
+        .select('*')
+        .eq('id', editFilmId)
+        .single()
+
+      if (cancelled) return
+
+      if (fetchError || !data || data.creator_id !== profile.id) {
+        navigate('/dashboard', { replace: true })
+        return
+      }
+
+      setExistingFilm(data)
+      setTitle(data.title || '')
+      setDescription(data.description || '')
+      setThumbnailPreview(data.thumbnail_url || null)
+      setThumbnailFile(null)
+      setVideoFile(null)
+      setLoadingEditFilm(false)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [editFilmId, profile?.id, navigate])
+
+  async function uploadThumbnailIfNeeded() {
+    if (!thumbnailFile) return null
+    const ext = thumbnailFile.name.split('.').pop()
+    const path = `thumbnails/${Date.now()}.${ext}`
+    const { error: thumbError } = await supabase.storage.from('film-assets').upload(path, thumbnailFile)
+
+    if (thumbError) return null
+    const { data: urlData } = supabase.storage.from('film-assets').getPublicUrl(path)
+    return urlData.publicUrl
+  }
+
+  async function saveMetadataOnly(filmId, baseFilm) {
+    const thumbUrl = (await uploadThumbnailIfNeeded()) ?? baseFilm.thumbnail_url ?? null
+
+    const { error: upErr } = await supabase
+      .from('films')
+      .update({
+        title: title.trim(),
+        description: description.trim(),
+        thumbnail_url: thumbUrl,
+      })
+      .eq('id', filmId)
+
+    if (upErr) throw upErr
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!videoFile) {
+
+    if (!editFilmId && !videoFile) {
       setError('Please select a video file.')
       return
     }
 
     setError('')
     setUploading(true)
-    setStep('uploading')
 
     try {
-      // Upload thumbnail to Supabase Storage if provided
-      let thumbnailUrl = null
-      if (thumbnailFile) {
-        const ext = thumbnailFile.name.split('.').pop()
-        const path = `thumbnails/${Date.now()}.${ext}`
-        const { error: thumbError } = await supabase.storage
-          .from('film-assets')
-          .upload(path, thumbnailFile)
-
-        if (!thumbError) {
-          const { data: urlData } = supabase.storage
-            .from('film-assets')
-            .getPublicUrl(path)
-          thumbnailUrl = urlData.publicUrl
-        }
+      // ——— Edit: metadata only (no new video) ———
+      if (editFilmId && existingFilm && !videoFile) {
+        await saveMetadataOnly(editFilmId, existingFilm)
+        setUploading(false)
+        navigate('/dashboard')
+        return
       }
 
-      // Create film record
+      // ——— Edit: replace video ———
+      if (editFilmId && existingFilm && videoFile) {
+        setStep('uploading')
+
+        let thumbnailUrl = existingFilm.thumbnail_url
+        if (thumbnailFile) {
+          const uploaded = await uploadThumbnailIfNeeded()
+          if (uploaded) thumbnailUrl = uploaded
+        }
+
+        await supabase
+          .from('films')
+          .update({
+            title: title.trim(),
+            description: description.trim(),
+            thumbnail_url: thumbnailUrl,
+            status: 'processing',
+            mux_asset_id: null,
+            mux_playback_id: null,
+          })
+          .eq('id', editFilmId)
+
+        const { uploadUrl, assetId } = await api.createUploadUrl(editFilmId)
+
+        const xhr = new XMLHttpRequest()
+        xhr.open('PUT', uploadUrl)
+
+        xhr.upload.onprogress = (ev) => {
+          if (ev.lengthComputable) {
+            setUploadProgress(Math.round((ev.loaded / ev.total) * 100))
+          }
+        }
+
+        await new Promise((resolve, reject) => {
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) resolve()
+            else reject(new Error('Upload failed'))
+          }
+          xhr.onerror = () => reject(new Error('Upload failed'))
+          xhr.send(videoFile)
+        })
+
+        setStep('processing')
+        setProcessing(true)
+
+        const pollInterval = setInterval(async () => {
+          try {
+            const { status, playbackId } = await api.getAssetStatus(assetId)
+
+            if (status === 'ready' && playbackId) {
+              clearInterval(pollInterval)
+
+              await supabase
+                .from('films')
+                .update({
+                  mux_asset_id: assetId,
+                  mux_playback_id: playbackId,
+                  status: 'ready',
+                })
+                .eq('id', editFilmId)
+
+              setFilm({
+                ...existingFilm,
+                id: editFilmId,
+                mux_playback_id: playbackId,
+                status: 'ready',
+              })
+              setProcessing(false)
+              setStep('ready')
+            }
+          } catch {
+            // keep polling
+          }
+        }, 5000)
+
+        setTimeout(() => {
+          clearInterval(pollInterval)
+          setProcessing((p) => {
+            if (p) {
+              setFilm({ ...existingFilm, id: editFilmId })
+              setStep('ready')
+              return false
+            }
+            return p
+          })
+        }, 600000)
+
+        setUploading(false)
+        return
+      }
+
+      // ——— Create new film ———
+      setStep('uploading')
+
+      let thumbnailUrl = null
+      if (thumbnailFile) {
+        const uploaded = await uploadThumbnailIfNeeded()
+        thumbnailUrl = uploaded
+      }
+
       const { data: filmData, error: filmError } = await supabase
         .from('films')
         .insert({
@@ -78,10 +236,8 @@ export default function Upload() {
 
       if (filmError) throw filmError
 
-      // Get Mux upload URL
       const { uploadUrl, assetId } = await api.createUploadUrl(filmData.id)
 
-      // Upload video to Mux using PUT
       const xhr = new XMLHttpRequest()
       xhr.open('PUT', uploadUrl)
 
@@ -103,7 +259,6 @@ export default function Upload() {
       setStep('processing')
       setProcessing(true)
 
-      // Poll for asset status
       const pollInterval = setInterval(async () => {
         try {
           const { status, playbackId } = await api.getAssetStatus(assetId)
@@ -129,7 +284,6 @@ export default function Upload() {
         }
       }, 5000)
 
-      // Timeout after 10 minutes
       setTimeout(() => {
         clearInterval(pollInterval)
         if (processing) {
@@ -141,8 +295,17 @@ export default function Upload() {
     } catch (err) {
       setError(err.message)
       setStep('form')
+    } finally {
       setUploading(false)
     }
+  }
+
+  if (loadingEditFilm) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6">
+        <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
   }
 
   if (step === 'ready' && film) {
@@ -152,9 +315,13 @@ export default function Upload() {
           <div className="flex justify-center mb-8">
             <DeepcastLogo variant="ink" className="h-8" />
           </div>
-          <h1 className="text-2xl font-display mb-2">Your film is ready</h1>
+          <h1 className="text-2xl font-display mb-2">
+            {editFilmId ? 'Your film is updated' : 'Your film is ready'}
+          </h1>
           <p className="text-text-muted text-sm mb-10">
-            Send your first seed invitations to start spreading the screening.
+            {editFilmId
+              ? 'Share new invitations when you’re ready.'
+              : 'Send your first seed invitations to start spreading the screening.'}
           </p>
 
           <InviteForm
@@ -169,10 +336,7 @@ export default function Upload() {
           />
 
           <div className="mt-10">
-            <Link
-              to="/dashboard"
-              className="text-text-muted text-sm hover:text-text transition-colors"
-            >
+            <Link to="/dashboard" className="text-text-muted text-sm hover:text-text transition-colors">
               Go to dashboard &rarr;
             </Link>
           </div>
@@ -191,7 +355,9 @@ export default function Upload() {
 
           {step === 'uploading' ? (
             <>
-              <h2 className="text-xl font-display mb-6">Uploading your film</h2>
+              <h2 className="text-xl font-display mb-6">
+                {editFilmId ? 'Uploading new video' : 'Uploading your film'}
+              </h2>
               <div className="w-full h-1 bg-border rounded-none overflow-hidden mb-4">
                 <div
                   className="h-full bg-accent transition-all duration-300 rounded-none"
@@ -214,6 +380,16 @@ export default function Upload() {
     )
   }
 
+  const isEdit = Boolean(editFilmId && existingFilm)
+  const videoHint =
+    isEdit && existingFilm?.status === 'ready'
+      ? 'Current video is live. Choose a file only if you want to replace it (re-encodes on Mux).'
+      : isEdit && existingFilm?.status === 'processing'
+        ? 'Video is still processing. You can replace it once ready, or save title/description/thumbnail now without a new file.'
+        : isEdit
+          ? 'Choose a new video file only if you want to replace the uploaded file.'
+          : null
+
   return (
     <div className="min-h-screen px-6 py-12">
       <div className="max-w-lg mx-auto">
@@ -221,117 +397,32 @@ export default function Upload() {
           <Link to="/dashboard" className="text-text-muted text-sm hover:text-text transition-colors">
             &larr; Dashboard
           </Link>
-          <h1 className="text-2xl font-display mt-6">Upload a film</h1>
+          <h1 className="text-2xl font-display mt-6">{isEdit ? 'Edit film' : 'Upload a film'}</h1>
+          {isEdit && (
+            <p className="text-text-muted text-sm mt-2">
+              Update details anytime. Add a new video file only when you want to replace the current one.
+            </p>
+          )}
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6 animate-fade-in animate-delay-200">
-          {error && (
-            <div className="text-error text-sm text-center bg-error/10 rounded-none py-2 px-4">
-              {error}
-            </div>
-          )}
-
-          <div>
-            <label className="block text-xs text-text-muted uppercase tracking-wider mb-2">
-              Title
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-              className="w-full bg-bg-card border border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
-              placeholder="Film title"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs text-text-muted uppercase tracking-wider mb-2">
-              Description
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={3}
-              className="w-full bg-bg-card border border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors resize-none"
-              placeholder="A brief description of your film"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs text-text-muted uppercase tracking-wider mb-2">
-              Thumbnail
-            </label>
-            <input
-              ref={thumbInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleThumbnailSelect}
-              className="hidden"
-            />
-            {thumbnailPreview ? (
-              <div
-                className="relative w-[100px] h-[100px] rounded-none overflow-hidden bg-bg-card cursor-pointer"
-                onClick={() => thumbInputRef.current?.click()}
-              >
-                <img
-                  src={thumbnailPreview}
-                  alt="Thumbnail preview"
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-bg/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                  <span className="text-[10px]">Change</span>
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => thumbInputRef.current?.click()}
-                className="w-full aspect-video border-2 border-dashed border-border rounded-none flex flex-col items-center justify-center gap-2 text-text-muted hover:border-accent hover:text-accent transition-colors cursor-pointer"
-              >
-                <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <span className="text-xs">Upload thumbnail</span>
-              </button>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-xs text-text-muted uppercase tracking-wider mb-2">
-              Video file
-            </label>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="video/*"
-              onChange={(e) => setVideoFile(e.target.files[0])}
-              className="hidden"
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full border-2 border-dashed border-border rounded-none py-8 flex flex-col items-center justify-center gap-2 text-text-muted hover:border-accent hover:text-accent transition-colors cursor-pointer"
-            >
-              <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                <path d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
-              </svg>
-              {videoFile ? (
-                <span className="text-xs text-accent">{videoFile.name}</span>
-              ) : (
-                <span className="text-xs">Select video file</span>
-              )}
-            </button>
-          </div>
-
-          <button
-            type="submit"
-            disabled={uploading || !title || !videoFile}
-            className="w-full bg-ink text-warm font-medium rounded-none py-3 text-sm hover:bg-accent-hover transition-colors disabled:opacity-50 cursor-pointer"
-          >
-            Upload film
-          </button>
-        </form>
+        <FilmForm
+          title={title}
+          onTitleChange={setTitle}
+          description={description}
+          onDescriptionChange={setDescription}
+          thumbnailPreview={thumbnailPreview}
+          onThumbnailSelect={handleThumbnailSelect}
+          thumbInputRef={thumbInputRef}
+          videoFile={videoFile}
+          onVideoFileChange={setVideoFile}
+          fileInputRef={fileInputRef}
+          videoOptional={isEdit}
+          videoStatusHint={videoHint}
+          error={error}
+          submitLabel={isEdit ? 'Save changes' : 'Upload film'}
+          disabled={uploading}
+          onSubmit={handleSubmit}
+        />
       </div>
     </div>
   )

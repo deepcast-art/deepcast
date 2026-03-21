@@ -1,11 +1,54 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import MuxPlayer from '@mux/mux-player-react'
 import { supabase } from '../lib/supabase'
+import { INTRO_FILM_MUX_PLAYBACK_ID } from '../lib/introFilm'
 import DeepcastLogo from '../components/DeepcastLogo'
 
+const INTRO_FILM_ID_ENV =
+  typeof import.meta.env.VITE_LANDING_INTRO_FILM_ID === 'string'
+    ? import.meta.env.VITE_LANDING_INTRO_FILM_ID.trim()
+    : ''
+
+function splitDisplayName(name) {
+  if (!name?.trim()) return { first: '', last: '', full: '' }
+  const parts = name.trim().split(/\s+/)
+  if (parts.length === 1) return { first: parts[0], last: '', full: parts[0] }
+  return { first: parts[0], last: parts.slice(1).join(' '), full: name.trim() }
+}
+
 export default function Landing() {
+  const [searchParams] = useSearchParams()
   const [invites, setInvites] = useState([])
   const [filmTitle, setFilmTitle] = useState('')
+  const [firstInviterName, setFirstInviterName] = useState('')
+  /** When set, overrides {@link INTRO_FILM_MUX_PLAYBACK_ID} (e.g. from `VITE_LANDING_INTRO_FILM_ID`). */
+  const [introPlaybackFromFilm, setIntroPlaybackFromFilm] = useState(null)
+  const [directVideoError, setDirectVideoError] = useState(false)
+
+  const directVideoUrl = useMemo(() => {
+    const u = import.meta.env.VITE_LANDING_INTRO_VIDEO_URL
+    return typeof u === 'string' && u.trim() ? u.trim() : ''
+  }, [])
+
+  const muxIntroPlaybackId = introPlaybackFromFilm || INTRO_FILM_MUX_PLAYBACK_ID
+
+  useEffect(() => {
+    if (!INTRO_FILM_ID_ENV) return
+    let cancelled = false
+    supabase
+      .from('films')
+      .select('mux_playback_id, status')
+      .eq('id', INTRO_FILM_ID_ENV)
+      .single()
+      .then(({ data, error }) => {
+        if (cancelled || error || !data?.mux_playback_id || data.status !== 'ready') return
+        setIntroPlaybackFromFilm(data.mux_playback_id)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let isMounted = true
@@ -13,7 +56,9 @@ export default function Landing() {
     async function loadNetwork() {
       const { data: allInvites } = await supabase
         .from('invites')
-        .select('id, film_id, sender_name, sender_email, sender_id, recipient_name, recipient_email, status')
+        .select(
+          'id, film_id, sender_name, sender_email, sender_id, recipient_name, recipient_email, status, created_at'
+        )
         .order('created_at', { ascending: true })
 
       if (!isMounted || !allInvites?.length) return
@@ -28,11 +73,15 @@ export default function Landing() {
       const filmInvites = allInvites.filter((inv) => inv.film_id === topFilmId)
       setInvites(filmInvites)
 
-      const { data: film } = await supabase
-        .from('films')
-        .select('title')
-        .eq('id', topFilmId)
-        .single()
+      const sorted = [...filmInvites].sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      )
+      const first = sorted[0]
+      if (first?.sender_name?.trim()) {
+        setFirstInviterName(first.sender_name.trim())
+      }
+
+      const { data: film } = await supabase.from('films').select('title').eq('id', topFilmId).single()
 
       if (isMounted && film) setFilmTitle(film.title)
     }
@@ -150,45 +199,142 @@ export default function Landing() {
     return { width, height, nodes: positionedNodes, edges }
   }, [invites, filmTitle])
 
-  const peopleCount = networkLayout
-    ? networkLayout.nodes.filter((n) => n.type !== 'film').length
-    : 0
+  const handsCount = networkLayout ? networkLayout.nodes.filter((n) => n.type !== 'film').length : 0
+
+  const inviterFromParams = useMemo(() => {
+    const fn = searchParams.get('fn') || searchParams.get('first')
+    const ln = searchParams.get('ln') || searchParams.get('last')
+    const inviter = searchParams.get('inviter') || searchParams.get('from')
+    if (fn || ln) {
+      return splitDisplayName([fn, ln].filter(Boolean).join(' '))
+    }
+    if (inviter) return splitDisplayName(inviter)
+    return null
+  }, [searchParams])
+
+  const displayInviter = useMemo(() => {
+    if (inviterFromParams?.full) return inviterFromParams
+    if (firstInviterName) return splitDisplayName(firstInviterName)
+    return { first: '', last: '', full: '' }
+  }, [inviterFromParams, firstInviterName])
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
-      <div className="max-w-2xl mx-auto text-center">
-        <div className="mb-6 dc-fade-in dc-fade-in-1">
+    <div className="min-h-screen flex flex-col items-center px-6 py-12 bg-bg">
+      <div className="max-w-2xl w-full mx-auto text-center">
+        <div className="mb-6 dc-fade-in dc-fade-in-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
           <Link
             to="/login"
+            className="font-body text-xs font-medium tracking-wide text-ink hover:text-accent transition-colors duration-[var(--duration-base)]"
+          >
+            Log in
+          </Link>
+          <span className="text-border select-none" aria-hidden>
+            ·
+          </span>
+          <Link
+            to="/signup?role=creator"
             className="font-body text-xs font-medium tracking-wide text-muted hover:text-accent transition-colors duration-[var(--duration-base)]"
           >
-            Are you a filmmaker?
+            Filmmaker signup
           </Link>
         </div>
+
         <div className="flex justify-center mb-8 dc-fade-in dc-fade-in-2">
-          <DeepcastLogo variant="ink" className="h-10 sm:h-11 w-auto" />
+          <Link to="/" className="inline-flex hover:opacity-90 transition-opacity">
+            <DeepcastLogo variant="ink" className="h-10 sm:h-11 w-auto" />
+          </Link>
         </div>
 
-        <h1 className="font-display text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] text-ink mb-8 dc-fade-in dc-fade-in-2">
-          Some films are not for everyone.
-          <br />
-          <span className="text-muted">Just the right ones.</span>
+        <p className="font-body text-sm sm:text-base text-muted mb-6 dc-fade-in dc-fade-in-2 leading-relaxed">
+          Not for everyone. <span className="text-ink">Just for you.</span>
+        </p>
+
+        <h1 className="font-display text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] text-ink mb-6 dc-fade-in dc-fade-in-3">
+          No algorithm sent you here.{' '}
+          {displayInviter.full ? (
+            <>
+              <span className="text-accent">{displayInviter.first}</span>
+              {displayInviter.last ? (
+                <>
+                  {' '}
+                  <span className="text-accent">{displayInviter.last}</span>
+                </>
+              ) : null}{' '}
+              did.
+            </>
+          ) : (
+            <>
+              <span className="text-muted">Someone who chose you</span> did.
+            </>
+          )}
         </h1>
-        <p className="dc-label text-muted mb-8 dc-fade-in dc-fade-in-3">
-          Depth is the new viral
+
+        <p className="font-body text-base sm:text-lg font-light text-muted leading-[var(--leading-body)] max-w-md mx-auto mb-10 dc-fade-in dc-fade-in-4">
+          Before you watch the film, take 120 seconds to understand what you&rsquo;ve been invited to.
         </p>
 
-        <p className="font-body text-lg font-light text-muted leading-[var(--leading-body)] max-w-md mx-auto mb-10 dc-fade-in dc-fade-in-3">
-          A private screening platform where films spread through personal invitation.
-          No public catalogue. No algorithm. Just trust.
+        {/* VIDEO — Mux intro film (same as invite “intro” stage), or optional MP4 URL */}
+        <div className="mb-10 dc-fade-in dc-fade-in-4 w-full max-w-xl mx-auto">
+          <div className="w-full bg-bg-card border-[0.5px] border-border rounded-none overflow-hidden aspect-video">
+            {directVideoUrl && !directVideoError ? (
+              <video
+                className="w-full h-full object-cover bg-ink"
+                controls
+                playsInline
+                preload="metadata"
+                src={directVideoUrl}
+                onError={() => setDirectVideoError(true)}
+              >
+                Your browser does not support the video tag.
+              </video>
+            ) : directVideoUrl && directVideoError ? (
+              <div className="w-full h-full min-h-[200px] flex flex-col items-center justify-center gap-2 px-6 bg-bg-card/80">
+                <p className="dc-label text-muted">Intro video</p>
+                <p className="text-text-muted text-xs max-w-sm leading-relaxed">
+                  Could not load <span className="text-ink">VITE_LANDING_INTRO_VIDEO_URL</span>. Check the URL or use
+                  the default Mux intro by removing that variable.
+                </p>
+              </div>
+            ) : (
+              <MuxPlayer
+                streamType="on-demand"
+                playbackId={muxIntroPlaybackId}
+                accentColor="#c4822a"
+                autoPlay
+                muted
+                playsInline
+                metadata={{ video_title: 'Deepcast intro' }}
+                style={{ width: '100%', height: '100%', display: 'block' }}
+              />
+            )}
+          </div>
+        </div>
+
+        <p className="font-display italic text-[length:var(--text-subhead)] sm:text-lg leading-[var(--leading-subhead)] text-ink mb-10 dc-fade-in dc-fade-in-5 max-w-md mx-auto">
+          {handsCount > 0 ? (
+            <>
+              This film has been passed through {handsCount} human hands to reach you. Now it&rsquo;s your turn.
+            </>
+          ) : (
+            <>
+              This film moves only through personal invitation. When it reaches you, it&rsquo;s your turn.
+            </>
+          )}
         </p>
 
+        <div className="dc-fade-in dc-fade-in-6 mb-16">
+          <Link
+            to="/login"
+            className="inline-flex items-center justify-center bg-ink text-warm font-medium rounded-none px-8 py-3.5 text-sm hover:bg-accent-hover transition-colors min-w-[200px]"
+          >
+            Watch the film
+          </Link>
+        </div>
+
+        {/* GRAPH */}
         {networkLayout && (
-          <div className="mb-10 dc-fade-in dc-fade-in-4">
+          <div className="dc-fade-in dc-fade-in-5 border-t border-border pt-12">
             <div className="w-px h-10 bg-border mx-auto mb-6" />
-            <p className="font-display italic text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] font-normal text-ink mb-4">
-              This film has passed through {peopleCount} pairs of hands to reach you.
-            </p>
             <div className="w-full bg-bg-card border-[0.5px] border-border rounded-none overflow-hidden">
               <svg
                 viewBox={`0 0 ${networkLayout.width} ${networkLayout.height}`}
@@ -248,15 +394,17 @@ export default function Landing() {
                 })}
               </svg>
             </div>
-            <p className="dc-body text-xs mt-3">
+            <p className="dc-body text-xs mt-3 text-center">
               Each node is a person. Each line is a personal invitation.
             </p>
           </div>
         )}
 
         {!networkLayout && (
-          <div className="dc-fade-in dc-fade-in-5">
-            <div className="w-px h-16 bg-border mx-auto mb-8" />
+          <div className="dc-fade-in dc-fade-in-5 border-t border-border pt-12">
+            <p className="text-text-muted text-sm text-center">
+              When screenings run on Deepcast, a live map of invitations can appear here.
+            </p>
           </div>
         )}
       </div>

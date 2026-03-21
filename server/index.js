@@ -299,7 +299,7 @@ app.post('/api/invites/send', async (req, res) => {
       await sendInviteEmailResend({
         from: fromEmail,
         to: recipientEmailNorm,
-        subject: `${displaySender} has shared a film with you.`,
+        subject: formatInviteEmailSubject(displaySender),
         html: buildInviteEmailHtml(
           displaySender,
           recipientFirstName,
@@ -389,7 +389,7 @@ app.post('/api/invites/resend-last', async (req, res) => {
       await sendInviteEmailResend({
         from: fromEmail,
         to: invite.recipient_email,
-        subject: `${displaySender} has shared a film with you.`,
+        subject: formatInviteEmailSubject(displaySender),
         html: buildInviteEmailHtml(
           displaySender,
           recipientFirstName,
@@ -466,7 +466,7 @@ app.post('/api/invites/resend', async (req, res) => {
       await sendInviteEmailResend({
         from: fromEmail,
         to: invite.recipient_email,
-        subject: `${displaySender} has shared a film with you.`,
+        subject: formatInviteEmailSubject(displaySender),
         html: buildInviteEmailHtml(
           displaySender,
           recipientFirstName,
@@ -540,6 +540,37 @@ app.get('/api/invites/validate/:token', async (req, res) => {
 
 // ============ EMAIL TEMPLATE ============
 
+function escapeHtml(s) {
+  if (s == null || s === '') return ''
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+/** English ordinal: 1st, 2nd, 3rd, 11th, 21st, … */
+function ordinalSuffix(n) {
+  const num = Number(n)
+  if (!Number.isFinite(num) || num < 1) return String(n)
+  const j = num % 10
+  const k = num % 100
+  if (j === 1 && k !== 11) return `${num}st`
+  if (j === 2 && k !== 12) return `${num}nd`
+  if (j === 3 && k !== 13) return `${num}rd`
+  return `${num}th`
+}
+
+/** Subject: "[First name] [Last name] has shared a film with you" (uses full sender name when provided). */
+function formatInviteEmailSubject(senderName) {
+  const parts = String(senderName || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+  const display = parts.length ? parts.join(' ') : 'Someone'
+  return `${display} has shared a film with you`
+}
+
 function buildInviteEmailHtml(
   senderName,
   recipientName,
@@ -552,6 +583,67 @@ function buildInviteEmailHtml(
   personalNote
 ) {
   const senderFirstName = senderName ? senderName.trim().split(/\s+/)[0] : 'Someone'
+  const greetingName = recipientName ? recipientName.trim() : ''
+  const safe = {
+    senderFirst: escapeHtml(senderFirstName),
+    greeting: escapeHtml(greetingName),
+    filmTitle: escapeHtml(filmTitle || ''),
+    filmDescription: escapeHtml(filmDescription || ''),
+    personalNote: personalNote ? escapeHtml(personalNote) : '',
+    inviteUrl: escapeHtml(inviteUrl),
+    senderDisplay: escapeHtml(senderName || 'Someone'),
+    thumbUrl: filmThumbnailUrl ? escapeHtml(filmThumbnailUrl) : '',
+  }
+
+  const introLine = `${safe.senderFirst} has thoughtfully curated and shared a short film with you.${
+    inviteOrdinal
+      ? ` You are the ${ordinalSuffix(inviteOrdinal)} person to be invited to this private online screening.`
+      : ''
+  }`
+
+  const greetingLine = greetingName
+    ? `<p style="margin: 0 0 16px; color: #1a1714; font-size: 14px; line-height: 1.6; text-align: left; max-width: 360px;">${safe.greeting},</p>`
+    : `<p style="margin: 0 0 16px; color: #1a1714; font-size: 14px; line-height: 1.6; text-align: left; max-width: 360px;">Hello,</p>`
+
+  const personalBlock =
+    personalNote && safe.personalNote
+      ? `
+          <tr>
+            <td style="padding-bottom: 12px;">
+              <p style="margin: 0; color: #1a1714; font-size: 14px; line-height: 1.6; text-align: left; max-width: 360px;">
+                Here&rsquo;s ${safe.senderFirst}&rsquo;s message to you:
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding-bottom: 24px;">
+              <p style="margin: 0; color: #1a1714; font-size: 14px; line-height: 1.6; text-align: left; max-width: 360px; border-left: 2px solid #d4cfc4; padding-left: 14px;">
+                ${safe.personalNote}
+              </p>
+            </td>
+          </tr>`
+      : ''
+
+  const thumbBlock = filmThumbnailUrl
+    ? `
+          <tr>
+            <td style="padding-bottom: 16px;">
+              <img src="${safe.thumbUrl}" alt="${safe.filmTitle}" style="width: 100%; max-width: 360px; border-radius: 2px; display: block;" />
+            </td>
+          </tr>`
+    : ''
+
+  const descBlock = filmDescription
+    ? `
+          <tr>
+            <td style="padding-bottom: 32px;">
+              <p style="margin: 0; color: #8a8070; font-size: 14px; line-height: 1.6; text-align: left; max-width: 360px;">
+                ${safe.filmDescription}
+              </p>
+            </td>
+          </tr>`
+    : '<tr><td style="padding-bottom: 32px;"></td></tr>'
+
   return `
 <!DOCTYPE html>
 <html>
@@ -564,120 +656,63 @@ function buildInviteEmailHtml(
     <tr>
       <td align="center">
         <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 480px;">
-          <!-- Logo -->
           <tr>
             <td align="center" style="padding-bottom: 40px;">
               <span style="color: #c4822a; font-family: 'DM Serif Display', Georgia, serif; font-size: 12px; letter-spacing: 4px; text-transform: uppercase;">DEEPCAST</span>
             </td>
           </tr>
-
-          <!-- Divider -->
           <tr>
             <td align="center" style="padding-bottom: 40px;">
               <div style="width: 40px; height: 1px; background-color: #d4cfc4;"></div>
             </td>
           </tr>
 
-          ${recipientName ? `
           <tr>
-            <td align="center" style="padding-bottom: 10px;">
-              <p style="margin: 0; color: #c4822a; font-size: 14px;">
-                Hi ${recipientName},
-              </p>
+            <td>
+              ${greetingLine}
             </td>
           </tr>
-          ` : ''}
 
           <tr>
-            <td align="center" style="padding-bottom: 16px;">
-              <p style="margin: 0; color: #1a1714; font-size: 14px; line-height: 1.6; max-width: 360px;">
-                ${senderFirstName} thought of you when they watched this film.${inviteOrdinal ? ` You are the ${inviteOrdinal}th person to be invited to see the exclusive screening of this film.` : ''}
+            <td style="padding-bottom: 20px;">
+              <p style="margin: 0; color: #1a1714; font-size: 14px; line-height: 1.6; text-align: left; max-width: 360px;">
+                ${introLine}
               </p>
             </td>
           </tr>
 
-          ${personalNote ? `
-          <tr>
-            <td align="center" style="padding-bottom: 16px;">
-              <p style="margin: 0; color: #8a8070; font-size: 12px;">
-                Here is what they had to say,
-              </p>
-            </td>
-          </tr>
-          <tr>
-            <td align="center" style="padding-bottom: 20px;">
-              <p style="margin: 0; color: #1a1714; font-size: 14px; line-height: 1.6; max-width: 360px;">
-                &quot;${personalNote}&quot;
-              </p>
-            </td>
-          </tr>
-          ` : ''}
+          ${personalBlock}
+
+          ${thumbBlock}
+
+          ${descBlock}
 
           <tr>
             <td align="center" style="padding-bottom: 24px;">
-              <p style="margin: 0; color: #c4822a; font-size: 14px;">
-                - ${senderFirstName}
-              </p>
-            </td>
-          </tr>
-
-          <!-- Film title -->
-          <tr>
-            <td align="center" style="padding-bottom: 8px;">
-              <h2 style="margin: 0; color: #c4822a; font-family: 'DM Serif Display', Georgia, serif; font-size: 18px; font-weight: 400;">
-                ${filmTitle}
-              </h2>
-            </td>
-          </tr>
-
-          ${filmThumbnailUrl ? `
-          <tr>
-            <td align="center" style="padding-bottom: 16px;">
-              <img src="${filmThumbnailUrl}" alt="${filmTitle}" style="width: 100%; max-width: 360px; border-radius: 2px; display: block;" />
-            </td>
-          </tr>
-          ` : ''}
-
-          ${filmDescription ? `
-          <!-- Description -->
-          <tr>
-            <td align="center" style="padding-bottom: 40px;">
-              <p style="margin: 0; color: #8a8070; font-size: 14px; line-height: 1.6; max-width: 360px;">
-                ${filmDescription}
-              </p>
-            </td>
-          </tr>
-          ` : '<tr><td style="padding-bottom: 40px;"></td></tr>'}
-
-          <!-- CTA Button -->
-          <tr>
-            <td align="center" style="padding-bottom: 48px;">
-              <a href="${inviteUrl}" style="display: inline-block; background-color: #1a1714; color: #f5f0e8; text-decoration: none; font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; font-weight: 500; padding: 14px 32px; border-radius: 0;">
-                Accept your invitation
+              <a href="${safe.inviteUrl}" style="display: inline-block; background-color: #1a1714; color: #f5f0e8; text-decoration: none; font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; font-weight: 500; padding: 14px 32px; border-radius: 0;">
+                Receive your film
               </a>
             </td>
           </tr>
           <tr>
             <td align="center" style="padding-bottom: 32px;">
-              <p style="margin: 0; color: #8a8070; font-size: 12px; line-height: 1.6; max-width: 360px;">
-                If the button doesn&apos;t work, copy and paste this link:<br />
-                <a href="${inviteUrl}" style="color: #c4822a; text-decoration: none;">${inviteUrl}</a>
+              <p style="margin: 0; color: #8a8070; font-size: 12px; line-height: 1.6; max-width: 360px; text-align: left;">
+                If the button doesn&rsquo;t work:<br />
+                <a href="${safe.inviteUrl}" style="color: #c4822a; text-decoration: none; word-break: break-all;">${safe.inviteUrl}</a>
               </p>
             </td>
           </tr>
 
-          <!-- Divider -->
           <tr>
             <td align="center" style="padding-bottom: 24px;">
               <div style="width: 40px; height: 1px; background-color: #d4cfc4;"></div>
             </td>
           </tr>
 
-          <!-- Footer -->
           <tr>
             <td align="center">
-              <p style="margin: 0; color: #8a8070; font-size: 12px; line-height: 1.6;">
-                You were invited by ${senderName}. This film is not publicly available. It travels only through people.
+              <p style="margin: 0; color: #8a8070; font-size: 12px; line-height: 1.6; text-align: left; max-width: 360px;">
+                You were invited by ${safe.senderDisplay}. This film is not publicly available. It travels only through people.
               </p>
             </td>
           </tr>

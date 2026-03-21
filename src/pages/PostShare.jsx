@@ -60,7 +60,7 @@ export default function PostShare() {
   if (!profile) return null
 
   return (
-    <div className="min-h-screen screening-intro-bg px-6 py-12 dc-fade-in">
+    <div className="min-h-screen dc-share-page-bg px-6 py-12 dc-fade-in">
       <div className="max-w-4xl mx-auto">
         <div className="flex justify-center sm:justify-start mb-6">
           <Link to="/" className="inline-flex hover:opacity-80 transition-opacity">

@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import MuxPlayer from '@mux/mux-player-react'
+import { INTRO_FILM_MUX_PLAYBACK_ID } from '../lib/introFilm'
 import { supabase } from '../lib/supabase'
 import { api } from '../lib/api'
 import InviteForm, { parseInviteRecipientForPrefill } from '../components/InviteForm'
 import NetworkForceGraph2D from '../components/NetworkForceGraph2D'
 import { buildNetworkGraphLayout } from '../lib/networkGraphLayout'
 import DeepcastLogo from '../components/DeepcastLogo'
+
+const VIEWER_SHARE_LIMIT = 5
 
 export default function InviteScreening() {
   const navigate = useNavigate()
@@ -137,6 +140,15 @@ export default function InviteScreening() {
     })
   }, [creatorName, filmInvites, film?.title, invite?.id, viewerRecipientKey])
 
+  /** For “passed it on” copy: people in the invite graph, else total invites for the film. */
+  const peopleWhoPassedCount = useMemo(() => {
+    if (networkLayout?.graphData?.nodes?.length) {
+      return networkLayout.graphData.nodes.filter((n) => n.type !== 'film').length
+    }
+    if (inviteCount != null) return inviteCount
+    return null
+  }, [networkLayout, inviteCount])
+
   async function handleTimeUpdate(e) {
     const player = e.target
     if (!player.duration) return
@@ -235,51 +247,62 @@ export default function InviteScreening() {
 
   if (showPostFilm) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6 animate-fade-in theme-inverse text-warm">
-        <div className="flex justify-center mb-8">
-          <DeepcastLogo variant="accent" className="h-8" />
-        </div>
-        <div className="w-full max-w-md bg-ink/70 border-[0.5px] border-accent/50 rounded-none p-6">
-          <p className="dc-label text-accent mb-3 text-center">Next step</p>
-          <h2 className="dc-display-sm mb-3 text-center text-warm">
-            Know someone who should see this?
-          </h2>
-          <p className="dc-body mb-8 text-center max-w-sm mx-auto">
-            Share this screening with up to 5 people. The film spreads only through personal invitation.
-          </p>
+      <div className="min-h-screen dc-share-page-bg px-6 py-12 animate-fade-in">
+        <div className="max-w-md mx-auto w-full">
+          <div className="flex justify-center mb-6">
+            <Link to="/" className="inline-flex hover:opacity-80 transition-opacity">
+              <DeepcastLogo variant="ink" className="h-10 sm:h-11 w-auto" />
+            </Link>
+          </div>
+          <p className="dc-label text-muted mb-8 text-center">Depth is the new viral</p>
 
-          <InviteForm
-            filmId={film.id}
-            filmTitle={film.title}
-            filmDescription={film.description}
-            senderName={recipientFirstName}
-            senderEmail={invite?.recipient_email || ''}
-            senderId={null}
-            maxInvites={5}
-            showSenderFields
-            embedOnDarkBackground
-            initialRecipient={parseInviteRecipientForPrefill(invite)}
-            onInviteSent={(info) => {
-              navigate('/profile')
-            }}
-          />
-          <p className="dc-body text-xs mt-6 text-center">
-            If you choose not to share, the film&apos;s journey ends here. That&apos;s okay — but know that it
-            was carried this far by people who believed it was worth passing on.
-          </p>
-        </div>
+          {film?.title && (
+            <p className="font-display italic text-[length:var(--text-subhead)] leading-[var(--leading-subhead)] text-accent mb-6 text-center">
+              {film.title}
+            </p>
+          )}
 
-        <div className="mt-12 text-center">
-          <div className="w-px h-8 bg-faint/25 mx-auto mb-4" />
-          <p className="dc-body text-xs mb-2">
-            Join Deepcast to unlock more invites and connect with others who&apos;ve watched.
-          </p>
-          <Link
-            to="/signup"
-            className="text-accent text-sm tracking-wide hover:opacity-80 transition-opacity duration-base"
-          >
-            Create an account
-          </Link>
+          <div className="bg-bg-card border-[0.5px] border-accent/50 rounded-none p-6 mb-10">
+            <h2 className="font-display text-[length:var(--text-display-sm)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] font-normal text-ink mb-4 text-center">
+              Pass it on.
+            </h2>
+            <p className="dc-body mb-6 text-center max-w-sm mx-auto">
+              You have {VIEWER_SHARE_LIMIT} shares. Use them thoughtfully on the people who need to see this.
+            </p>
+
+            <InviteForm
+              filmId={film.id}
+              filmTitle={film.title}
+              filmDescription={film.description}
+              senderName={invite?.recipient_name?.trim() || recipientFirstName}
+              senderEmail={invite?.recipient_email || ''}
+              senderId={null}
+              maxInvites={VIEWER_SHARE_LIMIT}
+              showSenderFields
+              embedOnDarkBackground={false}
+              initialRecipient={parseInviteRecipientForPrefill(invite)}
+              onInviteSent={(info) => {
+                navigate('/profile')
+              }}
+            />
+            <p className="dc-body mt-6 text-center text-muted">
+              If you choose not to share, the film&apos;s journey ends with you. That&apos;s ok — but know that it
+              was carried this far by {peopleWhoPassedCount ?? '…'} people who believed in it and passed it on.
+            </p>
+          </div>
+
+          <div className="text-center">
+            <div className="w-px h-8 bg-border mx-auto mb-4" />
+            <p className="dc-body mb-2">
+              Join Deepcast to unlock more invites and connect with others who&apos;ve watched.
+            </p>
+            <Link
+              to="/signup"
+              className="dc-label text-accent hover:opacity-80 transition-opacity inline-block"
+            >
+              Create an account
+            </Link>
+          </div>
         </div>
       </div>
     )
@@ -317,7 +340,7 @@ export default function InviteScreening() {
             <div className="aspect-video rounded-none overflow-hidden bg-bg-card border-[0.5px] border-border">
               <MuxPlayer
                 streamType="on-demand"
-                playbackId="m00OT01KqAvAR00BDNcCuCGMsvvfwKknTq68Z00yLW4myE8"
+                playbackId={INTRO_FILM_MUX_PLAYBACK_ID}
                 accentColor="#c4822a"
                 autoPlay
                 muted
@@ -403,6 +426,13 @@ export default function InviteScreening() {
                 </div>
               )}
             </div>
+            {film?.description?.trim() ? (
+              <div className="shrink-0 border-t border-border bg-bg-page px-4 py-4 sm:px-6 lg:px-8">
+                <p className="dc-body text-sm text-muted leading-[var(--leading-body)] max-w-4xl">
+                  {film.description.trim()}
+                </p>
+              </div>
+            ) : null}
             {isPaused && networkLayout ? (
               <div className="shrink-0 border-t border-border bg-bg-card px-4 py-6 lg:px-8">
                 <h2 className="font-display italic text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] font-normal text-ink text-center mb-4">
@@ -427,26 +457,22 @@ export default function InviteScreening() {
             <header className="shrink-0 border-b border-border px-4 py-4 sm:px-6 lg:px-6">
               <p className="dc-label text-muted mb-2">Share</p>
               <h2 className="font-display text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] font-normal text-ink">
-                {film.title}
+                Pass it on.
               </h2>
+              <p className="font-display italic text-[length:var(--text-subhead)] text-muted mt-2">{film.title}</p>
             </header>
             <div className="flex-1 min-h-0 bg-bg-card border-[0.5px] border-accent/50 rounded-none p-6 lg:border-t-0">
-              <h3 className="dc-label text-muted mb-3">Share with friends</h3>
               <p className="dc-body text-sm mb-6">
-                You have 5 shares. Use them on the people who are genuinely ready for this.
-              </p>
-              <p className="dc-body text-sm mb-6 text-left">
-                If you choose not to share, the film&apos;s journey ends here. That&apos;s okay — but know that
-                it was carried this far by people who believed it was worth passing on.
+                You have {VIEWER_SHARE_LIMIT} shares. Use them thoughtfully on the people who need to see this.
               </p>
               <InviteForm
                 filmId={film.id}
                 filmTitle={film.title}
                 filmDescription={film.description}
-                senderName={recipientFirstName}
+                senderName={invite?.recipient_name?.trim() || recipientFirstName}
                 senderEmail={invite?.recipient_email || ''}
                 senderId={null}
-                maxInvites={5}
+                maxInvites={VIEWER_SHARE_LIMIT}
                 showSenderFields
                 embedOnDarkBackground={false}
                 initialRecipient={parseInviteRecipientForPrefill(invite)}
@@ -454,6 +480,10 @@ export default function InviteScreening() {
                   navigate('/profile')
                 }}
               />
+              <p className="dc-body text-sm mt-6 text-muted">
+                If you choose not to share, the film&apos;s journey ends with you. That&apos;s ok — but know that
+                it was carried this far by {peopleWhoPassedCount ?? '…'} people who believed in it and passed it on.
+              </p>
             </div>
           </aside>
         </div>
