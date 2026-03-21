@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import InviteForm from '../components/InviteForm'
+import DeepcastLogo from '../components/DeepcastLogo'
 
 export default function PostShare() {
   const { profile } = useAuth()
@@ -26,6 +27,7 @@ export default function PostShare() {
 
   const shareCount = invites.length
   const firstInvite = invites[0] || null
+  const filmTitle = firstInvite?.films?.title || null
 
   const graph = useMemo(() => {
     const nodes = [{ id: 'you', label: 'You', highlight: true }]
@@ -40,7 +42,6 @@ export default function PostShare() {
       edges.push({ from: 'you', to: nodeId })
     })
 
-    // Simple radial placement
     const radius = 140
     const angleStep = nodes.length > 1 ? (Math.PI * 2) / (nodes.length - 1) : 0
     const positioned = nodes.map((node, idx) => {
@@ -59,46 +60,51 @@ export default function PostShare() {
   if (!profile) return null
 
   return (
-    <div className="min-h-screen px-6 py-12">
+    <div className="min-h-screen screening-intro-bg px-6 py-12 dc-fade-in">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-8 animate-fade-in">
-          <div>
-            <Link to="/" className="text-accent text-sm tracking-[0.3em] uppercase">
-              Deepcast
-            </Link>
-            <h1 className="text-2xl font-display mt-4">You&apos;ve just extended the movement.</h1>
-            <p className="text-text-muted text-sm mt-2">
+        <div className="flex justify-center sm:justify-start mb-6">
+          <Link to="/" className="inline-flex hover:opacity-80 transition-opacity">
+            <DeepcastLogo variant="ink" className="h-10 sm:h-11 w-auto" />
+          </Link>
+        </div>
+        <p className="dc-label text-muted mb-10 text-center sm:text-left">Depth is the new viral</p>
+
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-8 mb-8">
+          <div className="flex-1 min-w-0">
+            {filmTitle && (
+              <p className="font-display italic text-[length:var(--text-subhead)] leading-[var(--leading-subhead)] text-accent mb-3">
+                {filmTitle}
+              </p>
+            )}
+            <h1 className="font-display text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] font-normal text-ink mb-4">
+              You&apos;ve just extended the movement.
+            </h1>
+            <p className="dc-body max-w-xl">
               Because of you, {shareCount} more people now have access to this film.
             </p>
           </div>
           <Link
             to="/network"
-            className="text-text-muted text-xs uppercase tracking-wider hover:text-text transition-colors"
+            className="dc-label text-accent hover:opacity-80 transition-opacity shrink-0 self-start sm:pt-1"
           >
             Network map
           </Link>
         </div>
 
-        <p className="text-text-muted text-sm mb-6">
+        <p className="dc-body mb-8 max-w-3xl">
           This is how the film has travelled. Every node is a person who chose to pass it on.
         </p>
 
-        <div className="bg-bg-card/60 border border-border rounded-none p-6 mb-8">
+        <div className="bg-bg-card border-[0.5px] border-border rounded-none p-6 mb-8">
           {loading ? (
             <div className="flex justify-center py-12">
-              <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+              <div
+                className="w-6 h-6 border-[0.5px] border-accent border-t-transparent rounded-full animate-spin"
+                aria-hidden
+              />
             </div>
           ) : (
-            <svg viewBox="0 0 400 400" className="w-full h-[360px]">
-              <defs>
-                <filter id="glow">
-                  <feGaussianBlur stdDeviation="3" result="coloredBlur" />
-                  <feMerge>
-                    <feMergeNode in="coloredBlur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-              </defs>
+            <svg viewBox="0 0 400 400" className="w-full h-[360px]" aria-hidden>
               {graph.edges.map((edge, i) => {
                 const from = graph.nodes.find((n) => n.id === edge.from)
                 const to = graph.nodes.find((n) => n.id === edge.to)
@@ -110,7 +116,8 @@ export default function PostShare() {
                     y1={from.y}
                     x2={to.x}
                     y2={to.y}
-                    stroke="rgba(200,169,110,0.35)"
+                    stroke="var(--color-amber)"
+                    strokeOpacity="0.4"
                     strokeWidth="1"
                   />
                 )
@@ -121,15 +128,15 @@ export default function PostShare() {
                     cx={node.x}
                     cy={node.y}
                     r={node.highlight ? 10 : 6}
-                    fill={node.highlight ? '#c8a96e' : 'rgba(200,169,110,0.55)'}
-                    filter={node.highlight ? 'url(#glow)' : undefined}
+                    fill={node.highlight ? 'var(--color-amber)' : 'var(--color-faint)'}
                   />
                   <text
                     x={node.x}
                     y={node.y + 18}
                     textAnchor="middle"
                     fontSize="10"
-                    fill="rgba(245,245,240,0.8)"
+                    fill="var(--color-muted)"
+                    style={{ fontFamily: 'var(--font-body)' }}
                   >
                     {node.label}
                   </text>
@@ -139,14 +146,12 @@ export default function PostShare() {
           )}
         </div>
 
-        <div className="bg-bg-card/80 border border-accent/50 rounded-none p-6 mb-8">
-          <h3 className="text-sm uppercase tracking-wider text-text-muted mb-3">
-            SHARE WITH FRIENDS
-          </h3>
-          <p className="text-text-muted text-sm mb-6">
+        <div className="bg-bg-card border-[0.5px] border-accent/50 rounded-none p-6 mb-8">
+          <h2 className="dc-label mb-3">Share with friends</h2>
+          <p className="dc-body mb-6">
             You have 5 shares. Use them on the people who are genuinely ready for this.
           </p>
-          <p className="text-text-muted text-sm mb-6 text-left">
+          <p className="dc-body mb-6 text-left">
             If you choose not to share, the film&apos;s journey ends here. That&apos;s okay — but know that
             it was carried this far by people who believed it was worth passing on.
           </p>
@@ -165,16 +170,15 @@ export default function PostShare() {
               }}
             />
           ) : (
-            <p className="text-text-muted text-sm">No film selected for sharing yet.</p>
+            <p className="dc-body">No film selected for sharing yet.</p>
           )}
         </div>
-        <p className="text-text-muted text-sm mb-6">
+
+        <p className="dc-body mb-6 max-w-3xl">
           Your shares are now in motion. As the people you invited watch and share, your branch of
           this network will grow. You can return here to see how far it reaches.
         </p>
-        <p className="text-text-muted text-sm">
-          This is your space. Every film you&apos;re part of lives here.
-        </p>
+        <p className="dc-body max-w-3xl">This is your space. Every film you&apos;re part of lives here.</p>
       </div>
     </div>
   )

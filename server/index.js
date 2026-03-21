@@ -137,6 +137,30 @@ function resolveBaseUrl(appUrl, origin) {
   return APP_URL
 }
 
+/** Resend Node SDK returns { data, error } and does NOT throw on API errors — always check `error`. */
+function formatResendError(err) {
+  if (!err) return 'Unknown Resend error'
+  if (typeof err.message === 'string') return err.message
+  if (Array.isArray(err.message)) return err.message.map((m) => (typeof m === 'string' ? m : m?.message || JSON.stringify(m))).join('; ')
+  return JSON.stringify(err)
+}
+
+async function sendInviteEmailResend(payload) {
+  if (!resendApiKey) {
+    throw new Error('RESEND_API_KEY is not set — cannot send email')
+  }
+  const { data, error } = await resend.emails.send(payload)
+  if (error) {
+    const msg = formatResendError(error)
+    console.error('Resend API error:', msg, error)
+    const e = new Error(msg)
+    e.resendError = error
+    throw e
+  }
+  if (data?.id) console.log('Resend email id:', data.id)
+  return data
+}
+
 app.post('/api/invites/send', async (req, res) => {
   try {
     const {
@@ -153,6 +177,10 @@ app.post('/api/invites/send', async (req, res) => {
     if (!filmId || !recipientEmail) {
       return res.status(400).json({ error: 'Film ID and recipient email are required' })
     }
+
+    const recipientEmailNorm = String(recipientEmail).trim()
+    let previousAllocation = null
+    let allocationDecremented = false
 
     // Check sender's invite allocation if they're a registered user
     if (senderId) {
@@ -180,6 +208,7 @@ app.post('/api/invites/send', async (req, res) => {
       }
 
       if (sender.role !== 'creator') {
+        previousAllocation = sender.invite_allocation
         // Decrement invite allocation for viewers only
         const { error: decrementError } = await supabase
           .from('users')
@@ -190,6 +219,7 @@ app.post('/api/invites/send', async (req, res) => {
           console.error('Invite allocation decrement error:', decrementError.message || decrementError)
           return res.status(500).json({ error: 'Unable to update invites' })
         }
+        allocationDecremented = true
       }
     }
 
@@ -232,7 +262,7 @@ app.post('/api/invites/send', async (req, res) => {
         sender_id: senderId || null,
         sender_name: senderName || null,
         sender_email: senderEmail || null,
-        recipient_email: recipientEmail,
+        recipient_email: recipientEmailNorm,
         recipient_name: recipientName || null,
         personal_note: personalNote || null,
         token,
@@ -266,9 +296,9 @@ app.post('/api/invites/send', async (req, res) => {
 
     try {
       const fromEmail = process.env.RESEND_FROM_EMAIL || 'Deepcast <onboarding@resend.dev>'
-      const emailResult = await resend.emails.send({
+      await sendInviteEmailResend({
         from: fromEmail,
-        to: recipientEmail,
+        to: recipientEmailNorm,
         subject: `${displaySender} has shared a film with you.`,
         html: buildInviteEmailHtml(
           displaySender,
@@ -282,14 +312,21 @@ app.post('/api/invites/send', async (req, res) => {
           personalNote || null
         ),
       })
-      console.log('Email sent:', JSON.stringify(emailResult))
     } catch (emailErr) {
       const message = emailErr?.message || 'Email send failed'
       console.error('Email send error:', message, emailErr)
+      await supabase.from('invites').delete().eq('id', invite.id)
+      if (allocationDecremented && previousAllocation !== null && senderId) {
+        const { error: rollbackErr } = await supabase
+          .from('users')
+          .update({ invite_allocation: previousAllocation })
+          .eq('id', senderId)
+        if (rollbackErr) console.error('Failed to rollback invite_allocation:', rollbackErr)
+      }
       return res.status(502).json({ error: 'Email failed to send', details: message })
     }
 
-    console.log(`Invite created: token=${token}, recipient=${recipientEmail}, inviteUrl=${inviteUrl}`)
+    console.log(`Invite created: token=${token}, recipient=${recipientEmailNorm}, inviteUrl=${inviteUrl}`)
 
     res.json({ success: true, token })
   } catch (err) {
@@ -348,22 +385,28 @@ app.post('/api/invites/resend-last', async (req, res) => {
       : null
 
     const fromEmail = process.env.RESEND_FROM_EMAIL || 'Deepcast <hello@deepcast.com>'
-    await resend.emails.send({
-      from: fromEmail,
-      to: invite.recipient_email,
-      subject: `${displaySender} has shared a film with you.`,
-      html: buildInviteEmailHtml(
-        displaySender,
-        recipientFirstName,
-        film.title,
-        film.description,
-        film.thumbnail_url,
-        inviteUrl,
-        displaySenderEmail,
-        inviteOrdinal,
-        invite.personal_note || null
-      ),
-    })
+    try {
+      await sendInviteEmailResend({
+        from: fromEmail,
+        to: invite.recipient_email,
+        subject: `${displaySender} has shared a film with you.`,
+        html: buildInviteEmailHtml(
+          displaySender,
+          recipientFirstName,
+          film.title,
+          film.description,
+          film.thumbnail_url,
+          inviteUrl,
+          displaySenderEmail,
+          inviteOrdinal,
+          invite.personal_note || null
+        ),
+      })
+    } catch (emailErr) {
+      const message = emailErr?.message || 'Email send failed'
+      console.error('Invite resend-last email error:', message)
+      return res.status(502).json({ error: 'Email failed to send', details: message })
+    }
 
     res.json({ success: true, inviteId: invite.id })
   } catch (err) {
@@ -418,23 +461,29 @@ app.post('/api/invites/resend', async (req, res) => {
       ? invite.recipient_name.trim().split(/\s+/)[0]
       : null
 
-      const fromEmail = process.env.RESEND_FROM_EMAIL || 'Deepcast <hello@deepcast.com>'
-    await resend.emails.send({
-      from: fromEmail,
-      to: invite.recipient_email,
-      subject: `${displaySender} has shared a film with you.`,
-      html: buildInviteEmailHtml(
-        displaySender,
-        recipientFirstName,
-        film.title,
-        film.description,
-        film.thumbnail_url,
-        inviteUrl,
-        displaySenderEmail,
-        inviteOrdinal,
-        invite.personal_note || null
-      ),
-    })
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'Deepcast <hello@deepcast.com>'
+    try {
+      await sendInviteEmailResend({
+        from: fromEmail,
+        to: invite.recipient_email,
+        subject: `${displaySender} has shared a film with you.`,
+        html: buildInviteEmailHtml(
+          displaySender,
+          recipientFirstName,
+          film.title,
+          film.description,
+          film.thumbnail_url,
+          inviteUrl,
+          displaySenderEmail,
+          inviteOrdinal,
+          invite.personal_note || null
+        ),
+      })
+    } catch (emailErr) {
+      const message = emailErr?.message || 'Email send failed'
+      console.error('Invite resend-by-id email error:', message)
+      return res.status(502).json({ error: 'Email failed to send', details: message })
+    }
 
     res.json({ success: true, inviteId: invite.id })
   } catch (err) {

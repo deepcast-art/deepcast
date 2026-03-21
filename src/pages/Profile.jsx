@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import InviteForm from '../components/InviteForm'
+import DeepcastLogo from '../components/DeepcastLogo'
 
 export default function Profile() {
   const { profile, signOut, fetchProfile, user } = useAuth()
@@ -230,8 +231,8 @@ export default function Profile() {
         {/* Header */}
         <div className="flex items-center justify-between mb-12 animate-fade-in">
           <div>
-            <Link to="/" className="text-accent text-sm tracking-[0.3em] uppercase">
-              Deepcast
+            <Link to="/" className="inline-flex hover:opacity-80 transition-opacity">
+              <DeepcastLogo variant="ink" className="h-8" />
             </Link>
             <h1 className="text-2xl font-display mt-4">{profile.name}</h1>
             <p className="text-text-muted text-sm mt-1">{profile.email}</p>

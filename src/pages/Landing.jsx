@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import DeepcastLogo from '../components/DeepcastLogo'
 
 export default function Landing() {
   const [invites, setInvites] = useState([])
@@ -37,7 +38,9 @@ export default function Landing() {
     }
 
     loadNetwork()
-    return () => { isMounted = false }
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   const networkLayout = useMemo(() => {
@@ -138,8 +141,8 @@ export default function Landing() {
           status === 'watched' || status === 'signed_up'
             ? 'text-success'
             : status === 'opened'
-            ? 'text-accent'
-            : 'text-text-muted'
+              ? 'text-accent'
+              : 'text-text-muted'
         positionedNodes.push({ ...node, x, y, statusClass })
       })
     })
@@ -152,38 +155,38 @@ export default function Landing() {
     : 0
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6">
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
       <div className="max-w-2xl mx-auto text-center">
-        <div className="mb-6 animate-fade-in">
+        <div className="mb-6 dc-fade-in dc-fade-in-1">
           <Link
             to="/login"
-            className="text-text-muted text-xs hover:text-accent transition-colors duration-300"
+            className="font-body text-xs font-medium tracking-wide text-muted hover:text-accent transition-colors duration-[var(--duration-base)]"
           >
             Are you a filmmaker?
           </Link>
         </div>
-        <p className="text-accent text-sm tracking-[0.3em] uppercase mb-8 animate-fade-in">
-          Deepcast
-        </p>
+        <div className="flex justify-center mb-8 dc-fade-in dc-fade-in-2">
+          <DeepcastLogo variant="ink" className="h-10 sm:h-11 w-auto" />
+        </div>
 
-        <h1 className="text-3xl sm:text-5xl font-display leading-tight tracking-tight mb-8 animate-fade-in animate-delay-200">
+        <h1 className="font-display text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] text-ink mb-8 dc-fade-in dc-fade-in-2">
           Some films are not for everyone.
           <br />
-          <span className="text-text-muted">Just the right ones.</span>
+          <span className="text-muted">Just the right ones.</span>
         </h1>
-        <p className="text-text-muted text-sm tracking-[0.2em] uppercase mb-8 animate-fade-in animate-delay-300">
+        <p className="dc-label text-muted mb-8 dc-fade-in dc-fade-in-3">
           Depth is the new viral
         </p>
 
-        <p className="text-text-muted text-lg font-light max-w-md mx-auto mb-10 animate-fade-in animate-delay-300">
+        <p className="font-body text-lg font-light text-muted leading-[var(--leading-body)] max-w-md mx-auto mb-10 dc-fade-in dc-fade-in-3">
           A private screening platform where films spread through personal invitation.
           No public catalogue. No algorithm. Just trust.
         </p>
 
         {networkLayout && (
-          <div className="animate-fade-in animate-delay-400 mb-10">
+          <div className="mb-10 dc-fade-in dc-fade-in-4">
             <div className="w-px h-10 bg-border mx-auto mb-6" />
-            <p className="font-display text-xl mb-4">
+            <p className="font-display italic text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] font-normal text-ink mb-4">
               This film has passed through {peopleCount} pairs of hands to reach you.
             </p>
             <div className="w-full bg-bg-card border-[0.5px] border-border rounded-none overflow-hidden">
@@ -193,7 +196,7 @@ export default function Landing() {
                 role="img"
                 aria-label="Invite network map"
               >
-                <g stroke="#c4822a" strokeWidth="1" strokeOpacity="0.4">
+                <g stroke="var(--color-amber)" strokeWidth="1" strokeOpacity="0.4">
                   {networkLayout.edges.map((edge) => {
                     const fromNode = networkLayout.nodes.find((n) => n.id === edge.from)
                     const toNode = networkLayout.nodes.find((n) => n.id === edge.to)
@@ -213,14 +216,14 @@ export default function Landing() {
                 {networkLayout.nodes.map((node) => {
                   const fillColor =
                     node.type === 'film'
-                      ? '#c4822a'
+                      ? 'var(--color-amber)'
                       : node.type === 'recipient'
-                      ? '#8a8070'
-                      : node.statusClass === 'text-success'
-                      ? '#5b8a5e'
-                      : node.statusClass === 'text-accent'
-                      ? '#c4822a'
-                      : '#d4cfc4'
+                        ? 'var(--color-muted)'
+                        : node.statusClass === 'text-success'
+                          ? 'var(--color-success)'
+                          : node.statusClass === 'text-accent'
+                            ? 'var(--color-amber)'
+                            : 'var(--color-faint)'
                   const radius = node.type === 'film' ? 16 : 10
                   return (
                     <g key={node.id}>
@@ -234,8 +237,9 @@ export default function Landing() {
                         x={node.x}
                         y={node.y - radius - 6}
                         textAnchor="middle"
-                        className="fill-ink text-[10px]"
-                        style={{ fontFamily: "'DM Sans', sans-serif" }}
+                        fill="var(--color-ink)"
+                        className="text-[10px]"
+                        style={{ fontFamily: 'var(--font-body)' }}
                       >
                         {node.label}
                       </text>
@@ -244,14 +248,14 @@ export default function Landing() {
                 })}
               </svg>
             </div>
-            <p className="text-text-muted text-xs mt-3">
+            <p className="dc-body text-xs mt-3">
               Each node is a person. Each line is a personal invitation.
             </p>
           </div>
         )}
 
         {!networkLayout && (
-          <div className="animate-fade-in animate-delay-500">
+          <div className="dc-fade-in dc-fade-in-5">
             <div className="w-px h-16 bg-border mx-auto mb-8" />
           </div>
         )}

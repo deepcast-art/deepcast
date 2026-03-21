@@ -38,6 +38,8 @@ export default function InviteForm({
   showSenderFields = false,
   /** Prefill first "To" row (e.g. film invite receiver’s name + email) */
   initialRecipient = null,
+  /** Labels readable on dark screening surfaces (e.g. paused share column) */
+  embedOnDarkBackground = false,
 }) {
   const { signUp, signIn } = useAuth()
   const [recipients, setRecipients] = useState(() => [
@@ -190,7 +192,11 @@ export default function InviteForm({
 
       {showSenderFields && (
         <div className="mb-6">
-          <p className="text-text-muted text-xs uppercase tracking-wider mb-3">From</p>
+          <p
+            className={`dc-label mb-3 ${embedOnDarkBackground ? 'text-warm/75' : ''}`}
+          >
+            From
+          </p>
           <div className="space-y-3 bg-bg-card/60 border-[0.5px] border-border rounded-none p-4">
             <div className="flex gap-2">
               <input
@@ -238,7 +244,7 @@ export default function InviteForm({
       )}
 
       <div>
-        <p className="text-text-muted text-xs uppercase tracking-wider mb-3">To</p>
+        <p className={`dc-label mb-3 ${embedOnDarkBackground ? 'text-warm/75' : ''}`}>To</p>
         <div className="space-y-3 bg-bg-card/60 border-[0.5px] border-border rounded-none p-4">
           {recipients.map((recipient, i) => (
             <div
@@ -310,6 +316,7 @@ export default function InviteForm({
       </div>
 
       <button
+        type="button"
         onClick={handleSend}
         disabled={
           sending ||
@@ -323,7 +330,7 @@ export default function InviteForm({
               !senderEmailInput.includes('@') ||
               !senderPasswordInput.trim()))
         }
-        className="w-full mt-4 bg-ink text-warm font-medium rounded-none py-3 text-sm hover:bg-ink/80 transition-colors disabled:opacity-50 cursor-pointer"
+        className="dc-btn dc-btn-accent w-full mt-4 py-3 text-sm cursor-pointer"
       >
         {sending ? 'Sending...' : 'Send the invitations.'}
       </button>

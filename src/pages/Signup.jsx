@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
+import DeepcastLogo from '../components/DeepcastLogo'
 
 export default function Signup() {
   const [searchParams] = useSearchParams()
@@ -32,8 +33,8 @@ export default function Signup() {
     <div className="min-h-screen flex flex-col items-center justify-center px-6">
       <div className="w-full max-w-sm">
         <div className="text-center mb-10 animate-fade-in">
-          <Link to="/" className="text-accent text-sm tracking-[0.3em] uppercase">
-            Deepcast
+          <Link to="/" className="inline-flex justify-center hover:opacity-80 transition-opacity">
+            <DeepcastLogo variant="ink" className="h-8" />
           </Link>
           <h1 className="text-2xl font-display mt-6 mb-2">
             {isCreator ? 'Creator signup' : 'Join Deepcast'}

@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
 import { buildNetworkGraphLayout } from '../lib/networkGraphLayout'
 import NetworkForceGraph2D from '../components/NetworkForceGraph2D'
+import DeepcastLogo from '../components/DeepcastLogo'
 
 export default function NetworkMap() {
   const { profile } = useAuth()
@@ -178,8 +179,8 @@ export default function NetworkMap() {
       <div className="max-w-3xl mx-auto">
         <div className="flex items-center justify-between mb-12 animate-fade-in">
           <div>
-            <Link to="/" className="text-accent text-sm tracking-[0.3em] uppercase">
-              Deepcast
+            <Link to="/" className="inline-flex hover:opacity-80 transition-opacity">
+              <DeepcastLogo variant="ink" className="h-8" />
             </Link>
             <h1 className="text-2xl font-display mt-4">Network Map</h1>
             <p className="text-text-muted text-sm mt-1">

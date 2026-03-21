@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import { api } from '../lib/api'
 import InviteForm from '../components/InviteForm'
+import DeepcastLogo from '../components/DeepcastLogo'
 
 export default function Upload() {
   const { profile } = useAuth()
@@ -148,7 +149,9 @@ export default function Upload() {
     return (
       <div className="min-h-screen px-6 py-12">
         <div className="max-w-lg mx-auto text-center animate-fade-in">
-          <p className="text-accent text-sm tracking-[0.3em] uppercase mb-8">Deepcast</p>
+          <div className="flex justify-center mb-8">
+            <DeepcastLogo variant="ink" className="h-8" />
+          </div>
           <h1 className="text-2xl font-display mb-2">Your film is ready</h1>
           <p className="text-text-muted text-sm mb-10">
             Send your first seed invitations to start spreading the screening.
@@ -182,7 +185,9 @@ export default function Upload() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-6">
         <div className="max-w-sm w-full text-center animate-fade-in">
-          <p className="text-accent text-sm tracking-[0.3em] uppercase mb-8">Deepcast</p>
+          <div className="flex justify-center mb-8">
+            <DeepcastLogo variant="ink" className="h-8" />
+          </div>
 
           {step === 'uploading' ? (
             <>

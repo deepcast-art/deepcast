@@ -39,6 +39,62 @@ If you need to redeploy **without** new commits:
 - **Vercel:** Project → **Deployments** → ⋮ on latest production deployment → **Redeploy**.
 - **Render:** Service → **Manual Deploy** → deploy latest commit.
 
-## Environment
+## Environment variables
 
-Production secrets (`RESEND_*`, `SUPABASE_*`, etc.) must be set in **Vercel** (if any client-side) and **Render** (API), not only in local `.env`.
+### Do you need env vars on Vercel?
+
+**Usually no.** In this setup:
+
+- The **browser** loads the React app from Vercel.
+- Requests to **`/api/...`** are **rewritten** to the API on Render (`vercel.json`), so **Resend, Mux, and Supabase service-role keys run only on Render**, not in the Vercel build.
+
+You **do not** need to duplicate `RESEND_*`, `MUX_*`, or `SUPABASE_SERVICE_ROLE_KEY` on Vercel for the current architecture.
+
+**Add variables on Vercel only if** you later expose values to the **client bundle** (e.g. `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` after refactoring `src/lib/supabase.js`), or if a build step needs a secret. Never put the **service role** key in Vercel client-side env.
+
+---
+
+### Render (API) — required for production
+
+Set these on your **Web Service** (e.g. `deepcast.onrender.com`): **Environment** → add variables → **Save** → **Manual Deploy** (or wait for auto-deploy) so the service restarts.
+
+| Variable | Required | Notes |
+|----------|----------|--------|
+| `SUPABASE_URL` | Yes | Same project URL as in Supabase dashboard. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server-only; bypasses RLS — keep secret. Prefer **not** using the anon key here. |
+| `RESEND_API_KEY` | Yes | From [Resend API Keys](https://resend.com/api-keys). |
+| `RESEND_FROM_EMAIL` | Yes | Must be on your **verified** domain, e.g. `Deepcast <invites@deepcast.art>`. |
+| `MUX_TOKEN_ID` | Yes* | *Required for uploads / Mux routes. |
+| `MUX_TOKEN_SECRET` | Yes* | *Same. |
+| `APP_URL` | Recommended | Public site URL, e.g. `https://www.deepcast.art` — used for invite links when the request doesn’t supply a better origin. |
+| `PORT` | No | Render sets this automatically. |
+
+Local development uses a root **`.env`** (or `server/.env` if you configure it) with the same names; **never commit** real keys.
+
+---
+
+### Resend (invite emails)
+
+- **`RESEND_FROM_EMAIL`** must use an address on a **[verified domain](https://resend.com/docs/dashboard/domains/introduction)** in Resend (e.g. `Deepcast <invites@deepcast.art>`).
+- **Sandbox:** Using Resend’s shared test domain (`onboarding@resend.dev`) often limits delivery to your signup email. Use your own verified domain for real recipients.
+
+The API checks Resend’s `{ error }` response. If delivery fails, logs and API responses should include Resend’s message (e.g. domain not verified, invalid recipient).
+
+---
+
+### Troubleshooting: “nothing works” / emails not sending
+
+1. **`RESEND_FROM_EMAIL` must match a verified domain**  
+   If Resend says `yourdomain.com domain is not verified`, your `.env` still has a **placeholder** (e.g. `invites@yourdomain.com`). Change it to an address on the domain you verified in Resend (e.g. `Deepcast <invites@deepcast.art>`). See **`.env.example`** in the repo.
+
+2. **Restart the API after changing `.env`**  
+   `npm run dev` starts both Vite and the server. Stop the terminal (Ctrl+C) and run `npm run dev` again so `dotenv` reloads.
+
+3. **Confirm the browser hits your local API**  
+   The Vite dev server proxies `/api` to `http://localhost:3001` (`vite.config.js`). The Express server must be listening (same `npm run dev`). If you only run `vite`, invites will fail (no API).
+
+4. **Production (Render)**  
+   The same variables must be set in the **Render** dashboard. Updating only local `.env` does not change production.
+
+5. **Read the red error on the form**  
+   After a failed send, the invite form should show something like `Email failed to send: …` with Resend’s message. The browser **Network** tab → failed `invites/send` request → **Response** also shows `details`.

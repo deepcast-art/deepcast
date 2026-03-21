@@ -6,6 +6,7 @@ import { api } from '../lib/api'
 import InviteForm, { parseInviteRecipientForPrefill } from '../components/InviteForm'
 import NetworkForceGraph2D from '../components/NetworkForceGraph2D'
 import { buildNetworkGraphLayout } from '../lib/networkGraphLayout'
+import DeepcastLogo from '../components/DeepcastLogo'
 
 export default function InviteScreening() {
   const navigate = useNavigate()
@@ -206,19 +207,24 @@ export default function InviteScreening() {
 
   if (status === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center theme-inverse">
-        <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center theme-inverse dc-fade-in">
+        <div
+          className="w-6 h-6 border-[0.5px] border-accent border-t-transparent rounded-full animate-spin"
+          aria-hidden
+        />
       </div>
     )
   }
 
   if (status === 'invalid' || status === 'expired') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center theme-inverse text-warm">
-        <p className="text-accent text-sm tracking-[0.3em] uppercase mb-6">Deepcast</p>
-        <div className="w-16 h-px bg-faint/20 mb-8" />
-        <h1 className="text-xl font-display mb-4">This screening is no longer available.</h1>
-        <p className="text-text-muted text-sm max-w-xs">
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center theme-inverse text-warm dc-fade-in">
+        <div className="flex justify-center mb-6">
+          <DeepcastLogo variant="accent" className="h-8" />
+        </div>
+        <hr className="dc-divider w-16 mb-8 opacity-40" />
+        <h1 className="dc-display-sm mb-4 max-w-md">This screening is no longer available.</h1>
+        <p className="dc-body max-w-xs">
           {status === 'expired'
             ? 'This invitation has expired. Ask the sender for a new one.'
             : 'This invitation link is not valid.'}
@@ -230,15 +236,15 @@ export default function InviteScreening() {
   if (showPostFilm) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-6 animate-fade-in theme-inverse text-warm">
-        <p className="text-accent text-sm tracking-[0.3em] uppercase mb-8">Deepcast</p>
-        <div className="w-full max-w-md bg-ink/70 border border-accent/50 rounded-none p-6">
-          <p className="text-accent text-xs uppercase tracking-[0.3em] mb-3 text-center">
-            Next step
-          </p>
-          <h2 className="text-2xl font-display mb-3 text-center">
+        <div className="flex justify-center mb-8">
+          <DeepcastLogo variant="accent" className="h-8" />
+        </div>
+        <div className="w-full max-w-md bg-ink/70 border-[0.5px] border-accent/50 rounded-none p-6">
+          <p className="dc-label text-accent mb-3 text-center">Next step</p>
+          <h2 className="dc-display-sm mb-3 text-center text-warm">
             Know someone who should see this?
           </h2>
-          <p className="text-text-muted text-sm mb-8 text-center max-w-sm mx-auto">
+          <p className="dc-body mb-8 text-center max-w-sm mx-auto">
             Share this screening with up to 5 people. The film spreads only through personal invitation.
           </p>
 
@@ -251,25 +257,26 @@ export default function InviteScreening() {
             senderId={null}
             maxInvites={5}
             showSenderFields
+            embedOnDarkBackground
             initialRecipient={parseInviteRecipientForPrefill(invite)}
             onInviteSent={(info) => {
               navigate('/profile')
             }}
           />
-          <p className="text-text-muted text-xs mt-6 text-center">
+          <p className="dc-body text-xs mt-6 text-center">
             If you choose not to share, the film&apos;s journey ends here. That&apos;s okay — but know that it
             was carried this far by people who believed it was worth passing on.
           </p>
         </div>
 
         <div className="mt-12 text-center">
-          <div className="w-px h-8 bg-faint/20 mx-auto mb-4" />
-        <p className="text-text-muted text-xs mb-2">
-          Join Deepcast to unlock more invites and connect with others who&apos;ve watched.
-        </p>
+          <div className="w-px h-8 bg-faint/25 mx-auto mb-4" />
+          <p className="dc-body text-xs mb-2">
+            Join Deepcast to unlock more invites and connect with others who&apos;ve watched.
+          </p>
           <Link
             to="/signup"
-            className="text-accent text-sm hover:text-accent-hover transition-colors"
+            className="text-accent text-sm tracking-wide hover:opacity-80 transition-opacity duration-base"
           >
             Create an account
           </Link>
@@ -279,156 +286,176 @@ export default function InviteScreening() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden theme-inverse">
+    <div
+      className={`min-h-screen flex flex-col relative overflow-hidden ${
+        stage === 'intro'
+          ? 'screening-intro-bg items-center justify-center px-6'
+          : 'screening-intro-bg text-ink items-stretch min-h-screen px-0'
+      }`}
+    >
       {stage === 'intro' ? (
-        <div className="relative w-full max-w-3xl text-center animate-fade-in">
-          <div className="absolute inset-0 -z-10">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(196,130,42,0.15),transparent_60%)]" />
-            <div className="absolute inset-0 opacity-40">
-              <div className="absolute top-8 left-10 h-2 w-2 rounded-none bg-accent/40" />
-              <div className="absolute top-16 right-16 h-1.5 w-1.5 rounded-none bg-accent/40" />
-              <div className="absolute bottom-16 left-24 h-1.5 w-1.5 rounded-none bg-accent/40" />
-              <div className="absolute bottom-8 right-28 h-2 w-2 rounded-none bg-accent/40" />
-              <div className="absolute left-1/2 top-24 h-px w-32 bg-accent/20" />
-              <div className="absolute left-1/3 bottom-20 h-px w-40 bg-accent/20" />
-            </div>
+        <div className="relative w-full max-w-3xl mx-auto text-center dc-fade-in dc-fade-in-2 py-10">
+          <div className="flex justify-center mb-8">
+            <DeepcastLogo variant="ink" className="h-10 sm:h-11 w-auto" />
           </div>
+          <p className="dc-label text-muted mb-8">Depth is the new viral</p>
 
-          <p className="text-accent text-base tracking-[0.35em] uppercase mb-2">Deepcast</p>
-          <p className="text-text-muted text-xs tracking-[0.3em] uppercase mb-6">Depth is the new viral</p>
-          <h1 className="text-3xl sm:text-5xl font-display leading-tight tracking-tight mb-6 text-warm">
-            No algorithm sent you here.
-            <br />
-            {invite?.sender_name || 'A friend'} did.
+          <h1 className="mb-8">
+            <span className="block font-display italic text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] font-normal text-ink">
+              No algorithm sent you here.
+            </span>
+            <span className="block font-display text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] font-normal text-ink mt-4">
+              {invite?.sender_name || 'A friend'} did.
+            </span>
           </h1>
 
-          <div className="bg-ink/60 border border-faint/20 rounded-none p-6 mb-10">
-            <p className="text-text-muted text-sm mb-4">
-              Before you watch the film, take 60 seconds to understand what you&apos;ve been invited into.
-            </p>
-            <div className="aspect-video rounded-none overflow-hidden bg-ink/60 flex items-center justify-center text-text-muted text-sm">
+          <p className="dc-body max-w-md mx-auto mb-8 text-left sm:text-center">
+            Before you watch the film, take 60 seconds to understand what you&apos;ve been invited into.
+          </p>
+
+          <div className="w-full max-w-xl mx-auto mb-8">
+            <div className="aspect-video rounded-none overflow-hidden bg-bg-card border-[0.5px] border-border">
               <MuxPlayer
                 streamType="on-demand"
                 playbackId="m00OT01KqAvAR00BDNcCuCGMsvvfwKknTq68Z00yLW4myE8"
-                accentColor="#c8a96e"
+                accentColor="#c4822a"
                 autoPlay
                 muted
                 playsInline
                 onEnded={() => {
-                  setStage('screening')
-                  setIsPaused(false)
+                  /* Do not advance to the film — user must click "Enter screening room". */
                 }}
                 style={{ width: '100%', height: '100%' }}
               />
             </div>
-            {networkLayout ? (
-              <>
-                <h2 className="font-display text-warm text-lg sm:text-xl mt-6 mb-4 text-center leading-tight">
-                  This film has passed through{' '}
-                  {networkLayout.graphData.nodes.filter((n) => n.type !== 'film').length} pairs of hands to reach you.
-                </h2>
-                <div className="relative w-full aspect-video bg-ink/60 border border-faint/20 rounded-none overflow-hidden">
-                  <NetworkForceGraph2D
-                    graphData={networkLayout.graphData}
-                    rootId="film-root"
-                    theme="dark"
-                    height={320}
-                  />
-                </div>
-                <p className="text-text-muted text-xs mt-3 text-center">
-                  Each node is a person; each line is an invitation spreading from the film at the center.
-                </p>
-              </>
-            ) : (
-              <p className="text-text-muted text-xs mt-4">
-                This film has passed through {inviteCount ?? '...'} pairs of hands to reach you.
-              </p>
-            )}
+            <div className="mt-6 flex justify-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setStage('screening')
+                  setIsPaused(false)
+                }}
+                className="dc-btn dc-btn-accent inline-flex items-center gap-3 px-8 py-4 text-sm cursor-pointer"
+              >
+                Enter screening room
+              </button>
+            </div>
           </div>
 
-          <button
-            onClick={() => {
-              setStage('screening')
-              setIsPaused(false)
-            }}
-            className="inline-flex items-center gap-3 bg-accent text-warm font-medium rounded-none px-8 py-4 text-sm hover:bg-accent-hover transition-colors cursor-pointer"
-          >
-            Enter screening room
-          </button>
+          {networkLayout ? (
+            <div className="mt-12 text-left sm:text-center">
+              <h2 className="font-display italic text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] font-normal text-ink mb-6">
+                This film has passed through{' '}
+                {networkLayout.graphData.nodes.filter((n) => n.type !== 'film').length} pairs of hands to reach
+                you.
+              </h2>
+              <div className="relative w-full aspect-video bg-bg-card border-[0.5px] border-border rounded-none overflow-hidden">
+                <NetworkForceGraph2D
+                  graphData={networkLayout.graphData}
+                  rootId="film-root"
+                  theme="light"
+                  height={320}
+                />
+              </div>
+              <p className="dc-body mt-3 text-center">
+                Each node is a person; each line is an invitation spreading from the film at the center.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-12">
+              <h2 className="font-display italic text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] font-normal text-ink mb-4">
+                This film has passed through {inviteCount ?? '…'} pairs of hands to reach you.
+              </h2>
+            </div>
+          )}
         </div>
       ) : (
-        <div className="w-full max-w-6xl animate-fade-in mt-8">
-          <div className={`flex flex-col ${isPaused ? 'lg:flex-row' : ''} gap-6`}>
-            <div className={isPaused ? 'flex-1' : 'w-full'}>
-              <div className="relative w-full aspect-video bg-ink rounded-none overflow-hidden">
-                {film.mux_playback_id ? (
+        <div className="w-full flex-1 flex flex-col lg:flex-row min-h-0 min-h-screen animate-fade-in">
+          {/* Left: film title header, full-viewport video; network map only when paused */}
+          <div className="flex-1 flex flex-col min-h-0 min-h-[50vh] lg:min-h-0">
+            <header className="shrink-0 border-b border-border bg-bg-page px-4 py-4 sm:px-6 lg:px-8">
+              <p className="dc-label text-muted mb-2">Now screening</p>
+              <h1 className="font-display text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] font-normal text-ink">
+                {film.title}
+              </h1>
+            </header>
+            <div className="flex-1 relative min-h-[40vh] lg:min-h-[50vh] bg-ink">
+              {film.mux_playback_id ? (
+                <div className="absolute inset-0">
                   <MuxPlayer
                     ref={playerRef}
                     streamType="on-demand"
                     playbackId={film.mux_playback_id}
                     metadata={{ video_title: film.title }}
-                    accentColor="#c8a96e"
+                    accentColor="#c4822a"
                     onTimeUpdate={handleTimeUpdate}
                     onEnded={handleEnded}
                     onPause={() => setIsPaused(true)}
                     onPlay={() => setIsPaused(false)}
                     autoPlay
                     muted
-                    style={{ width: '100%', height: '100%' }}
+                    style={{ width: '100%', height: '100%', display: 'block' }}
                   />
-                ) : (
-                  <div className="flex items-center justify-center h-full text-text-muted">
-                    Video is being processed...
-                  </div>
-                )}
-              </div>
-              {networkLayout ? (
-                <div className="mt-8 mb-6">
-                  <h2 className="font-display text-warm text-lg sm:text-xl text-center mb-4 leading-tight">
-                    This film has passed through{' '}
-                    {networkLayout.graphData.nodes.filter((n) => n.type !== 'film').length} pairs of hands to reach you.
-                  </h2>
-                  <div className="relative w-full min-h-[280px] bg-ink/40 border border-faint/20 rounded-none overflow-hidden">
-                    <NetworkForceGraph2D
-                      graphData={networkLayout.graphData}
-                      rootId="film-root"
-                      theme="dark"
-                      height={280}
-                    />
-                  </div>
                 </div>
-              ) : null}
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center text-text-muted">
+                  Video is being processed...
+                </div>
+              )}
             </div>
-
-            {isPaused && (
-              <div className="w-full lg:w-[360px] bg-ink/80 border border-accent/50 rounded-none p-6 h-fit">
-                <h3 className="text-sm uppercase tracking-wider text-text-muted mb-3">
-                  SHARE WITH FRIENDS
-                </h3>
-                <p className="text-text-muted text-sm mb-6">
-                  You have 5 shares. Use them on the people who are genuinely ready for this.
-                </p>
-                <p className="text-text-muted text-sm mb-6 text-left">
-                  If you choose not to share, the film&apos;s journey ends here. That&apos;s okay — but know
-                  that it was carried this far by people who believed it was worth passing on.
-                </p>
-                <InviteForm
-                  filmId={film.id}
-                  filmTitle={film.title}
-                  filmDescription={film.description}
-                  senderName={recipientFirstName}
-                  senderEmail={invite?.recipient_email || ''}
-                  senderId={null}
-                  maxInvites={5}
-                  showSenderFields
-                  initialRecipient={parseInviteRecipientForPrefill(invite)}
-                  onInviteSent={(info) => {
-                    navigate('/profile')
-                  }}
-                />
+            {isPaused && networkLayout ? (
+              <div className="shrink-0 border-t border-border bg-bg-card px-4 py-6 lg:px-8">
+                <h2 className="font-display italic text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] font-normal text-ink text-center mb-4">
+                  This film has passed through{' '}
+                  {networkLayout.graphData.nodes.filter((n) => n.type !== 'film').length} pairs of hands to reach
+                  you.
+                </h2>
+                <div className="relative w-full max-w-4xl mx-auto min-h-[240px] lg:min-h-[280px] bg-bg-page border-[0.5px] border-border rounded-none overflow-hidden">
+                  <NetworkForceGraph2D
+                    graphData={networkLayout.graphData}
+                    rootId="film-root"
+                    theme="light"
+                    height={280}
+                  />
+                </div>
               </div>
-            )}
+            ) : null}
           </div>
+
+          {/* Right: film title + share (matches PostShare card width) */}
+          <aside className="w-full lg:w-96 lg:max-w-sm shrink-0 flex flex-col border-t lg:border-t-0 lg:border-l border-border overflow-y-auto bg-bg-page">
+            <header className="shrink-0 border-b border-border px-4 py-4 sm:px-6 lg:px-6">
+              <p className="dc-label text-muted mb-2">Share</p>
+              <h2 className="font-display text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] font-normal text-ink">
+                {film.title}
+              </h2>
+            </header>
+            <div className="flex-1 min-h-0 bg-bg-card border-[0.5px] border-accent/50 rounded-none p-6 lg:border-t-0">
+              <h3 className="dc-label text-muted mb-3">Share with friends</h3>
+              <p className="dc-body text-sm mb-6">
+                You have 5 shares. Use them on the people who are genuinely ready for this.
+              </p>
+              <p className="dc-body text-sm mb-6 text-left">
+                If you choose not to share, the film&apos;s journey ends here. That&apos;s okay — but know that
+                it was carried this far by people who believed it was worth passing on.
+              </p>
+              <InviteForm
+                filmId={film.id}
+                filmTitle={film.title}
+                filmDescription={film.description}
+                senderName={recipientFirstName}
+                senderEmail={invite?.recipient_email || ''}
+                senderId={null}
+                maxInvites={5}
+                showSenderFields
+                embedOnDarkBackground={false}
+                initialRecipient={parseInviteRecipientForPrefill(invite)}
+                onInviteSent={(info) => {
+                  navigate('/profile')
+                }}
+              />
+            </div>
+          </aside>
         </div>
       )}
     </div>
