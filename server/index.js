@@ -531,7 +531,28 @@ app.get('/api/invites/validate/:token', async (req, res) => {
       console.error('Watch session create error:', sessionError.message || sessionError)
     }
 
-    return res.json({ invite: inv, film: inv.films, sessionId: session?.id || null })
+    /** Prefer live profile name so the screening intro shows who actually shared (not stale invite.sender_name). */
+    let senderDisplayName = inv.sender_name?.trim() || null
+    if (inv.sender_id) {
+      const { data: senderUser } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', inv.sender_id)
+        .single()
+      if (senderUser?.name?.trim()) {
+        senderDisplayName = senderUser.name.trim()
+      }
+    }
+    if (!senderDisplayName && inv.sender_email) {
+      senderDisplayName = inv.sender_email.split('@')[0] || null
+    }
+
+    return res.json({
+      invite: inv,
+      film: inv.films,
+      sessionId: session?.id || null,
+      senderDisplayName,
+    })
   } catch (err) {
     console.error('Invite validate error:', err)
     return res.status(500).json({ error: 'Failed to validate invite' })

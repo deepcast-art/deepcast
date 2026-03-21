@@ -15,6 +15,8 @@ export default function InviteScreening() {
   const navigate = useNavigate()
   const { token } = useParams()
   const [invite, setInvite] = useState(null)
+  /** Resolved from API (users.name when sender_id) so the intro shows the real sharer, not a stale sender_name. */
+  const [sharerDisplayName, setSharerDisplayName] = useState(null)
   const [film, setFilm] = useState(null)
   const [status, setStatus] = useState('loading') // loading, valid, expired, invalid
   const [stage, setStage] = useState('intro') // intro, screening
@@ -42,6 +44,12 @@ export default function InviteScreening() {
       setInvite(result.invite)
       setFilm(result.film)
       if (result.sessionId) setSessionId(result.sessionId)
+      const name =
+        (typeof result.senderDisplayName === 'string' && result.senderDisplayName.trim()) ||
+        result.invite?.sender_name?.trim() ||
+        (result.invite?.sender_email ? result.invite.sender_email.split('@')[0] : '') ||
+        'A friend'
+      setSharerDisplayName(name)
       setStatus('valid')
     } catch (err) {
       if (err.message === 'expired') {
@@ -328,7 +336,7 @@ export default function InviteScreening() {
               No algorithm sent you here.
             </span>
             <span className="block font-display text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] font-normal text-ink mt-4">
-              {invite?.sender_name || 'A friend'} did.
+              {sharerDisplayName || invite?.sender_name || 'A friend'} did.
             </span>
           </h1>
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 
@@ -43,6 +43,8 @@ export default function InviteForm({
   passwordPlaceholder = 'Create password',
   noteLabel = 'Why did this film make you think of them specifically? Write 2–3 sentences.',
   notePlaceholder = 'A uniquely personal note from you is what makes this different from everything else in their inbox.',
+  /** Wait before calling `onInviteSent` so the success message stays visible (ms). Use `0` for immediate. */
+  delayOnInviteSentMs = 2200,
 }) {
   const { signUp, signIn } = useAuth()
   const [recipients, setRecipients] = useState(() => [
@@ -64,6 +66,22 @@ export default function InviteForm({
   )
   const [senderEmailInput, setSenderEmailInput] = useState(senderEmail || '')
   const [senderPasswordInput, setSenderPasswordInput] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
+  const onInviteSentTimeoutRef = useRef(null)
+
+  useEffect(() => {
+    return () => {
+      if (onInviteSentTimeoutRef.current) {
+        clearTimeout(onInviteSentTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!successMessage) return
+    const t = setTimeout(() => setSuccessMessage(''), 8000)
+    return () => clearTimeout(t)
+  }, [successMessage])
 
   const addEmail = () => {
     if (unlimited || remainingInvites > 0) {
@@ -91,6 +109,12 @@ export default function InviteForm({
     if (validRecipients.length === 0) {
       setError('Please add a first name and valid email for each invite.')
       return
+    }
+
+    setSuccessMessage('')
+    if (onInviteSentTimeoutRef.current) {
+      clearTimeout(onInviteSentTimeoutRef.current)
+      onInviteSentTimeoutRef.current = null
     }
 
     if (showSenderFields) {
@@ -155,8 +179,31 @@ export default function InviteForm({
         setSent((prev) => [...prev, recipient])
       }
       setRecipients([{ firstName: '', lastName: '', email: '', note: '' }])
+
+      const msg =
+        validRecipients.length === 1
+          ? `Invitation sent to ${validRecipients[0].firstName.trim()}. They’ll receive an email with a private screening link.`
+          : `${validRecipients.length} invitations sent. Each person will receive an email with a private screening link.`
+      setSuccessMessage(msg)
+
+      const payload = {
+        senderName: resolvedSenderName,
+        senderEmail: resolvedSenderEmail,
+        recipients: validRecipients,
+      }
       if (onInviteSent) {
-        onInviteSent({ senderName: resolvedSenderName, senderEmail: resolvedSenderEmail })
+        const delay = typeof delayOnInviteSentMs === 'number' ? delayOnInviteSentMs : 2200
+        if (delay <= 0) {
+          onInviteSentTimeoutRef.current = setTimeout(() => {
+            onInviteSent(payload)
+            onInviteSentTimeoutRef.current = null
+          }, 0)
+        } else {
+          onInviteSentTimeoutRef.current = setTimeout(() => {
+            onInviteSent(payload)
+            onInviteSentTimeoutRef.current = null
+          }, delay)
+        }
       }
     } catch (err) {
       console.error('Invite send error:', err)
@@ -187,6 +234,16 @@ export default function InviteForm({
 
   return (
     <div className="w-full max-w-sm mx-auto">
+      {successMessage && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="text-success text-sm text-center mb-4 bg-success/10 border border-success/25 rounded-none py-3 px-4"
+        >
+          <span className="font-medium">Done. </span>
+          {successMessage}
+        </div>
+      )}
       {error && (
         <div className="text-error text-sm text-center mb-4 bg-error/10 rounded-none py-2 px-4">
           {error}
