@@ -350,9 +350,8 @@ export default function InviteScreening() {
                 streamType="on-demand"
                 playbackId={INTRO_FILM_MUX_PLAYBACK_ID}
                 accentColor="#c4822a"
-                autoPlay
-                muted
                 playsInline
+                preload="none"
                 onEnded={() => {
                   /* Do not advance to the film — user must click "Enter screening room". */
                 }}
@@ -410,7 +409,7 @@ export default function InviteScreening() {
                 {film.title}
               </h1>
             </header>
-            <div className="flex-1 relative min-h-[40vh] lg:min-h-[50vh] bg-ink">
+            <div className="relative w-full aspect-video max-h-[min(72vh,100vw)] shrink-0 bg-ink">
               {film.mux_playback_id ? (
                 <div className="absolute inset-0">
                   <MuxPlayer
@@ -423,8 +422,8 @@ export default function InviteScreening() {
                     onEnded={handleEnded}
                     onPause={() => setIsPaused(true)}
                     onPlay={() => setIsPaused(false)}
-                    autoPlay
-                    muted
+                    playsInline
+                    preload="metadata"
                     style={{ width: '100%', height: '100%', display: 'block' }}
                   />
                 </div>
@@ -441,20 +440,28 @@ export default function InviteScreening() {
                 </p>
               </div>
             ) : null}
-            {isPaused && networkLayout ? (
+            {networkLayout ? (
               <div className="shrink-0 border-t border-border bg-bg-card px-4 py-6 lg:px-8">
-                <h2 className="font-display italic text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] font-normal text-ink text-center mb-4">
+                <h2
+                  className={`font-display italic text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] font-normal text-ink text-center mb-4 ${
+                    isPaused ? '' : 'invisible'
+                  }`}
+                >
                   This film has passed through{' '}
                   {networkLayout.graphData.nodes.filter((n) => n.type !== 'film').length} pairs of hands to reach
                   you.
                 </h2>
                 <div className="relative w-full max-w-4xl mx-auto min-h-[240px] lg:min-h-[280px] bg-bg-page border-[0.5px] border-border rounded-none overflow-hidden">
-                  <NetworkForceGraph2D
-                    graphData={networkLayout.graphData}
-                    rootId="film-root"
-                    theme="light"
-                    height={280}
-                  />
+                  {isPaused ? (
+                    <NetworkForceGraph2D
+                      graphData={networkLayout.graphData}
+                      rootId="film-root"
+                      theme="light"
+                      height={280}
+                    />
+                  ) : (
+                    <div className="min-h-[240px] lg:min-h-[280px] w-full" aria-hidden />
+                  )}
                 </div>
               </div>
             ) : null}

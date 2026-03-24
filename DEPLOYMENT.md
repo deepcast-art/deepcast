@@ -98,3 +98,24 @@ The API checks Resend’s `{ error }` response. If delivery fails, logs and API 
 
 5. **Read the red error on the form**  
    After a failed send, the invite form should show something like `Email failed to send: …` with Resend’s message. The browser **Network** tab → failed `invites/send` request → **Response** also shows `details`.
+
+---
+
+### Gmail: “suspicious” mail or images not loading
+
+Invite emails are sent as **HTML + plain text** (multipart) with **`Reply-To`** set to the inviter’s address when available. Thumbnails use **HTTPS** URLs from your storage; the API logs a warning if a thumbnail URL still uses `http://`.
+
+**What you must do outside the repo (DNS + Resend):**
+
+1. **Verify the sending domain in Resend** and set **`RESEND_FROM_EMAIL`** to an address on that domain (not `onboarding@resend.dev`).
+2. **Complete Resend’s DNS records** for that domain: SPF, DKIM (and optionally DMARC). The Resend dashboard shows required **TXT** and **CNAME** records — add them at your DNS host and wait for propagation.
+3. **DMARC** (recommended): publish a policy at `_dmarc.yourdomain.com` (start with `p=none` while testing, then tighten).
+4. **Thumbnail host**: Prefer **HTTPS** Supabase public URLs. Gmail may still hide images until the user trusts the sender — that’s normal; authentication + reputation reduce “suspicious” labeling.
+
+**Local DNS check (diagnostics):** from the repo root:
+
+```bash
+./scripts/email-dns-check.sh yourdomain.com
+```
+
+This prints **SPF**, **DMARC**, and common **Resend DKIM** hostnames so you can compare with the Resend dashboard. Empty or missing records usually mean DNS was not added yet or hasn’t propagated.

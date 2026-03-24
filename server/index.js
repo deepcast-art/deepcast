@@ -28,6 +28,16 @@ if (!resendApiKey) {
 }
 const resend = new Resend(resendApiKey)
 
+const resendFromEnv = process.env.RESEND_FROM_EMAIL || ''
+if (
+  resendFromEnv &&
+  (resendFromEnv.includes('onboarding@resend.dev') || resendFromEnv.includes('@resend.dev'))
+) {
+  console.warn(
+    '[email] RESEND_FROM_EMAIL uses resend.dev — use a verified domain (e.g. invites@yourdomain.com) in production for Gmail trust and images.'
+  )
+}
+
 // Supabase admin client
 const supabaseUrl = process.env.SUPABASE_URL
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
@@ -143,6 +153,23 @@ function formatResendError(err) {
   if (typeof err.message === 'string') return err.message
   if (Array.isArray(err.message)) return err.message.map((m) => (typeof m === 'string' ? m : m?.message || JSON.stringify(m))).join('; ')
   return JSON.stringify(err)
+}
+
+/** Optional reply-to (inviter) — helps Gmail when aligned with content. */
+function withReplyTo(payload, replyEmail) {
+  const trimmed = typeof replyEmail === 'string' ? replyEmail.trim() : ''
+  if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return payload
+  return { ...payload, reply_to: trimmed }
+}
+
+/** Log if thumbnail is not HTTPS (Gmail and clients prefer HTTPS for remote images). */
+function warnIfInsecureThumbnailUrl(url) {
+  if (!url || typeof url !== 'string') return
+  if (url.startsWith('http://')) {
+    console.warn(
+      '[email] Film thumbnail URL uses http:// — prefer HTTPS in Supabase Storage public URLs for better Gmail image loading.'
+    )
+  }
 }
 
 async function sendInviteEmailResend(payload) {
@@ -296,22 +323,40 @@ app.post('/api/invites/send', async (req, res) => {
 
     try {
       const fromEmail = process.env.RESEND_FROM_EMAIL || 'Deepcast <onboarding@resend.dev>'
-      await sendInviteEmailResend({
-        from: fromEmail,
-        to: recipientEmailNorm,
-        subject: formatInviteEmailSubject(displaySender),
-        html: buildInviteEmailHtml(
-          displaySender,
-          recipientFirstName,
-          film.title,
-          film.description,
-          film.thumbnail_url,
-          inviteUrl,
-          displaySenderEmail,
-          inviteOrdinal,
-          personalNote || null
-        ),
-      })
+      const htmlBody = buildInviteEmailHtml(
+        displaySender,
+        recipientFirstName,
+        film.title,
+        film.description,
+        film.thumbnail_url,
+        inviteUrl,
+        displaySenderEmail,
+        inviteOrdinal,
+        personalNote || null
+      )
+      const textBody = buildInviteEmailPlainText(
+        displaySender,
+        recipientFirstName,
+        film.title,
+        film.description,
+        film.thumbnail_url,
+        inviteUrl,
+        displaySenderEmail,
+        inviteOrdinal,
+        personalNote || null
+      )
+      await sendInviteEmailResend(
+        withReplyTo(
+          {
+            from: fromEmail,
+            to: recipientEmailNorm,
+            subject: formatInviteEmailSubject(displaySender),
+            html: htmlBody,
+            text: textBody,
+          },
+          displaySenderEmail
+        )
+      )
     } catch (emailErr) {
       const message = emailErr?.message || 'Email send failed'
       console.error('Email send error:', message, emailErr)
@@ -386,22 +431,40 @@ app.post('/api/invites/resend-last', async (req, res) => {
 
     const fromEmail = process.env.RESEND_FROM_EMAIL || 'Deepcast <hello@deepcast.com>'
     try {
-      await sendInviteEmailResend({
-        from: fromEmail,
-        to: invite.recipient_email,
-        subject: formatInviteEmailSubject(displaySender),
-        html: buildInviteEmailHtml(
-          displaySender,
-          recipientFirstName,
-          film.title,
-          film.description,
-          film.thumbnail_url,
-          inviteUrl,
-          displaySenderEmail,
-          inviteOrdinal,
-          invite.personal_note || null
-        ),
-      })
+      const htmlBody = buildInviteEmailHtml(
+        displaySender,
+        recipientFirstName,
+        film.title,
+        film.description,
+        film.thumbnail_url,
+        inviteUrl,
+        displaySenderEmail,
+        inviteOrdinal,
+        invite.personal_note || null
+      )
+      const textBody = buildInviteEmailPlainText(
+        displaySender,
+        recipientFirstName,
+        film.title,
+        film.description,
+        film.thumbnail_url,
+        inviteUrl,
+        displaySenderEmail,
+        inviteOrdinal,
+        invite.personal_note || null
+      )
+      await sendInviteEmailResend(
+        withReplyTo(
+          {
+            from: fromEmail,
+            to: invite.recipient_email,
+            subject: formatInviteEmailSubject(displaySender),
+            html: htmlBody,
+            text: textBody,
+          },
+          displaySenderEmail
+        )
+      )
     } catch (emailErr) {
       const message = emailErr?.message || 'Email send failed'
       console.error('Invite resend-last email error:', message)
@@ -463,22 +526,40 @@ app.post('/api/invites/resend', async (req, res) => {
 
     const fromEmail = process.env.RESEND_FROM_EMAIL || 'Deepcast <hello@deepcast.com>'
     try {
-      await sendInviteEmailResend({
-        from: fromEmail,
-        to: invite.recipient_email,
-        subject: formatInviteEmailSubject(displaySender),
-        html: buildInviteEmailHtml(
-          displaySender,
-          recipientFirstName,
-          film.title,
-          film.description,
-          film.thumbnail_url,
-          inviteUrl,
-          displaySenderEmail,
-          inviteOrdinal,
-          invite.personal_note || null
-        ),
-      })
+      const htmlBody = buildInviteEmailHtml(
+        displaySender,
+        recipientFirstName,
+        film.title,
+        film.description,
+        film.thumbnail_url,
+        inviteUrl,
+        displaySenderEmail,
+        inviteOrdinal,
+        invite.personal_note || null
+      )
+      const textBody = buildInviteEmailPlainText(
+        displaySender,
+        recipientFirstName,
+        film.title,
+        film.description,
+        film.thumbnail_url,
+        inviteUrl,
+        displaySenderEmail,
+        inviteOrdinal,
+        invite.personal_note || null
+      )
+      await sendInviteEmailResend(
+        withReplyTo(
+          {
+            from: fromEmail,
+            to: invite.recipient_email,
+            subject: formatInviteEmailSubject(displaySender),
+            html: htmlBody,
+            text: textBody,
+          },
+          displaySenderEmail
+        )
+      )
     } catch (emailErr) {
       const message = emailErr?.message || 'Email send failed'
       console.error('Invite resend-by-id email error:', message)
@@ -592,6 +673,45 @@ function formatInviteEmailSubject(senderName) {
   return `${display} has shared a film with you`
 }
 
+/** Plain-text alternative — improves deliverability (Gmail, corporate filters). */
+function buildInviteEmailPlainText(
+  senderName,
+  recipientName,
+  filmTitle,
+  filmDescription,
+  filmThumbnailUrl,
+  inviteUrl,
+  senderEmail,
+  inviteOrdinal,
+  personalNote
+) {
+  const senderFirstName = senderName ? senderName.trim().split(/\s+/)[0] : 'Someone'
+  const greetingLine = recipientName ? `${recipientName.trim()},` : 'Hello,'
+  let body = `${greetingLine}\n\n`
+  body += `${senderFirstName} has thoughtfully curated and shared a short film with you.`
+  if (inviteOrdinal) {
+    body += ` You are the ${ordinalSuffix(inviteOrdinal)} person to be invited to this private online screening.`
+  }
+  body += '\n\n'
+  if (personalNote && String(personalNote).trim()) {
+    body += `Here's ${senderFirstName}'s message to you:\n\n${String(personalNote).trim()}\n\n`
+  }
+  if (filmThumbnailUrl) {
+    body += `Film: ${filmTitle || 'Screening'}\n`
+    body += `Thumbnail: ${filmThumbnailUrl}\n\n`
+  }
+  if (filmDescription && String(filmDescription).trim()) {
+    body += `${String(filmDescription).trim()}\n\n`
+  }
+  body += 'Receive your film:\n'
+  body += `${inviteUrl}\n\n`
+  body += "If the button doesn't work, use this link:\n"
+  body += `${inviteUrl}\n\n`
+  body += `You were invited by ${senderName || 'Someone'}. This film is not publicly available. It travels only through people.\n`
+  body += '\n—\nDEEPCAST\n'
+  return body
+}
+
 function buildInviteEmailHtml(
   senderName,
   recipientName,
@@ -603,6 +723,7 @@ function buildInviteEmailHtml(
   inviteOrdinal,
   personalNote
 ) {
+  warnIfInsecureThumbnailUrl(filmThumbnailUrl)
   const senderFirstName = senderName ? senderName.trim().split(/\s+/)[0] : 'Someone'
   const greetingName = recipientName ? recipientName.trim() : ''
   const safe = {
@@ -649,7 +770,7 @@ function buildInviteEmailHtml(
     ? `
           <tr>
             <td style="padding-bottom: 16px;">
-              <img src="${safe.thumbUrl}" alt="${safe.filmTitle}" style="width: 100%; max-width: 360px; border-radius: 2px; display: block;" />
+              <img src="${safe.thumbUrl}" alt="${safe.filmTitle}" width="360" border="0" decoding="async" style="width: 100%; max-width: 360px; height: auto; border: 0; border-radius: 2px; display: block; outline: none; text-decoration: none;" />
             </td>
           </tr>`
     : ''

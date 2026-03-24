@@ -84,7 +84,7 @@ export default function InviteForm({
   }, [successMessage])
 
   const addEmail = () => {
-    if (unlimited || remainingInvites > 0) {
+    if (unlimited || recipients.length < slotsRemaining) {
       setRecipients([...recipients, { firstName: '', lastName: '', email: '', note: '' }])
     }
   }
@@ -108,6 +108,13 @@ export default function InviteForm({
     )
     if (validRecipients.length === 0) {
       setError('Please add a first name and valid email for each invite.')
+      return
+    }
+
+    if (!unlimited && validRecipients.length > slotsRemaining) {
+      setError(
+        `You can only send ${slotsRemaining} more invitation${slotsRemaining !== 1 ? 's' : ''} in this batch. Remove a row or send fewer.`
+      )
       return
     }
 
@@ -213,11 +220,10 @@ export default function InviteForm({
     }
   }
 
-  const remainingInvites = unlimited
-    ? maxInvites
-    : Math.max(0, maxInvites - (sent.length + recipients.length))
+  /** Invites left to send (do not subtract draft rows — only completed sends count). */
+  const slotsRemaining = unlimited ? Number.MAX_SAFE_INTEGER : Math.max(0, maxInvites - sent.length)
 
-  if (!unlimited && remainingInvites <= 0) {
+  if (!unlimited && sent.length >= maxInvites) {
     return (
       <div className="text-center">
         <p className="text-text-muted text-sm">All invitations sent.</p>
@@ -358,7 +364,7 @@ export default function InviteForm({
       </div>
 
       <div className="flex items-center justify-between mt-4">
-        {(unlimited || remainingInvites > 0) && (
+        {(unlimited || recipients.length < slotsRemaining) && (
           <button
             onClick={addEmail}
             className="text-accent text-sm hover:text-accent-hover transition-colors cursor-pointer"
@@ -370,7 +376,7 @@ export default function InviteForm({
           <span className="text-text-muted text-xs">Unlimited shares</span>
         ) : (
           <span className="text-text-muted text-xs">
-            {remainingInvites} share{remainingInvites !== 1 ? 's' : ''} remaining
+            {slotsRemaining} share{slotsRemaining !== 1 ? 's' : ''} remaining
           </span>
         )}
       </div>

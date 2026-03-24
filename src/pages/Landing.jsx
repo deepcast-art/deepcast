@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import MuxPlayer from '@mux/mux-player-react'
 import { supabase } from '../lib/supabase'
@@ -25,6 +25,9 @@ export default function Landing() {
   /** When set, overrides {@link INTRO_FILM_MUX_PLAYBACK_ID} (e.g. from `VITE_LANDING_INTRO_FILM_ID`). */
   const [introPlaybackFromFilm, setIntroPlaybackFromFilm] = useState(null)
   const [directVideoError, setDirectVideoError] = useState(false)
+  /** Defer loading Mux chunk + stream until intro section is near viewport (faster first paint). */
+  const [loadIntroMux, setLoadIntroMux] = useState(false)
+  const introVideoSectionRef = useRef(null)
 
   const directVideoUrl = useMemo(() => {
     const u = import.meta.env.VITE_LANDING_INTRO_VIDEO_URL
@@ -49,6 +52,29 @@ export default function Landing() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (directVideoUrl) {
+      setLoadIntroMux(true)
+      return
+    }
+    const el = introVideoSectionRef.current
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setLoadIntroMux(true)
+      return
+    }
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setLoadIntroMux(true)
+          obs.disconnect()
+        }
+      },
+      { rootMargin: '320px 0px', threshold: 0.01 }
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [directVideoUrl])
 
   useEffect(() => {
     let isMounted = true
@@ -273,8 +299,11 @@ export default function Landing() {
           Before you watch the film, take 120 seconds to understand what you&rsquo;ve been invited to.
         </p>
 
-        {/* VIDEO — Mux intro film (same as invite “intro” stage), or optional MP4 URL */}
-        <div className="mb-10 dc-fade-in dc-fade-in-4 w-full max-w-xl mx-auto">
+        {/* VIDEO — Mux intro loads after scroll-into-view + lazy chunk; no autoplay so tap = sound on mobile */}
+        <div
+          ref={introVideoSectionRef}
+          className="mb-10 dc-fade-in dc-fade-in-4 w-full max-w-xl mx-auto"
+        >
           <div className="w-full bg-bg-card border-[0.5px] border-border rounded-none overflow-hidden aspect-video">
             {directVideoUrl && !directVideoError ? (
               <video
@@ -295,17 +324,21 @@ export default function Landing() {
                   the default Mux intro by removing that variable.
                 </p>
               </div>
-            ) : (
+            ) : loadIntroMux ? (
               <MuxPlayer
                 streamType="on-demand"
                 playbackId={muxIntroPlaybackId}
                 accentColor="#c4822a"
-                autoPlay
-                muted
                 playsInline
+                preload="none"
                 metadata={{ video_title: 'Deepcast intro' }}
                 style={{ width: '100%', height: '100%', display: 'block' }}
               />
+            ) : (
+              <div className="w-full h-full min-h-[200px] flex flex-col items-center justify-center gap-3 px-6 bg-bg-card/80">
+                <div className="w-7 h-7 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                <p className="text-text-muted text-xs">Loading player…</p>
+              </div>
             )}
           </div>
         </div>
