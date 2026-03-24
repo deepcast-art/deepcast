@@ -6,6 +6,7 @@ import { api } from '../lib/api'
 import InviteForm from '../components/InviteForm'
 import DeepcastLogo from '../components/DeepcastLogo'
 import FilmForm from '../components/FilmForm'
+import { ensureHttpsUrl } from '../lib/httpsUrl.js'
 
 export default function Upload() {
   const { profile } = useAuth()
@@ -65,7 +66,7 @@ export default function Upload() {
       setExistingFilm(data)
       setTitle(data.title || '')
       setDescription(data.description || '')
-      setThumbnailPreview(data.thumbnail_url || null)
+      setThumbnailPreview(ensureHttpsUrl(data.thumbnail_url) ?? data.thumbnail_url ?? null)
       setThumbnailFile(null)
       setVideoFile(null)
       setLoadingEditFilm(false)
@@ -84,11 +85,15 @@ export default function Upload() {
 
     if (thumbError) return null
     const { data: urlData } = supabase.storage.from('film-assets').getPublicUrl(path)
-    return urlData.publicUrl
+    return ensureHttpsUrl(urlData.publicUrl) ?? urlData.publicUrl
   }
 
   async function saveMetadataOnly(filmId, baseFilm) {
-    const thumbUrl = (await uploadThumbnailIfNeeded()) ?? baseFilm.thumbnail_url ?? null
+    const thumbUrl =
+      (await uploadThumbnailIfNeeded()) ??
+      ensureHttpsUrl(baseFilm.thumbnail_url) ??
+      baseFilm.thumbnail_url ??
+      null
 
     const { error: upErr } = await supabase
       .from('films')
@@ -126,7 +131,7 @@ export default function Upload() {
       if (editFilmId && existingFilm && videoFile) {
         setStep('uploading')
 
-        let thumbnailUrl = existingFilm.thumbnail_url
+        let thumbnailUrl = ensureHttpsUrl(existingFilm.thumbnail_url) ?? existingFilm.thumbnail_url ?? null
         if (thumbnailFile) {
           const uploaded = await uploadThumbnailIfNeeded()
           if (uploaded) thumbnailUrl = uploaded

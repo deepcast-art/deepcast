@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
 import { buildNetworkGraphLayout } from '../lib/networkGraphLayout'
-import NetworkForceGraph2D from '../components/NetworkForceGraph2D'
 import DeepcastLogo from '../components/DeepcastLogo'
+
+const NetworkForceGraph2D = lazy(() => import('../components/NetworkForceGraph2D.jsx'))
 
 export default function NetworkMap() {
   const { profile } = useAuth()
@@ -261,12 +262,20 @@ export default function NetworkMap() {
                 ) : (
                 <>
                 <div className="w-full min-h-[420px]" role="img" aria-label="Invite network map">
-                  <NetworkForceGraph2D
-                    graphData={mapLayout.graphData}
-                    rootId="film-root"
-                    theme="light"
-                    height={420}
-                  />
+                  <Suspense
+                    fallback={
+                      <div className="w-full min-h-[420px] flex items-center justify-center bg-bg-card border border-border">
+                        <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                      </div>
+                    }
+                  >
+                    <NetworkForceGraph2D
+                      graphData={mapLayout.graphData}
+                      rootId="film-root"
+                      theme="light"
+                      height={420}
+                    />
+                  </Suspense>
                 </div>
                 <p className="text-text-muted text-xs mt-3 text-center">
                   Force-directed layout: the film stays at the center; invitations spread through the network.

@@ -5,6 +5,7 @@ import Mux from '@mux/mux-node'
 import { Resend } from 'resend'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
+import { ensureHttpsUrl } from '../src/lib/httpsUrl.js'
 
 const app = express()
 app.use(cors())
@@ -160,16 +161,6 @@ function withReplyTo(payload, replyEmail) {
   const trimmed = typeof replyEmail === 'string' ? replyEmail.trim() : ''
   if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return payload
   return { ...payload, reply_to: trimmed }
-}
-
-/** Log if thumbnail is not HTTPS (Gmail and clients prefer HTTPS for remote images). */
-function warnIfInsecureThumbnailUrl(url) {
-  if (!url || typeof url !== 'string') return
-  if (url.startsWith('http://')) {
-    console.warn(
-      '[email] Film thumbnail URL uses http:// — prefer HTTPS in Supabase Storage public URLs for better Gmail image loading.'
-    )
-  }
 }
 
 async function sendInviteEmailResend(payload) {
@@ -696,9 +687,10 @@ function buildInviteEmailPlainText(
   if (personalNote && String(personalNote).trim()) {
     body += `Here's ${senderFirstName}'s message to you:\n\n${String(personalNote).trim()}\n\n`
   }
-  if (filmThumbnailUrl) {
+  const thumbForEmail = ensureHttpsUrl(filmThumbnailUrl)
+  if (thumbForEmail) {
     body += `Film: ${filmTitle || 'Screening'}\n`
-    body += `Thumbnail: ${filmThumbnailUrl}\n\n`
+    body += `Thumbnail: ${thumbForEmail}\n\n`
   }
   if (filmDescription && String(filmDescription).trim()) {
     body += `${String(filmDescription).trim()}\n\n`
@@ -723,7 +715,7 @@ function buildInviteEmailHtml(
   inviteOrdinal,
   personalNote
 ) {
-  warnIfInsecureThumbnailUrl(filmThumbnailUrl)
+  const thumbForEmail = ensureHttpsUrl(filmThumbnailUrl)
   const senderFirstName = senderName ? senderName.trim().split(/\s+/)[0] : 'Someone'
   const greetingName = recipientName ? recipientName.trim() : ''
   const safe = {
@@ -734,7 +726,7 @@ function buildInviteEmailHtml(
     personalNote: personalNote ? escapeHtml(personalNote) : '',
     inviteUrl: escapeHtml(inviteUrl),
     senderDisplay: escapeHtml(senderName || 'Someone'),
-    thumbUrl: filmThumbnailUrl ? escapeHtml(filmThumbnailUrl) : '',
+    thumbUrl: thumbForEmail ? escapeHtml(thumbForEmail) : '',
   }
 
   const introLine = `${safe.senderFirst} has thoughtfully curated and shared a short film with you.${
@@ -766,7 +758,7 @@ function buildInviteEmailHtml(
           </tr>`
       : ''
 
-  const thumbBlock = filmThumbnailUrl
+  const thumbBlock = thumbForEmail
     ? `
           <tr>
             <td style="padding-bottom: 16px;">
@@ -830,7 +822,7 @@ function buildInviteEmailHtml(
           ${descBlock}
 
           <tr>
-            <td align="center" style="padding-bottom: 24px;">
+            <td align="left" style="padding-bottom: 24px; text-align: left;">
               <a href="${safe.inviteUrl}" style="display: inline-block; background-color: #1a1714; color: #f5f0e8; text-decoration: none; font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; font-weight: 500; padding: 14px 32px; border-radius: 0;">
                 Receive your film
               </a>

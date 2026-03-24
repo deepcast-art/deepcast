@@ -1,14 +1,31 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './lib/auth'
-import Landing from './pages/Landing'
-import InviteScreening from './pages/InviteScreening'
-import Signup from './pages/Signup'
-import Login from './pages/Login'
-import Profile from './pages/Profile'
-import Dashboard from './pages/Dashboard'
-import Upload from './pages/Upload'
-import NetworkMap from './pages/NetworkMap'
-import PostShare from './pages/PostShare'
+
+const Landing = lazy(() => import('./pages/Landing.jsx'))
+const InviteScreening = lazy(() => import('./pages/InviteScreening.jsx'))
+const Signup = lazy(() => import('./pages/Signup.jsx'))
+const Login = lazy(() => import('./pages/Login.jsx'))
+const Profile = lazy(() => import('./pages/Profile.jsx'))
+const Dashboard = lazy(() => import('./pages/Dashboard.jsx'))
+const Upload = lazy(() => import('./pages/Upload.jsx'))
+const NetworkMap = lazy(() => import('./pages/NetworkMap.jsx'))
+const PostShare = lazy(() => import('./pages/PostShare.jsx'))
+
+function RouteFallback({ inverse = false }) {
+  return (
+    <div
+      className={`min-h-screen flex items-center justify-center dc-fade-in ${
+        inverse ? 'theme-inverse' : 'bg-bg-page'
+      }`}
+    >
+      <div
+        className="w-6 h-6 border-[0.5px] border-accent border-t-transparent rounded-full animate-spin"
+        aria-hidden
+      />
+    </div>
+  )
+}
 
 function ProtectedRoute({ children, requiredRole }) {
   const { user, profile, loading, profileLoaded } = useAuth()
@@ -35,15 +52,45 @@ function ProtectedRoute({ children, requiredRole }) {
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Landing />} />
-      <Route path="/i/:token" element={<InviteScreening />} />
-      <Route path="/signup" element={<Signup />} />
-      <Route path="/login" element={<Login />} />
+      <Route
+        path="/"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <Landing />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/i/:token"
+        element={
+          <Suspense fallback={<RouteFallback inverse />}>
+            <InviteScreening />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/signup"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <Signup />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/login"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <Login />
+          </Suspense>
+        }
+      />
       <Route
         path="/profile"
         element={
           <ProtectedRoute>
-            <Profile />
+            <Suspense fallback={<RouteFallback />}>
+              <Profile />
+            </Suspense>
           </ProtectedRoute>
         }
       />
@@ -51,7 +98,9 @@ export default function App() {
         path="/dashboard"
         element={
           <ProtectedRoute requiredRole="creator">
-            <Dashboard />
+            <Suspense fallback={<RouteFallback />}>
+              <Dashboard />
+            </Suspense>
           </ProtectedRoute>
         }
       />
@@ -59,7 +108,9 @@ export default function App() {
         path="/upload"
         element={
           <ProtectedRoute requiredRole="creator">
-            <Upload />
+            <Suspense fallback={<RouteFallback />}>
+              <Upload />
+            </Suspense>
           </ProtectedRoute>
         }
       />
@@ -67,7 +118,9 @@ export default function App() {
         path="/network"
         element={
           <ProtectedRoute>
-            <NetworkMap />
+            <Suspense fallback={<RouteFallback />}>
+              <NetworkMap />
+            </Suspense>
           </ProtectedRoute>
         }
       />
@@ -75,7 +128,9 @@ export default function App() {
         path="/impact"
         element={
           <ProtectedRoute>
-            <PostShare />
+            <Suspense fallback={<RouteFallback />}>
+              <PostShare />
+            </Suspense>
           </ProtectedRoute>
         }
       />

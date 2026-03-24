@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import InviteForm from '../components/InviteForm'
 import DeepcastLogo from '../components/DeepcastLogo'
 import { api } from '../lib/api'
+import { ensureHttpsUrl } from '../lib/httpsUrl.js'
 
 export default function Dashboard() {
   const { profile, signOut, fetchProfile } = useAuth()
@@ -247,7 +248,7 @@ export default function Dashboard() {
                     <div className="flex items-center gap-4">
                       {film.thumbnail_url && (
                         <img
-                          src={film.thumbnail_url}
+                          src={ensureHttpsUrl(film.thumbnail_url) ?? film.thumbnail_url}
                           alt={film.title}
                           className="w-24 h-14 object-cover rounded-none"
                         />

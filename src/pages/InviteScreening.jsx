@@ -1,15 +1,47 @@
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import MuxPlayer from '@mux/mux-player-react'
 import { INTRO_FILM_MUX_PLAYBACK_ID } from '../lib/introFilm'
+import { parseInviteRecipientForPrefill } from '../lib/invitePrefill'
 import { supabase } from '../lib/supabase'
 import { api } from '../lib/api'
-import InviteForm, { parseInviteRecipientForPrefill } from '../components/InviteForm'
-import NetworkForceGraph2D from '../components/NetworkForceGraph2D'
 import { buildNetworkGraphLayout } from '../lib/networkGraphLayout'
 import DeepcastLogo from '../components/DeepcastLogo'
 
 const VIEWER_SHARE_LIMIT = 5
+
+/** Code-split: Mux + force graph + invite form are large; load on demand + prefetch on mount. */
+const MuxPlayer = lazy(() =>
+  import('@mux/mux-player-react').then((m) => ({ default: m.default }))
+)
+const NetworkForceGraph2D = lazy(() => import('../components/NetworkForceGraph2D.jsx'))
+const InviteForm = lazy(() => import('../components/InviteForm.jsx'))
+
+function MuxChunkFallback({ className = '' }) {
+  return (
+    <div
+      className={`flex items-center justify-center bg-bg-card border-[0.5px] border-border ${className}`}
+      aria-busy="true"
+    >
+      <div className="w-6 h-6 border-[0.5px] border-accent border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+}
+
+function GraphChunkFallback() {
+  return (
+    <div className="min-h-[240px] lg:min-h-[280px] w-full flex items-center justify-center bg-bg-page border-[0.5px] border-border">
+      <div className="w-6 h-6 border-[0.5px] border-accent border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+}
+
+function InviteFormChunkFallback() {
+  return (
+    <div className="min-h-[200px] flex items-center justify-center bg-bg-card/60 border-[0.5px] border-border rounded-none p-8">
+      <div className="w-6 h-6 border-[0.5px] border-accent border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+}
 
 export default function InviteScreening() {
   const navigate = useNavigate()
@@ -27,7 +59,6 @@ export default function InviteScreening() {
   const [filmInvites, setFilmInvites] = useState([])
   const [creatorName, setCreatorName] = useState('')
   const [inviteCount, setInviteCount] = useState(null)
-  const playerRef = useRef(null)
   const hasMarkedWatched = useRef(false)
   const recipientFirstName =
     invite?.recipient_name?.trim().split(/\s+/)[0] ||
@@ -37,6 +68,13 @@ export default function InviteScreening() {
   useEffect(() => {
     validateInvite()
   }, [token])
+
+  /** Start downloading player / graph / form chunks immediately (parallel with API). */
+  useEffect(() => {
+    void import('@mux/mux-player-react')
+    void import('../components/NetworkForceGraph2D.jsx')
+    void import('../components/InviteForm.jsx')
+  }, [])
 
   async function validateInvite() {
     try {
@@ -278,21 +316,23 @@ export default function InviteScreening() {
               You have {VIEWER_SHARE_LIMIT} shares. Use them thoughtfully on the people who need to see this.
             </p>
 
-            <InviteForm
-              filmId={film.id}
-              filmTitle={film.title}
-              filmDescription={film.description}
-              senderName={invite?.recipient_name?.trim() || recipientFirstName}
-              senderEmail={invite?.recipient_email || ''}
-              senderId={null}
-              maxInvites={VIEWER_SHARE_LIMIT}
-              showSenderFields
-              embedOnDarkBackground={false}
-              initialRecipient={parseInviteRecipientForPrefill(invite)}
-              onInviteSent={(info) => {
-                navigate('/profile')
-              }}
-            />
+            <Suspense fallback={<InviteFormChunkFallback />}>
+              <InviteForm
+                filmId={film.id}
+                filmTitle={film.title}
+                filmDescription={film.description}
+                senderName={invite?.recipient_name?.trim() || recipientFirstName}
+                senderEmail={invite?.recipient_email || ''}
+                senderId={null}
+                maxInvites={VIEWER_SHARE_LIMIT}
+                showSenderFields
+                embedOnDarkBackground={false}
+                initialRecipient={parseInviteRecipientForPrefill(invite)}
+                onInviteSent={() => {
+                  navigate('/profile')
+                }}
+              />
+            </Suspense>
             <p className="dc-body mt-6 text-center text-muted">
               If you choose not to share, the film&apos;s journey ends with you. That&apos;s ok — but know that it
               was carried this far by {peopleWhoPassedCount ?? '…'} people who believed in it and passed it on.
@@ -346,17 +386,19 @@ export default function InviteScreening() {
 
           <div className="w-full max-w-xl mx-auto mb-8">
             <div className="aspect-video rounded-none overflow-hidden bg-bg-card border-[0.5px] border-border">
-              <MuxPlayer
-                streamType="on-demand"
-                playbackId={INTRO_FILM_MUX_PLAYBACK_ID}
-                accentColor="#c4822a"
-                playsInline
-                preload="none"
-                onEnded={() => {
-                  /* Do not advance to the film — user must click "Enter screening room". */
-                }}
-                style={{ width: '100%', height: '100%' }}
-              />
+              <Suspense fallback={<MuxChunkFallback className="h-full min-h-[200px] w-full" />}>
+                <MuxPlayer
+                  streamType="on-demand"
+                  playbackId={INTRO_FILM_MUX_PLAYBACK_ID}
+                  accentColor="#c4822a"
+                  playsInline
+                  preload="none"
+                  onEnded={() => {
+                    /* Do not advance to the film — user must click "Enter screening room". */
+                  }}
+                  style={{ width: '100%', height: '100%' }}
+                />
+              </Suspense>
             </div>
             <div className="mt-6 flex justify-center">
               <button
@@ -380,12 +422,14 @@ export default function InviteScreening() {
                 you.
               </h2>
               <div className="relative w-full aspect-video bg-bg-card border-[0.5px] border-border rounded-none overflow-hidden">
-                <NetworkForceGraph2D
-                  graphData={networkLayout.graphData}
-                  rootId="film-root"
-                  theme="light"
-                  height={320}
-                />
+                <Suspense fallback={<GraphChunkFallback />}>
+                  <NetworkForceGraph2D
+                    graphData={networkLayout.graphData}
+                    rootId="film-root"
+                    theme="light"
+                    height={320}
+                  />
+                </Suspense>
               </div>
               <p className="dc-body mt-3 text-center">
                 Each node is a person; each line is an invitation spreading from the film at the center.
@@ -412,20 +456,21 @@ export default function InviteScreening() {
             <div className="relative w-full aspect-video max-h-[min(72vh,100vw)] shrink-0 bg-ink">
               {film.mux_playback_id ? (
                 <div className="absolute inset-0">
-                  <MuxPlayer
-                    ref={playerRef}
-                    streamType="on-demand"
-                    playbackId={film.mux_playback_id}
-                    metadata={{ video_title: film.title }}
-                    accentColor="#c4822a"
-                    onTimeUpdate={handleTimeUpdate}
-                    onEnded={handleEnded}
-                    onPause={() => setIsPaused(true)}
-                    onPlay={() => setIsPaused(false)}
-                    playsInline
-                    preload="metadata"
-                    style={{ width: '100%', height: '100%', display: 'block' }}
-                  />
+                  <Suspense fallback={<MuxChunkFallback className="absolute inset-0" />}>
+                    <MuxPlayer
+                      streamType="on-demand"
+                      playbackId={film.mux_playback_id}
+                      metadata={{ video_title: film.title }}
+                      accentColor="#c4822a"
+                      onTimeUpdate={handleTimeUpdate}
+                      onEnded={handleEnded}
+                      onPause={() => setIsPaused(true)}
+                      onPlay={() => setIsPaused(false)}
+                      playsInline
+                      preload="metadata"
+                      style={{ width: '100%', height: '100%', display: 'block' }}
+                    />
+                  </Suspense>
                 </div>
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center text-text-muted">
@@ -453,12 +498,14 @@ export default function InviteScreening() {
                 </h2>
                 <div className="relative w-full max-w-4xl mx-auto min-h-[240px] lg:min-h-[280px] bg-bg-page border-[0.5px] border-border rounded-none overflow-hidden">
                   {isPaused ? (
-                    <NetworkForceGraph2D
-                      graphData={networkLayout.graphData}
-                      rootId="film-root"
-                      theme="light"
-                      height={280}
-                    />
+                    <Suspense fallback={<GraphChunkFallback />}>
+                      <NetworkForceGraph2D
+                        graphData={networkLayout.graphData}
+                        rootId="film-root"
+                        theme="light"
+                        height={280}
+                      />
+                    </Suspense>
                   ) : (
                     <div className="min-h-[240px] lg:min-h-[280px] w-full" aria-hidden />
                   )}
@@ -480,21 +527,23 @@ export default function InviteScreening() {
               <p className="dc-body text-sm mb-6">
                 You have {VIEWER_SHARE_LIMIT} shares. Use them thoughtfully on the people who need to see this.
               </p>
-              <InviteForm
-                filmId={film.id}
-                filmTitle={film.title}
-                filmDescription={film.description}
-                senderName={invite?.recipient_name?.trim() || recipientFirstName}
-                senderEmail={invite?.recipient_email || ''}
-                senderId={null}
-                maxInvites={VIEWER_SHARE_LIMIT}
-                showSenderFields
-                embedOnDarkBackground={false}
-                initialRecipient={parseInviteRecipientForPrefill(invite)}
-                onInviteSent={(info) => {
-                  navigate('/profile')
-                }}
-              />
+              <Suspense fallback={<InviteFormChunkFallback />}>
+                <InviteForm
+                  filmId={film.id}
+                  filmTitle={film.title}
+                  filmDescription={film.description}
+                  senderName={invite?.recipient_name?.trim() || recipientFirstName}
+                  senderEmail={invite?.recipient_email || ''}
+                  senderId={null}
+                  maxInvites={VIEWER_SHARE_LIMIT}
+                  showSenderFields
+                  embedOnDarkBackground={false}
+                  initialRecipient={parseInviteRecipientForPrefill(invite)}
+                  onInviteSent={() => {
+                    navigate('/profile')
+                  }}
+                />
+              </Suspense>
               <p className="dc-body text-sm mt-6 text-muted">
                 If you choose not to share, the film&apos;s journey ends with you. That&apos;s ok — but know that
                 it was carried this far by {peopleWhoPassedCount ?? '…'} people who believed in it and passed it on.

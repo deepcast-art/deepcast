@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import InviteForm from '../components/InviteForm'
 import DeepcastLogo from '../components/DeepcastLogo'
+import { ensureHttpsUrl } from '../lib/httpsUrl.js'
 
 export default function Profile() {
   const { profile, signOut, fetchProfile, user } = useAuth()
@@ -284,7 +285,7 @@ export default function Profile() {
                     >
                       {film.thumbnail_url && (
                         <img
-                          src={film.thumbnail_url}
+                          src={ensureHttpsUrl(film.thumbnail_url) ?? film.thumbnail_url}
                           alt={film.title}
                           className="w-20 h-12 object-cover rounded"
                         />

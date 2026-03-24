@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import MuxPlayer from '@mux/mux-player-react'
 import { supabase } from '../lib/supabase'
 import { INTRO_FILM_MUX_PLAYBACK_ID } from '../lib/introFilm'
 import DeepcastLogo from '../components/DeepcastLogo'
+
+const MuxPlayer = lazy(() =>
+  import('@mux/mux-player-react').then((m) => ({ default: m.default }))
+)
 
 const INTRO_FILM_ID_ENV =
   typeof import.meta.env.VITE_LANDING_INTRO_FILM_ID === 'string'
@@ -325,15 +328,24 @@ export default function Landing() {
                 </p>
               </div>
             ) : loadIntroMux ? (
-              <MuxPlayer
-                streamType="on-demand"
-                playbackId={muxIntroPlaybackId}
-                accentColor="#c4822a"
-                playsInline
-                preload="none"
-                metadata={{ video_title: 'Deepcast intro' }}
-                style={{ width: '100%', height: '100%', display: 'block' }}
-              />
+              <Suspense
+                fallback={
+                  <div className="w-full h-full min-h-[200px] flex flex-col items-center justify-center gap-3 px-6 bg-bg-card/80">
+                    <div className="w-7 h-7 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                    <p className="text-text-muted text-xs">Loading player…</p>
+                  </div>
+                }
+              >
+                <MuxPlayer
+                  streamType="on-demand"
+                  playbackId={muxIntroPlaybackId}
+                  accentColor="#c4822a"
+                  playsInline
+                  preload="none"
+                  metadata={{ video_title: 'Deepcast intro' }}
+                  style={{ width: '100%', height: '100%', display: 'block' }}
+                />
+              </Suspense>
             ) : (
               <div className="w-full h-full min-h-[200px] flex flex-col items-center justify-center gap-3 px-6 bg-bg-card/80">
                 <div className="w-7 h-7 border-2 border-accent border-t-transparent rounded-full animate-spin" />
