@@ -619,11 +619,35 @@ app.get('/api/invites/validate/:token', async (req, res) => {
       senderDisplayName = inv.sender_email.split('@')[0] || null
     }
 
+    /** All invites for this film — used by the viewer's network map. Service role bypasses RLS. */
+    const { data: filmInvites, error: invitesError } = await supabase
+      .from('invites')
+      .select('id, film_id, sender_id, sender_name, sender_email, recipient_name, recipient_email, status, created_at, parent_invite_id')
+      .eq('film_id', inv.film_id)
+      .order('created_at', { ascending: true })
+
+    if (invitesError) {
+      console.error('validate: filmInvites load error', invitesError.message || invitesError)
+    }
+
+    /** Creator name for the network map root label. */
+    let creatorName = ''
+    if (inv.films?.creator_id) {
+      const { data: creatorUser } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', inv.films.creator_id)
+        .single()
+      creatorName = creatorUser?.name?.trim() || ''
+    }
+
     return res.json({
       invite: inv,
       film: inv.films,
       sessionId: session?.id || null,
       senderDisplayName,
+      filmInvites: filmInvites || [],
+      creatorName,
     })
   } catch (err) {
     console.error('Invite validate error:', err)

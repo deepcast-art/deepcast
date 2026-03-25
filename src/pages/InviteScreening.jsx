@@ -7,6 +7,7 @@ import { api } from '../lib/api'
 import { buildNetworkGraphLayout } from '../lib/networkGraphLayout'
 import DeepcastLogo from '../components/DeepcastLogo'
 
+
 const VIEWER_SHARE_LIMIT = 5
 
 /** Code-split: Mux + force graph + invite form are large; load on demand + prefetch on mount. */
@@ -53,12 +54,10 @@ export default function InviteScreening() {
   const [status, setStatus] = useState('loading') // loading, valid, expired, invalid
   const [stage, setStage] = useState('intro') // intro, screening
   const [showPostFilm, setShowPostFilm] = useState(false)
-  const [watchPercentage, setWatchPercentage] = useState(0)
   const [sessionId, setSessionId] = useState(null)
   const [isPaused, setIsPaused] = useState(false)
   const [filmInvites, setFilmInvites] = useState([])
   const [creatorName, setCreatorName] = useState('')
-  const [inviteCount, setInviteCount] = useState(null)
   const hasMarkedWatched = useRef(false)
   const recipientFirstName =
     invite?.recipient_name?.trim().split(/\s+/)[0] ||
@@ -88,6 +87,9 @@ export default function InviteScreening() {
         (result.invite?.sender_email ? result.invite.sender_email.split('@')[0] : '') ||
         'A friend'
       setSharerDisplayName(name)
+      // Network map data comes from the server (service role) so it is always complete
+      if (Array.isArray(result.filmInvites)) setFilmInvites(result.filmInvites)
+      if (typeof result.creatorName === 'string') setCreatorName(result.creatorName)
       setStatus('valid')
     } catch (err) {
       if (err.message === 'expired') {
@@ -97,78 +99,6 @@ export default function InviteScreening() {
       }
     }
   }
-
-  useEffect(() => {
-    if (!invite?.film_id) return
-    let isMounted = true
-
-    async function loadInviteCount() {
-      const { count } = await supabase
-        .from('invites')
-        .select('*', { count: 'exact', head: true })
-        .eq('film_id', invite.film_id)
-
-      if (isMounted) {
-        setInviteCount(count ?? 0)
-      }
-    }
-
-    loadInviteCount()
-
-    return () => {
-      isMounted = false
-    }
-  }, [invite?.film_id])
-
-  useEffect(() => {
-    if (!film?.creator_id) {
-      setCreatorName('')
-      return
-    }
-    let isMounted = true
-
-    async function loadCreatorName() {
-      const { data } = await supabase
-        .from('users')
-        .select('name')
-        .eq('id', film.creator_id)
-        .single()
-
-      if (isMounted) setCreatorName(data?.name || '')
-    }
-
-    loadCreatorName()
-    return () => {
-      isMounted = false
-    }
-  }, [film?.creator_id])
-
-  useEffect(() => {
-    if (!invite?.film_id) return
-    let isMounted = true
-
-    async function loadFilmInvites() {
-      // Use * so the query still succeeds if parent_invite_id (or other columns) are missing on older DBs.
-      const { data, error } = await supabase
-        .from('invites')
-        .select('*')
-        .eq('film_id', invite.film_id)
-        .order('created_at', { ascending: true })
-
-      if (error) {
-        console.error('loadFilmInvites failed:', error)
-      }
-      if (isMounted) {
-        setFilmInvites(data || [])
-      }
-    }
-
-    loadFilmInvites()
-
-    return () => {
-      isMounted = false
-    }
-  }, [invite?.film_id])
 
   const viewerRecipientKey = invite
     ? invite.recipient_name
@@ -187,20 +117,19 @@ export default function InviteScreening() {
   }, [creatorName, filmInvites, film?.title, invite?.id, viewerRecipientKey])
 
   /** For “passed it on” copy: people in the invite graph, else total invites for the film. */
+  /** Unique people in the graph (excluding film/creator nodes); falls back to raw invite count. */
   const peopleWhoPassedCount = useMemo(() => {
     if (networkLayout?.graphData?.nodes?.length) {
-      return networkLayout.graphData.nodes.filter((n) => n.type !== 'film').length
+      return networkLayout.graphData.nodes.filter((n) => n.type !== 'film' && n.type !== 'creator').length
     }
-    if (inviteCount != null) return inviteCount
-    return null
-  }, [networkLayout, inviteCount])
+    return filmInvites.length > 0 ? filmInvites.length : null
+  }, [networkLayout, filmInvites])
 
   async function handleTimeUpdate(e) {
     const player = e.target
     if (!player.duration) return
 
     const percent = Math.round((player.currentTime / player.duration) * 100)
-    setWatchPercentage(percent)
 
     if (percent >= 70 && !hasMarkedWatched.current) {
       hasMarkedWatched.current = true
@@ -438,7 +367,7 @@ export default function InviteScreening() {
           ) : (
             <div className="mt-12">
               <h2 className="font-display italic text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] font-normal text-ink mb-4">
-                This film has passed through {inviteCount ?? '…'} pairs of hands to reach you.
+                This film has passed through {filmInvites.length > 0 ? filmInvites.length : '…'} pairs of hands to reach you.
               </h2>
             </div>
           )}
