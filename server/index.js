@@ -30,12 +30,16 @@ if (!resendApiKey) {
 const resend = new Resend(resendApiKey)
 
 const resendFromEnv = process.env.RESEND_FROM_EMAIL || ''
-if (
-  resendFromEnv &&
-  (resendFromEnv.includes('onboarding@resend.dev') || resendFromEnv.includes('@resend.dev'))
+if (!resendFromEnv.trim()) {
+  console.warn(
+    '[email] RESEND_FROM_EMAIL is not set. Several routes fall back to onboarding@resend.dev; Resend only delivers those to your signup email and explicitly allowed test addresses. Other Gmail addresses will usually not receive mail even when the API returns success — set RESEND_FROM_EMAIL to an address on a verified domain.'
+  )
+} else if (
+  resendFromEnv.includes('onboarding@resend.dev') ||
+  resendFromEnv.includes('@resend.dev')
 ) {
   console.warn(
-    '[email] RESEND_FROM_EMAIL uses resend.dev — use a verified domain (e.g. invites@yourdomain.com) in production for Gmail trust and images.'
+    '[email] RESEND_FROM_EMAIL uses resend.dev — delivery is restricted to your Resend account / allowed test recipients. Use a verified custom domain (e.g. invites@yourdomain.com) so any recipient can receive mail.'
   )
 }
 
@@ -149,6 +153,11 @@ function normalizeEmail(value) {
     .toLowerCase()
 }
 
+function uuidStringEq(a, b) {
+  if (a == null || b == null) return false
+  return String(a) === String(b)
+}
+
 function resolveBaseUrl(appUrl, origin) {
   const normalizedAppUrl = typeof appUrl === 'string' ? appUrl.trim() : ''
   const normalizedOrigin = typeof origin === 'string' ? origin.trim() : ''
@@ -180,12 +189,20 @@ async function sendInviteEmailResend(payload) {
   const { data, error } = await resend.emails.send(payload)
   if (error) {
     const msg = formatResendError(error)
-    console.error('Resend API error:', msg, error)
+    const to = Array.isArray(payload?.to)
+      ? payload.to.join(', ')
+      : String(payload?.to || '')
+    console.error('Resend API error:', msg, 'to:', to, error)
     const e = new Error(msg)
     e.resendError = error
     throw e
   }
-  if (data?.id) console.log('Resend email id:', data.id)
+  if (data?.id) {
+    const to = Array.isArray(payload?.to)
+      ? payload.to.join(', ')
+      : String(payload?.to || '')
+    console.log('[email] Resend accepted — id:', data.id, 'to:', to)
+  }
   return data
 }
 
@@ -240,17 +257,29 @@ app.post('/api/invites/send', async (req, res) => {
         return res.status(404).json({ error: 'Sender not found' })
       }
 
-      if (sender.role === 'creator' && film.creator_id !== sender.id) {
-        return res.status(403).json({ error: 'You can only invite people to your own films' })
-      }
+      const role = String(sender.role || '')
+        .trim()
+        .toLowerCase()
+      const creatorOwnsFilm = uuidStringEq(film.creator_id, sender.id)
+      const onCreatorTeam =
+        sender.team_creator_id != null &&
+        uuidStringEq(film.creator_id, sender.team_creator_id)
 
-      if (sender.role === 'team_member') {
-        if (!sender.team_creator_id || film.creator_id !== sender.team_creator_id) {
+      if (role === 'creator') {
+        if (!creatorOwnsFilm) {
+          return res.status(403).json({ error: 'You can only invite people to your own films' })
+        }
+      } else if (role === 'team_member' || (role === 'viewer' && sender.team_creator_id)) {
+        if (!onCreatorTeam) {
           return res.status(403).json({ error: 'You can only invite people to your team’s films' })
         }
       }
 
-      const unlimitedInvites = sender.role === 'creator' || sender.role === 'team_member'
+      /* Teammates use invite_allocation 0 + unlimited; stale role "viewer" with team_creator_id must not hit "No invites remaining". */
+      const unlimitedInvites =
+        role === 'creator' ||
+        role === 'team_member' ||
+        (role === 'viewer' && onCreatorTeam)
 
       if (!unlimitedInvites && sender.invite_allocation <= 0) {
         console.warn('No invites remaining for sender:', senderId, sender)
@@ -642,6 +671,45 @@ function buildTeamInviteEmailPlainText(creatorName, joinUrl) {
   return `${n} invited you to join their Deepcast team.\n\nCreate your password here:\n${joinUrl}\n\n—\ndeepcast\n`
 }
 
+function buildTeamAddedEmailHtml(creatorName, loginUrl) {
+  const safeCreator = escapeHtml(creatorName || 'Your filmmaker')
+  const safeUrl = escapeHtml(loginUrl)
+  return `
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#080c18;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:36px 16px;">
+    <tr><td align="center">
+      <table width="100%" style="max-width:480px;background-color:#E1DED6;border-radius:12px;padding:40px 28px;">
+        <tr><td>
+          <p style="margin:0 0 12px;color:#2C2C2C;font-size:10px;letter-spacing:0.35em;text-transform:uppercase;text-align:center;">Deepcast · team</p>
+          <p style="margin:0 0 24px;color:#2C2C2C;font-size:18px;line-height:1.5;text-align:center;font-style:italic;">
+            ${safeCreator} added you to their team on Deepcast.
+          </p>
+          <p style="margin:0 0 28px;color:#6E6E6E;font-size:14px;line-height:1.65;text-align:center;">
+            Sign in with your existing password. You now have unlimited screening invites for their films.
+          </p>
+          <table align="center" cellpadding="0" cellspacing="0"><tr><td style="background-color:#B5A680;">
+            <a href="${safeUrl}" style="display:inline-block;padding:14px 32px;color:#FFFFFF;font-size:11px;font-weight:500;letter-spacing:0.15em;text-transform:uppercase;text-decoration:none;">
+              Sign in
+            </a>
+          </td></tr></table>
+          <p style="margin:28px 0 0;color:#8A8880;font-size:11px;line-height:1.6;text-align:center;">
+            If the button doesn&rsquo;t work, paste this link:<br/>
+            <a href="${safeUrl}" style="color:#5C4F3A;word-break:break-all;">${safeUrl}</a>
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`
+}
+
+function buildTeamAddedEmailPlainText(creatorName, loginUrl) {
+  const n = creatorName || 'Your filmmaker'
+  return `${n} added you to their Deepcast team.\n\nSign in with your existing password:\n${loginUrl}\n\n—\ndeepcast\n`
+}
+
 app.post('/api/team/send-invite', async (req, res) => {
   try {
     const { creatorId, inviteeEmail, inviteeName, appUrl } = req.body
@@ -660,7 +728,7 @@ app.post('/api/team/send-invite', async (req, res) => {
       .eq('id', creatorId)
       .single()
 
-    if (cErr || !creator || creator.role !== 'creator') {
+    if (cErr || !creator || String(creator.role || '').trim().toLowerCase() !== 'creator') {
       return res.status(403).json({ error: 'Only creators can invite teammates' })
     }
 
@@ -684,7 +752,16 @@ app.post('/api/team/send-invite', async (req, res) => {
         })
       }
       if (existingProfile.role === 'viewer') {
-        const { error: upErr } = await supabase
+        if (
+          existingProfile.team_creator_id != null &&
+          !uuidStringEq(existingProfile.team_creator_id, creatorId)
+        ) {
+          return res.status(400).json({
+            error: 'This viewer is already linked to another filmmaker’s team.',
+          })
+        }
+
+        const { data: upRows, error: upErr } = await supabase
           .from('users')
           .update({
             role: 'team_member',
@@ -692,10 +769,28 @@ app.post('/api/team/send-invite', async (req, res) => {
             invite_allocation: 0,
           })
           .eq('id', existingProfile.id)
+          .select('id')
 
-        if (upErr) {
-          console.error('team send-invite viewer upgrade:', upErr)
-          return res.status(500).json({ error: 'Failed to add teammate' })
+        let upgraded = Boolean(upRows?.length)
+
+        if (!upgraded) {
+          const { data: rpcOk, error: rpcUpErr } = await supabase.rpc(
+            'upgrade_viewer_to_team_member_for_creator',
+            { p_creator_id: creatorId, p_email: emailNorm }
+          )
+          if (rpcUpErr) {
+            console.error('team send-invite viewer upgrade rpc:', rpcUpErr)
+            return res.status(500).json({ error: 'Failed to add teammate' })
+          }
+          upgraded = Boolean(rpcOk)
+        }
+
+        if (!upgraded) {
+          return res.status(500).json({
+            error: 'Failed to add teammate',
+            details:
+              'Database did not apply the update. Apply migration 20260328_team_invite_rpcs.sql or set SUPABASE_SERVICE_ROLE_KEY.',
+          })
         }
 
         await supabase
@@ -704,6 +799,29 @@ app.post('/api/team/send-invite', async (req, res) => {
           .eq('creator_id', creatorId)
           .eq('email', emailNorm)
           .is('accepted_at', null)
+
+        const baseUrl = resolveBaseUrl(appUrl, req.get('origin'))
+        const loginUrl = `${baseUrl}/login`
+
+        try {
+          const fromEmail = process.env.RESEND_FROM_EMAIL || 'Deepcast <onboarding@resend.dev>'
+          await sendInviteEmailResend(
+            withReplyTo(
+              {
+                from: fromEmail,
+                to: emailNorm,
+                subject: `${creator.name || 'Your filmmaker'} added you to their Deepcast team`,
+                html: buildTeamAddedEmailHtml(creator.name, loginUrl),
+                text: buildTeamAddedEmailPlainText(creator.name, loginUrl),
+              },
+              creator.email
+            )
+          )
+        } catch (emailErr) {
+          const message = emailErr?.message || 'Email send failed'
+          console.error('Team added (viewer) email error:', message)
+          return res.status(502).json({ error: 'Email failed to send', details: message })
+        }
 
         return res.json({ success: true, upgradedFromViewer: true })
       }
@@ -723,35 +841,67 @@ app.post('/api/team/send-invite', async (req, res) => {
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 14)
 
-    const { error: insErr } = await supabase.from('team_invites').insert({
-      creator_id: creatorId,
-      email: emailNorm,
-      invited_name: typeof inviteeName === 'string' && inviteeName.trim() ? inviteeName.trim() : null,
-      token,
-      expires_at: expiresAt.toISOString(),
-    })
+    const invitedName =
+      typeof inviteeName === 'string' && inviteeName.trim() ? inviteeName.trim() : null
 
-    if (insErr) {
-      console.error('team_invites insert:', insErr)
-      return res.status(500).json({ error: 'Failed to create team invite' })
+    const { data: insertedRows, error: insErr } = await supabase
+      .from('team_invites')
+      .insert({
+        creator_id: creatorId,
+        email: emailNorm,
+        invited_name: invitedName,
+        token,
+        expires_at: expiresAt.toISOString(),
+      })
+      .select('token, expires_at')
+
+    let inviteToken = insertedRows?.[0]?.token
+
+    if (insErr || !inviteToken) {
+      if (insErr) {
+        console.warn('team_invites insert (trying RPC fallback):', insErr.message || insErr)
+      }
+      const { data: rpcRows, error: rpcErr } = await supabase.rpc(
+        'create_team_invite_for_creator',
+        {
+          p_creator_id: creatorId,
+          p_email: emailNorm,
+          p_invited_name: invitedName || '',
+        }
+      )
+      if (rpcErr || !rpcRows?.length) {
+        console.error('create_team_invite_for_creator:', rpcErr)
+        return res.status(500).json({
+          error: 'Failed to create team invite',
+          details:
+            rpcErr?.message ||
+            (insErr?.message ?? 'Apply migration 20260328_team_invite_rpcs.sql or set SUPABASE_SERVICE_ROLE_KEY.'),
+        })
+      }
+      inviteToken = rpcRows[0].token
     }
 
     const baseUrl = resolveBaseUrl(appUrl, req.get('origin'))
-    const joinUrl = `${baseUrl}/team/join?token=${encodeURIComponent(token)}`
+    const joinUrl = `${baseUrl}/team/join?token=${encodeURIComponent(inviteToken)}`
 
     try {
       const fromEmail = process.env.RESEND_FROM_EMAIL || 'Deepcast <onboarding@resend.dev>'
-      await sendInviteEmailResend({
-        from: fromEmail,
-        to: emailNorm,
-        subject: `${creator.name || 'Your filmmaker'} invited you to the Deepcast team`,
-        html: buildTeamInviteEmailHtml(creator.name, joinUrl),
-        text: buildTeamInviteEmailPlainText(creator.name, joinUrl),
-      })
+      await sendInviteEmailResend(
+        withReplyTo(
+          {
+            from: fromEmail,
+            to: emailNorm,
+            subject: `${creator.name || 'Your filmmaker'} invited you to the Deepcast team`,
+            html: buildTeamInviteEmailHtml(creator.name, joinUrl),
+            text: buildTeamInviteEmailPlainText(creator.name, joinUrl),
+          },
+          creator.email
+        )
+      )
     } catch (emailErr) {
       const message = emailErr?.message || 'Email send failed'
       console.error('Team invite email error:', message)
-      await supabase.from('team_invites').delete().eq('token', token)
+      await supabase.rpc('delete_team_invite_by_token', { p_token: inviteToken })
       return res.status(502).json({ error: 'Email failed to send', details: message })
     }
 
@@ -767,13 +917,15 @@ app.get('/api/team/invite-info', async (req, res) => {
     const token = typeof req.query.token === 'string' ? req.query.token.trim() : ''
     if (!token) return res.status(400).json({ error: 'Token is required' })
 
-    const { data: row, error } = await supabase
-      .from('team_invites')
-      .select('email, invited_name, expires_at, accepted_at, creator_id')
-      .eq('token', token)
-      .maybeSingle()
-
-    if (error || !row) {
+    const { data: invRows, error } = await supabase.rpc('get_team_invite_by_token', {
+      p_token: token,
+    })
+    if (error) {
+      console.error('team invite-info rpc:', error)
+      return res.status(500).json({ error: 'Failed to load invitation' })
+    }
+    const row = invRows?.[0]
+    if (!row) {
       return res.status(404).json({ error: 'Invitation not found' })
     }
 
@@ -785,16 +937,10 @@ app.get('/api/team/invite-info', async (req, res) => {
       return res.status(410).json({ error: 'This invitation has expired' })
     }
 
-    const { data: creator } = await supabase
-      .from('users')
-      .select('name')
-      .eq('id', row.creator_id)
-      .single()
-
     res.json({
       email: row.email,
       invitedName: row.invited_name || '',
-      creatorName: creator?.name || 'Your filmmaker',
+      creatorName: row.creator_name || 'Your filmmaker',
     })
   } catch (err) {
     console.error('team invite-info error:', err)
@@ -814,13 +960,23 @@ app.post('/api/team/register', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 8 characters' })
     }
 
-    const { data: row, error: rowErr } = await supabase
-      .from('team_invites')
-      .select('*')
-      .eq('token', t)
-      .maybeSingle()
+    if (supabaseKeyRole !== 'service_role') {
+      return res.status(503).json({
+        error: 'Team signup is not fully configured on this server',
+        details:
+          'Add SUPABASE_SERVICE_ROLE_KEY to the API environment. Invite emails are sent, but creating the teammate account requires the Supabase service role key.',
+      })
+    }
 
-    if (rowErr || !row) {
+    const { data: invRows, error: rowErr } = await supabase.rpc('get_team_invite_by_token', {
+      p_token: t,
+    })
+    if (rowErr) {
+      console.error('team register invite lookup:', rowErr)
+      return res.status(500).json({ error: 'Failed to load invitation' })
+    }
+    const row = invRows?.[0]
+    if (!row) {
       return res.status(404).json({ error: 'Invitation not found' })
     }
 
@@ -889,15 +1045,105 @@ app.post('/api/team/register', async (req, res) => {
       return res.status(500).json({ error: 'Failed to create profile' })
     }
 
-    await supabase
-      .from('team_invites')
-      .update({ accepted_at: new Date().toISOString() })
-      .eq('id', row.id)
+    const { data: accepted, error: acceptErr } = await supabase.rpc('accept_team_invite_by_token', {
+      p_token: t,
+    })
+    if (acceptErr || !accepted) {
+      console.error('accept_team_invite_by_token:', acceptErr, accepted)
+      await supabase.auth.admin.deleteUser(userId).catch(() => {})
+      return res.status(500).json({ error: 'Failed to finalize invitation' })
+    }
 
     res.json({ success: true, userId })
   } catch (err) {
     console.error('team register error:', err)
     res.status(500).json({ error: 'Registration failed' })
+  }
+})
+
+app.post('/api/team/remove-member', async (req, res) => {
+  try {
+    const { creatorId, memberId } = req.body
+    if (!creatorId || !memberId) {
+      return res.status(400).json({ error: 'Creator ID and member ID are required' })
+    }
+    if (uuidStringEq(creatorId, memberId)) {
+      return res.status(400).json({ error: 'You cannot remove yourself' })
+    }
+
+    const { data: creator, error: cErr } = await supabase
+      .from('users')
+      .select('id, role')
+      .eq('id', creatorId)
+      .single()
+
+    if (cErr || !creator || String(creator.role || '').trim().toLowerCase() !== 'creator') {
+      return res.status(403).json({ error: 'Only creators can remove teammates' })
+    }
+
+    const { data: member, error: mErr } = await supabase
+      .from('users')
+      .select('id, role, team_creator_id')
+      .eq('id', memberId)
+      .single()
+
+    if (mErr || !member) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+
+    if (!uuidStringEq(member.team_creator_id, creatorId)) {
+      return res.status(403).json({ error: 'This person is not on your team' })
+    }
+
+    const mRole = String(member.role || '').trim().toLowerCase()
+    if (mRole === 'creator') {
+      return res.status(400).json({ error: 'Invalid team member' })
+    }
+
+    const { data: updatedRows, error: upErr } = await supabase
+      .from('users')
+      .update({
+        role: 'viewer',
+        team_creator_id: null,
+        invite_allocation: 5,
+      })
+      .eq('id', memberId)
+      .select('id')
+
+    if (upErr) {
+      console.error('team remove-member update:', upErr)
+      return res.status(500).json({ error: 'Failed to remove teammate' })
+    }
+
+    let removed = Boolean(updatedRows?.length)
+
+    if (!removed) {
+      const { data: rpcOk, error: rpcErr } = await supabase.rpc(
+        'remove_team_member_for_creator',
+        { p_creator_id: creatorId, p_member_id: memberId }
+      )
+      if (rpcErr) {
+        console.error('team remove-member rpc:', rpcErr)
+        return res.status(500).json({
+          error: 'Failed to remove teammate',
+          details: rpcErr.message || String(rpcErr),
+        })
+      }
+      removed = Boolean(rpcOk)
+    }
+
+    if (!removed) {
+      return res.status(500).json({
+        error: 'Failed to remove teammate',
+        details:
+          'Database did not apply the update. Set SUPABASE_SERVICE_ROLE_KEY on the API server, or run the migration that creates remove_team_member_for_creator().',
+      })
+    }
+
+    res.json({ success: true })
+  } catch (err) {
+    console.error('team remove-member error:', err)
+    res.status(500).json({ error: 'Failed to remove teammate' })
   }
 })
 

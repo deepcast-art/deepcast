@@ -45,6 +45,7 @@ export default function Dashboard() {
   const [teamMessage, setTeamMessage] = useState('')
   const [teamInvites, setTeamInvites] = useState([])
   const [teamMembers, setTeamMembers] = useState([])
+  const [teamRemoveBusyId, setTeamRemoveBusyId] = useState(null)
 
   const [viewerSentInvites, setViewerSentInvites] = useState([])
   const [viewerFilmId, setViewerFilmId] = useState(null)
@@ -843,10 +844,8 @@ export default function Dashboard() {
             </h2>
             <p className="mb-4 max-w-xl text-sm text-text-muted">
               Enter their email. If they don&apos;t have an account yet, we email a registration link.
-              If they already have a <strong>viewer</strong> account, we upgrade them to teammate in the
-              database (linked to you), grant unlimited invites for your films, and do{' '}
-              <strong>not</strong> send email — they should refresh or sign in again to see the team
-              dashboard.
+              If they already have a <strong>viewer</strong> account, we upgrade them to teammate,
+              grant unlimited invites for your films, and email them a short sign-in reminder.
             </p>
             <div className="mb-4 flex flex-col gap-3 sm:flex-row">
               <input
@@ -882,7 +881,7 @@ export default function Dashboard() {
                     )
                     setTeamMessage(
                       r?.upgradedFromViewer
-                        ? 'Existing viewer added to your team (no email). They can sign in for unlimited invites.'
+                        ? 'Existing viewer added—we sent them a sign-in email.'
                         : 'Invitation email sent.'
                     )
                     setTeamEmail('')
@@ -916,10 +915,47 @@ export default function Dashboard() {
             {teamMembers.length > 0 && (
               <div>
                 <p className="mb-2 text-xs uppercase tracking-wider text-text-muted">On your team</p>
-                <ul className="space-y-1 text-sm text-text">
+                <ul className="space-y-2 text-sm text-text">
                   {teamMembers.map((m) => (
-                    <li key={m.id}>
-                      {m.name} <span className="text-text-muted">({m.email})</span>
+                    <li
+                      key={m.id}
+                      className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2 last:border-b-0"
+                    >
+                      <span>
+                        {m.name}{' '}
+                        <span className="text-text-muted">({m.email})</span>
+                      </span>
+                      <button
+                        type="button"
+                        disabled={teamRemoveBusyId === m.id}
+                        onClick={async () => {
+                          if (
+                            !window.confirm(
+                              `Remove ${m.name || m.email} from your team? They keep their login as a viewer but lose access to your films and team tools until invited again.`
+                            )
+                          ) {
+                            return
+                          }
+                          setTeamMessage('')
+                          setTeamRemoveBusyId(m.id)
+                          try {
+                            const memberId = m.id
+                            await api.removeTeamMember(profile.id, memberId)
+                            setTeamMembers((prev) =>
+                              prev.filter((x) => String(x.id) !== String(memberId))
+                            )
+                            await loadTeamSection()
+                            setTeamMessage('Teammate removed.')
+                          } catch (e) {
+                            setTeamMessage(e.message || 'Could not remove teammate.')
+                          } finally {
+                            setTeamRemoveBusyId(null)
+                          }
+                        }}
+                        className="shrink-0 cursor-pointer text-xs uppercase tracking-wider text-error/90 transition-colors hover:text-error disabled:opacity-50"
+                      >
+                        {teamRemoveBusyId === m.id ? 'Removing…' : 'Remove'}
+                      </button>
                     </li>
                   ))}
                 </ul>

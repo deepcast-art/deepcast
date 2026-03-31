@@ -35,7 +35,7 @@ function Spinner({ className = '' }) {
 
 export default function InviteScreening() {
   const { token } = useParams()
-  const { signIn, signUp, fetchProfile, user } = useAuth()
+  const { signIn, signUp, signOut, fetchProfile, user } = useAuth()
 
   /* ---------- DATA STATE ---------- */
 
@@ -149,6 +149,14 @@ export default function InviteScreening() {
     if (fromName) return fromName
     return invite.recipient_email?.split('@')[0] || 'you'
   }, [invite])
+
+  /** Logged-in user must match this invite’s recipient — otherwise “dashboard” is the wrong account (e.g. sender still signed in). */
+  const isInviteRecipientSession = useMemo(() => {
+    if (!user?.email || !invite?.recipient_email) return false
+    return (
+      user.email.trim().toLowerCase() === invite.recipient_email.trim().toLowerCase()
+    )
+  }, [user?.email, invite?.recipient_email])
 
   /* ---------- PROLOGUE SEQUENCE ---------- */
 
@@ -672,7 +680,7 @@ export default function InviteScreening() {
                   <h2 className="font-serif-v3 text-4xl md:text-5xl text-[#dddddd] tracking-tight">
                     {showPostFilm ? 'Thank you for watching.' : 'Pass it on.'}
                   </h2>
-                  {showPostFilm && user && (
+                  {showPostFilm && isInviteRecipientSession && (
                     <Link
                       to="/dashboard"
                       className="font-sans text-[10px] uppercase tracking-[0.25em] text-[#b1a180] transition-opacity hover:opacity-80"
@@ -902,17 +910,48 @@ export default function InviteScreening() {
                   {showPostFilm && (
                     <div className="mt-2 flex flex-col items-center gap-3">
                       <div className="h-8 w-px bg-[#b1a180]/25" />
-                      {user ? (
+                      {isInviteRecipientSession ? (
                         <>
                           <p className="max-w-md px-4 text-center font-body text-xs text-[#dddddd]/50">
-                            You&apos;re signed in — open your dashboard to see invites and your
-                            network map.
+                            You&apos;re signed in as this invitation&apos;s recipient — open your
+                            dashboard to see invites and your network map.
                           </p>
                           <Link
                             to="/dashboard"
                             className="font-sans text-[11px] uppercase tracking-[0.2em] text-[#b1a180] transition-opacity hover:opacity-80"
                           >
                             Go to dashboard
+                          </Link>
+                        </>
+                      ) : user ? (
+                        <>
+                          <p className="max-w-md px-4 text-center font-body text-xs text-[#dddddd]/50">
+                            You&apos;re signed in as a different email than this invitation. Sign out
+                            to create an account or sign in as{' '}
+                            <span className="text-[#dddddd]/70">{invite?.recipient_email}</span>.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => void signOut()}
+                            className="font-sans text-[11px] uppercase tracking-[0.2em] text-[#dddddd]/45 transition-opacity hover:text-[#dddddd]"
+                          >
+                            Sign out
+                          </button>
+                          <Link
+                            to="/signup"
+                            className="font-sans text-[11px] uppercase tracking-[0.2em] text-[#b1a180] transition-opacity hover:opacity-80"
+                          >
+                            Create an account
+                          </Link>
+                          <Link
+                            to={
+                              invite?.recipient_email
+                                ? `/login?email=${encodeURIComponent(invite.recipient_email)}`
+                                : '/login'
+                            }
+                            className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#dddddd]/35 transition-opacity hover:text-[#dddddd]/55"
+                          >
+                            Log in
                           </Link>
                         </>
                       ) : (
@@ -925,6 +964,16 @@ export default function InviteScreening() {
                             className="font-sans text-[11px] uppercase tracking-[0.2em] text-[#b1a180] transition-opacity hover:opacity-80"
                           >
                             Create an account
+                          </Link>
+                          <Link
+                            to={
+                              invite?.recipient_email
+                                ? `/login?email=${encodeURIComponent(invite.recipient_email)}`
+                                : '/login'
+                            }
+                            className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#dddddd]/35 transition-opacity hover:text-[#dddddd]/55"
+                          >
+                            Already have an account? Log in
                           </Link>
                         </>
                       )}
