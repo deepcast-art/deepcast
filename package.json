@@ -9,7 +9,8 @@
     "dev:server": "node server/index.js",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy:staging": "vercel deploy --prod"
   },
   "dependencies": {
     "@mux/mux-node": "^12.8.1",
@@ -21,7 +22,6 @@
     "express": "^5.2.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-force-graph-2d": "^1.29.1",
     "react-router-dom": "^7.13.1",
     "resend": "^6.9.2",
     "tailwindcss": "^4.2.1"
@@ -37,6 +37,7 @@
     "globals": "^16.5.0",
     "playwright": "^1.58.2",
     "puppeteer": "^24.39.0",
+    "vercel": "^50.37.0",
     "vite": "^7.3.1"
   }
 }

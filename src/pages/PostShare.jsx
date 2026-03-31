@@ -64,7 +64,7 @@ export default function PostShare() {
       <div className="max-w-4xl mx-auto">
         <div className="flex justify-center sm:justify-start mb-6">
           <Link to="/" className="inline-flex hover:opacity-80 transition-opacity">
-            <DeepcastLogo variant="ink" className="h-10 sm:h-11 w-auto" />
+            <DeepcastLogo variant="on-light" className="h-10 sm:h-11 w-auto" />
           </Link>
         </div>
         <p className="dc-label text-muted mb-10 text-center sm:text-left">Depth is the new viral</p>
@@ -72,11 +72,11 @@ export default function PostShare() {
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-8 mb-8">
           <div className="flex-1 min-w-0">
             {filmTitle && (
-              <p className="font-display italic text-[length:var(--text-subhead)] leading-[var(--leading-subhead)] text-accent mb-3">
+              <p className="font-serif-v3 text-[length:var(--text-subhead)] leading-[var(--leading-subhead)] text-accent mb-3">
                 {filmTitle}
               </p>
             )}
-            <h1 className="font-display text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] font-normal text-ink mb-4">
+            <h1 className="font-display text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] font-normal text-text mb-4">
               You&apos;ve just extended the movement.
             </h1>
             <p className="dc-body max-w-xl">

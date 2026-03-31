@@ -79,14 +79,12 @@ export default function InviteForm({
   }
 
   const handleSend = async () => {
-    const validRecipients = recipients.filter(
-      (r) =>
-        r.email.trim() &&
-        r.email.includes('@') &&
-        r.firstName.trim()
-    )
+    const validRecipients = recipients.filter((r) => {
+      const e = r.email.trim()
+      return e && e.includes('@')
+    })
     if (validRecipients.length === 0) {
-      setError('Please add a first name and valid email for each invite.')
+      setError('Please add a valid email for each invite.')
       return
     }
 
@@ -151,11 +149,13 @@ export default function InviteForm({
 
       for (const recipient of validRecipients) {
         const recipientNote = recipient.note.trim()
-        const recipientName = [recipient.firstName, recipient.lastName].filter(Boolean).join(' ')
+        const fromFields = [recipient.firstName, recipient.lastName].filter(Boolean).join(' ').trim()
+        const recipientName =
+          fromFields || recipient.email.trim().split('@')[0] || ''
         await api.sendInvite(
           filmId,
           recipient.email.trim(),
-          recipientName.trim(),
+          recipientName,
           resolvedSenderName,
           resolvedSenderId,
           resolvedSenderEmail,
@@ -166,9 +166,13 @@ export default function InviteForm({
       }
       setRecipients([{ firstName: '', lastName: '', email: '', note: '' }])
 
+      const oneName =
+        validRecipients[0].firstName.trim() ||
+        validRecipients[0].email.trim().split('@')[0] ||
+        'them'
       const msg =
         validRecipients.length === 1
-          ? `Invitation sent to ${validRecipients[0].firstName.trim()}. They’ll receive an email with a private screening link.`
+          ? `Invitation sent to ${oneName}. They’ll receive an email with a private screening link.`
           : `${validRecipients.length} invitations sent. Each person will receive an email with a private screening link.`
       setSuccessMessage(msg)
 

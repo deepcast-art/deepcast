@@ -1,39 +1,61 @@
 /**
- * Deepcast wordmark — DM Serif Display 400, −0.02em (brand hero / wordmark).
+ * Deepcast wordmark — lowercase “deepcast” in Neue Haas Grotesk Display (matches brand),
+ * or legacy vector wordmark for serif/legacy variants.
  */
 export default function DeepcastLogo({
-  variant = 'ink',
+  variant = 'wordmark',
   className = '',
   title = 'Deepcast',
 }) {
-  const toneClass =
-    variant === 'accent'
-      ? 'text-accent'
-      : variant === 'warm'
-        ? 'text-warm'
-        : 'text-ink'
+  if (variant === 'serif' || variant === 'legacy') {
+    const toneClass =
+      variant === 'accent'
+        ? 'text-accent'
+        : variant === 'warm'
+          ? 'text-warm'
+          : 'text-text'
+
+    return (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 800 180"
+        className={`h-8 w-auto shrink-0 ${toneClass} ${className}`.trim()}
+        role="img"
+        aria-label={title}
+      >
+        <title>{title}</title>
+        <text
+          x="400"
+          y="140"
+          fontFamily="'Neue Haas Grotesk Display Pro', 'Helvetica Neue', Helvetica, sans-serif"
+          fontSize="110"
+          fontWeight="400"
+          fill="currentColor"
+          textAnchor="middle"
+          letterSpacing="-0.02em"
+        >
+          deepcast
+        </text>
+      </svg>
+    )
+  }
+
+  const onLight = variant === 'on-light'
 
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 800 180"
-      className={`h-8 w-auto shrink-0 ${toneClass} ${className}`.trim()}
+    <span
       role="img"
       aria-label={title}
+      className={[
+        'inline-block shrink-0 font-display font-normal lowercase leading-none tracking-[-0.02em]',
+        'text-[1.65rem] sm:text-[1.9rem]',
+        onLight ? 'text-[#080c18]' : 'text-[#d1d1d1]',
+        className,
+      ]
+        .filter(Boolean)
+        .join(' ')}
     >
-      <title>{title}</title>
-      <text
-        x="400"
-        y="140"
-        fontFamily="'DM Serif Display', Georgia, serif"
-        fontSize="110"
-        fontWeight="400"
-        fill="currentColor"
-        textAnchor="middle"
-        letterSpacing="-0.02em"
-      >
-        Deepcast
-      </text>
-    </svg>
+      deepcast
+    </span>
   )
 }

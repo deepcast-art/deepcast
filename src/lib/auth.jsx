@@ -11,6 +11,54 @@ export function AuthProvider({ children }) {
   const [profileLoaded, setProfileLoaded] = useState(false)
   const isSigningUp = useRef(false)
 
+  const SUPABASE_URL = 'https://wmtjgpxhjtbocsmutqqc.supabase.co'
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndtdGpncHhoanRib2NzbXV0cXFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4OTU5MTcsImV4cCI6MjA4NzQ3MTkxN30.IeeS2KToh7YPsKcVhFtojcX5fuwjAwEzIt5_RO09tQg'
+
+  /**
+   * Auth user exists but public.users row is missing (e.g. invited viewer who never hit signup insert).
+   * RLS allows insert where id = auth.uid().
+   */
+  async function ensurePublicUserRowForAuthUser(userId) {
+    const { data: authData } = await supabase.auth.getUser()
+    const authUser = authData?.user
+    if (!authUser?.id || authUser.id !== userId) return null
+    const safeEmail = (authUser.email || '').trim()
+    if (!safeEmail) return null
+
+    const safeName = safeEmail.split('@')[0] || 'Member'
+    const { data: created, error: insErr } = await supabase
+      .from('users')
+      .insert({
+        id: userId,
+        email: safeEmail,
+        name: safeName,
+        first_name: safeName,
+        last_name: '',
+        role: 'viewer',
+        invite_allocation: 5,
+      })
+      .select()
+      .single()
+
+    if (!insErr && created) return created
+
+    if (insErr?.code === '23505') {
+      const { data: byId } = await supabase.from('users').select('*').eq('id', userId).maybeSingle()
+      if (byId) return byId
+    }
+
+    return null
+  }
+
+  async function fetchProfileViaSupabaseClient(userId) {
+    const { data, error } = await supabase.from('users').select('*').eq('id', userId).maybeSingle()
+    if (error) {
+      console.warn('Profile fetch (supabase client):', error.message)
+      return null
+    }
+    return data ?? null
+  }
+
   async function fetchProfile(userId, token) {
     try {
       let accessToken = token
@@ -32,21 +80,77 @@ export function AuthProvider({ children }) {
       )
 
       const rows = await res.json()
-      const row = Array.isArray(rows) ? rows[0] : null
+
+      if (!res.ok) {
+        console.error('Profile fetch failed:', res.status, rows)
+        const viaClient = await fetchProfileViaSupabaseClient(userId)
+        if (viaClient) {
+          setProfile(viaClient)
+          setProfileLoaded(true)
+          return viaClient
+        }
+        const ensured = await ensurePublicUserRowForAuthUser(userId)
+        if (ensured) {
+          setProfile(ensured)
+          setProfileLoaded(true)
+          return ensured
+        }
+        setProfile(null)
+        setProfileLoaded(true)
+        return null
+      }
+
+      if (!Array.isArray(rows)) {
+        console.error('Profile fetch unexpected response:', rows)
+        const viaClient = await fetchProfileViaSupabaseClient(userId)
+        if (viaClient) {
+          setProfile(viaClient)
+          setProfileLoaded(true)
+          return viaClient
+        }
+        const ensured = await ensurePublicUserRowForAuthUser(userId)
+        if (ensured) {
+          setProfile(ensured)
+          setProfileLoaded(true)
+          return ensured
+        }
+        setProfile(null)
+        setProfileLoaded(true)
+        return null
+      }
+
+      let row = rows[0] ?? null
+
+      if (!row) {
+        row = await fetchProfileViaSupabaseClient(userId)
+      }
+
+      if (!row) {
+        row = await ensurePublicUserRowForAuthUser(userId)
+      }
 
       setProfile(row || null)
       setProfileLoaded(true)
       return row || null
     } catch (err) {
       console.error('Profile fetch error:', err)
+      const viaClient = await fetchProfileViaSupabaseClient(userId).catch(() => null)
+      if (viaClient) {
+        setProfile(viaClient)
+        setProfileLoaded(true)
+        return viaClient
+      }
+      const ensured = await ensurePublicUserRowForAuthUser(userId).catch(() => null)
+      if (ensured) {
+        setProfile(ensured)
+        setProfileLoaded(true)
+        return ensured
+      }
       setProfile(null)
       setProfileLoaded(true)
       return null
     }
   }
-
-  const SUPABASE_URL = 'https://wmtjgpxhjtbocsmutqqc.supabase.co'
-  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndtdGpncHhoanRib2NzbXV0cXFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4OTU5MTcsImV4cCI6MjA4NzQ3MTkxN30.IeeS2KToh7YPsKcVhFtojcX5fuwjAwEzIt5_RO09tQg'
 
   async function createProfile(userId, email, name, role, firstName = '', lastName = '', accessToken = null) {
     const safeName = name && name.trim() ? name.trim() : email.split('@')[0]
@@ -233,15 +337,8 @@ export function AuthProvider({ children }) {
       currentProfile = await fetchProfile(data.user.id, data.session?.access_token)
 
       if (!currentProfile) {
-        const fallback = email.split('@')[0]
-        currentProfile = await createProfile(
-          data.user.id,
-          email,
-          fallback,
-          'viewer',
-          fallback,
-          '',
-          data.session?.access_token || null
+        throw new Error(
+          'Your account signed in, but your profile could not be loaded. If you use a different email for invitations, sign in with the same address you were invited on.'
         )
       }
     }

@@ -139,6 +139,16 @@ function generateToken() {
   return crypto.randomBytes(4).toString('hex') // 8 char hex string
 }
 
+function generateTeamInviteToken() {
+  return crypto.randomBytes(24).toString('hex')
+}
+
+function normalizeEmail(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+}
+
 function resolveBaseUrl(appUrl, origin) {
   const normalizedAppUrl = typeof appUrl === 'string' ? appUrl.trim() : ''
   const normalizedOrigin = typeof origin === 'string' ? origin.trim() : ''
@@ -196,15 +206,28 @@ app.post('/api/invites/send', async (req, res) => {
       return res.status(400).json({ error: 'Film ID and recipient email are required' })
     }
 
-    const recipientEmailNorm = String(recipientEmail).trim()
+    const recipientEmailNorm = normalizeEmail(recipientEmail)
+    if (!recipientEmailNorm || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmailNorm)) {
+      return res.status(400).json({ error: 'Invalid recipient email address' })
+    }
     let previousAllocation = null
     let allocationDecremented = false
 
-    // Check sender's invite allocation if they're a registered user
+    const { data: film, error: filmLookupError } = await supabase
+      .from('films')
+      .select('title, description, thumbnail_url, creator_id')
+      .eq('id', filmId)
+      .single()
+
+    if (filmLookupError || !film) {
+      return res.status(404).json({ error: 'Film not found' })
+    }
+
+    // Check sender allocation + film access (creators / team only for their films)
     if (senderId) {
       const { data: sender, error: senderError } = await supabase
         .from('users')
-        .select('invite_allocation, role')
+        .select('invite_allocation, role, team_creator_id, id')
         .eq('id', senderId)
         .single()
 
@@ -217,7 +240,19 @@ app.post('/api/invites/send', async (req, res) => {
         return res.status(404).json({ error: 'Sender not found' })
       }
 
-      if (sender.role !== 'creator' && sender.invite_allocation <= 0) {
+      if (sender.role === 'creator' && film.creator_id !== sender.id) {
+        return res.status(403).json({ error: 'You can only invite people to your own films' })
+      }
+
+      if (sender.role === 'team_member') {
+        if (!sender.team_creator_id || film.creator_id !== sender.team_creator_id) {
+          return res.status(403).json({ error: 'You can only invite people to your team’s films' })
+        }
+      }
+
+      const unlimitedInvites = sender.role === 'creator' || sender.role === 'team_member'
+
+      if (!unlimitedInvites && sender.invite_allocation <= 0) {
         console.warn('No invites remaining for sender:', senderId, sender)
         return res.status(400).json({
           error: 'No invites remaining',
@@ -225,9 +260,8 @@ app.post('/api/invites/send', async (req, res) => {
         })
       }
 
-      if (sender.role !== 'creator') {
+      if (!unlimitedInvites) {
         previousAllocation = sender.invite_allocation
-        // Decrement invite allocation for viewers only
         const { error: decrementError } = await supabase
           .from('users')
           .update({ invite_allocation: sender.invite_allocation - 1 })
@@ -239,17 +273,6 @@ app.post('/api/invites/send', async (req, res) => {
         }
         allocationDecremented = true
       }
-    }
-
-    // Get the film details
-    const { data: film } = await supabase
-      .from('films')
-      .select('title, description, thumbnail_url')
-      .eq('id', filmId)
-      .single()
-
-    if (!film) {
-      return res.status(404).json({ error: 'Film not found' })
     }
 
     /** Chain: this invite continues from the invite where the sender was the recipient (e.g. Vidya → Julia → Super). */
@@ -359,7 +382,21 @@ app.post('/api/invites/send', async (req, res) => {
           .eq('id', senderId)
         if (rollbackErr) console.error('Failed to rollback invite_allocation:', rollbackErr)
       }
-      return res.status(502).json({ error: 'Email failed to send', details: message })
+      let hint = ''
+      const m = String(message).toLowerCase()
+      if (
+        m.includes('only send') ||
+        m.includes('verified') ||
+        m.includes('not authorized') ||
+        m.includes('testing emails')
+      ) {
+        hint =
+          ' Resend may only deliver to addresses you have verified in the Resend dashboard until your sending domain is verified.'
+      }
+      return res.status(502).json({
+        error: 'Email failed to send',
+        details: hint ? `${message}${hint}` : message,
+      })
     }
 
     console.log(`Invite created: token=${token}, recipient=${recipientEmailNorm}, inviteUrl=${inviteUrl}`)
@@ -564,6 +601,306 @@ app.post('/api/invites/resend', async (req, res) => {
   }
 })
 
+// ============ TEAM MEMBER INVITES (creators → teammates, unlimited film invites) ============
+
+function buildTeamInviteEmailHtml(creatorName, joinUrl) {
+  const safeCreator = escapeHtml(creatorName || 'Your filmmaker')
+  const safeUrl = escapeHtml(joinUrl)
+  return `
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#080c18;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:36px 16px;">
+    <tr><td align="center">
+      <table width="100%" style="max-width:480px;background-color:#E1DED6;border-radius:12px;padding:40px 28px;">
+        <tr><td>
+          <p style="margin:0 0 12px;color:#2C2C2C;font-size:10px;letter-spacing:0.35em;text-transform:uppercase;text-align:center;">Deepcast · team</p>
+          <p style="margin:0 0 24px;color:#2C2C2C;font-size:18px;line-height:1.5;text-align:center;font-style:italic;">
+            ${safeCreator} invited you to join their team on Deepcast.
+          </p>
+          <p style="margin:0 0 28px;color:#6E6E6E;font-size:14px;line-height:1.65;text-align:center;">
+            Create your password to access the dashboard and send screening invitations on their behalf.
+          </p>
+          <table align="center" cellpadding="0" cellspacing="0"><tr><td style="background-color:#B5A680;">
+            <a href="${safeUrl}" style="display:inline-block;padding:14px 32px;color:#FFFFFF;font-size:11px;font-weight:500;letter-spacing:0.15em;text-transform:uppercase;text-decoration:none;">
+              Complete registration
+            </a>
+          </td></tr></table>
+          <p style="margin:28px 0 0;color:#8A8880;font-size:11px;line-height:1.6;text-align:center;">
+            If the button doesn&rsquo;t work, paste this link:<br/>
+            <a href="${safeUrl}" style="color:#5C4F3A;word-break:break-all;">${safeUrl}</a>
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`
+}
+
+function buildTeamInviteEmailPlainText(creatorName, joinUrl) {
+  const n = creatorName || 'Your filmmaker'
+  return `${n} invited you to join their Deepcast team.\n\nCreate your password here:\n${joinUrl}\n\n—\ndeepcast\n`
+}
+
+app.post('/api/team/send-invite', async (req, res) => {
+  try {
+    const { creatorId, inviteeEmail, inviteeName, appUrl } = req.body
+    if (!creatorId || !inviteeEmail) {
+      return res.status(400).json({ error: 'Creator ID and invitee email are required' })
+    }
+
+    const emailNorm = normalizeEmail(inviteeEmail)
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm)) {
+      return res.status(400).json({ error: 'Invalid email address' })
+    }
+
+    const { data: creator, error: cErr } = await supabase
+      .from('users')
+      .select('id, email, name, role')
+      .eq('id', creatorId)
+      .single()
+
+    if (cErr || !creator || creator.role !== 'creator') {
+      return res.status(403).json({ error: 'Only creators can invite teammates' })
+    }
+
+    if (normalizeEmail(creator.email) === emailNorm) {
+      return res.status(400).json({ error: 'You cannot invite your own email' })
+    }
+
+    const { data: existingProfile } = await supabase
+      .from('users')
+      .select('id, role, team_creator_id')
+      .eq('email', emailNorm)
+      .maybeSingle()
+
+    if (existingProfile) {
+      if (existingProfile.role === 'team_member' && existingProfile.team_creator_id === creatorId) {
+        return res.status(400).json({ error: 'This person is already on your team' })
+      }
+      if (existingProfile.role === 'team_member' && existingProfile.team_creator_id !== creatorId) {
+        return res.status(400).json({
+          error: 'This person is already on another filmmaker’s team.',
+        })
+      }
+      if (existingProfile.role === 'viewer') {
+        const { error: upErr } = await supabase
+          .from('users')
+          .update({
+            role: 'team_member',
+            team_creator_id: creatorId,
+            invite_allocation: 0,
+          })
+          .eq('id', existingProfile.id)
+
+        if (upErr) {
+          console.error('team send-invite viewer upgrade:', upErr)
+          return res.status(500).json({ error: 'Failed to add teammate' })
+        }
+
+        await supabase
+          .from('team_invites')
+          .delete()
+          .eq('creator_id', creatorId)
+          .eq('email', emailNorm)
+          .is('accepted_at', null)
+
+        return res.json({ success: true, upgradedFromViewer: true })
+      }
+      return res.status(400).json({
+        error: 'An account already exists with this email. They can sign in at the login page.',
+      })
+    }
+
+    await supabase
+      .from('team_invites')
+      .delete()
+      .eq('creator_id', creatorId)
+      .eq('email', emailNorm)
+      .is('accepted_at', null)
+
+    const token = generateTeamInviteToken()
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + 14)
+
+    const { error: insErr } = await supabase.from('team_invites').insert({
+      creator_id: creatorId,
+      email: emailNorm,
+      invited_name: typeof inviteeName === 'string' && inviteeName.trim() ? inviteeName.trim() : null,
+      token,
+      expires_at: expiresAt.toISOString(),
+    })
+
+    if (insErr) {
+      console.error('team_invites insert:', insErr)
+      return res.status(500).json({ error: 'Failed to create team invite' })
+    }
+
+    const baseUrl = resolveBaseUrl(appUrl, req.get('origin'))
+    const joinUrl = `${baseUrl}/team/join?token=${encodeURIComponent(token)}`
+
+    try {
+      const fromEmail = process.env.RESEND_FROM_EMAIL || 'Deepcast <onboarding@resend.dev>'
+      await sendInviteEmailResend({
+        from: fromEmail,
+        to: emailNorm,
+        subject: `${creator.name || 'Your filmmaker'} invited you to the Deepcast team`,
+        html: buildTeamInviteEmailHtml(creator.name, joinUrl),
+        text: buildTeamInviteEmailPlainText(creator.name, joinUrl),
+      })
+    } catch (emailErr) {
+      const message = emailErr?.message || 'Email send failed'
+      console.error('Team invite email error:', message)
+      await supabase.from('team_invites').delete().eq('token', token)
+      return res.status(502).json({ error: 'Email failed to send', details: message })
+    }
+
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Team send-invite error:', err)
+    res.status(500).json({ error: 'Failed to send team invite' })
+  }
+})
+
+app.get('/api/team/invite-info', async (req, res) => {
+  try {
+    const token = typeof req.query.token === 'string' ? req.query.token.trim() : ''
+    if (!token) return res.status(400).json({ error: 'Token is required' })
+
+    const { data: row, error } = await supabase
+      .from('team_invites')
+      .select('email, invited_name, expires_at, accepted_at, creator_id')
+      .eq('token', token)
+      .maybeSingle()
+
+    if (error || !row) {
+      return res.status(404).json({ error: 'Invitation not found' })
+    }
+
+    if (row.accepted_at) {
+      return res.status(410).json({ error: 'This invitation was already used' })
+    }
+
+    if (new Date(row.expires_at) < new Date()) {
+      return res.status(410).json({ error: 'This invitation has expired' })
+    }
+
+    const { data: creator } = await supabase
+      .from('users')
+      .select('name')
+      .eq('id', row.creator_id)
+      .single()
+
+    res.json({
+      email: row.email,
+      invitedName: row.invited_name || '',
+      creatorName: creator?.name || 'Your filmmaker',
+    })
+  } catch (err) {
+    console.error('team invite-info error:', err)
+    res.status(500).json({ error: 'Failed to load invitation' })
+  }
+})
+
+app.post('/api/team/register', async (req, res) => {
+  try {
+    const { token, password, fullName } = req.body
+    const t = typeof token === 'string' ? token.trim() : ''
+    if (!t || !password) {
+      return res.status(400).json({ error: 'Token and password are required' })
+    }
+
+    if (String(password).length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' })
+    }
+
+    const { data: row, error: rowErr } = await supabase
+      .from('team_invites')
+      .select('*')
+      .eq('token', t)
+      .maybeSingle()
+
+    if (rowErr || !row) {
+      return res.status(404).json({ error: 'Invitation not found' })
+    }
+
+    if (row.accepted_at) {
+      return res.status(410).json({ error: 'This invitation was already used' })
+    }
+
+    if (new Date(row.expires_at) < new Date()) {
+      return res.status(410).json({ error: 'This invitation has expired' })
+    }
+
+    const emailNorm = normalizeEmail(row.email)
+
+    const { data: existingProfile } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', emailNorm)
+      .maybeSingle()
+
+    if (existingProfile) {
+      return res.status(409).json({ error: 'An account already exists with this email' })
+    }
+
+    const nameFromInvite =
+      typeof row.invited_name === 'string' && row.invited_name.trim()
+        ? row.invited_name.trim()
+        : emailNorm.split('@')[0]
+    const displayName =
+      typeof fullName === 'string' && fullName.trim() ? fullName.trim() : nameFromInvite
+    const nameParts = displayName.split(/\s+/)
+    const firstName = nameParts[0] || displayName
+    const lastName = nameParts.slice(1).join(' ') || ''
+
+    const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
+      email: emailNorm,
+      password: String(password),
+      email_confirm: true,
+      user_metadata: { full_name: displayName },
+    })
+
+    if (authErr || !authData?.user?.id) {
+      const msg = authErr?.message || 'Could not create account'
+      if (/already|registered|exists/i.test(msg)) {
+        return res.status(409).json({ error: 'An account already exists with this email' })
+      }
+      console.error('auth.admin.createUser:', authErr)
+      return res.status(500).json({ error: msg })
+    }
+
+    const userId = authData.user.id
+
+    const { error: profileErr } = await supabase.from('users').insert({
+      id: userId,
+      email: emailNorm,
+      name: displayName,
+      first_name: firstName,
+      last_name: lastName,
+      role: 'team_member',
+      team_creator_id: row.creator_id,
+      invite_allocation: 0,
+    })
+
+    if (profileErr) {
+      console.error('team register users insert:', profileErr)
+      await supabase.auth.admin.deleteUser(userId)
+      return res.status(500).json({ error: 'Failed to create profile' })
+    }
+
+    await supabase
+      .from('team_invites')
+      .update({ accepted_at: new Date().toISOString() })
+      .eq('id', row.id)
+
+    res.json({ success: true, userId })
+  } catch (err) {
+    console.error('team register error:', err)
+    res.status(500).json({ error: 'Registration failed' })
+  }
+})
+
 app.get('/api/invites/validate/:token', async (req, res) => {
   try {
     const { token } = req.params
@@ -719,12 +1056,13 @@ function buildInviteEmailPlainText(
   if (filmDescription && String(filmDescription).trim()) {
     body += `${String(filmDescription).trim()}\n\n`
   }
-  body += 'Receive your film:\n'
+  body += 'Open your invitation:\n'
   body += `${inviteUrl}\n\n`
   body += "If the button doesn't work, use this link:\n"
   body += `${inviteUrl}\n\n`
+  body += `With intention,\n${senderName || 'Someone'}\n\n`
   body += `You were invited by ${senderName || 'Someone'}. This film is not publicly available. It travels only through people.\n`
-  body += '\n—\nDEEPCAST\n'
+  body += '\n—\ndeepcast\n'
   return body
 }
 
@@ -739,6 +1077,25 @@ function buildInviteEmailHtml(
   inviteOrdinal,
   personalNote
 ) {
+  /* Brand palette — invite letter + CTA (matches in-app invite + design refs) */
+  const C = {
+    pageBg: '#080c18',
+    cardBg: '#E1DED6',
+    cardBgAlt: '#E5E2D9',
+    text: '#2C2C2C',
+    textMuted: '#6E6E6E',
+    textSoft: '#8A8880',
+    rule: '#B8B5AD',
+    btnBg: '#B5A680',
+    btnText: '#FFFFFF',
+    link: '#5C4F3A',
+  }
+
+  const fontSans =
+    "'Helvetica Neue', Helvetica, Arial, 'Segoe UI', sans-serif"
+  const fontSerifItalic =
+    "Georgia, 'Times New Roman', Times, serif"
+
   const thumbForEmail = ensureHttpsUrl(filmThumbnailUrl)
   const senderFirstName = senderName ? senderName.trim().split(/\s+/)[0] : 'Someone'
   const greetingName = recipientName ? recipientName.trim() : ''
@@ -759,23 +1116,16 @@ function buildInviteEmailHtml(
       : ''
   }`
 
-  const greetingLine = greetingName
-    ? `<p style="margin: 0 0 16px; color: #1a1714; font-size: 14px; line-height: 1.6; text-align: left; max-width: 360px;">${safe.greeting},</p>`
-    : `<p style="margin: 0 0 16px; color: #1a1714; font-size: 14px; line-height: 1.6; text-align: left; max-width: 360px;">Hello,</p>`
+  const dearLine = greetingName
+    ? `Dear ${safe.greeting},`
+    : 'Hello,'
 
   const personalBlock =
     personalNote && safe.personalNote
       ? `
           <tr>
-            <td style="padding-bottom: 12px;">
-              <p style="margin: 0; color: #1a1714; font-size: 14px; line-height: 1.6; text-align: left; max-width: 360px;">
-                Here&rsquo;s ${safe.senderFirst}&rsquo;s message to you:
-              </p>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding-bottom: 24px;">
-              <p style="margin: 0; color: #1a1714; font-size: 14px; line-height: 1.6; text-align: left; max-width: 360px; border-left: 2px solid #d4cfc4; padding-left: 14px;">
+            <td align="center" style="padding: 0 28px 28px;">
+              <p style="margin: 0; color: ${C.textMuted}; font-family: ${fontSerifItalic}; font-size: 16px; font-style: italic; line-height: 1.75; text-align: center; max-width: 420px;">
                 ${safe.personalNote}
               </p>
             </td>
@@ -785,22 +1135,34 @@ function buildInviteEmailHtml(
   const thumbBlock = thumbForEmail
     ? `
           <tr>
-            <td style="padding-bottom: 16px;">
-              <img src="${safe.thumbUrl}" alt="${safe.filmTitle}" width="360" border="0" decoding="async" style="width: 100%; max-width: 360px; height: auto; border: 0; border-radius: 2px; display: block; outline: none; text-decoration: none;" />
+            <td align="center" style="padding: 0 28px 24px;">
+              <img src="${safe.thumbUrl}" alt="${safe.filmTitle}" width="400" border="0" decoding="async" style="width: 100%; max-width: 400px; height: auto; border: 0; border-radius: 8px; display: block; margin: 0 auto; outline: none; text-decoration: none;" />
             </td>
           </tr>`
     : ''
 
+  const titleRow =
+    filmTitle && String(filmTitle).trim()
+      ? `
+          <tr>
+            <td align="center" style="padding: 0 28px 16px;">
+              <p style="margin: 0; color: ${C.text}; font-family: ${fontSerifItalic}; font-size: 17px; font-style: italic; line-height: 1.4; text-align: center;">
+                ${safe.filmTitle}
+              </p>
+            </td>
+          </tr>`
+      : ''
+
   const descBlock = filmDescription
     ? `
           <tr>
-            <td style="padding-bottom: 32px;">
-              <p style="margin: 0; color: #8a8070; font-size: 14px; line-height: 1.6; text-align: left; max-width: 360px;">
+            <td align="center" style="padding: 0 28px 32px;">
+              <p style="margin: 0; color: ${C.textSoft}; font-family: ${fontSerifItalic}; font-size: 15px; font-style: italic; line-height: 1.65; text-align: center; max-width: 420px;">
                 ${safe.filmDescription}
               </p>
             </td>
           </tr>`
-    : '<tr><td style="padding-bottom: 32px;"></td></tr>'
+    : '<tr><td style="padding-bottom: 24px;"></td></tr>'
 
   return `
 <!DOCTYPE html>
@@ -809,31 +1171,37 @@ function buildInviteEmailHtml(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="margin: 0; padding: 0; background-color: #f5f0e8; font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-weight: 300;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f0e8; padding: 40px 20px;">
+<body style="margin: 0; padding: 0; background-color: ${C.pageBg}; font-family: ${fontSans}; font-weight: 400;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color: ${C.pageBg}; padding: 36px 16px;">
     <tr>
       <td align="center">
-        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 480px;">
+        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width: 520px; background-color: ${C.cardBg}; border-radius: 12px; overflow: hidden;">
           <tr>
-            <td align="center" style="padding-bottom: 40px;">
-              <span style="color: #c4822a; font-family: 'DM Serif Display', Georgia, serif; font-size: 12px; letter-spacing: 4px; text-transform: uppercase;">DEEPCAST</span>
+            <td style="padding: 44px 28px 20px; background-color: ${C.cardBg};">
+              <p style="margin: 0; color: ${C.text}; font-family: ${fontSans}; font-size: 10px; font-weight: 400; letter-spacing: 0.42em; line-height: 1.4; text-align: center; text-transform: uppercase;">
+                A letter of invitation
+              </p>
             </td>
           </tr>
           <tr>
-            <td align="center" style="padding-bottom: 40px;">
-              <div style="width: 40px; height: 1px; background-color: #d4cfc4;"></div>
+            <td align="center" style="padding: 0 28px 28px;">
+              <table align="center" cellpadding="0" cellspacing="0" role="presentation" style="margin: 0 auto;">
+                <tr>
+                  <td width="1" height="28" bgcolor="${C.rule}" style="width: 1px; height: 28px; line-height: 28px; font-size: 0; background-color: ${C.rule};">&nbsp;</td>
+                </tr>
+              </table>
             </td>
           </tr>
-
           <tr>
-            <td>
-              ${greetingLine}
+            <td align="center" style="padding: 0 28px 20px;">
+              <p style="margin: 0; color: ${C.text}; font-family: ${fontSerifItalic}; font-size: 18px; font-style: italic; line-height: 1.5; text-align: center;">
+                ${dearLine}
+              </p>
             </td>
           </tr>
-
           <tr>
-            <td style="padding-bottom: 20px;">
-              <p style="margin: 0; color: #1a1714; font-size: 14px; line-height: 1.6; text-align: left; max-width: 360px;">
+            <td align="center" style="padding: 0 28px 28px;">
+              <p style="margin: 0; color: ${C.text}; font-family: ${fontSerifItalic}; font-size: 16px; font-style: italic; line-height: 1.75; text-align: center; max-width: 420px;">
                 ${introLine}
               </p>
             </td>
@@ -841,36 +1209,50 @@ function buildInviteEmailHtml(
 
           ${personalBlock}
 
+          ${titleRow}
+
           ${thumbBlock}
 
           ${descBlock}
 
           <tr>
-            <td align="left" style="padding-bottom: 24px; text-align: left;">
-              <a href="${safe.inviteUrl}" style="display: inline-block; background-color: #1a1714; color: #f5f0e8; text-decoration: none; font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; font-weight: 500; padding: 14px 32px; border-radius: 0;">
-                Receive your film
-              </a>
+            <td align="center" style="padding: 0 28px 12px; background-color: ${C.cardBgAlt};">
+              <table cellpadding="0" cellspacing="0" role="presentation" style="margin: 0 auto;">
+                <tr>
+                  <td align="center" style="border-radius: 0;">
+                    <a href="${safe.inviteUrl}" style="display: inline-block; background-color: ${C.btnBg}; color: ${C.btnText}; font-family: ${fontSans}; font-size: 11px; font-weight: 500; letter-spacing: 0.18em; line-height: 1.2; padding: 16px 40px; text-align: center; text-decoration: none; text-transform: uppercase; border-radius: 0;">
+                      Open your invitation
+                    </a>
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
           <tr>
-            <td align="center" style="padding-bottom: 32px;">
-              <p style="margin: 0; color: #8a8070; font-size: 12px; line-height: 1.6; max-width: 360px; text-align: left;">
-                If the button doesn&rsquo;t work:<br />
-                <a href="${safe.inviteUrl}" style="color: #c4822a; text-decoration: none; word-break: break-all;">${safe.inviteUrl}</a>
+            <td align="center" style="padding: 24px 28px 40px; background-color: ${C.cardBgAlt};">
+              <p style="margin: 0; color: ${C.textMuted}; font-family: ${fontSerifItalic}; font-size: 16px; font-style: italic; line-height: 1.6; text-align: center;">
+                With intention,<br />
+                <span style="color: ${C.text};">${safe.senderDisplay}</span>
               </p>
             </td>
           </tr>
 
           <tr>
-            <td align="center" style="padding-bottom: 24px;">
-              <div style="width: 40px; height: 1px; background-color: #d4cfc4;"></div>
+            <td align="center" style="padding: 0 28px 32px; background-color: ${C.cardBg};">
+              <p style="margin: 0; color: ${C.textSoft}; font-family: ${fontSans}; font-size: 11px; line-height: 1.65; text-align: center; max-width: 400px;">
+                If the button doesn&rsquo;t work, copy this link:<br />
+                <a href="${safe.inviteUrl}" style="color: ${C.link}; text-decoration: underline; word-break: break-all;">${safe.inviteUrl}</a>
+              </p>
             </td>
           </tr>
 
           <tr>
-            <td align="center">
-              <p style="margin: 0; color: #8a8070; font-size: 12px; line-height: 1.6; text-align: left; max-width: 360px;">
+            <td align="center" style="padding: 0 28px 36px;">
+              <p style="margin: 0; color: ${C.textSoft}; font-family: ${fontSans}; font-size: 11px; line-height: 1.65; text-align: center; max-width: 400px;">
                 You were invited by ${safe.senderDisplay}. This film is not publicly available. It travels only through people.
+              </p>
+              <p style="margin: 20px 0 0; color: ${C.text}; font-family: ${fontSans}; font-size: 10px; letter-spacing: 0.14em; text-transform: lowercase; text-align: center;">
+                deepcast
               </p>
             </td>
           </tr>

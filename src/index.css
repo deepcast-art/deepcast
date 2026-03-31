@@ -1,10 +1,11 @@
 @import "tailwindcss";
 
 @theme {
-  /* Fonts */
-  --font-display: 'DM Serif Display', Georgia, serif;
-  --font-body: 'DM Sans', system-ui, sans-serif;
-  --font-sans: 'DM Sans', system-ui, sans-serif;
+  /* Fonts — Phoenix (UI/body), Neue Haas Display (headlines), Garamond Italic (editorial) */
+  --font-display: 'Neue Haas Grotesk Display Pro', 'Helvetica Neue', Helvetica, system-ui, sans-serif;
+  --font-body: 'Phoenix', system-ui, sans-serif;
+  --font-sans: 'Phoenix', system-ui, sans-serif;
+  --font-serif-v3: 'Garamond Premier Pro Italic', Garamond, Georgia, 'Times New Roman', serif;
   --font-mono: 'Courier New', Courier, monospace;
 
   /* Font weights — brand uses 300 / 400 / 500 only */
@@ -12,38 +13,38 @@
   --font-regular: 400;
   --font-medium: 500;
 
-  /* Core palette */
-  --color-ink: #1a1714;
-  --color-warm: #f5f0e8;
-  --color-paper: #ede8dd;
-  --color-amber: #c4822a;
-  --color-amber-dim: #7a4e18;
-  --color-amber-pale: #f0ddb8;
-  --color-muted: #8a8070;
-  --color-faint: #d4cfc4;
-  --color-ghost: #c8c3b8;
+  /* Core palette — website V3 (dark canvas, soft gold, cool undertone) */
+  --color-ink: #080c18;
+  --color-warm: #dddddd;
+  --color-paper: #121a33;
+  --color-amber: #b1a180;
+  --color-amber-dim: #8a7358;
+  --color-amber-pale: #3d3528;
+  --color-muted: #a89f94;
+  --color-faint: #4a5580;
+  --color-ghost: rgba(221, 221, 221, 0.42);
 
   /* Backward-compatible aliases (used throughout existing components) */
-  --color-bg: #f5f0e8;
-  --color-bg-card: #ede8dd;
-  --color-bg-elevated: #ede8dd;
-  --color-text: #1a1714;
-  --color-text-muted: #8a8070;
-  --color-accent: #c4822a;
-  --color-accent-hover: #7a4e18;
-  --color-border: #d4cfc4;
+  --color-bg: #080c18;
+  --color-bg-card: #121a33;
+  --color-bg-elevated: #1a2540;
+  --color-text: #dddddd;
+  --color-text-muted: rgba(221, 221, 221, 0.55);
+  --color-accent: #b1a180;
+  --color-accent-hover: #978768;
+  --color-border: rgba(74, 85, 128, 0.35);
   --color-error: #b84233;
   --color-success: #5b8a5e;
 
   /* Semantic aliases */
-  --color-bg-page: var(--color-warm);
+  --color-bg-page: var(--color-ink);
   --color-bg-surface: var(--color-paper);
-  --color-bg-inverse: var(--color-ink);
-  --color-text-primary: var(--color-ink);
+  --color-bg-inverse: #ede8dd;
+  --color-text-primary: var(--color-warm);
   --color-text-secondary: var(--color-muted);
-  --color-text-inverse: var(--color-warm);
+  --color-text-inverse: var(--color-ink);
   --color-text-accent: var(--color-amber);
-  --color-border-strong: #b8b2a6;
+  --color-border-strong: rgba(74, 85, 128, 0.55);
 
   /* Typography scale */
   --text-display: 3rem;
@@ -96,6 +97,11 @@
   --grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
 }
 
+::selection {
+  background-color: var(--color-amber);
+  color: var(--color-warm);
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
 }
@@ -109,14 +115,23 @@ html {
 
 body {
   margin: 0;
-  background-color: var(--color-warm);
-  color: var(--color-ink);
+  background-color: var(--color-bg-page);
+  color: var(--color-text);
   font-family: var(--font-body);
   font-weight: 300;
   line-height: 1.7;
   min-height: 100vh;
-  background-image: var(--grain);
-  background-size: 200px 200px;
+}
+
+/* Film grain overlay — matches Deepcast-website-main tactile treatment */
+.dc-tactile-grain {
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  z-index: 9999;
 }
 
 /* Typography utilities */
@@ -126,7 +141,7 @@ body {
   font-weight: 400;
   line-height: var(--leading-display);
   letter-spacing: var(--tracking-tight);
-  color: var(--color-ink);
+  color: var(--color-text-primary);
 }
 
 .dc-display-sm {
@@ -144,7 +159,7 @@ body {
   font-style: italic;
   line-height: var(--leading-display);
   letter-spacing: var(--tracking-tight);
-  color: var(--color-ink);
+  color: var(--color-text-primary);
 }
 
 .dc-subhead {
@@ -152,7 +167,7 @@ body {
   font-size: var(--text-subhead);
   font-weight: 300;
   line-height: var(--leading-subhead);
-  color: var(--color-ink);
+  color: var(--color-text-primary);
 }
 
 .dc-body {
@@ -190,8 +205,8 @@ body {
 }
 
 .dc-btn-primary {
-  background-color: var(--color-ink);
-  color: var(--color-warm);
+  background-color: var(--color-amber);
+  color: var(--color-ink);
 }
 .dc-btn-primary:hover { opacity: 0.82; }
 .dc-btn-primary:active { opacity: 0.65; }
@@ -204,15 +219,15 @@ body {
 
 .dc-btn-ghost {
   background-color: transparent;
-  color: var(--color-ink);
-  border: 0.5px solid var(--color-ink);
+  color: var(--color-warm);
+  border: 0.5px solid rgba(221, 221, 221, 0.35);
 }
-.dc-btn-ghost:hover { background-color: var(--color-paper); }
+.dc-btn-ghost:hover { background-color: rgba(177, 161, 128, 0.08); }
 .dc-btn-ghost:active { opacity: 0.65; }
 
 .dc-btn-accent {
   background-color: var(--color-amber);
-  color: var(--color-warm);
+  color: var(--color-ink);
 }
 .dc-btn-accent:hover { background-color: var(--color-amber-dim); }
 .dc-btn-accent:active { opacity: 0.75; }
@@ -268,47 +283,44 @@ body {
 .animate-delay-500 { animation-delay: 0.3s; }
 .animate-delay-600 { animation-delay: 0.36s; }
 
-/* Inverse theme for screening room + share flows on dark */
+/* Inverse theme — light paper surface on dark app shell */
 .theme-inverse {
-  background-color: var(--color-ink);
-  color: var(--color-warm);
+  background-color: var(--color-bg-inverse);
+  color: var(--color-text-inverse);
   background-image: var(--grain);
   background-size: 200px 200px;
 }
 
-/* Brand typography on inverse (screening / dark surfaces) */
 .theme-inverse .dc-display,
 .theme-inverse .dc-display-italic,
 .theme-inverse .dc-display-sm {
-  color: var(--color-warm);
+  color: var(--color-text-inverse);
 }
 
 .theme-inverse .dc-subhead {
-  color: var(--color-warm);
+  color: var(--color-text-inverse);
 }
 
 .theme-inverse .dc-body {
-  color: var(--color-ghost);
+  color: var(--color-muted);
 }
 
 .theme-inverse .dc-label {
   color: var(--color-muted);
 }
 
-/* Screening invite intro (light paper, matches --color-bg-page) */
+/* Screening invite intro */
 .screening-intro-bg {
   background-color: var(--color-bg-page);
-  background-image: var(--grain);
-  background-size: 200px 200px;
-  color: var(--color-ink);
+  color: var(--color-text);
 }
 
-/* Post-share screen — explicit brand color-bg (#f5f0e8) + grain */
+/* Post-share screen — warm paper letter stack */
 .dc-share-page-bg {
-  background-color: var(--color-bg);
+  background-color: #ede8dd;
   background-image: var(--grain);
   background-size: 200px 200px;
-  color: var(--color-ink);
+  color: #1a1714;
 }
 
 /* ============================================================
@@ -316,8 +328,32 @@ body {
    × No heavy shadows; × No pure #fff/#000; × Accent once per view max
    ============================================================ */
 
+@keyframes slow-fade-text {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+.slow-fade-text {
+  animation: slow-fade-text 6s ease-in-out infinite;
+}
+
+.panel-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.panel-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.panel-scroll::-webkit-scrollbar-thumb {
+  background: rgba(246, 240, 228, 0.15);
+  border-radius: 10px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dc-fade-in, .animate-fade-in, .animate-fade-in-slow {
+    animation: none;
+    opacity: 1;
+  }
+  .slow-fade-text {
     animation: none;
     opacity: 1;
   }

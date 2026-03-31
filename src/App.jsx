@@ -11,6 +11,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard.jsx'))
 const Upload = lazy(() => import('./pages/Upload.jsx'))
 const NetworkMap = lazy(() => import('./pages/NetworkMap.jsx'))
 const PostShare = lazy(() => import('./pages/PostShare.jsx'))
+const TeamJoin = lazy(() => import('./pages/TeamJoin.jsx'))
 
 function RouteFallback({ inverse = false }) {
   return (
@@ -27,7 +28,7 @@ function RouteFallback({ inverse = false }) {
   )
 }
 
-function ProtectedRoute({ children, requiredRole }) {
+function ProtectedRoute({ children, requiredRole, requiredRoles }) {
   const { user, profile, loading, profileLoaded } = useAuth()
 
   // Still loading auth or profile
@@ -43,6 +44,10 @@ function ProtectedRoute({ children, requiredRole }) {
 
   // Profile was fetched but doesn't exist — send to signup
   if (profileLoaded && !profile) return <Navigate to="/signup" replace />
+
+  if (requiredRoles?.length && !requiredRoles.includes(profile.role)) {
+    return <Navigate to="/profile" replace />
+  }
 
   if (requiredRole && profile.role !== requiredRole) return <Navigate to="/profile" replace />
 
@@ -63,7 +68,7 @@ export default function App() {
       <Route
         path="/i/:token"
         element={
-          <Suspense fallback={<RouteFallback inverse />}>
+          <Suspense fallback={<RouteFallback />}>
             <InviteScreening />
           </Suspense>
         }
@@ -85,6 +90,14 @@ export default function App() {
         }
       />
       <Route
+        path="/team/join"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <TeamJoin />
+          </Suspense>
+        }
+      />
+      <Route
         path="/profile"
         element={
           <ProtectedRoute>
@@ -97,7 +110,9 @@ export default function App() {
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute requiredRole="creator">
+          <ProtectedRoute
+            requiredRoles={['creator', 'team_member', 'viewer']}
+          >
             <Suspense fallback={<RouteFallback />}>
               <Dashboard />
             </Suspense>

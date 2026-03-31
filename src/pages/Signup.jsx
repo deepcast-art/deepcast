@@ -22,7 +22,7 @@ export default function Signup() {
     try {
       const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ')
       await signUp(email, password, fullName, isCreator ? 'creator' : 'viewer', firstName.trim(), lastName.trim())
-      window.location.href = isCreator ? '/dashboard' : '/profile'
+      window.location.href = '/dashboard'
     } catch (err) {
       setError(err.message || 'Account creation failed. Please try again.')
       setLoading(false)

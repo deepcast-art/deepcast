@@ -1,15 +1,22 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
-import { buildNetworkGraphLayout } from '../lib/networkGraphLayout'
 import DeepcastLogo from '../components/DeepcastLogo'
+import NetworkGraph, { buildGraphLayout, inviteRecipientKey } from '../components/NetworkGraph'
 
-const NetworkForceGraph2D = lazy(() => import('../components/NetworkForceGraph2D.jsx'))
+function recipientKeyForRow(row) {
+  if (!row) return null
+  if (row.recipient_name) {
+    return `${row.recipient_email || ''}:${String(row.recipient_name).trim().toLowerCase()}`
+  }
+  return row.recipient_email || null
+}
 
 export default function NetworkMap() {
   const { profile } = useAuth()
+  const [searchParams] = useSearchParams()
   const [loading, setLoading] = useState(true)
   const [invites, setInvites] = useState([])
   const [films, setFilms] = useState([])
@@ -39,6 +46,20 @@ export default function NetworkMap() {
       setCreatorName(profile?.name || '')
       return
     }
+    if (profile?.role === 'team_member' && profile?.team_creator_id) {
+      let cancelled = false
+      ;(async () => {
+        const { data: u } = await supabase
+          .from('users')
+          .select('name')
+          .eq('id', profile.team_creator_id)
+          .single()
+        if (!cancelled) setCreatorName(u?.name || '')
+      })()
+      return () => {
+        cancelled = true
+      }
+    }
     let cancelled = false
     ;(async () => {
       const { data: film } = await supabase
@@ -56,24 +77,35 @@ export default function NetworkMap() {
     return () => {
       cancelled = true
     }
-  }, [selectedFilmId, profile?.role, profile?.name, profile?.id])
+  }, [selectedFilmId, profile?.role, profile?.name, profile?.id, profile?.team_creator_id])
 
   async function loadNetwork() {
     setLoading(true)
 
-    if (profile.role === 'creator') {
+    if (profile.role === 'creator' || profile.role === 'team_member') {
+      const ownerId =
+        profile.role === 'team_member' ? profile.team_creator_id : profile.id
+
+      if (!ownerId) {
+        setFilms([])
+        setInvites([])
+        setSelectedFilmId(null)
+        setLoading(false)
+        return
+      }
+
       const { data: creatorFilms } = await supabase
         .from('films')
         .select('id, title')
-        .eq('creator_id', profile.id)
+        .eq('creator_id', ownerId)
         .order('created_at', { ascending: false })
 
       const filmIds = (creatorFilms || []).map((f) => f.id)
       setFilms(creatorFilms || [])
-      setSelectedFilmId((creatorFilms || [])[0]?.id || null)
 
       if (filmIds.length === 0) {
         setInvites([])
+        setSelectedFilmId(null)
         setLoading(false)
         return
       }
@@ -89,22 +121,56 @@ export default function NetworkMap() {
       return
     }
 
-    const { data: viewerInvites } = await supabase
+    const { data: sessions } = await supabase
+      .from('watch_sessions')
+      .select('film_id')
+      .eq('viewer_id', profile.id)
+
+    const { data: emailInvites } = await supabase
+      .from('invites')
+      .select('token')
+      .eq('recipient_email', profile.email)
+
+    const tokens = (emailInvites || []).map((i) => i.token).filter(Boolean)
+    let inviteSessionRows = []
+    if (tokens.length > 0) {
+      const { data: invSess } = await supabase
+        .from('watch_sessions')
+        .select('film_id')
+        .in('invite_token', tokens)
+      inviteSessionRows = invSess || []
+    }
+
+    const filmIdSet = new Set()
+    ;(sessions || []).forEach((s) => s.film_id && filmIdSet.add(s.film_id))
+    inviteSessionRows.forEach((s) => s.film_id && filmIdSet.add(s.film_id))
+
+    const { data: viewerScoped } = await supabase
+      .from('invites')
+      .select('film_id')
+      .or(`recipient_email.eq.${profile.email},sender_id.eq.${profile.id}`)
+    ;(viewerScoped || []).forEach((i) => i.film_id && filmIdSet.add(i.film_id))
+
+    const viewerFilmIds = Array.from(filmIdSet)
+    if (viewerFilmIds.length === 0) {
+      setInvites([])
+      setSelectedFilmId(null)
+      setLoading(false)
+      return
+    }
+
+    const { data: allFilmInvites } = await supabase
       .from('invites')
       .select('*, films(title)')
-      .or(`recipient_email.eq.${profile.email},sender_id.eq.${profile.id}`)
+      .in('film_id', viewerFilmIds)
       .order('created_at', { ascending: false })
 
-    setInvites(viewerInvites || [])
-    const firstFilmId = viewerInvites?.[0]?.film_id
-    if (firstFilmId) {
-      setSelectedFilmId((prev) => prev ?? firstFilmId)
-    }
+    setInvites(allFilmInvites || [])
     setLoading(false)
   }
 
   const filmOptions = useMemo(() => {
-    if (profile?.role === 'creator') return films
+    if (profile?.role === 'creator' || profile?.role === 'team_member') return films
     const byId = new Map()
     invites.forEach((invite) => {
       if (!invite.film_id) return
@@ -124,15 +190,36 @@ export default function NetworkMap() {
     return filmOptions.find((film) => film.id === selectedFilmId)?.title || 'Untitled'
   }, [filmOptions, selectedFilmId])
 
-  const mapLayout = useMemo(() => {
+  const viewerRecipientKey = useMemo(() => {
+    if (profile?.role !== 'viewer' || !profile?.email || !filteredInvites.length) return null
+    const e = profile.email.trim().toLowerCase()
+    const row = filteredInvites.find((r) => (r.recipient_email || '').toLowerCase() === e)
+    return recipientKeyForRow(row)
+  }, [profile?.role, profile?.email, filteredInvites])
+
+  const viewerFocusInviteId = useMemo(() => {
+    if (!viewerRecipientKey || !filteredInvites.length) return null
+    const matches = filteredInvites.filter(
+      (r) => inviteRecipientKey(r) === viewerRecipientKey
+    )
+    if (!matches.length) return null
+    return [...matches].sort((a, b) => {
+      const tb = b.created_at ? new Date(b.created_at).getTime() : 0
+      const ta = a.created_at ? new Date(a.created_at).getTime() : 0
+      return tb - ta
+    })[0]?.id
+  }, [viewerRecipientKey, filteredInvites])
+
+  const graphLayout = useMemo(() => {
     if (!filteredInvites.length) return null
-    return buildNetworkGraphLayout({
+    return buildGraphLayout({
       filmInvites: filteredInvites,
       filmTitle: selectedFilmTitle,
       creatorName,
-      viewerRecipientKey: null,
+      viewerRecipientKey,
+      focusInviteId: viewerFocusInviteId,
     })
-  }, [filteredInvites, selectedFilmTitle, creatorName])
+  }, [filteredInvites, selectedFilmTitle, creatorName, viewerRecipientKey, viewerFocusInviteId])
 
   const handleResendInvite = async (inviteId) => {
     setResendStatusByInvite((prev) => ({ ...prev, [inviteId]: 'sending' }))
@@ -168,43 +255,61 @@ export default function NetworkMap() {
   }
 
   useEffect(() => {
-    if (!selectedFilmId && filmOptions.length > 0) {
-      setSelectedFilmId(filmOptions[0].id)
+    if (loading || filmOptions.length === 0) return
+    const paramId = searchParams.get('filmId')
+    const matches = (id) =>
+      filmOptions.some((f) => String(f.id) === String(id))
+    if (paramId && matches(paramId)) {
+      setSelectedFilmId(paramId)
+      return
     }
-  }, [filmOptions, selectedFilmId])
+    setSelectedFilmId((prev) => {
+      if (prev && matches(prev)) return prev
+      return filmOptions[0].id
+    })
+  }, [loading, filmOptions, searchParams])
 
   if (!profile) return null
 
   return (
     <div className="min-h-screen px-6 py-12">
       <div className="max-w-3xl mx-auto">
-        <div className="flex items-center justify-between mb-12 animate-fade-in">
+        <div className="flex items-start justify-between gap-6 mb-12 animate-fade-in">
           <div>
             <Link to="/" className="inline-flex hover:opacity-80 transition-opacity">
               <DeepcastLogo variant="ink" className="h-8" />
             </Link>
-            <h1 className="text-2xl font-display mt-4">Network Map</h1>
+            <Link
+              to="/dashboard"
+              className="mt-3 mb-1 inline-flex items-center gap-2 text-text-muted text-xs uppercase tracking-wider hover:text-text transition-colors"
+            >
+              <svg
+                className="w-3.5 h-3.5 shrink-0 opacity-70"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                />
+              </svg>
+              Back to dashboard
+            </Link>
+            <h1 className="text-2xl font-display mt-3">Network Map</h1>
             <p className="text-text-muted text-sm mt-1">
               See how each film travels through the network.
             </p>
           </div>
-          <div className="flex items-center gap-4">
-            {profile.role === 'creator' ? (
-              <Link
-                to="/dashboard"
-                className="text-text-muted text-xs uppercase tracking-wider hover:text-text transition-colors"
-              >
-                Dashboard
-              </Link>
-            ) : (
-              <Link
-                to="/profile"
-                className="text-text-muted text-xs uppercase tracking-wider hover:text-text transition-colors"
-              >
-                Profile
-              </Link>
-            )}
-          </div>
+          <Link
+            to="/profile"
+            className="shrink-0 text-text-muted text-xs uppercase tracking-wider hover:text-text transition-colors pt-1"
+          >
+            Profile
+          </Link>
         </div>
 
         {loading ? (
@@ -225,7 +330,7 @@ export default function NetworkMap() {
                     {filteredInvites.length} invite{filteredInvites.length !== 1 ? 's' : ''}
                   </p>
                 </div>
-                {profile.role === 'creator' && (
+                {(profile.role === 'creator' || profile.role === 'team_member') && (
                   <span className="text-text-muted text-xs uppercase tracking-wider">
                     {
                       filteredInvites.filter(
@@ -256,33 +361,34 @@ export default function NetworkMap() {
                 </div>
               )}
 
-              <div className="mb-6 rounded-none border border-border bg-bg/60 p-4">
-                {!mapLayout ? (
-                  <p className="text-text-muted text-sm text-center py-12">No invites for this film yet.</p>
+              <div className="mb-6 overflow-hidden border border-faint/40 bg-paper/70">
+                {!graphLayout ? (
+                  <p className="py-12 text-center font-sans text-[10px] uppercase tracking-widest text-warm/35">
+                    No invites for this film yet.
+                  </p>
                 ) : (
-                <>
-                <div className="w-full min-h-[420px]" role="img" aria-label="Invite network map">
-                  <Suspense
-                    fallback={
-                      <div className="w-full min-h-[420px] flex items-center justify-center bg-bg-card border border-border">
-                        <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-                      </div>
-                    }
-                  >
-                    <NetworkForceGraph2D
-                      graphData={mapLayout.graphData}
-                      rootId="film-root"
-                      theme="light"
-                      height={420}
-                    />
-                  </Suspense>
-                </div>
-                <p className="text-text-muted text-xs mt-3 text-center">
-                  Force-directed layout: the film stays at the center; invitations spread through the network.
-                  Drag and scroll to explore. The yellow ring marks the end of the longest invite chain (last
-                  leaf). Colors reflect invite status.
-                </p>
-                </>
+                  <>
+                    <div
+                      className="flex h-[min(52vh,520px)] w-full min-h-[320px] flex-col"
+                      role="img"
+                      aria-label="Invite network map"
+                    >
+                      <NetworkGraph
+                        fillHeight
+                        pannable
+                        transparentSurface
+                        nodesData={graphLayout.nodesData}
+                        linksData={graphLayout.linksData}
+                        viewBoxH={graphLayout.viewBoxH}
+                        rootNode={graphLayout.rootNode}
+                        defaultActiveNodes={graphLayout.defaultActiveNodes}
+                        defaultActiveLinks={graphLayout.defaultActiveLinks}
+                      />
+                    </div>
+                    <p className="border-t border-faint/30 px-4 py-3 text-center font-sans text-[10px] uppercase tracking-widest text-warm/35">
+                      Scroll and drag to explore. Amber highlights the active invitation path.
+                    </p>
+                  </>
                 )}
               </div>
 

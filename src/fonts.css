@@ -1,0 +1,50 @@
+/* Client-licensed fonts — files in /public/fonts */
+
+@font-face {
+  font-family: 'Phoenix';
+  src: url('/fonts/phoenix-light.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Phoenix';
+  src: url('/fonts/phoenix-regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Phoenix';
+  src: url('/fonts/phoenix-medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Phoenix';
+  src: url('/fonts/phoenix-italic-regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Neue Haas Grotesk Display Pro';
+  src: url('/fonts/neue-haas-grotesk-display-55-roman.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Single-style cut: glyphs are already italic */
+@font-face {
+  font-family: 'Garamond Premier Pro Italic';
+  src: url('/fonts/garamond-premier-pro-italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}

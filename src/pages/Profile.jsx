@@ -1,10 +1,77 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import InviteForm from '../components/InviteForm'
 import DeepcastLogo from '../components/DeepcastLogo'
+import NetworkGraph, { buildGraphLayout, inviteRecipientKey } from '../components/NetworkGraph'
 import { ensureHttpsUrl } from '../lib/httpsUrl.js'
+
+function recipientKeyForRow(row) {
+  if (!row) return null
+  if (row.recipient_name) {
+    return `${row.recipient_email || ''}:${String(row.recipient_name).trim().toLowerCase()}`
+  }
+  return row.recipient_email || null
+}
+
+function FilmNetworkPreview({ film, invites, creatorName, profileEmail, profileRole }) {
+  const viewerRecipientKey = useMemo(() => {
+    if (profileRole !== 'viewer' || !profileEmail || !invites?.length) return null
+    const e = profileEmail.trim().toLowerCase()
+    const row = invites.find((r) => (r.recipient_email || '').toLowerCase() === e)
+    return recipientKeyForRow(row)
+  }, [profileRole, profileEmail, invites])
+
+  const focusInviteId = useMemo(() => {
+    if (!viewerRecipientKey || !invites?.length) return null
+    const matches = invites.filter((r) => inviteRecipientKey(r) === viewerRecipientKey)
+    if (!matches.length) return null
+    return [...matches].sort((a, b) => {
+      const tb = b.created_at ? new Date(b.created_at).getTime() : 0
+      const ta = a.created_at ? new Date(a.created_at).getTime() : 0
+      return tb - ta
+    })[0]?.id
+  }, [viewerRecipientKey, invites])
+
+  const graphLayout = useMemo(
+    () =>
+      invites?.length
+        ? buildGraphLayout({
+            filmInvites: invites,
+            filmTitle: film.title,
+            creatorName: creatorName || '',
+            viewerRecipientKey,
+            focusInviteId,
+          })
+        : null,
+    [invites, film.title, creatorName, viewerRecipientKey, focusInviteId]
+  )
+
+  if (!graphLayout) return null
+
+  return (
+    <Link
+      to={`/network?filmId=${film.id}`}
+      className="mt-4 block cursor-pointer overflow-hidden border border-faint/40 bg-paper/70 transition-colors hover:border-accent/40"
+    >
+      <span className="sr-only">Open full invitation map for {film.title}</span>
+      <div className="h-[260px] w-full">
+        <NetworkGraph
+          fillHeight
+          pannable
+          transparentSurface
+          nodesData={graphLayout.nodesData}
+          linksData={graphLayout.linksData}
+          viewBoxH={graphLayout.viewBoxH}
+          rootNode={graphLayout.rootNode}
+          defaultActiveNodes={graphLayout.defaultActiveNodes}
+          defaultActiveLinks={graphLayout.defaultActiveLinks}
+        />
+      </div>
+    </Link>
+  )
+}
 
 export default function Profile() {
   const { profile, signOut, fetchProfile, user } = useAuth()
@@ -55,7 +122,9 @@ export default function Profile() {
     if (watchedFilmIds.length > 0) {
       const { data: filmInvites } = await supabase
         .from('invites')
-        .select('id, film_id, sender_id, sender_name, sender_email, recipient_name, recipient_email, status')
+        .select(
+          'id, film_id, sender_id, sender_name, sender_email, recipient_name, recipient_email, status, parent_invite_id, created_at'
+        )
         .in('film_id', watchedFilmIds)
         .order('created_at', { ascending: true })
 
@@ -115,117 +184,6 @@ export default function Profile() {
     signed_up: 'text-success',
   }
 
-  const buildNetworkLayout = (invites, filmTitle, creatorName) => {
-    if (!invites || invites.length === 0) return null
-    const rootId = 'film-root'
-    const creatorId = 'creator-root'
-    const nodes = new Map()
-    const edges = []
-    const statusByRecipient = new Map()
-
-    const ensureNode = (id, label, type = 'person') => {
-      if (!nodes.has(id)) {
-        nodes.set(id, { id, label, type })
-      }
-    }
-
-    const toFirstName = (value, fallback = 'Invitee') => {
-      if (!value) return fallback
-      const trimmed = value.trim()
-      if (!trimmed) return fallback
-      const base = trimmed.includes('@') ? trimmed.split('@')[0] : trimmed
-      return base.split(/\s+/)[0] || fallback
-    }
-
-    ensureNode(rootId, filmTitle || 'Film', 'film')
-    if (creatorName) {
-      ensureNode(creatorId, toFirstName(creatorName, 'Creator'), 'creator')
-      edges.push({ from: rootId, to: creatorId })
-    }
-
-    invites.forEach((invite) => {
-      const senderKey =
-        invite.sender_email ||
-        (invite.sender_id ? `member:${invite.sender_id}` : '') ||
-        (invite.sender_name ? `name:${invite.sender_name}` : 'Unknown sender')
-      const senderLabel = toFirstName(
-        invite.sender_name || invite.sender_email || (invite.sender_id ? 'Member' : 'Unknown'),
-        'Member'
-      )
-      const recipientKey = invite.recipient_email || `recipient:${invite.id}`
-      const recipientLabel = toFirstName(
-        invite.recipient_name || invite.recipient_email,
-        'Invitee'
-      )
-
-      ensureNode(senderKey, senderLabel, 'person')
-      ensureNode(recipientKey, recipientLabel, 'recipient')
-      edges.push({ from: senderKey, to: recipientKey })
-      statusByRecipient.set(recipientKey, invite.status)
-    })
-
-    const recipients = new Set(edges.map((edge) => edge.to))
-    const senders = new Set(edges.map((edge) => edge.from))
-    const rootSenders = Array.from(senders).filter((sender) => !recipients.has(sender))
-    rootSenders.forEach((sender) => edges.push({ from: rootId, to: sender }))
-
-    const depthById = new Map([[rootId, 0]])
-    const queue = [rootId]
-    const adjacency = new Map()
-    edges.forEach((edge) => {
-      if (!adjacency.has(edge.from)) adjacency.set(edge.from, [])
-      adjacency.get(edge.from).push(edge.to)
-    })
-
-    while (queue.length) {
-      const current = queue.shift()
-      const depth = depthById.get(current) || 0
-      const children = adjacency.get(current) || []
-      children.forEach((child) => {
-        if (!depthById.has(child)) {
-          depthById.set(child, depth + 1)
-          queue.push(child)
-        }
-      })
-    }
-
-    const layers = {}
-    nodes.forEach((node) => {
-      const depth = depthById.get(node.id) ?? 1
-      if (!layers[depth]) layers[depth] = []
-      layers[depth].push(node)
-    })
-
-    const maxDepth = Math.max(...Object.keys(layers).map((d) => Number(d)))
-    const horizontalGap = 150
-    const verticalGap = 60
-    const padding = 48
-    const width = padding * 2 + maxDepth * horizontalGap
-    const maxLayerCount = Math.max(...Object.values(layers).map((layer) => layer.length))
-    const height = Math.max(320, padding * 2 + maxLayerCount * verticalGap)
-
-    const positionedNodes = []
-    Object.entries(layers).forEach(([depthKey, layerNodes]) => {
-      const depth = Number(depthKey)
-      const totalHeight = (layerNodes.length - 1) * verticalGap
-      const startY = height / 2 - totalHeight / 2
-      layerNodes.forEach((node, index) => {
-        const x = padding + depth * horizontalGap
-        const y = startY + index * verticalGap
-        const status = statusByRecipient.get(node.id)
-        const statusClass =
-          status === 'watched' || status === 'signed_up'
-            ? 'text-success'
-            : status === 'opened'
-            ? 'text-accent'
-            : 'text-text-muted'
-        positionedNodes.push({ ...node, x, y, statusClass })
-      })
-    })
-
-    return { width, height, nodes: positionedNodes, edges }
-  }
-
   return (
     <div className="min-h-screen px-6 py-12">
       <div className="max-w-2xl mx-auto">
@@ -238,22 +196,34 @@ export default function Profile() {
             <h1 className="text-2xl font-display mt-4">{profile.name}</h1>
             <p className="text-text-muted text-sm mt-1">{profile.email}</p>
             <p className="text-text-muted text-xs uppercase tracking-wider mt-2">
-              {profile.role}
+              {profile.role === 'team_member' ? 'Team member' : profile.role}
             </p>
           </div>
           <div className="text-right">
             <p className="text-accent text-2xl font-light">
-              {profile.role === 'creator' ? 'Unlimited' : profile.invite_allocation}
+              {profile.role === 'creator' || profile.role === 'team_member'
+                ? 'Unlimited'
+                : profile.invite_allocation}
             </p>
-            <p className="text-text-muted text-xs uppercase tracking-wider">
-              {profile.role === 'creator' ? 'invites' : 'invites'}
-            </p>
+            <p className="text-text-muted text-xs uppercase tracking-wider">invites</p>
             <Link
-              to="/network"
+              to={
+                profile.role === 'viewer' && watchedFilms.length > 0
+                  ? `/network?filmId=${watchedFilms[0].id}`
+                  : '/network'
+              }
               className="block text-text-muted text-xs uppercase tracking-wider mt-4 hover:text-text transition-colors"
             >
               Network map
             </Link>
+            {(profile.role === 'creator' || profile.role === 'team_member') && (
+              <Link
+                to="/dashboard"
+                className="block text-text-muted text-xs uppercase tracking-wider mt-3 hover:text-text transition-colors"
+              >
+                Dashboard
+              </Link>
+            )}
             <button
               onClick={signOut}
               className="text-text-muted text-xs hover:text-text transition-colors mt-3 cursor-pointer"
@@ -298,84 +268,20 @@ export default function Profile() {
                           </p>
                         )}
                         {filmInvitesById[film.id]?.length ? (
-                          <div className="mt-4 rounded-none border border-border bg-bg/60 p-3">
-                            {(() => {
-                              const layout = buildNetworkLayout(
-                                filmInvitesById[film.id],
-                                film.title,
-                                creatorNameByFilmId[film.id]
-                              )
-                              if (!layout) return null
-                              return (
-                                <svg
-                                  viewBox={`0 0 ${layout.width} ${layout.height}`}
-                                  className="w-full h-[260px]"
-                                  role="img"
-                                  aria-label="Invite network map"
-                                >
-                                  <g stroke="#7C3AED" strokeWidth="1.4" strokeOpacity="0.6">
-                                    {layout.edges.map((edge) => {
-                                      const fromNode = layout.nodes.find((node) => node.id === edge.from)
-                                      const toNode = layout.nodes.find((node) => node.id === edge.to)
-                                      if (!fromNode || !toNode) return null
-                                      return (
-                                        <line
-                                          key={`edge-${edge.from}-${edge.to}`}
-                                          x1={fromNode.x}
-                                          y1={fromNode.y}
-                                          x2={toNode.x}
-                                          y2={toNode.y}
-                                        />
-                                      )
-                                    })}
-                                  </g>
-
-                                  {layout.nodes.map((node) => {
-                                    const fillColor =
-                                      node.type === 'film'
-                                        ? '#F59E0B'
-                                        : node.type === 'creator'
-                                        ? '#22D3EE'
-                                        : node.type === 'recipient'
-                                        ? '#F43F5E'
-                                        : node.statusClass === 'text-success'
-                                        ? '#22C55E'
-                                        : node.statusClass === 'text-accent'
-                                        ? '#A855F7'
-                                        : '#94A3B8'
-                                    const radius = node.type === 'film' ? 16 : node.type === 'creator' ? 12 : 9
-                                    return (
-                                      <g key={node.id}>
-                                        <circle
-                                          cx={node.x}
-                                          cy={node.y}
-                                          r={radius}
-                                          fill={fillColor}
-                                          stroke={node.type === 'recipient' ? '#FDE047' : 'none'}
-                                          strokeWidth={node.type === 'recipient' ? 2 : 0}
-                                        />
-                                        <text
-                                          x={node.x}
-                                          y={node.y - radius - 6}
-                                          textAnchor="middle"
-                                          className="fill-text text-[9px]"
-                                        >
-                                          {node.label}
-                                        </text>
-                                      </g>
-                                    )
-                                  })}
-                                </svg>
-                              )
-                            })()}
-                          </div>
+                          <FilmNetworkPreview
+                            film={film}
+                            invites={filmInvitesById[film.id]}
+                            creatorName={creatorNameByFilmId[film.id]}
+                            profileEmail={profile.email}
+                            profileRole={profile.role}
+                          />
                         ) : (
                           <p className="text-text-muted text-xs mt-3">
                             Network map will appear after invites are sent.
                           </p>
                         )}
                       </div>
-                      {profile.invite_allocation > 0 && (
+                      {(profile.role === 'team_member' || profile.invite_allocation > 0) && (
                         <button
                           onClick={() =>
                             setSelectedFilm(selectedFilm?.id === film.id ? null : film)
@@ -402,8 +308,14 @@ export default function Profile() {
                   filmTitle={selectedFilm.title}
                   filmDescription={selectedFilm.description}
                   senderName={profile.name}
+                  senderEmail={profile.email}
                   senderId={profile.id}
-                  maxInvites={Math.min(5, profile.invite_allocation)}
+                  unlimited={profile.role === 'team_member'}
+                  maxInvites={
+                    profile.role === 'team_member'
+                      ? 50
+                      : Math.min(5, profile.invite_allocation)
+                  }
                   onInviteSent={() => {
                     fetchProfile(user.id)
                     loadData()

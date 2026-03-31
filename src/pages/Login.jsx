@@ -30,7 +30,10 @@ export default function Login() {
       const result = await signIn(email, password)
 
       const role = result?.profile?.role
-      window.location.href = role === 'creator' ? '/dashboard' : '/profile'
+      window.location.href =
+        role === 'creator' || role === 'team_member' || role === 'viewer'
+          ? '/dashboard'
+          : '/profile'
     } catch (err) {
       setError(err.message || 'Sign in failed. Please try again.')
       setLoading(false)
