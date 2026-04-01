@@ -12,6 +12,7 @@ const Upload = lazy(() => import('./pages/Upload.jsx'))
 const NetworkMap = lazy(() => import('./pages/NetworkMap.jsx'))
 const PostShare = lazy(() => import('./pages/PostShare.jsx'))
 const TeamJoin = lazy(() => import('./pages/TeamJoin.jsx'))
+const Unsubscribe = lazy(() => import('./pages/Unsubscribe.jsx'))
 
 function RouteFallback({ inverse = false }) {
   return (
@@ -94,6 +95,14 @@ export default function App() {
         element={
           <Suspense fallback={<RouteFallback />}>
             <TeamJoin />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/unsubscribe"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <Unsubscribe />
           </Suspense>
         }
       />

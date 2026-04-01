@@ -162,6 +162,27 @@ function resolveBaseUrl(appUrl, origin) {
   return APP_URL
 }
 
+/** Public site origin for logo + unsubscribe links in screening-invite emails */
+function siteOriginFromInviteUrl(inviteUrl) {
+  try {
+    return new URL(inviteUrl).origin
+  } catch {
+    return String(APP_URL || '').replace(/\/$/, '')
+  }
+}
+
+/** RFC 2369 List-Unsubscribe for transactional screening invites */
+function withFilmInviteMailingHeaders(payload, inviteUrl) {
+  const unsub = `${siteOriginFromInviteUrl(inviteUrl)}/unsubscribe`
+  return {
+    ...payload,
+    headers: {
+      ...(payload.headers || {}),
+      'List-Unsubscribe': `<${unsub}>`,
+    },
+  }
+}
+
 /** Resend Node SDK returns { data, error } and does NOT throw on API errors — always check `error`. */
 function formatResendError(err) {
   if (!err) return 'Unknown Resend error'
@@ -393,14 +414,17 @@ app.post('/api/invites/send', async (req, res) => {
         personalNote || null
       )
       await sendInviteEmailResend(
-        withReplyTo(
-          {
-            to: recipientEmailNorm,
-            subject: formatInviteEmailSubject(displaySender),
-            html: htmlBody,
-            text: textBody,
-          },
-          displaySenderEmail
+        withFilmInviteMailingHeaders(
+          withReplyTo(
+            {
+              to: recipientEmailNorm,
+              subject: formatInviteEmailSubject(displaySender),
+              html: htmlBody,
+              text: textBody,
+            },
+            displaySenderEmail
+          ),
+          inviteUrl
         )
       )
     } catch (emailErr) {
@@ -513,14 +537,17 @@ app.post('/api/invites/resend-last', async (req, res) => {
         invite.personal_note || null
       )
       await sendInviteEmailResend(
-        withReplyTo(
-          {
-            to: invite.recipient_email,
-            subject: formatInviteEmailSubject(displaySender),
-            html: htmlBody,
-            text: textBody,
-          },
-          displaySenderEmail
+        withFilmInviteMailingHeaders(
+          withReplyTo(
+            {
+              to: invite.recipient_email,
+              subject: formatInviteEmailSubject(displaySender),
+              html: htmlBody,
+              text: textBody,
+            },
+            displaySenderEmail
+          ),
+          inviteUrl
         )
       )
     } catch (emailErr) {
@@ -606,14 +633,17 @@ app.post('/api/invites/resend', async (req, res) => {
         invite.personal_note || null
       )
       await sendInviteEmailResend(
-        withReplyTo(
-          {
-            to: invite.recipient_email,
-            subject: formatInviteEmailSubject(displaySender),
-            html: htmlBody,
-            text: textBody,
-          },
-          displaySenderEmail
+        withFilmInviteMailingHeaders(
+          withReplyTo(
+            {
+              to: invite.recipient_email,
+              subject: formatInviteEmailSubject(displaySender),
+              html: htmlBody,
+              text: textBody,
+            },
+            displaySenderEmail
+          ),
+          inviteUrl
         )
       )
     } catch (emailErr) {
@@ -1265,19 +1295,27 @@ function buildInviteEmailPlainText(
   personalNote
 ) {
   const senderFirstName = senderName ? senderName.trim().split(/\s+/)[0] : 'Someone'
-  const greeting = recipientName ? `${recipientName.trim()},` : 'Hello,'
-  let body = `${greeting}\n\n`
-  body += `${senderFirstName} shared a film with you.`
-  if (inviteOrdinal) body += ` You are #${ordinalSuffix(inviteOrdinal)} to be invited.`
+  const receiverFirst = recipientName ? recipientName.trim().split(/\s+/)[0] : ''
+  const greeting = receiverFirst ? `Dear ${receiverFirst},` : 'Hello,'
+  const origin = siteOriginFromInviteUrl(inviteUrl)
+  const unsubUrl = `${origin}/unsubscribe`
+
+  let body = `deepcast\n\nA letter of invitation\n\n`
+  body += `${greeting}\n\n`
+  body += `${senderFirstName} has thoughtfully curated and shared a short film with you.`
+  if (inviteOrdinal) {
+    body += ` You are the ${ordinalSuffix(inviteOrdinal)} person to be invited to this private online screening.`
+  }
   body += '\n\n'
   if (personalNote && String(personalNote).trim()) {
-    body += `"${String(personalNote).trim()}"\n\n`
+    body += `${String(personalNote).trim()}\n\n`
   }
   if (filmTitle) body += `${filmTitle}\n`
   if (filmDescription && String(filmDescription).trim()) body += `${String(filmDescription).trim()}\n`
   if (filmTitle || filmDescription) body += '\n'
   body += `Open your invitation:\n${inviteUrl}\n\n`
-  body += `— ${senderName || 'Someone'}, via Deepcast\n`
+  body += `— ${senderName || 'Someone'}, via Deepcast\n\n`
+  body += `Unsubscribe from screening invitation emails:\n${unsubUrl}\n`
   return body
 }
 
@@ -1293,7 +1331,8 @@ function buildInviteEmailHtml(
   personalNote
 ) {
   const senderFirstName = senderName ? senderName.trim().split(/\s+/)[0] : 'Someone'
-  const greeting = recipientName ? `Dear ${escapeHtml(recipientName.trim())},` : 'Hello,'
+  const receiverFirst = recipientName ? recipientName.trim().split(/\s+/)[0] : ''
+  const greeting = receiverFirst ? `Dear ${escapeHtml(receiverFirst)},` : 'Hello,'
   const safe = {
     senderFirst: escapeHtml(senderFirstName),
     senderDisplay: escapeHtml(senderName || 'Someone'),
@@ -1303,12 +1342,14 @@ function buildInviteEmailHtml(
     inviteUrl: escapeHtml(inviteUrl),
   }
 
-  const intro = `${safe.senderFirst} shared a film with you.${
-    inviteOrdinal ? ` You are #${ordinalSuffix(inviteOrdinal)} to be invited.` : ''
+  const intro = `${safe.senderFirst} has thoughtfully curated and shared a short film with you.${
+    inviteOrdinal
+      ? ` You are the ${ordinalSuffix(inviteOrdinal)} person to be invited to this private online screening.`
+      : ''
   }`
 
   const noteBlock = safe.personalNote
-    ? `<p style="margin:0 0 16px;color:#555;font-style:italic;">&ldquo;${safe.personalNote}&rdquo;</p>`
+    ? `<p style="margin:0 0 16px;color:#333;">${safe.personalNote.replace(/\n/g, '<br/>')}</p>`
     : ''
   const titleBlock = safe.filmTitle
     ? `<p style="margin:0 0 8px;font-weight:500;">${safe.filmTitle}</p>`
@@ -1317,6 +1358,10 @@ function buildInviteEmailHtml(
     ? `<p style="margin:0 0 16px;color:#666;font-size:14px;">${safe.filmDescription}</p>`
     : ''
 
+  const origin = siteOriginFromInviteUrl(inviteUrl)
+  const unsubUrl = `${origin}/unsubscribe`
+  const safeUnsub = escapeHtml(unsubUrl)
+
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#222;background-color:#f5f5f0;">
@@ -1324,6 +1369,8 @@ function buildInviteEmailHtml(
 <tr><td align="center">
 <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:480px;background:#fff;padding:32px 28px;">
 <tr><td>
+<p style="margin:0 0 20px;text-align:center;font-family:Helvetica,Arial,sans-serif;font-size:22px;font-weight:400;letter-spacing:-0.02em;color:#1a1a1a;">deepcast</p>
+<p style="margin:0 0 24px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#666;">A letter of invitation</p>
 <p style="margin:0 0 20px;font-size:15px;">${greeting}</p>
 <p style="margin:0 0 16px;">${intro}</p>
 ${noteBlock}
@@ -1332,6 +1379,9 @@ ${descBlock}
 <p style="margin:24px 0;"><a href="${safe.inviteUrl}" style="color:#5C4F3A;font-weight:500;">Open your invitation</a></p>
 <p style="margin:0 0 16px;font-size:13px;color:#888;">If the link above doesn't work, paste this URL into your browser:<br/>${safe.inviteUrl}</p>
 <p style="margin:24px 0 0;font-size:13px;color:#888;">— ${safe.senderDisplay}, via Deepcast</p>
+<p style="margin:28px 0 0;padding-top:20px;border-top:1px solid #eee;font-size:12px;color:#999;line-height:1.5;">
+  <a href="${safeUnsub}" style="color:#666;text-decoration:underline;">Unsubscribe</a> from screening invitation emails.
+</p>
 </td></tr>
 </table>
 </td></tr>
