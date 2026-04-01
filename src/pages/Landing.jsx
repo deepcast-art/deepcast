@@ -295,6 +295,7 @@ export default function Landing() {
                   nodesData={graphLayout.nodesData}
                   linksData={graphLayout.linksData}
                   viewBoxH={graphLayout.viewBoxH}
+                  ringRadii={graphLayout.ringRadii}
                   rootNode={graphLayout.rootNode}
                   defaultActiveNodes={graphLayout.defaultActiveNodes}
                   defaultActiveLinks={graphLayout.defaultActiveLinks}

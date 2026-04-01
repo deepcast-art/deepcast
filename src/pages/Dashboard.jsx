@@ -46,6 +46,7 @@ export default function Dashboard() {
   const [teamInvites, setTeamInvites] = useState([])
   const [teamMembers, setTeamMembers] = useState([])
   const [teamRemoveBusyId, setTeamRemoveBusyId] = useState(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const [viewerSentInvites, setViewerSentInvites] = useState([])
   const [viewerFilmId, setViewerFilmId] = useState(null)
@@ -452,9 +453,30 @@ export default function Dashboard() {
 
     return (
       <div className="relative z-10 flex min-h-screen w-full flex-col overflow-hidden bg-bg-page text-warm lg:flex-row">
-        <aside className="flex w-full min-h-0 shrink-0 flex-col gap-6 overflow-y-auto border-b border-faint/30 bg-ink/80 px-6 py-10 panel-scroll lg:max-h-[100dvh] lg:w-[22%] lg:min-h-screen lg:border-b-0 lg:border-r">
+        {/* Mobile top bar */}
+        <div className="flex items-center justify-between border-b border-faint/30 bg-ink/80 px-4 py-3 lg:hidden">
+          <Link to="/" className="inline-block">
+            <DeepcastLogo variant="wordmark" className="!text-2xl text-warm" />
+          </Link>
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="flex h-9 w-9 items-center justify-center text-warm/70"
+            aria-label="Toggle menu"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+              {sidebarOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h16" />
+              )}
+            </svg>
+          </button>
+        </div>
+
+        <aside className={`${sidebarOpen ? 'flex' : 'hidden'} lg:flex w-full min-h-0 shrink-0 flex-col gap-6 overflow-y-auto border-b border-faint/30 bg-ink/80 px-6 py-10 panel-scroll lg:max-h-[100dvh] lg:w-[22%] lg:min-h-screen lg:border-b-0 lg:border-r`}>
           <div className="shrink-0 animate-fade-in">
-            <Link to="/" className="inline-block">
+            <Link to="/" className="hidden lg:inline-block">
               <DeepcastLogo variant="wordmark" className="!text-4xl sm:!text-5xl text-warm" />
             </Link>
             <h2 className="font-serif-v3 mt-3 text-xl text-warm">{profile.name}</h2>
@@ -517,6 +539,7 @@ export default function Dashboard() {
                     nodesData={graphLayout.nodesData}
                     linksData={graphLayout.linksData}
                     viewBoxH={graphLayout.viewBoxH}
+                    ringRadii={graphLayout.ringRadii}
                     rootNode={graphLayout.rootNode}
                     defaultActiveNodes={graphLayout.defaultActiveNodes}
                     defaultActiveLinks={graphLayout.defaultActiveLinks}
@@ -601,13 +624,15 @@ export default function Dashboard() {
                       <br />
                       Come back to watch your impact spread.
                       <br />
-                      The expanded map lives in the left panel.
+                      <span className="hidden lg:inline">The expanded map lives in the left panel.</span>
+                      <span className="lg:hidden">Open the menu to see your full impact map.</span>
                     </>
                   ) : (
                     <>
                       You’re connected to <span className="italic">{viewerFilmTitle}</span>.
                       <br />
-                      Your live invitation map is in the left panel — scroll and drag to explore.
+                      <span className="hidden lg:inline">Your live invitation map is in the left panel — scroll and drag to explore.</span>
+                      <span className="lg:hidden">Open the menu to see your live invitation map.</span>
                       <br />
                       When you send invitations, the map and list below update together.
                     </>
@@ -623,7 +648,8 @@ export default function Dashboard() {
                   </span>
                 </div>
                 <p className="mb-10 font-sans text-[10px] uppercase tracking-widest text-warm/35">
-                  Full network map → left sidebar
+                  <span className="hidden lg:inline">Full network map → left sidebar</span>
+                  <span className="lg:hidden">Full network map → menu</span>
                 </p>
               </section>
 
@@ -698,7 +724,7 @@ export default function Dashboard() {
         </main>
 
         {isShareModalOpen && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-ink/90 p-8 backdrop-blur-lg">
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-ink/90 p-4 backdrop-blur-lg sm:p-8">
             <div
               className="relative flex w-full max-w-2xl flex-col items-center overflow-hidden p-10 shadow-2xl sm:p-12"
               style={{
@@ -746,14 +772,14 @@ export default function Dashboard() {
                     placeholder="First name"
                     value={modalFirst}
                     onChange={(e) => setModalFirst(e.target.value)}
-                    className="mx-2 w-28 border-b border-[#6b5d4a]/40 bg-transparent text-center text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none"
+                    className="mx-1 w-24 border-b border-[#6b5d4a]/40 bg-transparent text-center text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none sm:mx-2 sm:w-28"
                   />
                   <input
                     type="text"
                     placeholder="Last name"
                     value={modalLast}
                     onChange={(e) => setModalLast(e.target.value)}
-                    className="mx-2 w-28 border-b border-[#6b5d4a]/40 bg-transparent text-center text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none"
+                    className="mx-1 w-24 border-b border-[#6b5d4a]/40 bg-transparent text-center text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none sm:mx-2 sm:w-28"
                   />
                   <textarea
                     rows={3}
@@ -789,9 +815,30 @@ export default function Dashboard() {
   /* ===================== CREATOR / TEAM V3 DIPTYCH ===================== */
   return (
     <div className="relative z-10 flex min-h-screen w-full flex-col overflow-hidden bg-bg-page text-warm lg:flex-row">
-      <aside className="flex w-full shrink-0 flex-col gap-6 overflow-y-auto border-b border-faint/30 bg-ink/80 px-6 py-10 panel-scroll lg:w-[22%] lg:min-h-screen lg:border-b-0 lg:border-r">
+      {/* Mobile top bar */}
+      <div className="flex items-center justify-between border-b border-faint/30 bg-ink/80 px-4 py-3 lg:hidden">
+        <Link to="/" className="inline-block opacity-90 hover:opacity-100">
+          <DeepcastLogo variant="wordmark" className="h-5 w-auto text-warm" />
+        </Link>
+        <button
+          type="button"
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="flex h-9 w-9 items-center justify-center text-warm/70"
+          aria-label="Toggle menu"
+        >
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+            {sidebarOpen ? (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h16" />
+            )}
+          </svg>
+        </button>
+      </div>
+
+      <aside className={`${sidebarOpen ? 'flex' : 'hidden'} lg:flex w-full shrink-0 flex-col gap-6 overflow-y-auto border-b border-faint/30 bg-ink/80 px-6 py-10 panel-scroll lg:w-[22%] lg:min-h-screen lg:border-b-0 lg:border-r`}>
         <div className="animate-fade-in">
-          <Link to="/" className="inline-block opacity-90 hover:opacity-100">
+          <Link to="/" className="hidden opacity-90 hover:opacity-100 lg:inline-block">
             <DeepcastLogo variant="wordmark" className="h-7 w-auto text-warm" />
           </Link>
           <h2 className="font-serif-v3 mt-4 text-xl text-warm">{profile.name}</h2>
@@ -847,20 +894,20 @@ export default function Dashboard() {
               If they already have a <strong>viewer</strong> account, we upgrade them to teammate,
               grant unlimited invites for your films, and email them a short sign-in reminder.
             </p>
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+            <div className="mb-4 flex flex-col gap-3">
               <input
                 type="email"
                 placeholder="Teammate email"
                 value={teamEmail}
                 onChange={(e) => setTeamEmail(e.target.value)}
-                className="flex-1 rounded-none border border-border bg-bg-page px-3 py-2 text-sm text-text"
+                className="w-full rounded-none border border-border bg-bg-page px-3 py-2.5 text-sm text-text sm:py-2"
               />
               <input
                 type="text"
                 placeholder="Name (optional, for new invites only)"
                 value={teamName}
                 onChange={(e) => setTeamName(e.target.value)}
-                className="flex-1 rounded-none border border-border bg-bg-page px-3 py-2 text-sm text-text"
+                className="w-full rounded-none border border-border bg-bg-page px-3 py-2.5 text-sm text-text sm:py-2"
               />
               <button
                 type="button"

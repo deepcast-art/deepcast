@@ -272,12 +272,12 @@ export default function NetworkMap() {
   if (!profile) return null
 
   return (
-    <div className="min-h-screen px-6 py-12">
+    <div className="min-h-screen px-4 py-8 sm:px-6 sm:py-12">
       <div className="max-w-3xl mx-auto">
-        <div className="flex items-start justify-between gap-6 mb-12 animate-fade-in">
+        <div className="flex flex-col gap-4 mb-8 animate-fade-in sm:mb-12 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
           <div>
             <Link to="/" className="inline-flex hover:opacity-80 transition-opacity">
-              <DeepcastLogo variant="ink" className="h-8" />
+              <DeepcastLogo variant="ink" className="h-7 sm:h-8" />
             </Link>
             <Link
               to="/dashboard"
@@ -299,14 +299,14 @@ export default function NetworkMap() {
               </svg>
               Back to dashboard
             </Link>
-            <h1 className="text-2xl font-display mt-3">Network Map</h1>
+            <h1 className="text-xl font-display mt-3 sm:text-2xl">Network Map</h1>
             <p className="text-text-muted text-sm mt-1">
               See how each film travels through the network.
             </p>
           </div>
           <Link
             to="/profile"
-            className="shrink-0 text-text-muted text-xs uppercase tracking-wider hover:text-text transition-colors pt-1"
+            className="shrink-0 text-text-muted text-xs uppercase tracking-wider hover:text-text transition-colors"
           >
             Profile
           </Link>
@@ -322,10 +322,10 @@ export default function NetworkMap() {
           </div>
         ) : (
           <div className="space-y-8 animate-fade-in animate-delay-200">
-            <div className="bg-bg-card border border-border rounded-none p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-lg font-display">{selectedFilmTitle}</h2>
+            <div className="bg-bg-card border border-border rounded-none p-4 sm:p-6">
+              <div className="flex flex-col gap-2 mb-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <h2 className="text-base font-display truncate sm:text-lg">{selectedFilmTitle}</h2>
                   <p className="text-text-muted text-xs mt-1">
                     {filteredInvites.length} invite{filteredInvites.length !== 1 ? 's' : ''}
                   </p>
@@ -380,13 +380,14 @@ export default function NetworkMap() {
                         nodesData={graphLayout.nodesData}
                         linksData={graphLayout.linksData}
                         viewBoxH={graphLayout.viewBoxH}
+                        ringRadii={graphLayout.ringRadii}
                         rootNode={graphLayout.rootNode}
                         defaultActiveNodes={graphLayout.defaultActiveNodes}
                         defaultActiveLinks={graphLayout.defaultActiveLinks}
                       />
                     </div>
                     <p className="border-t border-faint/30 px-4 py-3 text-center font-sans text-[10px] uppercase tracking-widest text-warm/35">
-                      Scroll and drag to explore. Amber highlights the active invitation path.
+                      Scroll to zoom, drag to pan. Pinch on mobile. Amber highlights the active path.
                     </p>
                   </>
                 )}
@@ -396,7 +397,7 @@ export default function NetworkMap() {
                 {filteredInvites.map((invite) => (
                   <div
                     key={invite.id}
-                    className="flex items-center gap-2 text-xs text-text-muted"
+                    className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-muted"
                   >
                     <span className="text-text">
                       {invite.sender_name
@@ -406,30 +407,32 @@ export default function NetworkMap() {
                         : 'Anonymous'}
                     </span>
                     <span>&rarr;</span>
-                    <span>{invite.recipient_name
-                      ? invite.recipient_name.trim().split(/\s+/)[0]
-                      : invite.recipient_email}</span>
-                      <button
-                        onClick={() => handleResendInvite(invite.id)}
-                        className="text-text-muted text-[10px] uppercase tracking-wider hover:text-text transition-colors"
-                        disabled={resendStatusByInvite[invite.id] === 'sending'}
-                      >
-                        {resendStatusByInvite[invite.id] === 'sending'
-                          ? 'Resending...'
-                          : 'Resend'}
-                      </button>
-                      {resendStatusByInvite[invite.id] === 'sent' && (
-                        <span className="text-success text-[10px] uppercase tracking-wider">
-                          Sent
-                        </span>
-                      )}
-                      {resendStatusByInvite[invite.id] === 'error' && (
-                        <span className="text-error text-[10px] uppercase tracking-wider">
-                          Failed
-                        </span>
-                      )}
+                    <span className="min-w-0 truncate max-w-[10rem] sm:max-w-none">
+                      {invite.recipient_name
+                        ? invite.recipient_name.trim().split(/\s+/)[0]
+                        : invite.recipient_email}
+                    </span>
+                    <button
+                      onClick={() => handleResendInvite(invite.id)}
+                      className="text-text-muted text-[10px] uppercase tracking-wider hover:text-text transition-colors"
+                      disabled={resendStatusByInvite[invite.id] === 'sending'}
+                    >
+                      {resendStatusByInvite[invite.id] === 'sending'
+                        ? 'Resending...'
+                        : 'Resend'}
+                    </button>
+                    {resendStatusByInvite[invite.id] === 'sent' && (
+                      <span className="text-success text-[10px] uppercase tracking-wider">
+                        Sent
+                      </span>
+                    )}
+                    {resendStatusByInvite[invite.id] === 'error' && (
+                      <span className="text-error text-[10px] uppercase tracking-wider">
+                        Failed
+                      </span>
+                    )}
                     <span
-                      className={`ml-auto uppercase tracking-wider ${
+                      className={`ml-auto shrink-0 uppercase tracking-wider ${
                         invite.status === 'watched' || invite.status === 'signed_up'
                           ? 'text-success'
                           : invite.status === 'opened'

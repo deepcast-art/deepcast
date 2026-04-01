@@ -121,6 +121,8 @@ body {
   font-weight: 300;
   line-height: 1.7;
   min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Film grain overlay — matches Deepcast-website-main tactile treatment */

@@ -29,18 +29,13 @@ if (!resendApiKey) {
 }
 const resend = new Resend(resendApiKey)
 
-const resendFromEnv = process.env.RESEND_FROM_EMAIL || ''
-if (!resendFromEnv.trim()) {
-  console.warn(
-    '[email] RESEND_FROM_EMAIL is not set. Several routes fall back to onboarding@resend.dev; Resend only delivers those to your signup email and explicitly allowed test addresses. Other Gmail addresses will usually not receive mail even when the API returns success — set RESEND_FROM_EMAIL to an address on a verified domain.'
-  )
-} else if (
-  resendFromEnv.includes('onboarding@resend.dev') ||
-  resendFromEnv.includes('@resend.dev')
-) {
-  console.warn(
-    '[email] RESEND_FROM_EMAIL uses resend.dev — delivery is restricted to your Resend account / allowed test recipients. Use a verified custom domain (e.g. invites@yourdomain.com) so any recipient can receive mail.'
-  )
+{
+  const f = process.env.RESEND_FROM_EMAIL || ''
+  if (!f.trim()) {
+    console.warn('[email] RESEND_FROM_EMAIL is not set. Using fallback: invites@deepcast.art. Set it to an address on a verified Resend domain.')
+  } else if (/@resend\.dev/i.test(f)) {
+    console.warn('[email] RESEND_FROM_EMAIL uses resend.dev — delivery is restricted to your Resend account. Use a verified custom domain so any recipient can receive mail.')
+  }
 }
 
 // Supabase admin client
@@ -182,11 +177,21 @@ function withReplyTo(payload, replyEmail) {
   return { ...payload, reply_to: trimmed }
 }
 
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'Deepcast <invites@deepcast.art>'
+
 async function sendInviteEmailResend(payload) {
   if (!resendApiKey) {
     throw new Error('RESEND_API_KEY is not set — cannot send email')
   }
-  const { data, error } = await resend.emails.send(payload)
+  const enriched = {
+    ...payload,
+    from: payload.from || FROM_EMAIL,
+    headers: {
+      ...payload.headers,
+      'X-Entity-Ref-ID': `dc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    },
+  }
+  const { data, error } = await resend.emails.send(enriched)
   if (error) {
     const msg = formatResendError(error)
     const to = Array.isArray(payload?.to)
@@ -365,7 +370,6 @@ app.post('/api/invites/send', async (req, res) => {
     const recipientFirstName = recipientName ? recipientName.trim().split(/\s+/)[0] : null
 
     try {
-      const fromEmail = process.env.RESEND_FROM_EMAIL || 'Deepcast <onboarding@resend.dev>'
       const htmlBody = buildInviteEmailHtml(
         displaySender,
         recipientFirstName,
@@ -391,7 +395,6 @@ app.post('/api/invites/send', async (req, res) => {
       await sendInviteEmailResend(
         withReplyTo(
           {
-            from: fromEmail,
             to: recipientEmailNorm,
             subject: formatInviteEmailSubject(displaySender),
             html: htmlBody,
@@ -486,7 +489,6 @@ app.post('/api/invites/resend-last', async (req, res) => {
       ? invite.recipient_name.trim().split(/\s+/)[0]
       : null
 
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'Deepcast <hello@deepcast.com>'
     try {
       const htmlBody = buildInviteEmailHtml(
         displaySender,
@@ -513,7 +515,6 @@ app.post('/api/invites/resend-last', async (req, res) => {
       await sendInviteEmailResend(
         withReplyTo(
           {
-            from: fromEmail,
             to: invite.recipient_email,
             subject: formatInviteEmailSubject(displaySender),
             html: htmlBody,
@@ -581,7 +582,6 @@ app.post('/api/invites/resend', async (req, res) => {
       ? invite.recipient_name.trim().split(/\s+/)[0]
       : null
 
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'Deepcast <hello@deepcast.com>'
     try {
       const htmlBody = buildInviteEmailHtml(
         displaySender,
@@ -608,7 +608,6 @@ app.post('/api/invites/resend', async (req, res) => {
       await sendInviteEmailResend(
         withReplyTo(
           {
-            from: fromEmail,
             to: invite.recipient_email,
             subject: formatInviteEmailSubject(displaySender),
             html: htmlBody,
@@ -633,81 +632,57 @@ app.post('/api/invites/resend', async (req, res) => {
 // ============ TEAM MEMBER INVITES (creators → teammates, unlimited film invites) ============
 
 function buildTeamInviteEmailHtml(creatorName, joinUrl) {
-  const safeCreator = escapeHtml(creatorName || 'Your filmmaker')
-  const safeUrl = escapeHtml(joinUrl)
-  return `
-<!DOCTYPE html>
+  const c = escapeHtml(creatorName || 'Your filmmaker')
+  const u = escapeHtml(joinUrl)
+  return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background-color:#080c18;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="padding:36px 16px;">
-    <tr><td align="center">
-      <table width="100%" style="max-width:480px;background-color:#E1DED6;border-radius:12px;padding:40px 28px;">
-        <tr><td>
-          <p style="margin:0 0 12px;color:#2C2C2C;font-size:10px;letter-spacing:0.35em;text-transform:uppercase;text-align:center;">Deepcast · team</p>
-          <p style="margin:0 0 24px;color:#2C2C2C;font-size:18px;line-height:1.5;text-align:center;font-style:italic;">
-            ${safeCreator} invited you to join their team on Deepcast.
-          </p>
-          <p style="margin:0 0 28px;color:#6E6E6E;font-size:14px;line-height:1.65;text-align:center;">
-            Create your password to access the dashboard and send screening invitations on their behalf.
-          </p>
-          <table align="center" cellpadding="0" cellspacing="0"><tr><td style="background-color:#B5A680;">
-            <a href="${safeUrl}" style="display:inline-block;padding:14px 32px;color:#FFFFFF;font-size:11px;font-weight:500;letter-spacing:0.15em;text-transform:uppercase;text-decoration:none;">
-              Complete registration
-            </a>
-          </td></tr></table>
-          <p style="margin:28px 0 0;color:#8A8880;font-size:11px;line-height:1.6;text-align:center;">
-            If the button doesn&rsquo;t work, paste this link:<br/>
-            <a href="${safeUrl}" style="color:#5C4F3A;word-break:break-all;">${safeUrl}</a>
-          </p>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
+<body style="margin:0;padding:0;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#222;background-color:#f5f5f0;">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="padding:32px 16px;">
+<tr><td align="center">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:480px;background:#fff;padding:32px 28px;">
+<tr><td>
+<p style="margin:0 0 16px;">Hi,</p>
+<p style="margin:0 0 16px;">${c} invited you to join their team on Deepcast. Create your password to access the dashboard and send screening invitations on their behalf.</p>
+<p style="margin:24px 0;"><a href="${u}" style="color:#5C4F3A;font-weight:500;">Complete registration</a></p>
+<p style="margin:0 0 16px;font-size:13px;color:#888;">Or paste this link:<br/>${u}</p>
+<p style="margin:24px 0 0;font-size:13px;color:#888;">— Deepcast</p>
+</td></tr>
+</table>
+</td></tr>
+</table>
 </body></html>`
 }
 
 function buildTeamInviteEmailPlainText(creatorName, joinUrl) {
   const n = creatorName || 'Your filmmaker'
-  return `${n} invited you to join their Deepcast team.\n\nCreate your password here:\n${joinUrl}\n\n—\ndeepcast\n`
+  return `Hi,\n\n${n} invited you to join their team on Deepcast. Create your password to access the dashboard and send screening invitations on their behalf.\n\nComplete registration:\n${joinUrl}\n\n— Deepcast\n`
 }
 
 function buildTeamAddedEmailHtml(creatorName, loginUrl) {
-  const safeCreator = escapeHtml(creatorName || 'Your filmmaker')
-  const safeUrl = escapeHtml(loginUrl)
-  return `
-<!DOCTYPE html>
+  const c = escapeHtml(creatorName || 'Your filmmaker')
+  const u = escapeHtml(loginUrl)
+  return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background-color:#080c18;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="padding:36px 16px;">
-    <tr><td align="center">
-      <table width="100%" style="max-width:480px;background-color:#E1DED6;border-radius:12px;padding:40px 28px;">
-        <tr><td>
-          <p style="margin:0 0 12px;color:#2C2C2C;font-size:10px;letter-spacing:0.35em;text-transform:uppercase;text-align:center;">Deepcast · team</p>
-          <p style="margin:0 0 24px;color:#2C2C2C;font-size:18px;line-height:1.5;text-align:center;font-style:italic;">
-            ${safeCreator} added you to their team on Deepcast.
-          </p>
-          <p style="margin:0 0 28px;color:#6E6E6E;font-size:14px;line-height:1.65;text-align:center;">
-            Sign in with your existing password. You now have unlimited screening invites for their films.
-          </p>
-          <table align="center" cellpadding="0" cellspacing="0"><tr><td style="background-color:#B5A680;">
-            <a href="${safeUrl}" style="display:inline-block;padding:14px 32px;color:#FFFFFF;font-size:11px;font-weight:500;letter-spacing:0.15em;text-transform:uppercase;text-decoration:none;">
-              Sign in
-            </a>
-          </td></tr></table>
-          <p style="margin:28px 0 0;color:#8A8880;font-size:11px;line-height:1.6;text-align:center;">
-            If the button doesn&rsquo;t work, paste this link:<br/>
-            <a href="${safeUrl}" style="color:#5C4F3A;word-break:break-all;">${safeUrl}</a>
-          </p>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
+<body style="margin:0;padding:0;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#222;background-color:#f5f5f0;">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="padding:32px 16px;">
+<tr><td align="center">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:480px;background:#fff;padding:32px 28px;">
+<tr><td>
+<p style="margin:0 0 16px;">Hi,</p>
+<p style="margin:0 0 16px;">${c} added you to their team on Deepcast. You now have unlimited screening invites for their films. Sign in with your existing password.</p>
+<p style="margin:24px 0;"><a href="${u}" style="color:#5C4F3A;font-weight:500;">Sign in</a></p>
+<p style="margin:0 0 16px;font-size:13px;color:#888;">Or paste this link:<br/>${u}</p>
+<p style="margin:24px 0 0;font-size:13px;color:#888;">— Deepcast</p>
+</td></tr>
+</table>
+</td></tr>
+</table>
 </body></html>`
 }
 
 function buildTeamAddedEmailPlainText(creatorName, loginUrl) {
   const n = creatorName || 'Your filmmaker'
-  return `${n} added you to their Deepcast team.\n\nSign in with your existing password:\n${loginUrl}\n\n—\ndeepcast\n`
+  return `Hi,\n\n${n} added you to their Deepcast team. You now have unlimited screening invites for their films. Sign in with your existing password.\n\nSign in:\n${loginUrl}\n\n— Deepcast\n`
 }
 
 app.post('/api/team/send-invite', async (req, res) => {
@@ -736,11 +711,22 @@ app.post('/api/team/send-invite', async (req, res) => {
       return res.status(400).json({ error: 'You cannot invite your own email' })
     }
 
-    const { data: existingProfile } = await supabase
-      .from('users')
-      .select('id, role, team_creator_id')
-      .eq('email', emailNorm)
-      .maybeSingle()
+    let existingProfile = null
+    {
+      const { data: directRow } = await supabase
+        .from('users')
+        .select('id, role, team_creator_id')
+        .eq('email', emailNorm)
+        .maybeSingle()
+      existingProfile = directRow || null
+
+      if (!existingProfile) {
+        const { data: rpcRows } = await supabase.rpc('get_user_profile_by_email', {
+          p_email: emailNorm,
+        })
+        existingProfile = rpcRows?.[0] || null
+      }
+    }
 
     if (existingProfile) {
       if (existingProfile.role === 'team_member' && existingProfile.team_creator_id === creatorId) {
@@ -804,11 +790,9 @@ app.post('/api/team/send-invite', async (req, res) => {
         const loginUrl = `${baseUrl}/login`
 
         try {
-          const fromEmail = process.env.RESEND_FROM_EMAIL || 'Deepcast <onboarding@resend.dev>'
           await sendInviteEmailResend(
             withReplyTo(
               {
-                from: fromEmail,
                 to: emailNorm,
                 subject: `${creator.name || 'Your filmmaker'} added you to their Deepcast team`,
                 html: buildTeamAddedEmailHtml(creator.name, loginUrl),
@@ -885,11 +869,9 @@ app.post('/api/team/send-invite', async (req, res) => {
     const joinUrl = `${baseUrl}/team/join?token=${encodeURIComponent(inviteToken)}`
 
     try {
-      const fromEmail = process.env.RESEND_FROM_EMAIL || 'Deepcast <onboarding@resend.dev>'
       await sendInviteEmailResend(
         withReplyTo(
           {
-            from: fromEmail,
             to: emailNorm,
             subject: `${creator.name || 'Your filmmaker'} invited you to the Deepcast team`,
             html: buildTeamInviteEmailHtml(creator.name, joinUrl),
@@ -1271,7 +1253,6 @@ function formatInviteEmailSubject(senderName) {
   return `${display} has shared a film with you`
 }
 
-/** Plain-text alternative — improves deliverability (Gmail, corporate filters). */
 function buildInviteEmailPlainText(
   senderName,
   recipientName,
@@ -1284,31 +1265,19 @@ function buildInviteEmailPlainText(
   personalNote
 ) {
   const senderFirstName = senderName ? senderName.trim().split(/\s+/)[0] : 'Someone'
-  const greetingLine = recipientName ? `${recipientName.trim()},` : 'Hello,'
-  let body = `${greetingLine}\n\n`
-  body += `${senderFirstName} has thoughtfully curated and shared a short film with you.`
-  if (inviteOrdinal) {
-    body += ` You are the ${ordinalSuffix(inviteOrdinal)} person to be invited to this private online screening.`
-  }
+  const greeting = recipientName ? `${recipientName.trim()},` : 'Hello,'
+  let body = `${greeting}\n\n`
+  body += `${senderFirstName} shared a film with you.`
+  if (inviteOrdinal) body += ` You are #${ordinalSuffix(inviteOrdinal)} to be invited.`
   body += '\n\n'
   if (personalNote && String(personalNote).trim()) {
-    body += `Here's ${senderFirstName}'s message to you:\n\n${String(personalNote).trim()}\n\n`
+    body += `"${String(personalNote).trim()}"\n\n`
   }
-  const thumbForEmail = ensureHttpsUrl(filmThumbnailUrl)
-  if (thumbForEmail) {
-    body += `Film: ${filmTitle || 'Screening'}\n`
-    body += `Thumbnail: ${thumbForEmail}\n\n`
-  }
-  if (filmDescription && String(filmDescription).trim()) {
-    body += `${String(filmDescription).trim()}\n\n`
-  }
-  body += 'Open your invitation:\n'
-  body += `${inviteUrl}\n\n`
-  body += "If the button doesn't work, use this link:\n"
-  body += `${inviteUrl}\n\n`
-  body += `With intention,\n${senderName || 'Someone'}\n\n`
-  body += `You were invited by ${senderName || 'Someone'}. This film is not publicly available. It travels only through people.\n`
-  body += '\n—\ndeepcast\n'
+  if (filmTitle) body += `${filmTitle}\n`
+  if (filmDescription && String(filmDescription).trim()) body += `${String(filmDescription).trim()}\n`
+  if (filmTitle || filmDescription) body += '\n'
+  body += `Open your invitation:\n${inviteUrl}\n\n`
+  body += `— ${senderName || 'Someone'}, via Deepcast\n`
   return body
 }
 
@@ -1323,191 +1292,51 @@ function buildInviteEmailHtml(
   inviteOrdinal,
   personalNote
 ) {
-  /* Brand palette — invite letter + CTA (matches in-app invite + design refs) */
-  const C = {
-    pageBg: '#080c18',
-    cardBg: '#E1DED6',
-    cardBgAlt: '#E5E2D9',
-    text: '#2C2C2C',
-    textMuted: '#6E6E6E',
-    textSoft: '#8A8880',
-    rule: '#B8B5AD',
-    btnBg: '#B5A680',
-    btnText: '#FFFFFF',
-    link: '#5C4F3A',
-  }
-
-  const fontSans =
-    "'Helvetica Neue', Helvetica, Arial, 'Segoe UI', sans-serif"
-  const fontSerifItalic =
-    "Georgia, 'Times New Roman', Times, serif"
-
-  const thumbForEmail = ensureHttpsUrl(filmThumbnailUrl)
   const senderFirstName = senderName ? senderName.trim().split(/\s+/)[0] : 'Someone'
-  const greetingName = recipientName ? recipientName.trim() : ''
+  const greeting = recipientName ? `Dear ${escapeHtml(recipientName.trim())},` : 'Hello,'
   const safe = {
     senderFirst: escapeHtml(senderFirstName),
-    greeting: escapeHtml(greetingName),
+    senderDisplay: escapeHtml(senderName || 'Someone'),
     filmTitle: escapeHtml(filmTitle || ''),
     filmDescription: escapeHtml(filmDescription || ''),
-    personalNote: personalNote ? escapeHtml(personalNote) : '',
+    personalNote: personalNote ? escapeHtml(String(personalNote).trim()) : '',
     inviteUrl: escapeHtml(inviteUrl),
-    senderDisplay: escapeHtml(senderName || 'Someone'),
-    thumbUrl: thumbForEmail ? escapeHtml(thumbForEmail) : '',
   }
 
-  const introLine = `${safe.senderFirst} has thoughtfully curated and shared a short film with you.${
-    inviteOrdinal
-      ? ` You are the ${ordinalSuffix(inviteOrdinal)} person to be invited to this private online screening.`
-      : ''
+  const intro = `${safe.senderFirst} shared a film with you.${
+    inviteOrdinal ? ` You are #${ordinalSuffix(inviteOrdinal)} to be invited.` : ''
   }`
 
-  const dearLine = greetingName
-    ? `Dear ${safe.greeting},`
-    : 'Hello,'
-
-  const personalBlock =
-    personalNote && safe.personalNote
-      ? `
-          <tr>
-            <td align="center" style="padding: 0 28px 28px;">
-              <p style="margin: 0; color: ${C.textMuted}; font-family: ${fontSerifItalic}; font-size: 16px; font-style: italic; line-height: 1.75; text-align: center; max-width: 420px;">
-                ${safe.personalNote}
-              </p>
-            </td>
-          </tr>`
-      : ''
-
-  const thumbBlock = thumbForEmail
-    ? `
-          <tr>
-            <td align="center" style="padding: 0 28px 24px;">
-              <img src="${safe.thumbUrl}" alt="${safe.filmTitle}" width="400" border="0" decoding="async" style="width: 100%; max-width: 400px; height: auto; border: 0; border-radius: 8px; display: block; margin: 0 auto; outline: none; text-decoration: none;" />
-            </td>
-          </tr>`
+  const noteBlock = safe.personalNote
+    ? `<p style="margin:0 0 16px;color:#555;font-style:italic;">&ldquo;${safe.personalNote}&rdquo;</p>`
+    : ''
+  const titleBlock = safe.filmTitle
+    ? `<p style="margin:0 0 8px;font-weight:500;">${safe.filmTitle}</p>`
+    : ''
+  const descBlock = safe.filmDescription
+    ? `<p style="margin:0 0 16px;color:#666;font-size:14px;">${safe.filmDescription}</p>`
     : ''
 
-  const titleRow =
-    filmTitle && String(filmTitle).trim()
-      ? `
-          <tr>
-            <td align="center" style="padding: 0 28px 16px;">
-              <p style="margin: 0; color: ${C.text}; font-family: ${fontSerifItalic}; font-size: 17px; font-style: italic; line-height: 1.4; text-align: center;">
-                ${safe.filmTitle}
-              </p>
-            </td>
-          </tr>`
-      : ''
-
-  const descBlock = filmDescription
-    ? `
-          <tr>
-            <td align="center" style="padding: 0 28px 32px;">
-              <p style="margin: 0; color: ${C.textSoft}; font-family: ${fontSerifItalic}; font-size: 15px; font-style: italic; line-height: 1.65; text-align: center; max-width: 420px;">
-                ${safe.filmDescription}
-              </p>
-            </td>
-          </tr>`
-    : '<tr><td style="padding-bottom: 24px;"></td></tr>'
-
-  return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="margin: 0; padding: 0; background-color: ${C.pageBg}; font-family: ${fontSans}; font-weight: 400;">
-  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color: ${C.pageBg}; padding: 36px 16px;">
-    <tr>
-      <td align="center">
-        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width: 520px; background-color: ${C.cardBg}; border-radius: 12px; overflow: hidden;">
-          <tr>
-            <td style="padding: 44px 28px 20px; background-color: ${C.cardBg};">
-              <p style="margin: 0; color: ${C.text}; font-family: ${fontSans}; font-size: 10px; font-weight: 400; letter-spacing: 0.42em; line-height: 1.4; text-align: center; text-transform: uppercase;">
-                A letter of invitation
-              </p>
-            </td>
-          </tr>
-          <tr>
-            <td align="center" style="padding: 0 28px 28px;">
-              <table align="center" cellpadding="0" cellspacing="0" role="presentation" style="margin: 0 auto;">
-                <tr>
-                  <td width="1" height="28" bgcolor="${C.rule}" style="width: 1px; height: 28px; line-height: 28px; font-size: 0; background-color: ${C.rule};">&nbsp;</td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-          <tr>
-            <td align="center" style="padding: 0 28px 20px;">
-              <p style="margin: 0; color: ${C.text}; font-family: ${fontSerifItalic}; font-size: 18px; font-style: italic; line-height: 1.5; text-align: center;">
-                ${dearLine}
-              </p>
-            </td>
-          </tr>
-          <tr>
-            <td align="center" style="padding: 0 28px 28px;">
-              <p style="margin: 0; color: ${C.text}; font-family: ${fontSerifItalic}; font-size: 16px; font-style: italic; line-height: 1.75; text-align: center; max-width: 420px;">
-                ${introLine}
-              </p>
-            </td>
-          </tr>
-
-          ${personalBlock}
-
-          ${titleRow}
-
-          ${thumbBlock}
-
-          ${descBlock}
-
-          <tr>
-            <td align="center" style="padding: 0 28px 12px; background-color: ${C.cardBgAlt};">
-              <table cellpadding="0" cellspacing="0" role="presentation" style="margin: 0 auto;">
-                <tr>
-                  <td align="center" style="border-radius: 0;">
-                    <a href="${safe.inviteUrl}" style="display: inline-block; background-color: ${C.btnBg}; color: ${C.btnText}; font-family: ${fontSans}; font-size: 11px; font-weight: 500; letter-spacing: 0.18em; line-height: 1.2; padding: 16px 40px; text-align: center; text-decoration: none; text-transform: uppercase; border-radius: 0;">
-                      Open your invitation
-                    </a>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-          <tr>
-            <td align="center" style="padding: 24px 28px 40px; background-color: ${C.cardBgAlt};">
-              <p style="margin: 0; color: ${C.textMuted}; font-family: ${fontSerifItalic}; font-size: 16px; font-style: italic; line-height: 1.6; text-align: center;">
-                With intention,<br />
-                <span style="color: ${C.text};">${safe.senderDisplay}</span>
-              </p>
-            </td>
-          </tr>
-
-          <tr>
-            <td align="center" style="padding: 0 28px 32px; background-color: ${C.cardBg};">
-              <p style="margin: 0; color: ${C.textSoft}; font-family: ${fontSans}; font-size: 11px; line-height: 1.65; text-align: center; max-width: 400px;">
-                If the button doesn&rsquo;t work, copy this link:<br />
-                <a href="${safe.inviteUrl}" style="color: ${C.link}; text-decoration: underline; word-break: break-all;">${safe.inviteUrl}</a>
-              </p>
-            </td>
-          </tr>
-
-          <tr>
-            <td align="center" style="padding: 0 28px 36px;">
-              <p style="margin: 0; color: ${C.textSoft}; font-family: ${fontSans}; font-size: 11px; line-height: 1.65; text-align: center; max-width: 400px;">
-                You were invited by ${safe.senderDisplay}. This film is not publicly available. It travels only through people.
-              </p>
-              <p style="margin: 20px 0 0; color: ${C.text}; font-family: ${fontSans}; font-size: 10px; letter-spacing: 0.14em; text-transform: lowercase; text-align: center;">
-                deepcast
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#222;background-color:#f5f5f0;">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="padding:32px 16px;">
+<tr><td align="center">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:480px;background:#fff;padding:32px 28px;">
+<tr><td>
+<p style="margin:0 0 20px;font-size:15px;">${greeting}</p>
+<p style="margin:0 0 16px;">${intro}</p>
+${noteBlock}
+${titleBlock}
+${descBlock}
+<p style="margin:24px 0;"><a href="${safe.inviteUrl}" style="color:#5C4F3A;font-weight:500;">Open your invitation</a></p>
+<p style="margin:0 0 16px;font-size:13px;color:#888;">If the link above doesn't work, paste this URL into your browser:<br/>${safe.inviteUrl}</p>
+<p style="margin:24px 0 0;font-size:13px;color:#888;">— ${safe.senderDisplay}, via Deepcast</p>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body></html>`
 }
 
 // ============ START SERVER ============

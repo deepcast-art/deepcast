@@ -3,7 +3,7 @@ import {
   useMemo,
   useRef,
   useCallback,
-  cloneElement,
+  useEffect,
 } from 'react'
 
 const GRAPH_COLORS = {
@@ -14,12 +14,10 @@ const GRAPH_COLORS = {
   faint: '#6a7aaa',
 }
 
-const VIEWBOX_W = 850
-const X_PAD = 100
-const Y_PAD = 60
+const VIEWBOX_SIZE = 850
 
 /* ------------------------------------------------------------------ */
-/*  LAYOUT — convert raw filmInvites into positioned nodes + links    */
+/*  LAYOUT — concentric rings: film center → creator/team → viewers   */
 /* ------------------------------------------------------------------ */
 
 function toFirstName(value, fallback = 'Invitee') {
@@ -36,7 +34,6 @@ function recipientKey(row) {
     : row.recipient_email || `recipient:${row.id}`
 }
 
-/** Graph node id for an invite row’s recipient (same as layout keys). */
 export function inviteRecipientKey(row) {
   if (!row) return ''
   return recipientKey(row)
@@ -51,22 +48,19 @@ function senderKey(row) {
 }
 
 /**
- * Build positioned node and link arrays from raw invite rows.
- * Returns `null` when there is no data to render.
+ * Build concentric-ring positioned nodes and links.
+ * Ring 0 = film (center), Ring 1 = creator + team, Ring 2+ = people shared with.
  */
 export function buildGraphLayout({
   filmInvites,
   filmTitle = 'Film',
   creatorName = '',
   viewerRecipientKey = null,
-  /** When set, path uses this invite row (e.g. token invite) if it matches the recipient. */
   focusInviteId = null,
   rootId = 'film-root',
   creatorNodeId = 'creator-root',
 }) {
   if (!filmInvites?.length) return null
-
-  /* --- build abstract graph --- */
 
   const nodeMap = new Map()
   const edges = []
@@ -75,7 +69,7 @@ export function buildGraphLayout({
     if (!nodeMap.has(id)) nodeMap.set(id, { id, label, type })
   }
 
-  ensure(rootId, toFirstName(filmTitle, 'Film'), 'film')
+  ensure(rootId, filmTitle?.trim() || 'Film', 'film')
   if (creatorName) {
     ensure(creatorNodeId, toFirstName(creatorName, 'Creator'), 'creator')
     edges.push({ source: rootId, target: creatorNodeId })
@@ -87,7 +81,11 @@ export function buildGraphLayout({
     const isViewer = viewerRecipientKey && rk === viewerRecipientKey
 
     ensure(sk, toFirstName(row.sender_name || row.sender_email, 'Member'))
-    ensure(rk, isViewer ? 'You' : toFirstName(row.recipient_name || row.recipient_email), isViewer ? 'viewer' : 'person')
+    ensure(
+      rk,
+      isViewer ? 'You' : toFirstName(row.recipient_name || row.recipient_email),
+      isViewer ? 'viewer' : 'person'
+    )
     edges.push({ source: sk, target: rk })
   })
 
@@ -100,10 +98,8 @@ export function buildGraphLayout({
     }
   }
 
-  /* attach orphan senders to film/creator root */
   const allTargets = new Set(edges.map((e) => e.target))
   const attachRoot = creatorName ? creatorNodeId : rootId
-  edges.forEach(() => {}) // no-op, iterate below
   const allSources = new Set(edges.map((e) => e.source))
   for (const s of allSources) {
     if (!allTargets.has(s) && s !== rootId && s !== creatorNodeId) {
@@ -111,8 +107,7 @@ export function buildGraphLayout({
     }
   }
 
-  /* --- BFS depth assignment --- */
-
+  /* BFS depth */
   const adj = new Map()
   edges.forEach((e) => {
     if (!adj.has(e.source)) adj.set(e.source, [])
@@ -131,8 +126,7 @@ export function buildGraphLayout({
     }
   }
 
-  /* --- group by depth & position --- */
-
+  /* Concentric ring positioning */
   const byDepth = new Map()
   for (const [id, d] of depth) {
     if (!byDepth.has(d)) byDepth.set(d, [])
@@ -140,38 +134,57 @@ export function buildGraphLayout({
   }
 
   const maxDepth = Math.max(...byDepth.keys(), 1)
-  const maxCount = Math.max(...[...byDepth.values()].map((a) => a.length))
-  const viewBoxH = Math.max(540, maxCount * 55 + 2 * Y_PAD)
+  const cx = VIEWBOX_SIZE / 2
+  const cy = VIEWBOX_SIZE / 2
+  const maxRadius = VIEWBOX_SIZE / 2 - 70
+  const ringSpacing = maxDepth > 0 ? maxRadius / maxDepth : maxRadius
 
   const nodesData = []
+  const ringRadii = []
   for (const [d, ids] of byDepth) {
-    const x = X_PAD + (d / maxDepth) * (VIEWBOX_W - 2 * X_PAD)
-    const count = ids.length
-    ids.forEach((id, i) => {
-      const y =
-        count === 1
-          ? viewBoxH / 2
-          : Y_PAD + (i / (count - 1)) * (viewBoxH - 2 * Y_PAD)
-      const node = nodeMap.get(id)
-      const isViewer = node?.type === 'viewer'
-      const isFilm = node?.type === 'film'
+    const r = d * ringSpacing
+    ringRadii.push(r)
+    if (d === 0) {
+      const node = nodeMap.get(ids[0])
       nodesData.push({
-        id,
-        label: node?.label || id,
-        x,
-        y,
-        size: isViewer ? 1.3 : isFilm ? 1.2 : 1.0,
-        type: node?.type || 'person',
+        id: ids[0],
+        label: node?.label || ids[0],
+        x: cx,
+        y: cy,
+        size: 1.3,
+        type: node?.type || 'film',
+        ring: 0,
       })
-    })
+    } else {
+      const count = ids.length
+      const startAngle = -Math.PI / 2
+      ids.forEach((id, i) => {
+        const angle = startAngle + (2 * Math.PI * i) / count
+        const x = cx + r * Math.cos(angle)
+        const y = cy + r * Math.sin(angle)
+        const node = nodeMap.get(id)
+        const isViewer = node?.type === 'viewer'
+        const isFilm = node?.type === 'film'
+        nodesData.push({
+          id,
+          label: node?.label || id,
+          x,
+          y,
+          size: isViewer ? 1.3 : isFilm ? 1.2 : 1.0,
+          type: node?.type || 'person',
+          ring: d,
+        })
+      })
+    }
   }
+
+  const viewBoxH = VIEWBOX_SIZE
 
   const linksData = edges.filter(
     (e) => depth.has(e.source) && depth.has(e.target)
   )
 
-  /* --- default highlight: path from film/creator to receiver (parent_invite chain) --- */
-
+  /* Default highlight: path from film/creator → focused recipient */
   const defaultNodes = new Set()
   const defaultLinks = new Set()
 
@@ -258,7 +271,6 @@ export function buildGraphLayout({
       if (!reverseAdj.has(e.target)) reverseAdj.set(e.target, [])
       reverseAdj.get(e.target).push(e.source)
     })
-
     let cur = viewerRecipientKey
     defaultNodes.add(cur)
     const visited = new Set([cur])
@@ -285,6 +297,7 @@ export function buildGraphLayout({
     nodesData,
     linksData,
     viewBoxH,
+    ringRadii: [...new Set(ringRadii)].sort((a, b) => a - b),
     rootNode: nodesData.find((n) => n.id === rootId),
     defaultActiveNodes: defaultNodes,
     defaultActiveLinks: defaultLinks,
@@ -322,9 +335,86 @@ function HumanNode({
   isActive,
   isFaded,
   isPathEnd,
+  isFilm,
   onMouseEnter,
   onMouseLeave,
 }) {
+  if (isFilm) {
+    const filmR = 22 * size
+    const glowR = 30 * size
+    const words = label ? label.split(/\s+/) : []
+    const lines = []
+    let current = ''
+    for (const w of words) {
+      const test = current ? `${current} ${w}` : w
+      if (test.length > 12 && current) {
+        lines.push(current)
+        current = w
+      } else {
+        current = test
+      }
+    }
+    if (current) lines.push(current)
+    const lineH = 13
+    const startY = -(filmR + 8 + (lines.length - 1) * lineH)
+
+    return (
+      <g
+        transform={`translate(${x}, ${y})`}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+        style={{
+          cursor: 'pointer',
+          opacity: isFaded ? 0.28 : 1,
+          transition: 'opacity 500ms ease-out',
+        }}
+      >
+        <circle
+          cx="0"
+          cy="0"
+          r={glowR}
+          fill={GRAPH_COLORS.amber}
+          opacity={0.08}
+        />
+        <circle
+          cx="0"
+          cy="0"
+          r={filmR}
+          fill="none"
+          stroke={GRAPH_COLORS.amber}
+          strokeWidth={0.75}
+          opacity={0.5}
+        />
+        <circle
+          cx="0"
+          cy="0"
+          r={6 * size}
+          fill={isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.warm}
+          style={{ transition: 'fill 500ms ease' }}
+        />
+        {lines.length > 0 && (
+          <text
+            textAnchor="middle"
+            style={{
+              fontFamily: "'Phoenix', system-ui, sans-serif",
+              fontSize: '11px',
+              fontWeight: 500,
+              letterSpacing: '0.12em',
+              textTransform: 'uppercase',
+              fill: GRAPH_COLORS.amber,
+            }}
+          >
+            {lines.map((line, i) => (
+              <tspan key={i} x="0" y={startY + i * lineH}>
+                {line}
+              </tspan>
+            ))}
+          </text>
+        )}
+      </g>
+    )
+  }
+
   const headR = 4 * size
   const headCy = -4.5 * size
   const bw = 9.5 * size
@@ -392,94 +482,228 @@ function HumanNode({
 /*  MAIN COMPONENT                                                    */
 /* ------------------------------------------------------------------ */
 
+const MIN_ZOOM = 0.5
+const MAX_ZOOM = 5
+const ZOOM_STEP = 0.15
+
+function ZoomControls({ onZoomIn, onZoomOut, onReset, zoom }) {
+  const btn =
+    'flex items-center justify-center w-8 h-8 rounded text-sm font-mono transition-colors select-none'
+  return (
+    <div
+      className="absolute bottom-3 right-3 z-30 flex flex-col gap-1"
+      style={{ pointerEvents: 'auto' }}
+    >
+      <button
+        onClick={onZoomIn}
+        className={btn}
+        style={{
+          background: `${GRAPH_COLORS.ink}cc`,
+          color: GRAPH_COLORS.warm,
+          border: `1px solid ${GRAPH_COLORS.faint}40`,
+        }}
+        aria-label="Zoom in"
+      >
+        +
+      </button>
+      <button
+        onClick={onZoomOut}
+        className={btn}
+        style={{
+          background: `${GRAPH_COLORS.ink}cc`,
+          color: GRAPH_COLORS.warm,
+          border: `1px solid ${GRAPH_COLORS.faint}40`,
+        }}
+        aria-label="Zoom out"
+      >
+        &minus;
+      </button>
+      {zoom !== 1 && (
+        <button
+          onClick={onReset}
+          className={btn}
+          style={{
+            background: `${GRAPH_COLORS.ink}cc`,
+            color: GRAPH_COLORS.amber,
+            border: `1px solid ${GRAPH_COLORS.faint}40`,
+            fontSize: '9px',
+            letterSpacing: '0.05em',
+          }}
+          aria-label="Reset zoom"
+        >
+          1:1
+        </button>
+      )}
+    </div>
+  )
+}
+
 export default function NetworkGraph({
   nodesData,
   linksData,
-  viewBoxH = 540,
+  viewBoxH = VIEWBOX_SIZE,
+  ringRadii = [],
   rootNode = null,
   defaultActiveNodes = new Set(),
   defaultActiveLinks = new Set(),
-  /** Stretch to parent height (e.g. invite landing diptych). */
   fillHeight = false,
-  /**
-   * Scroll (pan) when the laid-out graph is larger than the container; graph scales to width
-   * with height from aspect ratio (fits horizontally, scroll vertically if needed).
-   */
   pannable = false,
-  /** No ink fill / grain — sits on parent card (e.g. dashboard). */
   transparentSurface = false,
 }) {
   const [hoveredNode, setHoveredNode] = useState(null)
-  const scrollRef = useRef(null)
-  const dragRef = useRef({ active: false, x: 0, y: 0 })
-  const [isPanning, setIsPanning] = useState(false)
 
-  const handlePanPointerDown = useCallback((e) => {
+  /* zoom / pan state */
+  const containerRef = useRef(null)
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const dragRef = useRef({ active: false, startX: 0, startY: 0, panX: 0, panY: 0 })
+  const pinchRef = useRef({ active: false, dist: 0, zoom: 1 })
+
+  const clampZoom = (z) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z))
+
+  const zoomAtPoint = useCallback((newZoom, clientX, clientY) => {
+    const el = containerRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const px = clientX - rect.left
+    const py = clientY - rect.top
+
+    setZoom((prevZoom) => {
+      const clamped = clampZoom(newZoom)
+      const ratio = clamped / prevZoom
+      setPan((prev) => ({
+        x: px - ratio * (px - prev.x),
+        y: py - ratio * (py - prev.y),
+      }))
+      return clamped
+    })
+  }, [])
+
+  /* Wheel → zoom centered on cursor */
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const handler = (e) => {
+      e.preventDefault()
+      const delta = -e.deltaY * 0.002
+      setZoom((prev) => {
+        const next = clampZoom(prev * (1 + delta))
+        const rect = el.getBoundingClientRect()
+        const px = e.clientX - rect.left
+        const py = e.clientY - rect.top
+        const ratio = next / prev
+        setPan((p) => ({
+          x: px - ratio * (px - p.x),
+          y: py - ratio * (py - p.y),
+        }))
+        return next
+      })
+    }
+    el.addEventListener('wheel', handler, { passive: false })
+    return () => el.removeEventListener('wheel', handler)
+  }, [])
+
+  /* Pointer drag to pan */
+  const handlePointerDown = useCallback((e) => {
     if (e.pointerType === 'touch') return
     if (e.button !== 0) return
-    const el = scrollRef.current
-    if (!el) return
-    dragRef.current = { active: true, x: e.clientX, y: e.clientY }
-    setIsPanning(true)
-    try {
-      el.setPointerCapture(e.pointerId)
-    } catch {
-      dragRef.current = { active: false, x: 0, y: 0 }
-      setIsPanning(false)
-    }
+    dragRef.current = { active: true, startX: e.clientX, startY: e.clientY, panX: pan.x, panY: pan.y }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }, [pan])
+
+  const handlePointerMove = useCallback((e) => {
+    if (!dragRef.current.active) return
+    const dx = e.clientX - dragRef.current.startX
+    const dy = e.clientY - dragRef.current.startY
+    setPan({ x: dragRef.current.panX + dx, y: dragRef.current.panY + dy })
   }, [])
 
-  const handlePanPointerMove = useCallback((e) => {
-    if (!dragRef.current.active) return
-    const el = scrollRef.current
-    if (!el) return
-    const dx = e.clientX - dragRef.current.x
-    const dy = e.clientY - dragRef.current.y
-    dragRef.current.x = e.clientX
-    dragRef.current.y = e.clientY
-    el.scrollLeft -= dx
-    el.scrollTop -= dy
-  }, [])
-
-  const endPan = useCallback((e) => {
-    if (!dragRef.current.active) return
+  const handlePointerUp = useCallback(() => {
     dragRef.current.active = false
-    setIsPanning(false)
-    const el = scrollRef.current
-    if (el && e?.pointerId != null) {
-      try {
-        el.releasePointerCapture(e.pointerId)
-      } catch {
-        /* already released */
+  }, [])
+
+  /* Touch: pinch-to-zoom + drag */
+  const touchRef = useRef({ fingers: [], lastCenter: null, lastPan: null })
+
+  const handleTouchStart = useCallback((e) => {
+    const touches = Array.from(e.touches)
+    touchRef.current.fingers = touches.map((t) => ({ id: t.identifier, x: t.clientX, y: t.clientY }))
+    if (touches.length === 2) {
+      const dx = touches[1].clientX - touches[0].clientX
+      const dy = touches[1].clientY - touches[0].clientY
+      pinchRef.current = { active: true, dist: Math.hypot(dx, dy), zoom }
+      touchRef.current.lastCenter = {
+        x: (touches[0].clientX + touches[1].clientX) / 2,
+        y: (touches[0].clientY + touches[1].clientY) / 2,
+      }
+      touchRef.current.lastPan = { ...pan }
+    } else if (touches.length === 1) {
+      touchRef.current.lastCenter = { x: touches[0].clientX, y: touches[0].clientY }
+      touchRef.current.lastPan = { ...pan }
+    }
+  }, [zoom, pan])
+
+  const handleTouchMove = useCallback((e) => {
+    e.preventDefault()
+    const touches = Array.from(e.touches)
+    if (touches.length === 2 && pinchRef.current.active) {
+      const dx = touches[1].clientX - touches[0].clientX
+      const dy = touches[1].clientY - touches[0].clientY
+      const dist = Math.hypot(dx, dy)
+      const scale = dist / pinchRef.current.dist
+      const newZoom = clampZoom(pinchRef.current.zoom * scale)
+
+      const cx = (touches[0].clientX + touches[1].clientX) / 2
+      const cy = (touches[0].clientY + touches[1].clientY) / 2
+      const prevCenter = touchRef.current.lastCenter
+      const prevPan = touchRef.current.lastPan
+      if (prevCenter && prevPan) {
+        const el = containerRef.current
+        if (el) {
+          const rect = el.getBoundingClientRect()
+          const px = prevCenter.x - rect.left
+          const py = prevCenter.y - rect.top
+          const ratio = newZoom / pinchRef.current.zoom
+          setPan({
+            x: prevPan.x + (cx - prevCenter.x) + px - ratio * px,
+            y: prevPan.y + (cy - prevCenter.y) + py - ratio * py,
+          })
+        }
+      }
+      setZoom(newZoom)
+    } else if (touches.length === 1 && !pinchRef.current.active) {
+      const prevCenter = touchRef.current.lastCenter
+      const prevPan = touchRef.current.lastPan
+      if (prevCenter && prevPan) {
+        setPan({
+          x: prevPan.x + (touches[0].clientX - prevCenter.x),
+          y: prevPan.y + (touches[0].clientY - prevCenter.y),
+        })
       }
     }
   }, [])
 
-  const handlePanLostCapture = useCallback(() => {
-    dragRef.current.active = false
-    setIsPanning(false)
+  const handleTouchEnd = useCallback(() => {
+    pinchRef.current.active = false
   }, [])
 
-  /** Keep wheel/trackpad scroll on the map when it overflows (page is also scrollable on landing). */
-  const handleWheelCapture = useCallback((e) => {
-    const el = scrollRef.current
+  const handleZoomIn = useCallback(() => {
+    const el = containerRef.current
     if (!el) return
-    const { scrollTop, scrollLeft, scrollHeight, scrollWidth, clientHeight, clientWidth } =
-      el
-    const dy = e.deltaY
-    const dx = e.deltaX
-    let absorb = false
-    if (dy !== 0) {
-      const atTop = scrollTop <= 0
-      const atBottom = scrollTop + clientHeight >= scrollHeight - 1
-      if ((dy < 0 && !atTop) || (dy > 0 && !atBottom)) absorb = true
-    }
-    if (dx !== 0) {
-      const atLeft = scrollLeft <= 0
-      const atRight = scrollLeft + clientWidth >= scrollWidth - 1
-      if ((dx < 0 && !atLeft) || (dx > 0 && !atRight)) absorb = true
-    }
-    if (absorb) e.stopPropagation()
+    const rect = el.getBoundingClientRect()
+    zoomAtPoint(zoom * (1 + ZOOM_STEP), rect.left + rect.width / 2, rect.top + rect.height / 2)
+  }, [zoom, zoomAtPoint])
+
+  const handleZoomOut = useCallback(() => {
+    const el = containerRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    zoomAtPoint(zoom * (1 - ZOOM_STEP), rect.left + rect.width / 2, rect.top + rect.height / 2)
+  }, [zoom, zoomAtPoint])
+
+  const handleReset = useCallback(() => {
+    setZoom(1)
+    setPan({ x: 0, y: 0 })
   }, [])
 
   const activeElements = useMemo(() => {
@@ -514,94 +738,70 @@ export default function NetworkGraph({
     return { nodes: activeNodes, links: activeLinks }
   }, [hoveredNode, linksData, defaultActiveNodes, defaultActiveLinks])
 
-  const rootX = rootNode?.x ?? X_PAD
-  const rootY = rootNode?.y ?? viewBoxH / 2
+  const rcx = VIEWBOX_SIZE / 2
+  const rcy = VIEWBOX_SIZE / 2
 
-  const fixedH = `${Math.min(700, viewBoxH)}px`
-
-  const svgInner = (
+  const svgContent = (
     <svg
       width="100%"
       height="100%"
-      viewBox={`0 0 ${VIEWBOX_W} ${viewBoxH}`}
-      className="relative z-10 block"
+      viewBox={`0 0 ${VIEWBOX_SIZE} ${VIEWBOX_SIZE}`}
+      className="block"
       preserveAspectRatio="xMidYMid meet"
     >
-        {/* Decorative grid centered on root */}
-        <g
-          stroke={GRAPH_COLORS.faint}
-          strokeWidth="1"
-          fill="none"
-          opacity="0.15"
-        >
-          <circle cx={rootX} cy={rootY} r="150" strokeDasharray="1 4" />
-          <circle cx={rootX} cy={rootY} r="300" strokeDasharray="1 6" />
+      <g
+        stroke={GRAPH_COLORS.faint}
+        strokeWidth="0.75"
+        fill="none"
+        opacity="0.18"
+      >
+        {ringRadii
+          .filter((r) => r > 0)
+          .map((r, i) => (
+            <circle key={i} cx={rcx} cy={rcy} r={r} strokeDasharray="2 5" />
+          ))}
+      </g>
+
+      {linksData.map((link, i) => {
+        const src = nodesData.find((n) => n.id === link.source)
+        const tgt = nodesData.find((n) => n.id === link.target)
+        if (!src || !tgt) return null
+
+        const linkId = `${link.source}-${link.target}`
+        const isActive = activeElements.links.has(linkId)
+
+        return (
           <line
-            x1={rootX}
-            y1="0"
-            x2={rootX}
-            y2={viewBoxH}
-            strokeDasharray="4 4"
-            opacity="0.2"
+            key={i}
+            x1={src.x}
+            y1={src.y}
+            x2={tgt.x}
+            y2={tgt.y}
+            stroke={isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.muted}
+            strokeWidth={isActive ? 2 : 1}
+            opacity={isActive ? 0.8 : 0.18}
+            strokeDasharray={isActive ? 'none' : '2 4'}
+            strokeLinecap="round"
+            style={{ transition: 'stroke 500ms ease, opacity 500ms ease, stroke-width 500ms ease' }}
           />
-          <line
-            x1="0"
-            y1={rootY}
-            x2={VIEWBOX_W}
-            y2={rootY}
-            strokeDasharray="4 4"
-            opacity="0.2"
-          />
-        </g>
+        )
+      })}
 
-        {/* Links (bezier curves) */}
-        {linksData.map((link, i) => {
-          const src = nodesData.find((n) => n.id === link.source)
-          const tgt = nodesData.find((n) => n.id === link.target)
-          if (!src || !tgt) return null
-
-          const linkId = `${link.source}-${link.target}`
-          const isActive = activeElements.links.has(linkId)
-          const cpX = (src.x + tgt.x) / 2
-          const d = `M ${src.x} ${src.y + src.size * 3} C ${cpX} ${src.y + src.size * 3}, ${cpX} ${tgt.y + tgt.size * 3}, ${tgt.x} ${tgt.y + tgt.size * 3}`
-
-          return (
-            <g
-              key={i}
-              style={{
-                opacity: isActive ? 1 : 0.26,
-                transition: 'opacity 500ms ease-out',
-              }}
-            >
-              <path
-                d={d}
-                fill="none"
-                stroke={isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.muted}
-                strokeWidth={isActive ? 2.35 : 1.5}
-                opacity={isActive ? 1 : 0.48}
-                strokeDasharray={isActive ? 'none' : '2 3'}
-                strokeLinecap="round"
-                style={{ transition: 'stroke 500ms ease, opacity 500ms ease, stroke-width 500ms ease' }}
-              />
-            </g>
-          )
-        })}
-
-        {/* Nodes (human icons) */}
-        {nodesData.map((node) => (
-          <HumanNode
-            key={node.id}
-            x={node.x}
-            y={node.y}
-            size={node.size}
-            label={node.label}
-            isActive={activeElements.nodes.has(node.id)}
-            isFaded={!activeElements.nodes.has(node.id)}
-            isPathEnd={node.type === 'viewer'}
-            onMouseEnter={() => setHoveredNode(node.id)}
-            onMouseLeave={() => setHoveredNode(null)}
-          />
-        ))}
+      {nodesData.map((node) => (
+        <HumanNode
+          key={node.id}
+          x={node.x}
+          y={node.y}
+          size={node.size}
+          label={node.label}
+          isActive={activeElements.nodes.has(node.id)}
+          isFaded={!activeElements.nodes.has(node.id)}
+          isPathEnd={node.type === 'viewer'}
+          isFilm={node.type === 'film'}
+          onMouseEnter={() => setHoveredNode(node.id)}
+          onMouseLeave={() => setHoveredNode(null)}
+        />
+      ))}
     </svg>
   )
 
@@ -613,16 +813,13 @@ export default function NetworkGraph({
         : `0.5px solid ${GRAPH_COLORS.faint}40`,
   }
 
-  /* Padding-bottom % = height/width of graph at full content width (reliable overflow; aspect-ratio + flex was collapsing). */
-  const graphIntrinsicPaddingPct = (viewBoxH / VIEWBOX_W) * 100
+  const transformStyle = {
+    transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+    transformOrigin: '0 0',
+    willChange: 'transform',
+  }
 
   if (pannable) {
-    const svgInScrollBox = cloneElement(svgInner, {
-      className: 'absolute inset-0 z-10 block h-full w-full',
-      width: '100%',
-      height: '100%',
-    })
-
     return (
       <div
         className={`relative z-10 flex w-full flex-col ${
@@ -632,35 +829,38 @@ export default function NetworkGraph({
       >
         {!transparentSurface && <GrainOverlay />}
         <div
-          ref={scrollRef}
+          ref={containerRef}
           role="region"
-          aria-label="Invitation map: scroll with wheel or trackpad, drag to pan"
-          className={`relative z-10 min-h-0 w-full flex-1 overflow-auto overscroll-contain [scrollbar-width:thin] touch-pan-x touch-pan-y select-none ${
-            isPanning ? 'cursor-grabbing' : 'cursor-grab'
-          }`}
-          style={{
-            WebkitOverflowScrolling: 'touch',
-            overscrollBehavior: 'contain',
-          }}
-          onWheelCapture={handleWheelCapture}
-          onPointerDown={handlePanPointerDown}
-          onPointerMove={handlePanPointerMove}
-          onPointerUp={endPan}
-          onPointerCancel={endPan}
-          onLostPointerCapture={handlePanLostCapture}
+          aria-label="Invitation network map — scroll to zoom, drag to pan"
+          className="relative z-10 min-h-0 w-full flex-1 overflow-hidden select-none touch-none"
+          style={{ cursor: dragRef.current.active ? 'grabbing' : 'grab' }}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
         >
-          <div className="mx-auto w-full max-w-[min(100%,850px)] shrink-0">
-            <div
-              className="relative w-full"
-              style={{ paddingBottom: `${graphIntrinsicPaddingPct}%` }}
-            >
-              <div className="absolute inset-0 min-h-0">{svgInScrollBox}</div>
+          <div style={transformStyle} className="w-full h-full">
+            <div className="mx-auto w-full max-w-[min(100%,850px)]">
+              <div className="relative w-full" style={{ paddingBottom: '100%' }}>
+                <div className="absolute inset-0">{svgContent}</div>
+              </div>
             </div>
           </div>
         </div>
+        <ZoomControls
+          zoom={zoom}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onReset={handleReset}
+        />
       </div>
     )
   }
+
+  const fixedH = `${Math.min(700, VIEWBOX_SIZE)}px`
 
   return (
     <div
@@ -674,7 +874,7 @@ export default function NetworkGraph({
       }}
     >
       {!transparentSurface && <GrainOverlay />}
-      {svgInner}
+      {svgContent}
     </div>
   )
 }

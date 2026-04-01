@@ -113,6 +113,25 @@ begin
 end;
 $$;
 
+-- Look up a user profile by email, bypassing RLS (server has no user JWT with anon key)
+create or replace function public.get_user_profile_by_email(p_email text)
+returns table (id uuid, email text, role text, team_creator_id uuid)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select u.id, u.email, u.role, u.team_creator_id
+  from public.users u
+  where lower(trim(u.email)) = lower(trim(p_email))
+  limit 1;
+$$;
+
+revoke all on function public.get_user_profile_by_email(text) from public;
+grant execute on function public.get_user_profile_by_email(text) to anon;
+grant execute on function public.get_user_profile_by_email(text) to authenticated;
+grant execute on function public.get_user_profile_by_email(text) to service_role;
+
 revoke all on function public.create_team_invite_for_creator(uuid, text, text) from public;
 grant execute on function public.create_team_invite_for_creator(uuid, text, text) to anon;
 grant execute on function public.create_team_invite_for_creator(uuid, text, text) to authenticated;

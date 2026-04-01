@@ -8,7 +8,7 @@ import {
   useMemo,
 } from 'react'
 import DeepcastLogo from '../components/DeepcastLogo'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
@@ -35,6 +35,7 @@ function Spinner({ className = '' }) {
 
 export default function InviteScreening() {
   const { token } = useParams()
+  const navigate = useNavigate()
   const { signIn, signUp, signOut, fetchProfile, user } = useAuth()
 
   /* ---------- DATA STATE ---------- */
@@ -321,11 +322,20 @@ export default function InviteScreening() {
     if (
       !letterSenderName.trim() ||
       !letterSenderEmail.trim() ||
-      !letterSenderEmail.includes('@') ||
-      !letterPassword.trim()
+      !letterSenderEmail.includes('@')
     ) {
-      setLetterError('Please enter your name, email, and password.')
+      setLetterError('Please enter your name and a valid email.')
       return
+    }
+    if (showPostFilm) {
+      if (!letterPassword.trim()) {
+        setLetterError('Please create a password to set up your account.')
+        return
+      }
+      if (letterPassword.trim().length < 6) {
+        setLetterError('Password must be at least 6 characters.')
+        return
+      }
     }
     if (slotsRemaining <= 0) {
       setLetterError('All invitations have been sent.')
@@ -335,24 +345,27 @@ export default function InviteScreening() {
     setLetterSending(true)
     try {
       let senderId = null
-      try {
-        const r = await signIn(letterSenderEmail.trim(), letterPassword)
-        senderId = r?.user?.id || r?.profile?.id || null
-      } catch {
+
+      if (showPostFilm && letterPassword.trim()) {
         try {
-          const r = await signUp(
-            letterSenderEmail.trim(),
-            letterPassword,
-            letterSenderName.trim(),
-            'viewer',
-            letterSenderName.trim(),
-            ''
-          )
-          senderId = r?.user?.id || null
-        } catch (e) {
-          setLetterError(e.message || 'Authentication failed.')
-          setLetterSending(false)
-          return
+          const r = await signIn(letterSenderEmail.trim(), letterPassword)
+          senderId = r?.user?.id || r?.profile?.id || null
+        } catch {
+          try {
+            const r = await signUp(
+              letterSenderEmail.trim(),
+              letterPassword,
+              letterSenderName.trim(),
+              'viewer',
+              letterSenderName.trim(),
+              ''
+            )
+            senderId = r?.user?.id || null
+          } catch (e) {
+            setLetterError(e.message || 'Could not create account. Please try again.')
+            setLetterSending(false)
+            return
+          }
         }
       }
 
@@ -379,6 +392,11 @@ export default function InviteScreening() {
       } = await supabase.auth.getSession()
       if (session?.user?.id) {
         await fetchProfile(session.user.id, session.access_token)
+      }
+
+      if (showPostFilm) {
+        navigate('/dashboard', { replace: true })
+        return
       }
 
       setSentLetters((prev) => [
@@ -547,6 +565,7 @@ export default function InviteScreening() {
                     nodesData={graphLayout.nodesData}
                     linksData={graphLayout.linksData}
                     viewBoxH={graphLayout.viewBoxH}
+                    ringRadii={graphLayout.ringRadii}
                     rootNode={graphLayout.rootNode}
                     defaultActiveNodes={graphLayout.defaultActiveNodes}
                     defaultActiveLinks={graphLayout.defaultActiveLinks}
@@ -709,6 +728,7 @@ export default function InviteScreening() {
                         nodesData={graphLayout.nodesData}
                         linksData={graphLayout.linksData}
                         viewBoxH={graphLayout.viewBoxH}
+                        ringRadii={graphLayout.ringRadii}
                         rootNode={graphLayout.rootNode}
                         defaultActiveNodes={graphLayout.defaultActiveNodes}
                         defaultActiveLinks={graphLayout.defaultActiveLinks}
@@ -854,24 +874,30 @@ export default function InviteScreening() {
                             </div>
                           </div>
 
-                          <div className="flex flex-col items-center gap-6 mt-2 w-full">
+                          {showPostFilm && (
                             <input
                               type="password"
                               placeholder="Create a password to seal this message"
                               value={letterPassword}
-                              onChange={(e) =>
-                                setLetterPassword(e.target.value)
-                              }
+                              onChange={(e) => setLetterPassword(e.target.value)}
+                              minLength={6}
+                              autoComplete="new-password"
                               className="w-full max-w-[280px] text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/25 pb-2 text-[12px] font-sans font-light text-[#2a2a2a] placeholder-[#2a2a2a]/35 focus:outline-none focus:border-[#6b5d4a] transition-colors rounded-none"
                             />
+                          )}
 
+                          <div className="flex flex-col items-center gap-6 mt-2 w-full">
                             <button
                               type="button"
                               onClick={handleSendLetter}
                               disabled={letterSending}
                               className="mt-2 w-full md:w-[320px] py-3.5 bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-sans text-[11px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none disabled:opacity-40 cursor-pointer"
                             >
-                              {letterSending ? 'Sending\u2026' : 'Seal & Send'}
+                              {letterSending
+                                ? 'Sending\u2026'
+                                : showPostFilm
+                                  ? 'Seal, send & go to dashboard'
+                                  : 'Seal & Send'}
                             </button>
                           </div>
                         </div>
