@@ -13,6 +13,10 @@ const GRAPH_COLORS = {
   muted: '#a88a83',
   faint: '#6a7aaa',
 }
+// Active edge:   solid, 2px, amber
+// Inactive edge: stroke-dasharray="12 8", opacity 0.1, faint
+// Active node:   fill amber
+// Inactive node: fill warm at opacity 0.45
 
 const VIEWBOX_SIZE = 850
 
@@ -448,7 +452,8 @@ function HumanNode({
       <g
         style={{
           fill: isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.warm,
-          transition: 'fill 500ms ease',
+          opacity: isActive ? 1 : 0.45,
+          transition: 'fill 500ms ease, opacity 500ms ease',
         }}
       >
         <circle cx="0" cy={headCy} r={headR} />
@@ -467,7 +472,7 @@ function HumanNode({
             fontWeight: 500,
             letterSpacing: '0.14em',
             textTransform: 'uppercase',
-            fill: isActive ? GRAPH_COLORS.warm : GRAPH_COLORS.muted,
+            fill: isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.faint,
             transition: 'fill 500ms ease',
           }}
         >
@@ -791,10 +796,10 @@ export default function NetworkGraph({
             y1={src.y}
             x2={tgt.x}
             y2={tgt.y}
-            stroke={isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.muted}
+            stroke={isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.faint}
             strokeWidth={isActive ? 2 : 1}
-            opacity={isActive ? 0.8 : 0.18}
-            strokeDasharray={isActive ? 'none' : '2 4'}
+            opacity={isActive ? 0.8 : 0.1}
+            strokeDasharray={isActive ? undefined : '12 8'}
             strokeLinecap="round"
             style={{ transition: 'stroke 500ms ease, opacity 500ms ease, stroke-width 500ms ease' }}
           />
