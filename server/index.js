@@ -672,10 +672,10 @@ function buildTeamInviteEmailHtml(creatorName, joinUrl) {
 <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:480px;background:#fff;padding:32px 28px;">
 <tr><td>
 <p style="margin:0 0 16px;">Hi,</p>
-<p style="margin:0 0 16px;">${c} invited you to join their team on Deepcast. Create your password to access the dashboard and send screening invitations on their behalf.</p>
+<p style="margin:0 0 16px;">${c} invited you to join their team on <span style="font-weight:600;">Deepcast</span>. Create your password to access the dashboard and send screening invitations on their behalf.</p>
 <p style="margin:24px 0;"><a href="${u}" style="color:#5C4F3A;font-weight:500;">Complete registration</a></p>
 <p style="margin:0 0 16px;font-size:13px;color:#888;">Or paste this link:<br/>${u}</p>
-<p style="margin:24px 0 0;font-size:13px;color:#888;">— Deepcast</p>
+<p style="margin:24px 0 0;font-size:13px;color:#888;">— <span style="font-weight:600;">Deepcast</span></p>
 </td></tr>
 </table>
 </td></tr>
@@ -699,10 +699,10 @@ function buildTeamAddedEmailHtml(creatorName, loginUrl) {
 <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:480px;background:#fff;padding:32px 28px;">
 <tr><td>
 <p style="margin:0 0 16px;">Hi,</p>
-<p style="margin:0 0 16px;">${c} added you to their team on Deepcast. You now have unlimited screening invites for their films. Sign in with your existing password.</p>
+<p style="margin:0 0 16px;">${c} added you to their team on <span style="font-weight:600;">Deepcast</span>. You now have unlimited screening invites for their films. Sign in with your existing password.</p>
 <p style="margin:24px 0;"><a href="${u}" style="color:#5C4F3A;font-weight:500;">Sign in</a></p>
 <p style="margin:0 0 16px;font-size:13px;color:#888;">Or paste this link:<br/>${u}</p>
-<p style="margin:24px 0 0;font-size:13px;color:#888;">— Deepcast</p>
+<p style="margin:24px 0 0;font-size:13px;color:#888;">— <span style="font-weight:600;">Deepcast</span></p>
 </td></tr>
 </table>
 </td></tr>
@@ -1369,7 +1369,7 @@ function buildInviteEmailHtml(
 <tr><td align="center">
 <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:480px;background:#fff;padding:32px 28px;">
 <tr><td>
-<p style="margin:0 0 20px;text-align:center;font-family:Helvetica,Arial,sans-serif;font-size:22px;font-weight:400;letter-spacing:-0.02em;color:#1a1a1a;">deepcast</p>
+<p style="margin:0 0 20px;text-align:center;font-family:Helvetica,Arial,sans-serif;font-size:22px;font-weight:600;letter-spacing:-0.02em;color:#1a1a1a;">deepcast</p>
 <p style="margin:0 0 24px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#666;">A letter of invitation</p>
 <p style="margin:0 0 20px;font-size:15px;">${greeting}</p>
 <p style="margin:0 0 16px;">${intro}</p>
@@ -1378,7 +1378,7 @@ ${titleBlock}
 ${descBlock}
 <p style="margin:24px 0;"><a href="${safe.inviteUrl}" style="color:#5C4F3A;font-weight:500;">Open your invitation</a></p>
 <p style="margin:0 0 16px;font-size:13px;color:#888;">If the link above doesn't work, paste this URL into your browser:<br/>${safe.inviteUrl}</p>
-<p style="margin:24px 0 0;font-size:13px;color:#888;">— ${safe.senderDisplay}, via Deepcast</p>
+<p style="margin:24px 0 0;font-size:13px;color:#888;">— ${safe.senderDisplay}, via <span style="font-weight:600;">Deepcast</span></p>
 <p style="margin:28px 0 0;padding-top:20px;border-top:1px solid #eee;font-size:12px;color:#999;line-height:1.5;">
   <a href="${safeUnsub}" style="color:#666;text-decoration:underline;">Unsubscribe</a> from screening invitation emails.
 </p>

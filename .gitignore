@@ -1,5 +1,6 @@
 node_modules/
 dist/
+# Local secrets only — never commit. Production: set vars in Render / host dashboard, not a .env file.
 .env
 .env.*
 !.env.example

@@ -486,14 +486,15 @@ const MIN_ZOOM = 0.5
 const MAX_ZOOM = 5
 const ZOOM_STEP = 0.15
 
-function ZoomControls({ onZoomIn, onZoomOut, onReset, zoom }) {
+function ZoomControls({ onZoomIn, onZoomOut, onReset, zoom, position = 'bottom-right' }) {
   const btn =
     'flex items-center justify-center w-8 h-8 rounded text-sm font-mono transition-colors select-none'
+  const positionClass =
+    position === 'center-right'
+      ? 'right-4 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-1'
+      : 'bottom-3 right-3 z-30 flex flex-col gap-1'
   return (
-    <div
-      className="absolute bottom-3 right-3 z-30 flex flex-col gap-1"
-      style={{ pointerEvents: 'auto' }}
-    >
+    <div className={`absolute ${positionClass}`} style={{ pointerEvents: 'auto' }}>
       <button
         onClick={onZoomIn}
         className={btn}
@@ -549,6 +550,19 @@ export default function NetworkGraph({
   fillHeight = false,
   pannable = false,
   transparentSurface = false,
+  /** 'bottom-right' | 'center-right' — stacked +/− controls */
+  zoomControlsPosition = 'bottom-right',
+  /**
+   * When set (e.g. `min(42vh, 420px)`), graph draws in a centered square this large;
+   * shell still fills the parent so zoom controls can sit on the panel edge.
+   */
+  viewportMaxSize = null,
+  /** Solid shell background when not `transparentSurface`; default is ink. */
+  surfaceColor = null,
+  /** No shell border / drop shadow (e.g. edge-to-edge in a colored panel). */
+  plainShell = false,
+  /** Let SVG use full container width (default caps at 850px). */
+  fullBleed = false,
 }) {
   const [hoveredNode, setHoveredNode] = useState(null)
 
@@ -806,9 +820,11 @@ export default function NetworkGraph({
   )
 
   const shellStyle = {
-    backgroundColor: transparentSurface ? 'transparent' : GRAPH_COLORS.ink,
+    backgroundColor: transparentSurface ? 'transparent' : surfaceColor || GRAPH_COLORS.ink,
     border:
-      transparentSurface || (fillHeight && !pannable)
+      plainShell ||
+      transparentSurface ||
+      (fillHeight && !pannable)
         ? 'none'
         : `0.5px solid ${GRAPH_COLORS.faint}40`,
   }
@@ -820,41 +836,68 @@ export default function NetworkGraph({
   }
 
   if (pannable) {
+    const panRegion = (
+      <div
+        ref={containerRef}
+        role="region"
+        aria-label="Invitation network map — scroll to zoom, drag to pan"
+        className={`relative z-10 overflow-hidden select-none touch-none ${
+          viewportMaxSize ? 'max-h-full max-w-full shrink-0' : 'min-h-0 w-full flex-1'
+        }`}
+        style={{
+          cursor: dragRef.current.active ? 'grabbing' : 'grab',
+          ...(viewportMaxSize
+            ? {
+                width: viewportMaxSize,
+                height: viewportMaxSize,
+              }
+            : {}),
+        }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <div style={transformStyle} className="h-full w-full">
+          <div
+            className={`mx-auto w-full ${fullBleed ? 'max-w-none' : 'max-w-[min(100%,850px)]'} ${viewportMaxSize ? 'h-full' : ''}`}
+          >
+            {viewportMaxSize ? (
+              <div className="relative h-full w-full">
+                <div className="h-full w-full">{svgContent}</div>
+              </div>
+            ) : (
+              <div className="relative w-full" style={{ paddingBottom: '100%' }}>
+                <div className="absolute inset-0">{svgContent}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+
     return (
       <div
         className={`relative z-10 flex w-full flex-col ${
-          transparentSurface ? '' : 'shadow-2xl'
+          plainShell || transparentSurface ? '' : 'shadow-2xl'
         } ${fillHeight ? 'h-full min-h-0 max-h-full' : 'min-h-[320px]'}`}
         style={shellStyle}
       >
         {!transparentSurface && <GrainOverlay />}
-        <div
-          ref={containerRef}
-          role="region"
-          aria-label="Invitation network map — scroll to zoom, drag to pan"
-          className="relative z-10 min-h-0 w-full flex-1 overflow-hidden select-none touch-none"
-          style={{ cursor: dragRef.current.active ? 'grabbing' : 'grab' }}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerUp}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-        >
-          <div style={transformStyle} className="w-full h-full">
-            <div className="mx-auto w-full max-w-[min(100%,850px)]">
-              <div className="relative w-full" style={{ paddingBottom: '100%' }}>
-                <div className="absolute inset-0">{svgContent}</div>
-              </div>
-            </div>
-          </div>
-        </div>
+        {viewportMaxSize ? (
+          <div className="flex min-h-0 w-full flex-1 items-center justify-center">{panRegion}</div>
+        ) : (
+          panRegion
+        )}
         <ZoomControls
           zoom={zoom}
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
           onReset={handleReset}
+          position={zoomControlsPosition}
         />
       </div>
     )

@@ -41,6 +41,14 @@ If you need to redeploy **without** new commits:
 
 ## Environment variables
 
+### Do not use a `.env` file in production
+
+The **`.env` file is for local development only**. It is ignored by Git (`.gitignore`) and excluded from Vercel uploads (`.vercelignore`). **Never** commit `.env` or copy it onto production servers.
+
+On **Render** (and any API host), define the same names in **Environment** in the dashboard. The Node process reads `process.env` from the platform; you do not need a `.env` file on disk when those variables are set.
+
+---
+
 ### Do you need env vars on Vercel?
 
 **Usually no.** In this setup:

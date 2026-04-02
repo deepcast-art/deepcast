@@ -452,9 +452,9 @@ export default function Dashboard() {
     const firstNameDisplay = profile.name?.trim().split(/\s+/)[0] || profile.name || 'there'
 
     return (
-      <div className="relative z-10 flex min-h-screen w-full flex-col overflow-hidden bg-bg-page text-warm lg:flex-row">
+      <div className="relative z-10 flex min-h-screen w-full flex-col overflow-hidden bg-[#05070a] text-warm lg:flex-row">
         {/* Mobile top bar */}
-        <div className="flex items-center justify-between border-b border-faint/30 bg-ink/80 px-4 py-3 lg:hidden">
+        <div className="flex items-center justify-between border-b border-faint/20 bg-[#05070a] px-4 py-3 lg:hidden">
           <Link to="/" className="inline-block">
             <DeepcastLogo variant="wordmark" className="!text-2xl text-warm" />
           </Link>
@@ -474,122 +474,86 @@ export default function Dashboard() {
           </button>
         </div>
 
-        <aside className={`${sidebarOpen ? 'flex' : 'hidden'} lg:flex w-full min-h-0 shrink-0 flex-col gap-6 overflow-y-auto border-b border-faint/30 bg-ink/80 px-6 py-10 panel-scroll lg:max-h-[100dvh] lg:w-[22%] lg:min-h-screen lg:border-b-0 lg:border-r`}>
+        <aside
+          className={`${sidebarOpen ? 'flex' : 'hidden'} lg:flex w-full min-h-0 shrink-0 flex-col gap-8 overflow-y-auto border-b border-faint/25 bg-[#05070a]/95 px-7 py-10 panel-scroll lg:max-h-[100dvh] lg:w-[min(280px,26vw)] lg:min-h-screen lg:border-b-0 lg:border-r lg:border-faint/20 lg:px-8`}
+        >
           <div className="shrink-0 animate-fade-in">
             <Link to="/" className="hidden lg:inline-block">
-              <DeepcastLogo variant="wordmark" className="!text-4xl sm:!text-5xl text-warm" />
+              <DeepcastLogo variant="wordmark" className="!text-[1.85rem] leading-none tracking-tight text-warm sm:!text-[2rem]" />
             </Link>
-            <h2 className="font-serif-v3 mt-3 text-xl text-warm">{profile.name}</h2>
+            <h2 className="font-display mt-5 text-[1.05rem] font-normal leading-snug tracking-tight text-warm">
+              {profile.name}
+            </h2>
           </div>
 
           <div
-            className="h-[0.5px] w-full shrink-0 bg-accent/20 animate-fade-in"
+            className="h-px w-full shrink-0 bg-warm/[0.08] animate-fade-in"
             style={{ animationDelay: '60ms' }}
           />
 
           <div
-            className="flex shrink-0 flex-col gap-6 animate-fade-in"
+            className="flex shrink-0 flex-col gap-7 animate-fade-in"
             style={{ animationDelay: '100ms' }}
           >
-            <div className="flex flex-col gap-1">
-              <span className="font-sans text-[9px] uppercase tracking-widest text-accent/80">
+            <div className="flex flex-col gap-1.5">
+              <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
                 Invites sent
               </span>
-              <span className="font-display text-3xl font-light text-warm">{sentCount}</span>
+              <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-warm md:text-[2.5rem]">
+                {sentCount}
+              </span>
             </div>
-            <div className="flex flex-col gap-1">
-              <span className="font-sans text-[9px] uppercase tracking-widest text-accent/80">
+            <div className="flex flex-col gap-1.5">
+              <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
                 Invites left
               </span>
-              <span className="font-display text-3xl font-light text-accent">{invitesLeft}</span>
+              <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-accent md:text-[2.5rem]">
+                {invitesLeft}
+              </span>
             </div>
-            <div className="flex flex-col gap-1">
-              <span className="font-sans text-[9px] uppercase tracking-widest text-accent/80">
+            <div className="flex flex-col gap-1.5">
+              <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
                 New viewers
               </span>
-              <span className="font-display text-3xl font-light text-warm">
+              <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-warm md:text-[2.5rem]">
                 {viewerNewViewersCount}
               </span>
             </div>
           </div>
 
-          {!loading && viewerFilmId && graphLayout && (
-            <>
-              <div
-                className="h-[0.5px] w-full shrink-0 bg-accent/20 animate-fade-in"
-                style={{ animationDelay: '120ms' }}
-              />
-              <div
-                className="flex w-full min-h-0 flex-1 flex-col gap-2 animate-fade-in"
-                style={{ animationDelay: '130ms' }}
-              >
-                <div className="flex shrink-0 flex-col gap-0.5">
-                  <span className="font-sans text-[9px] uppercase tracking-[0.3em] text-warm/50">
-                    My network impact
-                  </span>
-                  <span className="font-serif-v3 text-[11px] italic tracking-widest text-warm/70">
-                    {viewerFilmTitle}
-                  </span>
-                </div>
-                <div className="flex h-[min(52vh,600px)] w-full flex-col overflow-hidden border border-faint/40 bg-paper/70 lg:h-[min(68vh,780px)]">
-                  <NetworkGraph
-                    fillHeight
-                    pannable
-                    transparentSurface
-                    nodesData={graphLayout.nodesData}
-                    linksData={graphLayout.linksData}
-                    viewBoxH={graphLayout.viewBoxH}
-                    ringRadii={graphLayout.ringRadii}
-                    rootNode={graphLayout.rootNode}
-                    defaultActiveNodes={graphLayout.defaultActiveNodes}
-                    defaultActiveLinks={graphLayout.defaultActiveLinks}
-                  />
-                </div>
-              </div>
-            </>
-          )}
-
-          <div
-            className="h-[0.5px] w-full shrink-0 bg-accent/20 animate-fade-in"
-            style={{ animationDelay: '140ms' }}
-          />
-
-          <div
-            className="flex shrink-0 flex-col gap-3 animate-fade-in"
-            style={{ animationDelay: '160ms' }}
-          >
+          <div className="mt-auto flex shrink-0 flex-col gap-4 border-t border-warm/[0.08] pt-8 animate-fade-in" style={{ animationDelay: '140ms' }}>
             {canShareMore && (
               <button
                 type="button"
                 onClick={openShareModal}
-                className="w-full border border-accent/40 px-4 py-2.5 text-left font-sans text-[10px] uppercase tracking-widest text-accent transition-colors hover:bg-accent/10"
+                className="w-full border border-accent/50 bg-transparent px-4 py-3 text-center font-sans text-[10px] font-medium uppercase tracking-[0.28em] text-accent transition-colors hover:border-accent hover:bg-accent/[0.06]"
               >
                 Share more
               </button>
             )}
             <Link
               to="/profile"
-              className="font-sans text-[10px] uppercase tracking-widest text-warm/40 transition-colors hover:text-warm"
+              className="font-sans text-[10px] uppercase tracking-[0.22em] text-warm/35 transition-colors hover:text-warm/70"
             >
               Profile
             </Link>
             <Link
               to="/network"
-              className="font-sans text-[10px] uppercase tracking-widest text-warm/40 transition-colors hover:text-warm"
+              className="font-sans text-[10px] uppercase tracking-[0.22em] text-warm/35 transition-colors hover:text-warm/70"
             >
               Network map
             </Link>
             <button
               type="button"
               onClick={() => signOut()}
-              className="text-left font-sans text-[10px] uppercase tracking-widest text-warm/40 transition-colors hover:text-warm"
+              className="text-left font-sans text-[10px] uppercase tracking-[0.28em] text-warm/50 transition-colors hover:text-warm"
             >
               Sign out
             </button>
           </div>
         </aside>
 
-        <main className="flex w-full min-h-0 flex-1 flex-col overflow-y-auto px-6 py-10 panel-scroll md:px-10 lg:w-[78%] lg:py-12">
+        <main className="flex w-full min-h-0 flex-1 flex-col overflow-y-auto bg-[#05070a] px-6 py-10 panel-scroll md:px-12 lg:flex-1 lg:py-14 lg:pl-14 lg:pr-16">
           {loading ? (
             <div className="flex flex-1 items-center justify-center py-24">
               <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
@@ -610,59 +574,81 @@ export default function Dashboard() {
           ) : (
             <>
               <section
-                className="mb-12 w-full animate-fade-in"
+                className="mb-14 w-full max-w-6xl animate-fade-in"
                 style={{ animationDelay: '80ms' }}
               >
-                <p className="font-display mb-10 text-base font-light leading-relaxed text-warm md:text-lg">
-                  {sentCount > 0 ? (
-                    <>
+                {sentCount > 0 ? (
+                  <>
+                    <p className="font-serif-v3 mb-5 text-[1.55rem] leading-[1.25] italic text-warm sm:text-[1.85rem] md:text-[2.05rem]">
                       Your shares have been sent, {firstNameDisplay}.
-                      <br />
+                    </p>
+                    <p className="mb-12 max-w-2xl font-body text-[0.95rem] font-light leading-[1.75] text-warm/65 md:text-base">
                       {formattedRecipientNames}{' '}
                       {sentCount === 1 ? 'has' : 'have'} been brought into the fold, growing the
-                      network.
-                      <br />
-                      Come back to watch your impact spread.
-                      <br />
-                      <span className="hidden lg:inline">The expanded map lives in the left panel.</span>
-                      <span className="lg:hidden">Open the menu to see your full impact map.</span>
-                    </>
-                  ) : (
-                    <>
-                      You’re connected to <span className="italic">{viewerFilmTitle}</span>.
-                      <br />
-                      <span className="hidden lg:inline">Your live invitation map is in the left panel — scroll and drag to explore.</span>
-                      <span className="lg:hidden">Open the menu to see your live invitation map.</span>
-                      <br />
+                      network. Come back to watch your impact spread.
+                      <span className="hidden lg:inline"> Your full network map is below.</span>
+                      <span className="lg:hidden"> Scroll for your impact map.</span>
+                    </p>
+                  </>
+                ) : (
+                  <p className="mb-12 max-w-2xl font-body text-[0.95rem] font-light leading-[1.75] text-warm/70 md:text-base">
+                    You’re connected to <span className="italic">{viewerFilmTitle}</span>.
+                    <span className="hidden lg:inline">
+                      {' '}
+                      Your live invitation map is below — scroll and drag to explore.
+                    </span>
+                    <span className="lg:hidden"> Scroll down for your live invitation map.</span>
+                    <br />
+                    <span className="text-warm/55">
                       When you send invitations, the map and list below update together.
-                    </>
-                  )}
-                </p>
+                    </span>
+                  </p>
+                )}
 
-                <div className="mb-2 flex flex-col justify-between gap-2 border-b border-faint/40 pb-4 md:flex-row md:items-baseline">
-                  <h3 className="font-sans text-[10px] uppercase tracking-[0.3em] text-warm/50">
-                    At a glance
-                  </h3>
-                  <span className="font-serif-v3 text-[12px] italic tracking-widest text-warm/70">
-                    {viewerFilmTitle}
-                  </span>
-                </div>
-                <p className="mb-10 font-sans text-[10px] uppercase tracking-widest text-warm/35">
-                  <span className="hidden lg:inline">Full network map → left sidebar</span>
-                  <span className="lg:hidden">Full network map → menu</span>
-                </p>
+                {graphLayout ? (
+                  <div className="mb-12 flex w-full flex-col animate-fade-in">
+                    <div className="mb-5 flex flex-row items-baseline justify-between gap-4">
+                      <h3 className="font-sans text-[10px] font-medium uppercase tracking-[0.32em] text-warm/50">
+                        My network impact
+                      </h3>
+                      <span className="max-w-[min(100%,14rem)] text-right font-serif-v3 text-[12px] italic leading-snug tracking-wide text-warm/65 sm:max-w-[20rem] sm:text-[13px]">
+                        {viewerFilmTitle}
+                      </span>
+                    </div>
+                    <div className="relative flex min-h-[min(52vh,560px)] w-full overflow-hidden border border-faint/30 bg-[#0a0f1a] sm:min-h-[min(56vh,620px)]">
+                      <NetworkGraph
+                        fillHeight
+                        pannable
+                        transparentSurface
+                        zoomControlsPosition="center-right"
+                        viewportMaxSize="min(min(42vh, 44vw), 420px)"
+                        nodesData={graphLayout.nodesData}
+                        linksData={graphLayout.linksData}
+                        viewBoxH={graphLayout.viewBoxH}
+                        ringRadii={graphLayout.ringRadii}
+                        rootNode={graphLayout.rootNode}
+                        defaultActiveNodes={graphLayout.defaultActiveNodes}
+                        defaultActiveLinks={graphLayout.defaultActiveLinks}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mb-10 font-sans text-[10px] uppercase tracking-widest text-warm/35">
+                    Your network map will appear here after invitations are sent.
+                  </p>
+                )}
               </section>
 
               <section
-                className="mb-24 w-full animate-fade-in"
+                className="mb-24 w-full max-w-6xl animate-fade-in"
                 style={{ animationDelay: '120ms' }}
               >
-                <h3 className="mb-6 border-b border-faint/40 pb-4 font-sans text-[10px] uppercase tracking-[0.3em] text-warm/50">
+                <h3 className="mb-6 border-b border-faint/25 pb-4 font-sans text-[10px] font-medium uppercase tracking-[0.32em] text-warm/50">
                   Sent invitations
                 </h3>
                 <div className="flex flex-col gap-4">
                   {viewerSentInvites.length === 0 ? (
-                    <div className="border border-dashed border-faint/30 p-8 text-center font-sans text-[10px] uppercase tracking-widest text-warm/20">
+                    <div className="border border-dashed border-faint/25 bg-[#0a0f1a]/40 p-8 text-center font-sans text-[10px] uppercase tracking-widest text-warm/25">
                       No active invitations
                     </div>
                   ) : (
@@ -675,37 +661,37 @@ export default function Dashboard() {
                       return (
                         <div
                           key={inv.id}
-                          className="flex flex-col items-stretch justify-between gap-4 border border-faint/50 bg-paper/70 p-6 transition-colors hover:bg-paper sm:flex-row sm:items-center md:p-8"
+                          className="flex flex-col items-stretch justify-between gap-4 border border-faint/30 bg-[#0a0f1a]/50 p-6 transition-colors hover:border-faint/45 sm:flex-row sm:items-center md:p-8"
                         >
                           <div className="flex flex-col gap-4">
                             <div>
-                              <span className="mb-1 block font-sans text-[9px] uppercase tracking-[0.4em] text-warm/30">
+                              <span className="mb-1 block font-sans text-[9px] font-medium uppercase tracking-[0.35em] text-warm/35">
                                 Invitation {String(index + 1).padStart(2, '0')}
                               </span>
-                              <h4 className="font-serif-v3 text-2xl italic text-warm">
+                              <h4 className="font-serif-v3 text-2xl italic leading-tight text-warm md:text-[1.65rem]">
                                 {displayName}
                               </h4>
                             </div>
                             <div className="flex flex-wrap gap-10">
-                              <div className="flex flex-col">
-                                <span className="font-sans text-[9px] uppercase tracking-widest text-warm/40">
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-sans text-[9px] uppercase tracking-[0.2em] text-warm/40">
                                   Shares initiated
                                 </span>
-                                <span className="font-display text-lg text-accent">{cc.shares}</span>
+                                <span className="font-display text-xl font-normal text-accent">{cc.shares}</span>
                               </div>
-                              <div className="flex flex-col">
-                                <span className="font-sans text-[9px] uppercase tracking-widest text-warm/40">
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-sans text-[9px] uppercase tracking-[0.2em] text-warm/40">
                                   Resulting viewers
                                 </span>
-                                <span className="font-display text-lg text-accent">
+                                <span className="font-display text-xl font-normal text-accent">
                                   {cc.viewers}
                                 </span>
                               </div>
                             </div>
                           </div>
-                          <div className="flex shrink-0 items-center gap-3 self-start border border-warm/20 bg-ink/50 px-6 py-2 sm:self-center">
-                            <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-                            <span className="font-sans text-[10px] uppercase tracking-widest text-warm/80">
+                          <div className="flex shrink-0 items-center gap-2.5 self-start border border-warm/15 bg-[#05070a]/80 px-5 py-2 sm:self-center">
+                            <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+                            <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/85">
                               {inv.status === 'pending' ? 'Active' : inv.status}
                             </span>
                           </div>
@@ -717,7 +703,8 @@ export default function Dashboard() {
               </section>
 
               <footer className="w-full py-12 text-center font-sans text-[10px] uppercase tracking-widest text-warm/40">
-                &copy; {new Date().getFullYear()} Deepcast.
+                &copy; {new Date().getFullYear()}{' '}
+                <span className="font-sans font-semibold normal-case">Deepcast</span>.
               </footer>
             </>
           )}

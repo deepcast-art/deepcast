@@ -12,8 +12,9 @@ export default function Unsubscribe() {
           Screening invitation emails
         </h1>
         <p className="mt-6 font-body text-sm leading-relaxed text-text-muted">
-          Deepcast sends private screening links when someone you know shares a film with you. These
-          messages are not bulk marketing mail; each invitation is tied to a specific share.
+          <span className="font-sans font-semibold text-text-muted">Deepcast</span> sends private
+          screening links when someone you know shares a film with you. These messages are not bulk
+          marketing mail; each invitation is tied to a specific share.
         </p>
         <p className="mt-4 font-body text-sm leading-relaxed text-text-muted">
           If you do not want to receive further screening invitations at this email address, you can
@@ -22,7 +23,10 @@ export default function Unsubscribe() {
         </p>
         <p className="mt-4 font-body text-sm leading-relaxed text-text-muted">
           For account or privacy questions, contact the person who invited you or visit{' '}
-          <Link to="/" className="text-accent underline-offset-2 hover:underline">
+          <Link
+            to="/"
+            className="font-sans font-semibold text-accent underline-offset-2 hover:underline"
+          >
             deepcast.art
           </Link>
           .

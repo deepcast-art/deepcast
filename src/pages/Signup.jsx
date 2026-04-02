@@ -37,7 +37,13 @@ export default function Signup() {
             <DeepcastLogo variant="ink" className="h-8" />
           </Link>
           <h1 className="text-2xl font-display mt-6 mb-2">
-            {isCreator ? 'Creator signup' : 'Join Deepcast'}
+            {isCreator ? (
+              'Creator signup'
+            ) : (
+              <>
+                Join <span className="font-sans font-semibold">Deepcast</span>
+              </>
+            )}
           </h1>
           <p className="text-text-muted text-sm">
             {isCreator

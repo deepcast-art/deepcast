@@ -461,7 +461,7 @@ export default function InviteScreening() {
         >
           <div className="flex flex-col items-center gap-3 z-10 max-w-xl text-center">
             <div
-              className="font-body font-light text-base md:text-lg text-[#dddddd]/85 leading-relaxed"
+              className="font-display font-normal text-base md:text-lg text-[#dddddd]/85 leading-relaxed"
               style={{
                 transition: 'opacity 2.5s ease-in-out',
                 opacity:
@@ -471,7 +471,7 @@ export default function InviteScreening() {
               A thoughtfully curated film experience for {recipientFirstName},
             </div>
             <div
-              className="font-body font-light text-base md:text-lg text-[#dddddd]/85 leading-relaxed"
+              className="font-display font-normal text-base md:text-lg text-[#dddddd]/85 leading-relaxed"
               style={{
                 transition: 'opacity 2.5s ease-in-out',
                 opacity:
@@ -491,8 +491,9 @@ export default function InviteScreening() {
       >
         {/* Still loading data after prologue finished */}
         {status === 'loading' && (
-          <div className="min-h-screen flex items-center justify-center">
+          <div className="font-display font-normal min-h-screen flex flex-col items-center justify-center gap-4">
             <Spinner />
+            <span className="sr-only">Loading</span>
           </div>
         )}
 
@@ -511,10 +512,13 @@ export default function InviteScreening() {
 
             {/* Viewport-centered invite column: sticky + fixed height on md so tall right panel doesn’t pull the cluster downward */}
             <div className="flex min-h-[100dvh] w-full shrink-0 flex-col items-center justify-center gap-10 bg-[#080c18] px-8 py-12 md:sticky md:top-0 md:h-[100dvh] md:max-h-[100dvh] md:min-h-0 md:w-1/2 md:shrink-0 md:px-16 md:py-0">
-              <div className="reveal-up" style={{ transitionDelay: '200ms' }}>
+              <div
+                className="reveal-up flex w-full max-w-[min(92vw,42rem)] justify-center px-1"
+                style={{ transitionDelay: '200ms' }}
+              >
                 <DeepcastLogo
                   variant="wordmark"
-                  className="h-12 w-auto max-w-[min(90vw,440px)] md:h-16"
+                  className="!text-[clamp(3rem,13vw,7rem)] w-auto max-w-full leading-none md:!text-[clamp(3rem,min(22vw,6.75rem),6.75rem)]"
                 />
               </div>
               <button
@@ -537,31 +541,16 @@ export default function InviteScreening() {
 
             <div className="hidden h-[100dvh] w-[0.5px] shrink-0 self-start bg-[#b1a180] opacity-30 md:block" />
 
-            <div className="flex min-h-[min(60vh,520px)] w-full shrink-0 flex-col overflow-hidden bg-[#090d19] md:min-h-[100dvh] md:w-1/2 md:flex-1">
-              <div className="flex shrink-0 justify-center px-4 pt-6 pb-4 md:pt-10 md:pb-6">
-                <div
-                  className="flex max-w-md flex-col items-center gap-1 text-center px-2"
-                  style={{
-                    opacity: viewVisible ? 1 : 0,
-                    transition: 'opacity 1.2s ease-out 0.6s',
-                  }}
-                >
-                  <p className="font-body text-[11px] font-light uppercase tracking-[0.35em] text-[#dddddd]/70">
-                    {peopleCount != null
-                      ? `You are among ${peopleCount} people this film has reached by invitation.`
-                      : 'You were invited by private invitation only.'}
-                  </p>
-                  <p className="font-body text-[11px] font-light uppercase tracking-[0.35em] text-[#dddddd]/70">
-                    By private invitation only.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex min-h-[min(40vh,480px)] flex-1 flex-col opacity-90 md:min-h-0">
+            <div className="relative isolate min-h-[min(60vh,520px)] w-full shrink-0 overflow-hidden bg-[#090d19] md:min-h-[100dvh] md:h-[100dvh] md:w-1/2 md:flex-1">
+              {/* Edge-to-edge graph — headline overlay only */}
+              <div className="absolute inset-0 z-0 flex min-h-[min(40vh,480px)] flex-col md:min-h-0">
                 {graphLayout ? (
                   <NetworkGraph
                     fillHeight
                     pannable
+                    plainShell
+                    fullBleed
+                    surfaceColor="#090d19"
                     nodesData={graphLayout.nodesData}
                     linksData={graphLayout.linksData}
                     viewBoxH={graphLayout.viewBoxH}
@@ -571,12 +560,30 @@ export default function InviteScreening() {
                     defaultActiveLinks={graphLayout.defaultActiveLinks}
                   />
                 ) : (
-                  <div className="flex flex-1 items-center justify-center px-6 text-sm text-[#dddddd]/40">
+                  <div className="flex h-full flex-1 items-center justify-center px-6 text-sm text-[#dddddd]/40">
                     {filmInvites.length > 0
                       ? 'Preparing your invitation map…'
                       : 'Your private path to this film begins here.'}
                   </div>
                 )}
+              </div>
+              <div
+                className="pointer-events-none absolute left-0 right-0 top-0 z-20 flex justify-center px-4 pt-6 md:pt-10"
+                style={{
+                  opacity: viewVisible ? 1 : 0,
+                  transition: 'opacity 1.2s ease-out 0.6s',
+                }}
+              >
+                <div className="flex max-w-md flex-col items-center gap-1 px-2 text-center">
+                  <p className="font-display text-[9px] font-light uppercase tracking-[0.35em] text-[#dddddd]/70">
+                    {peopleCount != null
+                      ? `You are the ${peopleCount} people  to be invited to watch this film.`
+                      : 'By private invitation only.'}
+                  </p>
+                  <p className="font-display text-[9px] font-light uppercase tracking-[0.35em] text-[#dddddd]/70">
+                    By private invitation only.
+                  </p>
+                </div>
               </div>
             </div>
           </section>
@@ -860,7 +867,7 @@ export default function InviteScreening() {
                             </div>
                             <div className="flex flex-col gap-2 text-left">
                               <label className="font-sans text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/55">
-                                Your Verification
+                                Your Email
                               </label>
                               <input
                                 type="email"
@@ -983,7 +990,8 @@ export default function InviteScreening() {
                       ) : (
                         <>
                           <p className="font-body text-xs text-[#dddddd]/50">
-                            Join Deepcast to unlock more invites
+                            Join <span className="font-sans font-semibold text-[#dddddd]/50">Deepcast</span>{' '}
+                            to unlock more invites
                           </p>
                           <Link
                             to="/signup"

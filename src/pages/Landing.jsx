@@ -153,9 +153,33 @@ export default function Landing() {
     return { first: '', last: '', full: '' }
   }, [inviterFromParams, firstInviterName])
 
+  const heroBgUrl = useMemo(() => {
+    const u = import.meta.env.VITE_LANDING_HERO_BG_URL
+    return typeof u === 'string' && u.trim() ? u.trim() : ''
+  }, [])
+
   return (
-    <div className="min-h-screen flex flex-col items-center px-6 py-12 bg-bg">
-      <div className="max-w-2xl w-full mx-auto text-center">
+    <div className="relative min-h-screen w-full">
+      {heroBgUrl ? (
+        <>
+          <img
+            src={heroBgUrl}
+            alt=""
+            aria-hidden
+            className="pointer-events-none fixed inset-0 z-0 h-full w-full object-cover object-center"
+          />
+          <div
+            className="pointer-events-none fixed inset-0 z-[1] bg-[#080c18]/70"
+            aria-hidden
+          />
+        </>
+      ) : null}
+      <div
+        className={`relative z-10 flex min-h-screen w-full flex-col items-center px-6 py-12 ${
+          heroBgUrl ? '' : 'bg-bg'
+        }`}
+      >
+      <div className="mx-auto w-full max-w-2xl text-center text-balance [&_a]:drop-shadow-sm [&_h1]:drop-shadow-sm [&_p]:drop-shadow-sm [&_span]:drop-shadow-sm">
         <div className="mb-6 dc-fade-in dc-fade-in-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
           <Link
             to="/login"
@@ -174,9 +198,16 @@ export default function Landing() {
           </Link>
         </div>
 
-        <div className="flex justify-center mb-8 dc-fade-in dc-fade-in-2">
-          <Link to="/" className="inline-flex hover:opacity-90 transition-opacity">
-            <DeepcastLogo variant="wordmark" className="h-9 sm:h-10 w-auto" />
+        <div className="flex justify-center mb-10 dc-fade-in dc-fade-in-2">
+          <Link
+            to="/"
+            className="inline-flex max-w-[min(92vw,46rem)] justify-center hover:opacity-90 transition-opacity"
+            aria-label="Deepcast home"
+          >
+            <DeepcastLogo
+              variant="wordmark"
+              className="!text-[clamp(3rem,13vw,7rem)] w-auto max-w-full leading-none"
+            />
           </Link>
         </div>
 
@@ -216,7 +247,7 @@ export default function Landing() {
           <div className="w-full bg-bg-card border-[0.5px] border-border rounded-none overflow-hidden aspect-video">
             {directVideoUrl && !directVideoError ? (
               <video
-                className="w-full h-full object-cover bg-ink"
+                className="h-full w-full bg-ink object-cover object-center"
                 controls
                 playsInline
                 preload="metadata"
@@ -249,7 +280,13 @@ export default function Landing() {
                   playsInline
                   preload="none"
                   metadata={{ video_title: 'Deepcast intro' }}
-                  style={{ width: '100%', height: '100%', display: 'block' }}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    display: 'block',
+                    objectFit: 'cover',
+                    objectPosition: 'center',
+                  }}
                 />
               </Suspense>
             ) : (
@@ -311,10 +348,13 @@ export default function Landing() {
         {!graphLayout && (
           <div className="dc-fade-in dc-fade-in-5 border-t border-border pt-12">
             <p className="text-text-muted text-sm text-center">
-              When screenings run on Deepcast, a live map of invitations can appear here.
+              When screenings run on{' '}
+              <span className="font-sans font-semibold text-text-muted">Deepcast</span>, a live map of
+              invitations can appear here.
             </p>
           </div>
         )}
+      </div>
       </div>
     </div>
   )
