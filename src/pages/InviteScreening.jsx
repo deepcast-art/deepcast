@@ -8,11 +8,11 @@ import {
   useMemo,
 } from 'react'
 import DeepcastLogo from '../components/DeepcastLogo'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import NetworkGraph, { buildGraphLayout } from '../components/NetworkGraph'
+import NetworkGraph, { buildGraphLayout, inviteRecipientKey } from '../components/NetworkGraph'
 import './screening-room.css'
 
 const VIEWER_SHARE_LIMIT = 5
@@ -40,8 +40,10 @@ function Spinner({ className = '' }) {
 
 export default function InviteScreening() {
   const { token } = useParams()
+  const [searchParams] = useSearchParams()
+  const directPlay = searchParams.get('play') === '1'
   const navigate = useNavigate()
-  const { signIn, signUp, signOut, fetchProfile, user } = useAuth()
+  const { signUp, signOut, fetchProfile, user, resetPassword } = useAuth()
 
   /* ---------- DATA STATE ---------- */
 
@@ -76,7 +78,6 @@ export default function InviteScreening() {
   const [letterRecipientEmail, setLetterRecipientEmail] = useState('')
   const [letterSenderName, setLetterSenderName] = useState('')
   const [letterSenderEmail, setLetterSenderEmail] = useState('')
-  const [letterPassword, setLetterPassword] = useState('')
   const [sentLetters, setSentLetters] = useState([])
   const [letterSending, setLetterSending] = useState(false)
   const [letterError, setLetterError] = useState('')
@@ -137,6 +138,17 @@ export default function InviteScreening() {
     validateInvite()
   }, [token])
 
+  // When ?play=1 is present, skip prologue + landing and go straight to the screening room
+  useEffect(() => {
+    if (!directPlay || status !== 'valid') return
+    if (entrySplashTimerRef.current?.clear) entrySplashTimerRef.current.clear()
+    entrySplashRunningRef.current = false
+    setPrologueState({ text1: false, text2: false, textsVisible: false, overlayVisible: false, mounted: false })
+    setPreScreeningPrologue({ visible: false, textVisible: false, text2Visible: false, fading: false })
+    setViewVisible(true)
+    finalizeEnterScreening()
+  }, [directPlay, status])
+
   async function validateInvite() {
     try {
       const r = await api.validateInvite(token)
@@ -170,9 +182,11 @@ export default function InviteScreening() {
   /* ---------- NETWORK GRAPH ---------- */
 
   const viewerRecipientKey = invite
-    ? invite.recipient_name
-      ? `${invite.recipient_email || ''}:${invite.recipient_name.trim().toLowerCase()}`
-      : invite.recipient_email || `recipient:${invite.id}`
+    ? inviteRecipientKey({
+        id: invite.id,
+        recipient_email: invite.recipient_email,
+        recipient_name: invite.recipient_name,
+      })
     : null
 
   const graphLayout = useMemo(() => {
@@ -373,6 +387,10 @@ export default function InviteScreening() {
     const p = e.target
     if (!p.duration) return
     const pct = Math.round((p.currentTime / p.duration) * 100)
+
+    // Persist playback position so the user can resume later
+    if (token) localStorage.setItem(`screening_position_${token}`, Math.floor(p.currentTime))
+
     if (pct >= 70 && !hasMarkedWatched.current) {
       hasMarkedWatched.current = true
       await supabase
@@ -414,13 +432,26 @@ export default function InviteScreening() {
   }
 
   function handleEnded() {
-    setShowPostFilm(true)
     setIsScreeningPaused(true)
+
     if (sessionId)
       supabase
         .from('watch_sessions')
         .update({ watch_percentage: 100, completed: true })
         .eq('id', sessionId)
+
+    // Clear stored position so "watch again" always starts from the beginning
+    if (token) localStorage.removeItem(`screening_position_${token}`)
+
+    // Already has an account (sent invite before) → go straight to dashboard
+    if (user?.id && isInviteRecipientSession) {
+      if (token) localStorage.setItem('viewer_invite_token', token)
+      navigate('/dashboard', { replace: true })
+      return
+    }
+
+    // First time finishing — show "Pass it on" to collect invite + create account
+    setShowPostFilm(true)
   }
 
   /* ---------- LETTER FORM ---------- */
@@ -447,19 +478,6 @@ export default function InviteScreening() {
       setLetterError('Please enter your name and a valid email.')
       return
     }
-    const postFilmUseSession =
-      showPostFilm && Boolean(user?.id && isInviteRecipientSession)
-
-    if (showPostFilm && !postFilmUseSession) {
-      if (!letterPassword.trim()) {
-        setLetterError('Please create a password to set up your account.')
-        return
-      }
-      if (letterPassword.trim().length < 6) {
-        setLetterError('Password must be at least 6 characters.')
-        return
-      }
-    }
     if (slotsRemaining <= 0) {
       setLetterError('All invitations have been sent.')
       return
@@ -469,55 +487,26 @@ export default function InviteScreening() {
     try {
       let senderId = null
 
-      if (showPostFilm) {
-        if (postFilmUseSession) {
-          const senderNorm = letterSenderEmail.trim().toLowerCase()
-          const inviteNorm = invite?.recipient_email?.trim().toLowerCase()
-          if (inviteNorm && senderNorm !== inviteNorm) {
-            setLetterError(
-              'Your account email must match the address this invitation was sent to.'
-            )
-            setLetterSending(false)
-            return
-          }
-          senderId = user.id
-        } else if (letterPassword.trim()) {
+      if (user?.id && isInviteRecipientSession) {
+        senderId = user.id
+      } else {
+        // Auto-create an account using the invite's recipient email
+        const accountEmail = (invite?.recipient_email || '').trim() || letterSenderEmail.trim()
+        const accountName = letterSenderName.trim() || (invite?.recipient_name || '').trim()
+        if (accountEmail && accountEmail.includes('@')) {
+          const tempPwd = Array.from(
+            { length: 24 },
+            () => 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^'[
+              Math.floor(Math.random() * 58)
+            ]
+          ).join('')
           try {
-            const r = await signIn(letterSenderEmail.trim(), letterPassword)
-            senderId = r?.user?.id || r?.profile?.id || null
-          } catch (signInErr) {
-            const signInMsg = signInErr?.message || ''
-            if (/profile could not be loaded/i.test(signInMsg)) {
-              setLetterError(signInMsg)
-              setLetterSending(false)
-              return
-            }
-            try {
-              const r = await signUp(
-                letterSenderEmail.trim(),
-                letterPassword,
-                letterSenderName.trim(),
-                'viewer',
-                letterSenderName.trim(),
-                ''
-              )
-              senderId = r?.user?.id || null
-            } catch (e) {
-              const upMsg = e?.message || ''
-              if (
-                /invalid login credentials|invalid email or password/i.test(upMsg)
-              ) {
-                setLetterError(
-                  'That email already has an account. Enter the correct password to continue.'
-                )
-              } else {
-                setLetterError(
-                  upMsg || 'Could not create account. Please try again.'
-                )
-              }
-              setLetterSending(false)
-              return
-            }
+            const r = await signUp(accountEmail, tempPwd, accountName, 'viewer', accountName, '')
+            senderId = r?.user?.id || null
+            // Send a "set your password" email so the user can log back in later
+            try { await resetPassword(accountEmail) } catch { /* non-blocking */ }
+          } catch {
+            // Account may already exist — proceed; dashboard auth will handle it
           }
         }
       }
@@ -547,27 +536,10 @@ export default function InviteScreening() {
         await fetchProfile(session.user.id, session.access_token)
       }
 
-      if (showPostFilm) {
-        navigate('/dashboard', { replace: true })
-        return
-      }
-
-      setSentLetters((prev) => [
-        ...prev,
-        { name: recipientName, email: letterRecipientEmail.trim() },
-      ])
-      setLetterSuccess(
-        `Invitation sent to ${letterRecipientFirst.trim()}. They\u2019ll receive a private screening link.`
-      )
-      setLetterRecipientFirst('')
-      setLetterRecipientLast('')
-      setLetterNote('')
-      setLetterRecipientEmail('')
-      setLetterPassword('')
-      setIsScreeningPaused(true)
-      queueMicrotask(() => {
-        const mux = document.querySelector('mux-player')
-        if (mux && typeof mux.pause === 'function') mux.pause()
+      if (token) localStorage.setItem('viewer_invite_token', token)
+      navigate('/dashboard', {
+        replace: true,
+        state: { inviteSent: true, recipientName: letterRecipientFirst.trim() },
       })
     } catch (err) {
       setLetterError(err.message || 'Failed to send. Please try again.')
@@ -856,6 +828,7 @@ export default function InviteScreening() {
                   metadata={{ video_title: film.title }}
                   accentColor="#b1a180"
                   autoPlay
+                  startTime={Number(localStorage.getItem(`screening_position_${token}`)) || 0}
                   onTimeUpdate={handleTimeUpdate}
                   onEnded={handleEnded}
                   onPause={() => setIsScreeningPaused(true)}
@@ -979,22 +952,22 @@ export default function InviteScreening() {
 
                             <div className="w-[40px] h-[1px] bg-[#2a2a2a]/15 my-2.5" />
 
-                            <div className="flex gap-2.5 w-full max-w-[300px]">
-                              <input type="email" placeholder="Your email" value={letterSenderEmail} onChange={(e) => setLetterSenderEmail(e.target.value)} className="flex-1 text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/25 pb-1 text-[12px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/25 focus:outline-none rounded-none" />
-                              {!isInviteRecipientSession && (
-                                <input type="password" placeholder="Password" value={letterPassword} onChange={(e) => setLetterPassword(e.target.value)} className="flex-1 text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/25 pb-1 text-[12px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/25 focus:outline-none rounded-none" />
-                              )}
-                            </div>
 
                             <button type="button" onClick={handleSendLetter} disabled={letterSending} className="mt-3 w-full py-2.5 bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-sans text-[11px] tracking-[0.3em] uppercase transition-colors duration-300 rounded-none disabled:opacity-40">
                               {letterSending ? 'Sending…' : 'Seal & Send'}
                             </button>
-                            <p className="mt-1 font-sans text-[8px] uppercase tracking-[0.2em] text-[#2a2a2a]/40">
-                              ({slotsRemaining} share{slotsRemaining !== 1 ? 's' : ''} remaining)
-                            </p>
                           </>
                         ) : (
                           <p className="font-serif-v3 text-base text-[#2a2a2a]/70 my-4">All invitations have been sent.</p>
+                        )}
+                        {showPostFilm && (
+                          <button
+                            type="button"
+                            onClick={() => navigate('/dashboard', { replace: true })}
+                            className="mt-2 w-full py-1.5 font-sans text-[9px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors"
+                          >
+                            Skip — Go to dashboard
+                          </button>
                         )}
                       </div>
                     </div>
@@ -1040,7 +1013,7 @@ export default function InviteScreening() {
                     {graphLayout && (
                       <div className="mt-2 flex flex-col flex-1 min-h-0">
                         <span className="font-sans text-[9px] uppercase tracking-[0.3em] text-[#dddddd]/40 block mb-3">Your network impact</span>
-                        <div className="bg-[#121a33] rounded overflow-hidden flex-1 min-h-[240px] max-h-[340px]">
+                        <div className="bg-[#121a33] rounded overflow-hidden flex-1 min-h-[340px] max-h-[520px]">
                           <NetworkGraph
                             fillHeight
                             pannable
@@ -1115,34 +1088,14 @@ export default function InviteScreening() {
                             </div>
                           </div>
 
-                          <div className="flex flex-col items-center justify-center mt-4 mb-1 gap-2">
-                            {sentLetters.length > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => { setLetterRecipientFirst(''); setLetterRecipientLast(''); setLetterNote(''); setLetterRecipientEmail(''); setLetterSuccess(''); setLetterError('') }}
-                                className="font-sans text-[10px] text-[#2a2a2a] px-6 py-2 border-[0.5px] border-[#2a2a2a]/40 hover:bg-[#2a2a2a]/10 transition-all duration-300 uppercase tracking-[0.2em] rounded-full"
-                              >
-                                + Draft another letter
-                              </button>
-                            )}
-                            <span className="font-sans text-[9px] uppercase tracking-[0.3em] text-[#2a2a2a]/60">
-                              ({slotsRemaining} Share{slotsRemaining !== 1 ? 's' : ''} Remaining)
-                            </span>
-                          </div>
 
                           <div className="w-[80px] h-[1px] bg-gradient-to-r from-transparent via-[#2a2a2a]/30 to-transparent my-3" />
 
                           <div className="flex flex-col items-center gap-2 w-full max-w-[320px]">
-                            {isInviteRecipientSession ? (
-                              <p className="font-sans text-[10px] uppercase tracking-[0.18em] text-[#2a2a2a]/50 text-center">
-                                You&apos;re signed in — seal and send uses your account.
+                            {!isInviteRecipientSession && (
+                              <p className="font-sans text-[9px] uppercase tracking-[0.18em] text-[#2a2a2a]/45 text-center">
+                                Your account will be created automatically.
                               </p>
-                            ) : (
-                              <>
-                                <label className="font-sans text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/70 text-center">Create your account to seal &amp; send</label>
-                                <input type="email" placeholder="Your Email Address" value={letterSenderEmail} onChange={(e) => setLetterSenderEmail(e.target.value)} className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none transition-colors rounded-none" />
-                                <input type="password" placeholder="Create Password" value={letterPassword} onChange={(e) => setLetterPassword(e.target.value)} minLength={6} autoComplete="new-password" className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none transition-colors rounded-none" />
-                              </>
                             )}
                             <button type="button" onClick={handleSendLetter} disabled={letterSending} className="mt-6 w-full py-3 bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-sans text-[11px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none mb-6 disabled:opacity-40">
                               {letterSending ? 'Sending…' : 'Seal & Send'}
@@ -1162,6 +1115,15 @@ export default function InviteScreening() {
                               </p>
                               <button type="button" onClick={() => void signOut()} className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#2a2a2a]/50 hover:text-[#2a2a2a]">Sign out</button>
                             </div>
+                          )}
+                          {showPostFilm && (
+                            <button
+                              type="button"
+                              onClick={() => navigate('/dashboard', { replace: true })}
+                              className="mt-2 w-full max-w-[320px] py-2 font-sans text-[9px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors"
+                            >
+                              Skip — Go to dashboard
+                            </button>
                           )}
                         </>
                       ) : (

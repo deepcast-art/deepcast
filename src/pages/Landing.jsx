@@ -190,12 +190,13 @@ export default function Landing() {
           <span className="text-border select-none" aria-hidden>
             ·
           </span>
+          {/* Filmmaker signup link 
           <Link
             to="/signup?role=creator"
             className="font-body text-xs font-medium tracking-wide text-muted hover:text-accent transition-colors duration-[var(--duration-base)]"
           >
             Filmmaker signup
-          </Link>
+          </Link>*/}
         </div>
 
         <div className="flex justify-center mb-10 dc-fade-in dc-fade-in-2">
@@ -215,7 +216,7 @@ export default function Landing() {
           Not for everyone. <span className="text-text">Just for you.</span>
         </p>
 
-        <h1 className="font-display text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] text-text mb-6 dc-fade-in dc-fade-in-3">
+        <h2 className="font-display text-[length:var(--text-display-sm)] sm:text-[length:var(--text-display)] leading-[var(--leading-display)] tracking-[var(--tracking-tight)] text-text mb-6 dc-fade-in dc-fade-in-3">
           No algorithm sent you here.{' '}
           {displayInviter.full ? (
             <>
@@ -233,7 +234,7 @@ export default function Landing() {
               <span className="text-muted">Someone who chose you</span> did.
             </>
           )}
-        </h1>
+        </h2>
 
         <p className="font-body text-base sm:text-lg font-light text-muted leading-[var(--leading-body)] max-w-md mx-auto mb-10 dc-fade-in dc-fade-in-4">
           Before you watch the film, take 120 seconds to understand what you&rsquo;ve been invited to.
@@ -345,6 +346,7 @@ export default function Landing() {
           </div>
         )}
 
+{/*}
         {!graphLayout && (
           <div className="dc-fade-in dc-fade-in-5 border-t border-border pt-12">
             <p className="text-text-muted text-sm text-center">
@@ -353,7 +355,7 @@ export default function Landing() {
               invitations can appear here.
             </p>
           </div>
-        )}
+        )}*/}
       </div>
       </div>
     </div>

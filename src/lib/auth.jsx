@@ -366,9 +366,21 @@ export function AuthProvider({ children }) {
     setProfileLoaded(false)
   }
 
+  const resetPassword = async (email, redirectTo) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: redirectTo || `${window.location.origin}/reset-password`,
+    })
+    if (error) throw error
+  }
+
+  const updatePassword = async (newPassword) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    if (error) throw error
+  }
+
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, loading, profileLoaded, signUp, signIn, signOut, fetchProfile }}
+      value={{ session, user, profile, loading, profileLoaded, signUp, signIn, signOut, fetchProfile, resetPassword, updatePassword }}
     >
       {children}
     </AuthContext.Provider>

@@ -51,18 +51,6 @@ export default function Login() {
           <p className="text-text-muted text-sm">Sign in to your account.</p>
         </div>
 
-        <div className="mb-6 text-center animate-fade-in animate-delay-200">
-          <p className="text-text-muted text-sm">
-            New here?{' '}
-            <Link
-              to="/signup?role=creator"
-              className="text-accent hover:text-accent-hover transition-colors"
-            >
-              Filmmaker signup
-            </Link>
-          </p>
-        </div>
-
         <form onSubmit={handleSubmit} className="space-y-5 animate-fade-in animate-delay-300">
           {error && (
             <div className="text-error text-sm text-center bg-error/10 rounded-none py-2 px-4">
@@ -85,9 +73,17 @@ export default function Login() {
           </div>
 
           <div>
-            <label className="block text-xs text-text-muted uppercase tracking-wider mb-2">
-              Password
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs text-text-muted uppercase tracking-wider">
+                Password
+              </label>
+              <Link
+                to="/reset-password"
+                className="text-xs text-accent hover:text-accent-hover transition-colors"
+              >
+                Forgot password?
+              </Link>
+            </div>
             <input
               type="password"
               value={password}

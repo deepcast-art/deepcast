@@ -18,7 +18,8 @@ const GRAPH_COLORS = {
 // Active node:   fill amber
 // Inactive node: fill warm at opacity 0.45
 
-const VIEWBOX_SIZE = 850
+const BASE_VIEWBOX = 850
+const MIN_NODE_ARC = 80
 
 /* ------------------------------------------------------------------ */
 /*  LAYOUT — concentric rings: film center → creator/team → viewers   */
@@ -33,9 +34,11 @@ function toFirstName(value, fallback = 'Invitee') {
 }
 
 function recipientKey(row) {
-  return row.recipient_name
-    ? `${row.recipient_email || ''}:${row.recipient_name.trim().toLowerCase()}`
-    : row.recipient_email || `recipient:${row.id}`
+  const email = (row.recipient_email || '').trim().toLowerCase()
+  if (email) return email
+  const name = (row.recipient_name || '').trim().toLowerCase()
+  if (name) return `name:${name}`
+  return `recipient:${row.id}`
 }
 
 export function inviteRecipientKey(row) {
@@ -53,7 +56,9 @@ function senderKey(row) {
 
 /**
  * Build concentric-ring positioned nodes and links.
- * Ring 0 = film (center), Ring 1 = creator + team, Ring 2+ = people shared with.
+ *   Ring 0 = film (center)
+ *   Ring 1 = creator + teammates (anyone who sends invites)
+ *   Ring 2 = recipients, grouped by sender so siblings stay adjacent
  */
 export function buildGraphLayout({
   filmInvites,
@@ -76,11 +81,34 @@ export function buildGraphLayout({
   ensure(rootId, filmTitle?.trim() || 'Film', 'film')
   if (creatorName) {
     ensure(creatorNodeId, toFirstName(creatorName, 'Creator'), 'creator')
-    edges.push({ source: rootId, target: creatorNodeId })
   }
 
+  const creatorFirst = toFirstName(creatorName || '', '').trim().toLowerCase()
+  const creatorFull = (creatorName || '').trim().toLowerCase()
+  const senderNodeId = (row) => {
+    const senderNameRaw = (row.sender_name || '').trim()
+    const senderNameFull = senderNameRaw.toLowerCase()
+    const senderFirst = toFirstName(senderNameRaw, '').trim().toLowerCase()
+    const senderEmailLocal = (row.sender_email || '').trim().toLowerCase().split('@')[0] || ''
+    if (
+      creatorName &&
+      ((senderNameFull && senderNameFull === creatorFull) ||
+        (senderFirst && creatorFirst && senderFirst === creatorFirst) ||
+        (senderEmailLocal &&
+          ((creatorFull && senderEmailLocal === creatorFull) ||
+            (creatorFirst && senderEmailLocal === creatorFirst))))
+    ) {
+      return creatorNodeId
+    }
+    return senderKey(row)
+  }
+
+  /* --- Build sender→recipients map while creating nodes/edges --- */
+  const senderToRecipients = new Map()
+  const allRecipientKeys = new Set()
+
   filmInvites.forEach((row) => {
-    const sk = senderKey(row)
+    const sk = senderNodeId(row)
     const rk = recipientKey(row)
     const isViewer = viewerRecipientKey && rk === viewerRecipientKey
 
@@ -88,9 +116,13 @@ export function buildGraphLayout({
     ensure(
       rk,
       isViewer ? 'You' : toFirstName(row.recipient_name || row.recipient_email),
-      isViewer ? 'viewer' : 'person'
+      isViewer ? 'viewer' : 'person',
     )
     edges.push({ source: sk, target: rk })
+    allRecipientKeys.add(rk)
+
+    if (!senderToRecipients.has(sk)) senderToRecipients.set(sk, new Set())
+    senderToRecipients.get(sk).add(rk)
   })
 
   if (viewerRecipientKey) {
@@ -102,199 +134,191 @@ export function buildGraphLayout({
     }
   }
 
-  const allTargets = new Set(edges.map((e) => e.target))
-  const attachRoot = creatorName ? creatorNodeId : rootId
-  const allSources = new Set(edges.map((e) => e.source))
-  for (const s of allSources) {
-    if (!allTargets.has(s) && s !== rootId && s !== creatorNodeId) {
-      edges.push({ source: attachRoot, target: s })
-    }
+  /* --- Ring 1: creators + teammates (senders who are never recipients) --- */
+  const ring1Ids = new Set()
+  if (creatorName) ring1Ids.add(creatorNodeId)
+  for (const sk of senderToRecipients.keys()) {
+    if (sk !== rootId && !allRecipientKeys.has(sk)) ring1Ids.add(sk)
   }
 
-  /* BFS depth */
-  const adj = new Map()
-  edges.forEach((e) => {
-    if (!adj.has(e.source)) adj.set(e.source, [])
-    adj.get(e.source).push(e.target)
-  })
-
+  /* --- BFS to assign every node a ring depth --- */
   const depth = new Map([[rootId, 0]])
-  const queue = [rootId]
-  while (queue.length) {
-    const u = queue.shift()
-    for (const v of adj.get(u) || []) {
-      if (!depth.has(v)) {
-        depth.set(v, depth.get(u) + 1)
-        queue.push(v)
+  ring1Ids.forEach((id) => depth.set(id, 1))
+
+  const bfsQueue = [...ring1Ids]
+  while (bfsQueue.length > 0) {
+    const cur = bfsQueue.shift()
+    const curDepth = depth.get(cur)
+    for (const rk of senderToRecipients.get(cur) || []) {
+      if (!depth.has(rk)) {
+        depth.set(rk, curDepth + 1)
+        bfsQueue.push(rk)
       }
     }
   }
 
-  /* Concentric ring positioning */
-  const byDepth = new Map()
-  for (const [id, d] of depth) {
-    if (!byDepth.has(d)) byDepth.set(d, [])
-    byDepth.get(d).push(id)
+  const maxRing = depth.size > 1 ? Math.max(...depth.values()) : 0
+
+  /* --- Group nodes by ring --- */
+  const ringGroups = new Map()
+  for (const [id, ring] of depth.entries()) {
+    if (!ringGroups.has(ring)) ringGroups.set(ring, [])
+    ringGroups.get(ring).push(id)
   }
 
-  const maxDepth = Math.max(...byDepth.keys(), 1)
-  const cx = VIEWBOX_SIZE / 2
-  const cy = VIEWBOX_SIZE / 2
-  const maxRadius = VIEWBOX_SIZE / 2 - 70
-  const ringSpacing = maxDepth > 0 ? maxRadius / maxDepth : maxRadius
+  /* --- Compute a radius for each ring --- */
+  const halfBase = BASE_VIEWBOX / 2 - 70
+  const ringRadiiArr = [0] // ring 0 = center
+  for (let ring = 1; ring <= maxRing; ring++) {
+    const count = (ringGroups.get(ring) || []).length
+    const prevR = ringRadiiArr[ring - 1] || 0
+    const neededR = count > 0 ? (count * MIN_NODE_ARC) / (2 * Math.PI) : 0
+    let r
+    if (ring === 1) r = Math.max(halfBase * 0.35, neededR, prevR + 80)
+    else if (ring === 2) r = Math.max(halfBase * 0.65, neededR, prevR + 90)
+    else r = Math.max(prevR + 100, neededR)
+    ringRadiiArr.push(r)
+  }
+
+  const outerR = ringRadiiArr[maxRing] || 120
+  const padding = 80
+  const viewBoxDim = Math.max(BASE_VIEWBOX, (outerR + padding) * 2)
+  const cx = viewBoxDim / 2
+  const cy = viewBoxDim / 2
 
   const nodesData = []
-  const ringRadii = []
-  for (const [d, ids] of byDepth) {
-    const r = d * ringSpacing
-    ringRadii.push(r)
-    if (d === 0) {
-      const node = nodeMap.get(ids[0])
+  const ringRadii = [0]
+  const nodeAngles = new Map() // track placed angle per node for child grouping
+
+  // Ring 0 — film at center
+  nodesData.push({
+    id: rootId,
+    label: nodeMap.get(rootId)?.label || 'Film',
+    x: cx, y: cy,
+    size: 1.3,
+    type: 'film',
+    ring: 0,
+  })
+
+  // Ring 1 — creator + teammates, evenly spaced starting from top
+  const ring1Array = [...ring1Ids]
+  const ring1Count = ring1Array.length
+  const r1 = ringRadiiArr[1] || 0
+
+  if (ring1Count > 0) {
+    ringRadii.push(r1)
+    const start = -Math.PI / 2
+    ring1Array.forEach((id, i) => {
+      const angle = start + (2 * Math.PI * i) / ring1Count
+      nodeAngles.set(id, angle)
       nodesData.push({
-        id: ids[0],
-        label: node?.label || ids[0],
-        x: cx,
-        y: cy,
-        size: 1.3,
-        type: node?.type || 'film',
-        ring: 0,
+        id,
+        label: nodeMap.get(id)?.label || id,
+        x: cx + r1 * Math.cos(angle),
+        y: cy + r1 * Math.sin(angle),
+        size: 1.0,
+        type: nodeMap.get(id)?.type || 'person',
+        ring: 1,
       })
-    } else {
-      const count = ids.length
-      const startAngle = -Math.PI / 2
-      ids.forEach((id, i) => {
-        const angle = startAngle + (2 * Math.PI * i) / count
-        const x = cx + r * Math.cos(angle)
-        const y = cy + r * Math.sin(angle)
-        const node = nodeMap.get(id)
-        const isViewer = node?.type === 'viewer'
-        const isFilm = node?.type === 'film'
+    })
+  }
+
+  // Rings 2+ — group each ring's nodes behind their sender, BFS outward
+  for (let ring = 2; ring <= maxRing; ring++) {
+    const ringNodeIds = ringGroups.get(ring) || []
+    if (ringNodeIds.length === 0) continue
+
+    const rN = ringRadiiArr[ring]
+    ringRadii.push(rN)
+
+    const prevRingIds = ringGroups.get(ring - 1) || []
+    const groups = []
+    const placed = new Set()
+
+    for (const senderId of prevRingIds) {
+      const recs = senderToRecipients.get(senderId)
+      if (!recs) continue
+      const ids = []
+      for (const rk of recs) {
+        if (depth.get(rk) === ring && !placed.has(rk)) {
+          ids.push(rk)
+          placed.add(rk)
+        }
+      }
+      if (ids.length) groups.push({ senderId, ids })
+    }
+    // Orphans (safety net)
+    for (const rk of ringNodeIds) {
+      if (!placed.has(rk)) groups.push({ senderId: null, ids: [rk] })
+    }
+    if (groups.length === 0) continue
+
+    const totalNodes = groups.reduce((s, g) => s + g.ids.length, 0)
+    // Cap the step so recipients stay tightly clustered behind their sender.
+    // fullCircleStep spreads everyone evenly; maxStep keeps the fan ≤ 25° per hop.
+    const fullCircleStep = (2 * Math.PI) / Math.max(totalNodes, 1)
+    const maxStep = Math.PI / 7.2  // ≈ 25° max between adjacent recipients
+    const slicePerNode = Math.min(fullCircleStep, maxStep)
+
+    groups.sort((a, b) => (nodeAngles.get(a.senderId) ?? 0) - (nodeAngles.get(b.senderId) ?? 0))
+
+    // Place each group independently, centered on its sender's angle
+    for (const g of groups) {
+      const senderAngle = nodeAngles.get(g.senderId) ?? -Math.PI / 2
+      const n = g.ids.length
+      const start = senderAngle - ((n - 1) / 2) * slicePerNode
+      g.ids.forEach((rk, i) => {
+        const angle = start + i * slicePerNode
+        const node = nodeMap.get(rk)
+        nodeAngles.set(rk, angle)
         nodesData.push({
-          id,
-          label: node?.label || id,
-          x,
-          y,
-          size: isViewer ? 1.3 : isFilm ? 1.2 : 1.0,
+          id: rk,
+          label: node?.label || rk,
+          x: cx + rN * Math.cos(angle),
+          y: cy + rN * Math.sin(angle),
+          size: node?.type === 'viewer' ? 1.3 : 1.0,
           type: node?.type || 'person',
-          ring: d,
+          ring,
         })
       })
     }
   }
 
-  const viewBoxH = VIEWBOX_SIZE
+  const viewBoxH = viewBoxDim
 
   const linksData = edges.filter(
-    (e) => depth.has(e.source) && depth.has(e.target)
+    (e) =>
+      depth.has(e.source) &&
+      depth.has(e.target) &&
+      !(ring1Ids.has(e.source) && ring1Ids.has(e.target)),
   )
 
-  /* Default highlight: path from film/creator → focused recipient */
+  /* --- Default highlight: full chain from creator/team → leaf viewer --- */
   const defaultNodes = new Set()
   const defaultLinks = new Set()
 
-  const pickLeafInviteForRecipient = () => {
-    if (!viewerRecipientKey) return null
-    const matches = filmInvites.filter((r) => recipientKey(r) === viewerRecipientKey)
-    if (!matches.length) return null
-    if (focusInviteId) {
-      const hit = matches.find((r) => r.id === focusInviteId)
-      if (hit) return hit
+  if (viewerRecipientKey && depth.has(viewerRecipientKey)) {
+    // Build a parent map (target → source) from all edges
+    const parentMap = new Map()
+    for (const e of linksData) {
+      if (!parentMap.has(e.target)) parentMap.set(e.target, e.source)
     }
-    const byId = new Map(filmInvites.map((r) => [r.id, r]))
-    const ancestryDepth = (row) => {
-      let d = 0
-      let cur = row
-      const seen = new Set()
-      while (cur?.parent_invite_id && !seen.has(cur.id)) {
-        seen.add(cur.id)
-        d += 1
-        cur = byId.get(cur.parent_invite_id)
-      }
-      return d
-    }
-    return [...matches].sort((a, b) => {
-      const diff = ancestryDepth(b) - ancestryDepth(a)
-      if (diff !== 0) return diff
-      const ta = a.created_at ? new Date(a.created_at).getTime() : 0
-      const tb = b.created_at ? new Date(b.created_at).getTime() : 0
-      return tb - ta
-    })[0]
-  }
 
-  const buildAncestryOldestFirst = (leafRow) => {
-    const byId = new Map(filmInvites.map((r) => [r.id, r]))
-    const rev = []
-    let cur = leafRow
-    const seen = new Set()
-    while (cur && !seen.has(cur.id)) {
-      seen.add(cur.id)
-      rev.push(cur)
-      cur = cur.parent_invite_id ? byId.get(cur.parent_invite_id) : null
-    }
-    return rev.reverse()
-  }
-
-  const addEdgeIfInGraph = (a, b) => {
-    const ok = linksData.some((e) => e.source === a && e.target === b)
-    if (ok) {
-      defaultLinks.add(`${a}-${b}`)
-      defaultNodes.add(a)
-      defaultNodes.add(b)
-    }
-  }
-
-  const leafInvite = pickLeafInviteForRecipient()
-
-  if (viewerRecipientKey && leafInvite) {
-    const chain = buildAncestryOldestFirst(leafInvite)
-    for (const inv of chain) {
-      addEdgeIfInGraph(senderKey(inv), recipientKey(inv))
-    }
-    if (chain.length) {
-      const firstSk = senderKey(chain[0])
-      const incoming = linksData.filter((e) => e.target === firstSk)
-      const rootward = incoming.find(
-        (e) => e.source === rootId || e.source === creatorNodeId || e.source === attachRoot
-      )
-      if (rootward) {
-        defaultLinks.add(`${rootward.source}-${firstSk}`)
-        defaultNodes.add(rootward.source)
-        defaultNodes.add(firstSk)
-      }
-    }
-    if (creatorName && defaultNodes.has(creatorNodeId)) {
-      const fc = linksData.find((e) => e.source === rootId && e.target === creatorNodeId)
-      if (fc) defaultLinks.add(`${rootId}-${creatorNodeId}`)
-    }
-    defaultNodes.add(rootId)
-    if (creatorName) defaultNodes.add(creatorNodeId)
-    defaultNodes.add(viewerRecipientKey)
-  } else if (viewerRecipientKey && depth.has(viewerRecipientKey)) {
-    const reverseAdj = new Map()
-    edges.forEach((e) => {
-      if (!reverseAdj.has(e.target)) reverseAdj.set(e.target, [])
-      reverseAdj.get(e.target).push(e.source)
-    })
+    // Walk from viewer up to the ring-1 origin, collecting every hop
     let cur = viewerRecipientKey
-    defaultNodes.add(cur)
-    const visited = new Set([cur])
-    while (cur !== rootId) {
-      const parents = (reverseAdj.get(cur) || []).filter(
-        (p) => depth.has(p) && !visited.has(p)
-      )
-      if (!parents.length) break
-      const parent = parents[0]
-      defaultNodes.add(parent)
-      defaultLinks.add(`${parent}-${cur}`)
-      visited.add(parent)
-      cur = parent
+    while (cur) {
+      defaultNodes.add(cur)
+      const parent = parentMap.get(cur)
+      if (parent) {
+        defaultLinks.add(`${parent}-${cur}`)
+        cur = parent
+      } else {
+        break
+      }
     }
-    if (creatorName && defaultNodes.has(creatorNodeId)) {
-      const fc = linksData.find((e) => e.source === rootId && e.target === creatorNodeId)
-      if (fc) defaultLinks.add(`${rootId}-${creatorNodeId}`)
-    }
+
+    // Always include the film center node
     defaultNodes.add(rootId)
-    if (creatorName) defaultNodes.add(creatorNodeId)
   }
 
   return {
@@ -344,23 +368,26 @@ function HumanNode({
   onMouseLeave,
 }) {
   if (isFilm) {
-    const filmR = 22 * size
-    const glowR = 30 * size
-    const words = label ? label.split(/\s+/) : []
+    const filmR = 50 * size
+    const glowR = 64 * size
+    const filmText = String(label || 'Film').trim()
+    const words = filmText.split(/\s+/)
+    const LINE_MAX = 18
     const lines = []
-    let current = ''
+    let cur = ''
     for (const w of words) {
-      const test = current ? `${current} ${w}` : w
-      if (test.length > 12 && current) {
-        lines.push(current)
-        current = w
+      if (cur && (cur.length + 1 + w.length) > LINE_MAX) {
+        lines.push(cur)
+        cur = w
       } else {
-        current = test
+        cur = cur ? `${cur} ${w}` : w
       }
     }
-    if (current) lines.push(current)
-    const lineH = 13
-    const startY = -(filmR + 8 + (lines.length - 1) * lineH)
+    if (cur) lines.push(cur)
+
+    const lineH = 10
+    const textBlockH = lines.length * lineH
+    const startY = -textBlockH / 2 + lineH * 0.65
 
     return (
       <g
@@ -389,32 +416,23 @@ function HumanNode({
           strokeWidth={0.75}
           opacity={0.5}
         />
-        <circle
-          cx="0"
-          cy="0"
-          r={6 * size}
-          fill={isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.warm}
-          style={{ transition: 'fill 500ms ease' }}
-        />
-        {lines.length > 0 && (
-          <text
-            textAnchor="middle"
-            style={{
-              fontFamily: "'Phoenix', system-ui, sans-serif",
-              fontSize: '11px',
-              fontWeight: 500,
-              letterSpacing: '0.12em',
-              textTransform: 'uppercase',
-              fill: GRAPH_COLORS.amber,
-            }}
-          >
-            {lines.map((line, i) => (
-              <tspan key={i} x="0" y={startY + i * lineH}>
-                {line}
-              </tspan>
-            ))}
-          </text>
-        )}
+        <text
+          x="0"
+          textAnchor="middle"
+          style={{
+            fontFamily: "'Phoenix', system-ui, sans-serif",
+            fontSize: '9px',
+            fontWeight: 500,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            fill: GRAPH_COLORS.amber,
+            pointerEvents: 'none',
+          }}
+        >
+          {lines.map((line, i) => (
+            <tspan key={i} x="0" y={startY + i * lineH}>{line}</tspan>
+          ))}
+        </text>
       </g>
     )
   }
@@ -547,7 +565,7 @@ function ZoomControls({ onZoomIn, onZoomOut, onReset, zoom, position = 'bottom-r
 export default function NetworkGraph({
   nodesData,
   linksData,
-  viewBoxH = VIEWBOX_SIZE,
+  viewBoxH = BASE_VIEWBOX,
   ringRadii = [],
   rootNode = null,
   defaultActiveNodes = new Set(),
@@ -757,14 +775,14 @@ export default function NetworkGraph({
     return { nodes: activeNodes, links: activeLinks }
   }, [hoveredNode, linksData, defaultActiveNodes, defaultActiveLinks])
 
-  const rcx = VIEWBOX_SIZE / 2
-  const rcy = VIEWBOX_SIZE / 2
+  const rcx = viewBoxH / 2
+  const rcy = viewBoxH / 2
 
   const svgContent = (
     <svg
       width="100%"
       height="100%"
-      viewBox={`0 0 ${VIEWBOX_SIZE} ${VIEWBOX_SIZE}`}
+      viewBox={`0 0 ${viewBoxH} ${viewBoxH}`}
       className="block"
       preserveAspectRatio="xMidYMid meet"
     >
@@ -777,7 +795,14 @@ export default function NetworkGraph({
         {ringRadii
           .filter((r) => r > 0)
           .map((r, i) => (
-            <circle key={i} cx={rcx} cy={rcy} r={r} strokeDasharray="2 5" />
+            <circle
+              key={i}
+              cx={rcx}
+              cy={rcy}
+              r={r}
+              fill={i === 0 ? 'rgba(177,161,128,0.04)' : 'none'}
+              strokeDasharray="2 5"
+            />
           ))}
       </g>
 
@@ -908,7 +933,7 @@ export default function NetworkGraph({
     )
   }
 
-  const fixedH = `${Math.min(700, VIEWBOX_SIZE)}px`
+  const fixedH = `${Math.min(700, viewBoxH)}px`
 
   return (
     <div

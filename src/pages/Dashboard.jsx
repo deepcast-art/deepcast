@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import InviteForm from '../components/InviteForm'
@@ -26,6 +26,10 @@ function formatNamesList(names) {
 
 export default function Dashboard() {
   const { profile, signOut, fetchProfile } = useAuth()
+  const location = useLocation()
+  const inviteSentConfirmation = location.state?.inviteSent
+    ? location.state.recipientName || 'your invitee'
+    : null
   const [films, setFilms] = useState([])
   const [filmStats, setFilmStats] = useState({})
   const [inviteTree, setInviteTree] = useState({})
@@ -51,7 +55,10 @@ export default function Dashboard() {
   const [viewerSentInvites, setViewerSentInvites] = useState([])
   const [viewerFilmId, setViewerFilmId] = useState(null)
   const [viewerFilmTitle, setViewerFilmTitle] = useState('')
+  const [viewerInviteToken, setViewerInviteToken] = useState(null)
   const [viewerFilmInvites, setViewerFilmInvites] = useState([])
+  const [viewerFilmThumbnail, setViewerFilmThumbnail] = useState(null)
+  const [viewerAllFilms, setViewerAllFilms] = useState([])
   const [viewerCreatorName, setViewerCreatorName] = useState('')
   const [viewerNewViewersCount, setViewerNewViewersCount] = useState(0)
   const [childCountsByParent, setChildCountsByParent] = useState({})
@@ -131,24 +138,59 @@ export default function Dashboard() {
     setViewerSentInvites(sentList)
 
     let filmId = sentList[0]?.film_id
-    if (!filmId && email) {
-      const { data: recv } = await supabase
+
+    // Fetch ALL films the viewer has been invited to watch
+    if (email) {
+      const { data: allRecvd } = await supabase
         .from('invites')
-        .select('film_id')
+        .select('film_id, token')
         .ilike('recipient_email', email)
         .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      filmId = recv?.film_id
+
+      if (allRecvd?.length) {
+        // De-duplicate by film_id, preserving most-recent-first order
+        const seen = new Set()
+        const uniqueRecvd = allRecvd.filter(r => {
+          if (seen.has(r.film_id)) return false
+          seen.add(r.film_id)
+          return true
+        })
+
+        // Resolve film details for every received film
+        const { data: filmRows } = await supabase
+          .from('films')
+          .select('id, title, thumbnail_url')
+          .in('id', uniqueRecvd.map(r => r.film_id))
+
+        const filmsMap = new Map((filmRows || []).map(f => [f.id, f]))
+        const allFilms = uniqueRecvd
+          .map(r => ({
+            id: r.film_id,
+            title: filmsMap.get(r.film_id)?.title || '',
+            thumbnail_url: filmsMap.get(r.film_id)?.thumbnail_url || null,
+            token: r.token,
+          }))
+          .filter(f => f.id)
+        setViewerAllFilms(allFilms)
+
+        // Primary film = most recent received
+        if (!filmId) filmId = uniqueRecvd[0]?.film_id
+        setViewerInviteToken(
+          uniqueRecvd[0]?.token || localStorage.getItem('viewer_invite_token') || null
+        )
+      }
     }
 
     if (!filmId) {
       setViewerFilmId(null)
       setViewerFilmTitle('')
+      setViewerFilmThumbnail(null)
+      setViewerAllFilms([])
       setViewerFilmInvites([])
       setViewerCreatorName('')
       setViewerNewViewersCount(0)
       setChildCountsByParent({})
+      setViewerInviteToken(null)
       return
     }
 
@@ -156,11 +198,12 @@ export default function Dashboard() {
 
     const { data: filmRow } = await supabase
       .from('films')
-      .select('id, title, creator_id')
+      .select('id, title, thumbnail_url, creator_id')
       .eq('id', filmId)
       .single()
 
     setViewerFilmTitle(filmRow?.title || '')
+    setViewerFilmThumbnail(filmRow?.thumbnail_url || null)
 
     let cname = ''
     if (filmRow?.creator_id) {
@@ -522,6 +565,15 @@ export default function Dashboard() {
           </div>
 
           <div className="mt-auto flex shrink-0 flex-col gap-4 border-t border-warm/[0.08] pt-8 animate-fade-in" style={{ animationDelay: '140ms' }}>
+            {viewerInviteToken && (
+              <Link
+                to={`/i/${viewerInviteToken}?play=1`}
+                className="flex w-full items-center justify-center gap-2 border border-warm/20 bg-transparent px-4 py-3 text-center font-sans text-[10px] font-medium uppercase tracking-[0.28em] text-warm/70 transition-colors hover:border-warm/40 hover:text-warm"
+              >
+                <svg className="h-3 w-3 fill-current shrink-0" viewBox="0 0 24 24" aria-hidden><path d="M8 5v14l11-7z"/></svg>
+                Watch again
+              </Link>
+            )}
             {canShareMore && (
               <button
                 type="button"
@@ -554,6 +606,13 @@ export default function Dashboard() {
         </aside>
 
         <main className="flex w-full min-h-0 flex-1 flex-col overflow-y-auto bg-[#05070a] px-6 py-10 panel-scroll md:px-12 lg:flex-1 lg:py-14 lg:pl-14 lg:pr-16">
+          {inviteSentConfirmation && (
+            <div className="mb-8 w-full max-w-6xl border border-[#5b8a5e]/30 bg-[#5b8a5e]/10 px-6 py-4 animate-fade-in">
+              <p className="font-sans text-[11px] uppercase tracking-[0.25em] text-[#5b8a5e]">
+                Invitation sent to {inviteSentConfirmation} — they&apos;ll receive a private screening link.
+              </p>
+            </div>
+          )}
           {loading ? (
             <div className="flex flex-1 items-center justify-center py-24">
               <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
@@ -573,6 +632,44 @@ export default function Dashboard() {
             </div>
           ) : (
             <>
+              {/* ── Your screenings ── */}
+              {viewerAllFilms.length > 0 && (
+                <section className="mb-10 w-full max-w-6xl animate-fade-in" style={{ animationDelay: '40ms' }}>
+                  <h3 className="mb-5 font-sans text-[10px] font-medium uppercase tracking-[0.32em] text-warm/50">
+                    Your screenings
+                  </h3>
+                  <div className="flex flex-col gap-3">
+                    {viewerAllFilms.map((film) => (
+                      <div key={film.id} className="flex items-center gap-5 border border-faint/20 bg-[#0a0f1a] p-4">
+                        {film.thumbnail_url ? (
+                          <img
+                            src={film.thumbnail_url}
+                            alt={film.title}
+                            className="h-16 w-28 shrink-0 object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-16 w-28 shrink-0 items-center justify-center bg-faint/10">
+                            <svg className="h-5 w-5 text-warm/20 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                          </div>
+                        )}
+                        <div className="flex flex-1 flex-col gap-1 min-w-0">
+                          <p className="font-serif-v3 text-base italic leading-snug text-warm truncate">{film.title}</p>
+                        </div>
+                        {film.token && (
+                          <a
+                            href={`/i/${film.token}?play=1`}
+                            className="shrink-0 flex items-center gap-1.5 border border-warm/20 px-4 py-2 font-sans text-[10px] uppercase tracking-[0.25em] text-warm/60 transition-colors hover:border-warm/40 hover:text-warm"
+                          >
+                            <svg className="h-2.5 w-2.5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                            Watch again
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
               <section
                 className="mb-14 w-full max-w-6xl animate-fade-in"
                 style={{ animationDelay: '80ms' }}

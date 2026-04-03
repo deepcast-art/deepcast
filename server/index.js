@@ -751,10 +751,12 @@ app.post('/api/team/send-invite', async (req, res) => {
       existingProfile = directRow || null
 
       if (!existingProfile) {
-        const { data: rpcRows } = await supabase.rpc('get_user_profile_by_email', {
-          p_email: emailNorm,
-        })
-        existingProfile = rpcRows?.[0] || null
+        const { data: fallbackRow } = await supabase
+          .from('users')
+          .select('id, role, team_creator_id')
+          .ilike('email', emailNorm)
+          .maybeSingle()
+        existingProfile = fallbackRow || null
       }
     }
 
@@ -913,7 +915,7 @@ app.post('/api/team/send-invite', async (req, res) => {
     } catch (emailErr) {
       const message = emailErr?.message || 'Email send failed'
       console.error('Team invite email error:', message)
-      await supabase.rpc('delete_team_invite_by_token', { p_token: inviteToken })
+      await supabase.from('team_invites').delete().eq('token', inviteToken)
       return res.status(502).json({ error: 'Email failed to send', details: message })
     }
 
@@ -929,14 +931,24 @@ app.get('/api/team/invite-info', async (req, res) => {
     const token = typeof req.query.token === 'string' ? req.query.token.trim() : ''
     if (!token) return res.status(400).json({ error: 'Token is required' })
 
-    const { data: invRows, error } = await supabase.rpc('get_team_invite_by_token', {
-      p_token: token,
-    })
+    const { data: invRows, error } = await supabase
+      .from('team_invites')
+      .select('id, email, invited_name, expires_at, accepted_at, creator_id')
+      .eq('token', token)
+      .limit(1)
     if (error) {
-      console.error('team invite-info rpc:', error)
+      console.error('team invite-info query:', error)
       return res.status(500).json({ error: 'Failed to load invitation' })
     }
     const row = invRows?.[0]
+    if (row) {
+      const { data: creatorRow } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', row.creator_id)
+        .maybeSingle()
+      row.creator_name = creatorRow?.name || null
+    }
     if (!row) {
       return res.status(404).json({ error: 'Invitation not found' })
     }
@@ -980,9 +992,11 @@ app.post('/api/team/register', async (req, res) => {
       })
     }
 
-    const { data: invRows, error: rowErr } = await supabase.rpc('get_team_invite_by_token', {
-      p_token: t,
-    })
+    const { data: invRows, error: rowErr } = await supabase
+      .from('team_invites')
+      .select('id, email, invited_name, expires_at, accepted_at, creator_id')
+      .eq('token', t)
+      .limit(1)
     if (rowErr) {
       console.error('team register invite lookup:', rowErr)
       return res.status(500).json({ error: 'Failed to load invitation' })
@@ -1057,11 +1071,14 @@ app.post('/api/team/register', async (req, res) => {
       return res.status(500).json({ error: 'Failed to create profile' })
     }
 
-    const { data: accepted, error: acceptErr } = await supabase.rpc('accept_team_invite_by_token', {
-      p_token: t,
-    })
-    if (acceptErr || !accepted) {
-      console.error('accept_team_invite_by_token:', acceptErr, accepted)
+    const { data: acceptedRows, error: acceptErr } = await supabase
+      .from('team_invites')
+      .update({ accepted_at: new Date().toISOString() })
+      .eq('token', t)
+      .is('accepted_at', null)
+      .select('id')
+    if (acceptErr || !acceptedRows?.length) {
+      console.error('accept team invite:', acceptErr, acceptedRows)
       await supabase.auth.admin.deleteUser(userId).catch(() => {})
       return res.status(500).json({ error: 'Failed to finalize invitation' })
     }
