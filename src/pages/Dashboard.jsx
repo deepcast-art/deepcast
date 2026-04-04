@@ -57,7 +57,6 @@ export default function Dashboard() {
   const [viewerFilmTitle, setViewerFilmTitle] = useState('')
   const [viewerInviteToken, setViewerInviteToken] = useState(null)
   const [viewerFilmInvites, setViewerFilmInvites] = useState([])
-  const [viewerFilmThumbnail, setViewerFilmThumbnail] = useState(null)
   const [viewerAllFilms, setViewerAllFilms] = useState([])
   const [viewerCreatorName, setViewerCreatorName] = useState('')
   const [viewerNewViewersCount, setViewerNewViewersCount] = useState(0)
@@ -184,7 +183,6 @@ export default function Dashboard() {
     if (!filmId) {
       setViewerFilmId(null)
       setViewerFilmTitle('')
-      setViewerFilmThumbnail(null)
       setViewerAllFilms([])
       setViewerFilmInvites([])
       setViewerCreatorName('')
@@ -203,7 +201,6 @@ export default function Dashboard() {
       .single()
 
     setViewerFilmTitle(filmRow?.title || '')
-    setViewerFilmThumbnail(filmRow?.thumbnail_url || null)
 
     let cname = ''
     if (filmRow?.creator_id) {
@@ -464,6 +461,21 @@ export default function Dashboard() {
     }
     setModalBusy(true)
     try {
+      const { data: existing } = await supabase
+        .from('invites')
+        .select('id')
+        .eq('film_id', viewerFilmId)
+        .ilike('recipient_email', modalEmail.trim())
+        .limit(1)
+        .maybeSingle()
+
+      if (existing) {
+        const name = modalFirst.trim() || modalEmail.trim().split('@')[0]
+        setModalError(`${name} has already received an invitation to this film. Try someone else.`)
+        setModalBusy(false)
+        return
+      }
+
       const recipientName =
         [modalFirst.trim(), modalLast.trim()].filter(Boolean).join(' ').trim() ||
         modalEmail.trim().split('@')[0] ||
@@ -590,6 +602,12 @@ export default function Dashboard() {
               Profile
             </Link>
             <Link
+              to="/profile#set-password"
+              className="font-sans text-[10px] uppercase tracking-[0.22em] text-warm/35 transition-colors hover:text-warm/70"
+            >
+              Set password
+            </Link>
+            <Link
               to="/network"
               className="font-sans text-[10px] uppercase tracking-[0.22em] text-warm/35 transition-colors hover:text-warm/70"
             >
@@ -605,7 +623,7 @@ export default function Dashboard() {
           </div>
         </aside>
 
-        <main className="flex w-full min-h-0 flex-1 flex-col overflow-y-auto bg-[#05070a] px-6 py-10 panel-scroll md:px-12 lg:flex-1 lg:py-14 lg:pl-14 lg:pr-16">
+        <main className="flex w-full min-h-0 flex-1 flex-col overflow-y-auto bg-[#0c1225] px-6 py-10 panel-scroll md:px-12 lg:flex-1 lg:py-14 lg:pl-14 lg:pr-16">
           {inviteSentConfirmation && (
             <div className="mb-8 w-full max-w-6xl border border-[#5b8a5e]/30 bg-[#5b8a5e]/10 px-6 py-4 animate-fade-in">
               <p className="font-sans text-[11px] uppercase tracking-[0.25em] text-[#5b8a5e]">
@@ -655,15 +673,31 @@ export default function Dashboard() {
                         <div className="flex flex-1 flex-col gap-1 min-w-0">
                           <p className="font-serif-v3 text-base italic leading-snug text-warm truncate">{film.title}</p>
                         </div>
-                        {film.token && (
-                          <a
-                            href={`/i/${film.token}?play=1`}
-                            className="shrink-0 flex items-center gap-1.5 border border-warm/20 px-4 py-2 font-sans text-[10px] uppercase tracking-[0.25em] text-warm/60 transition-colors hover:border-warm/40 hover:text-warm"
-                          >
-                            <svg className="h-2.5 w-2.5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                            Watch again
-                          </a>
-                        )}
+                        <div className="shrink-0 flex items-center gap-2">
+                          {film.token && (() => {
+                            const savedPos = localStorage.getItem(`screening_position_${film.token}`)
+                            const resume = savedPos && parseInt(savedPos, 10) > 0
+                            return (
+                              <a
+                                href={resume ? `/i/${film.token}?play=1&t=${savedPos}` : `/i/${film.token}?play=1`}
+                                className="flex items-center gap-1.5 border border-warm/20 px-4 py-2 font-sans text-[10px] uppercase tracking-[0.25em] text-warm/60 transition-colors hover:border-warm/40 hover:text-warm"
+                              >
+                                <svg className="h-2.5 w-2.5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                {resume ? 'Resume' : 'Watch again'}
+                              </a>
+                            )
+                          })()}
+                          {canShareMore && film.id === viewerFilmId && (
+                            <button
+                              type="button"
+                              onClick={openShareModal}
+                              className="flex items-center gap-1.5 border border-accent/40 px-4 py-2 font-sans text-[10px] uppercase tracking-[0.25em] text-accent/70 transition-colors hover:border-accent hover:text-accent"
+                            >
+                              <svg className="h-2.5 w-2.5 fill-current" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11A2.99 2.99 0 0 0 18 8a3 3 0 1 0-3-3c0 .24.04.47.09.7L8.04 9.81A2.99 2.99 0 0 0 6 9a3 3 0 1 0 0 6c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65a3 3 0 1 0 3-3z"/></svg>
+                              Share more
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -712,13 +746,15 @@ export default function Dashboard() {
                         {viewerFilmTitle}
                       </span>
                     </div>
-                    <div className="relative flex min-h-[min(52vh,560px)] w-full overflow-hidden border border-faint/30 bg-[#0a0f1a] sm:min-h-[min(56vh,620px)]">
+                    <div className="relative flex h-[min(52vh,560px)] w-full overflow-hidden bg-[#121a33] sm:h-[min(56vh,620px)]">
                       <NetworkGraph
                         fillHeight
                         pannable
+                        plainShell
+                        fullBleed
                         transparentSurface
                         zoomControlsPosition="center-right"
-                        viewportMaxSize="min(min(42vh, 44vw), 420px)"
+                        initialZoom={0.8}
                         nodesData={graphLayout.nodesData}
                         linksData={graphLayout.linksData}
                         viewBoxH={graphLayout.viewBoxH}
@@ -948,6 +984,9 @@ export default function Dashboard() {
         <nav className="flex flex-col gap-3 font-sans text-[10px] uppercase tracking-widest">
           <Link className="text-warm/40 transition-colors hover:text-warm" to="/profile">
             Profile
+          </Link>
+          <Link className="text-warm/40 transition-colors hover:text-warm" to="/profile#set-password">
+            Set password
           </Link>
           <Link className="text-warm/40 transition-colors hover:text-warm" to="/network">
             Network map

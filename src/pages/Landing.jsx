@@ -319,7 +319,7 @@ export default function Landing() {
             Watch the film
           </Link>
         </div>
-
+{/*
         {/* GRAPH */}
         {graphLayout && (
           <div className="dc-fade-in dc-fade-in-5 border-t border-border pt-12">
@@ -346,7 +346,7 @@ export default function Landing() {
           </div>
         )}
 
-{/*}
+
         {!graphLayout && (
           <div className="dc-fade-in dc-fade-in-5 border-t border-border pt-12">
             <p className="text-text-muted text-sm text-center">
@@ -355,7 +355,7 @@ export default function Landing() {
               invitations can appear here.
             </p>
           </div>
-        )}*/}
+        )}
       </div>
       </div>
     </div>

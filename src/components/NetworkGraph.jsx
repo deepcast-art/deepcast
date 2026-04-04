@@ -67,7 +67,6 @@ export function buildGraphLayout({
   viewerRecipientKey = null,
   focusInviteId = null,
   rootId = 'film-root',
-  creatorNodeId = 'creator-root',
 }) {
   if (!filmInvites?.length) return null
 
@@ -79,47 +78,52 @@ export function buildGraphLayout({
   }
 
   ensure(rootId, filmTitle?.trim() || 'Film', 'film')
-  if (creatorName) {
-    ensure(creatorNodeId, toFirstName(creatorName, 'Creator'), 'creator')
-  }
 
   const creatorFirst = toFirstName(creatorName || '', '').trim().toLowerCase()
   const creatorFull = (creatorName || '').trim().toLowerCase()
-  const senderNodeId = (row) => {
+
+  // Identify whether a sender is a creator/team member (not shown as a node)
+  const isCreatorOrTeam = (row) => {
+    if (!creatorName) return false
     const senderNameRaw = (row.sender_name || '').trim()
     const senderNameFull = senderNameRaw.toLowerCase()
     const senderFirst = toFirstName(senderNameRaw, '').trim().toLowerCase()
     const senderEmailLocal = (row.sender_email || '').trim().toLowerCase().split('@')[0] || ''
-    if (
-      creatorName &&
-      ((senderNameFull && senderNameFull === creatorFull) ||
-        (senderFirst && creatorFirst && senderFirst === creatorFirst) ||
-        (senderEmailLocal &&
-          ((creatorFull && senderEmailLocal === creatorFull) ||
-            (creatorFirst && senderEmailLocal === creatorFirst))))
-    ) {
-      return creatorNodeId
-    }
-    return senderKey(row)
+    return (
+      (senderNameFull && senderNameFull === creatorFull) ||
+      (senderFirst && creatorFirst && senderFirst === creatorFirst) ||
+      (senderEmailLocal &&
+        ((creatorFull && senderEmailLocal === creatorFull) ||
+          (creatorFirst && senderEmailLocal === creatorFirst)))
+    )
   }
 
-  /* --- Build sender→recipients map while creating nodes/edges --- */
-  const senderToRecipients = new Map()
+  // First pass: collect all recipient keys so we know who is a pure sender
   const allRecipientKeys = new Set()
+  filmInvites.forEach((row) => allRecipientKeys.add(recipientKey(row)))
+
+  // A sender is creator/team if they match creatorName OR are never a recipient themselves
+  const isPureOriginalSender = (row) =>
+    isCreatorOrTeam(row) || !allRecipientKeys.has(senderKey(row))
+
+  /* --- Build sender→recipients map, collapsing creator/team to rootId --- */
+  const senderToRecipients = new Map()
 
   filmInvites.forEach((row) => {
-    const sk = senderNodeId(row)
+    // Collapse creator/team senders → film root (they are not rendered as nodes)
+    const sk = isPureOriginalSender(row) ? rootId : senderKey(row)
     const rk = recipientKey(row)
     const isViewer = viewerRecipientKey && rk === viewerRecipientKey
 
-    ensure(sk, toFirstName(row.sender_name || row.sender_email, 'Member'))
+    if (sk !== rootId) {
+      ensure(sk, toFirstName(row.sender_name || row.sender_email, 'Member'))
+    }
     ensure(
       rk,
       isViewer ? 'You' : toFirstName(row.recipient_name || row.recipient_email),
       isViewer ? 'viewer' : 'person',
     )
     edges.push({ source: sk, target: rk })
-    allRecipientKeys.add(rk)
 
     if (!senderToRecipients.has(sk)) senderToRecipients.set(sk, new Set())
     senderToRecipients.get(sk).add(rk)
@@ -134,12 +138,8 @@ export function buildGraphLayout({
     }
   }
 
-  /* --- Ring 1: creators + teammates (senders who are never recipients) --- */
-  const ring1Ids = new Set()
-  if (creatorName) ring1Ids.add(creatorNodeId)
-  for (const sk of senderToRecipients.keys()) {
-    if (sk !== rootId && !allRecipientKeys.has(sk)) ring1Ids.add(sk)
-  }
+  /* --- Ring 1: direct recipients of the film (first receivers) --- */
+  const ring1Ids = new Set(senderToRecipients.get(rootId) || [])
 
   /* --- BFS to assign every node a ring depth --- */
   const depth = new Map([[rootId, 0]])
@@ -200,16 +200,73 @@ export function buildGraphLayout({
     ring: 0,
   })
 
-  // Ring 1 — creator + teammates, evenly spaced starting from top
+  // Place recipients in a ring, each group centered on its sender's angle.
+  // Overlapping groups are pushed apart (preserving order) so no lines cross.
+  const placeRingNodes = (groups, rN, ring) => {
+    const totalNodes = groups.reduce((s, g) => s + g.ids.length, 0)
+    if (totalNodes === 0) return
+
+    // Angle step shrinks as ring fills — compresses when sparse, expands when dense
+    const minArcPx = 40
+    const maxStep = rN > 0 ? minArcPx / rN : Math.PI / 4
+    const step = Math.min((2 * Math.PI) / totalNodes, maxStep)
+
+    // Build sectors: each centered on sender's angle
+    const sectors = groups.map((g) => {
+      const centre = nodeAngles.has(g.senderId) ? nodeAngles.get(g.senderId) : -Math.PI / 2
+      const span = g.ids.length * step
+      return { g, centre, span, start: centre - span / 2 }
+    })
+
+    // Sort by centre so processing is in angular order (prevents reordering)
+    sectors.sort((a, b) => a.centre - b.centre)
+
+    // Forward pass: push each sector past the previous one if they overlap
+    for (let i = 1; i < sectors.length; i++) {
+      const prev = sectors[i - 1]
+      const cur = sectors[i]
+      const prevEnd = prev.start + prev.span
+      if (cur.start < prevEnd) cur.start = prevEnd
+    }
+    // Backward pass: pull sectors back toward their ideal centre
+    for (let i = sectors.length - 2; i >= 0; i--) {
+      const next = sectors[i + 1]
+      const cur = sectors[i]
+      const maxEnd = next.start - 0.0001
+      if (cur.start + cur.span > maxEnd) cur.start = maxEnd - cur.span
+    }
+
+    // Emit nodes
+    for (const { g, start } of sectors) {
+      g.ids.forEach((rk, i) => {
+        const angle = start + (i + 0.5) * step
+        const node = nodeMap.get(rk)
+        nodeAngles.set(rk, angle)
+        nodesData.push({
+          id: rk,
+          label: node?.label || rk,
+          x: cx + rN * Math.cos(angle),
+          y: cy + rN * Math.sin(angle),
+          size: node?.type === 'viewer' ? 1.3 : 1.0,
+          type: node?.type || 'person',
+          ring,
+        })
+      })
+    }
+  }
+
+  // Ring 1 — first receivers, evenly spaced from top (no individual senders)
   const ring1Array = [...ring1Ids]
   const ring1Count = ring1Array.length
   const r1 = ringRadiiArr[1] || 0
 
   if (ring1Count > 0) {
     ringRadii.push(r1)
-    const start = -Math.PI / 2
+    const step1 = Math.min((2 * Math.PI) / ring1Count, 40 / (r1 || 1))
+    const totalSpan1 = ring1Count * step1
+    const start1 = -Math.PI / 2 - totalSpan1 / 2
     ring1Array.forEach((id, i) => {
-      const angle = start + (2 * Math.PI * i) / ring1Count
+      const angle = start1 + (i + 0.5) * step1
       nodeAngles.set(id, angle)
       nodesData.push({
         id,
@@ -223,7 +280,7 @@ export function buildGraphLayout({
     })
   }
 
-  // Rings 2+ — group each ring's nodes behind their sender, BFS outward
+  // Rings 2+ — each group centered on its sender, overlaps resolved without reordering
   for (let ring = 2; ring <= maxRing; ring++) {
     const ringNodeIds = ringGroups.get(ring) || []
     if (ringNodeIds.length === 0) continue
@@ -253,35 +310,7 @@ export function buildGraphLayout({
     }
     if (groups.length === 0) continue
 
-    const totalNodes = groups.reduce((s, g) => s + g.ids.length, 0)
-    // Cap the step so recipients stay tightly clustered behind their sender.
-    // fullCircleStep spreads everyone evenly; maxStep keeps the fan ≤ 25° per hop.
-    const fullCircleStep = (2 * Math.PI) / Math.max(totalNodes, 1)
-    const maxStep = Math.PI / 7.2  // ≈ 25° max between adjacent recipients
-    const slicePerNode = Math.min(fullCircleStep, maxStep)
-
-    groups.sort((a, b) => (nodeAngles.get(a.senderId) ?? 0) - (nodeAngles.get(b.senderId) ?? 0))
-
-    // Place each group independently, centered on its sender's angle
-    for (const g of groups) {
-      const senderAngle = nodeAngles.get(g.senderId) ?? -Math.PI / 2
-      const n = g.ids.length
-      const start = senderAngle - ((n - 1) / 2) * slicePerNode
-      g.ids.forEach((rk, i) => {
-        const angle = start + i * slicePerNode
-        const node = nodeMap.get(rk)
-        nodeAngles.set(rk, angle)
-        nodesData.push({
-          id: rk,
-          label: node?.label || rk,
-          x: cx + rN * Math.cos(angle),
-          y: cy + rN * Math.sin(angle),
-          size: node?.type === 'viewer' ? 1.3 : 1.0,
-          type: node?.type || 'person',
-          ring,
-        })
-      })
-    }
+    placeRingNodes(groups, rN, ring)
   }
 
   const viewBoxH = viewBoxDim
@@ -455,22 +484,33 @@ function HumanNode({
       }}
     >
       {isPathEnd && (
-        <ellipse
-          cx="0"
-          cy={-2 * size}
-          rx={13.5 * size}
-          ry={11.5 * size}
-          fill="none"
-          stroke={GRAPH_COLORS.amber}
-          strokeWidth={1.35}
-          opacity={0.92}
-          style={{ pointerEvents: 'none' }}
-        />
+        <>
+          {/* outer glow ring */}
+          <circle
+            cx="0"
+            cy={-2 * size}
+            r={22 * size}
+            fill={GRAPH_COLORS.amber}
+            opacity={0.07}
+            style={{ pointerEvents: 'none' }}
+          />
+          {/* amber circle */}
+          <circle
+            cx="0"
+            cy={-2 * size}
+            r={16 * size}
+            fill="none"
+            stroke={GRAPH_COLORS.amber}
+            strokeWidth={1.5}
+            opacity={1}
+            style={{ pointerEvents: 'none' }}
+          />
+        </>
       )}
       <g
         style={{
-          fill: isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.warm,
-          opacity: isActive ? 1 : 0.45,
+          fill: isPathEnd ? GRAPH_COLORS.amber : isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.warm,
+          opacity: isPathEnd ? 1 : isActive ? 1 : 0.45,
           transition: 'fill 500ms ease, opacity 500ms ease',
         }}
       >
@@ -490,7 +530,7 @@ function HumanNode({
             fontWeight: 500,
             letterSpacing: '0.14em',
             textTransform: 'uppercase',
-            fill: isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.faint,
+            fill: isPathEnd ? GRAPH_COLORS.amber : isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.faint,
             transition: 'fill 500ms ease',
           }}
         >
@@ -586,13 +626,28 @@ export default function NetworkGraph({
   plainShell = false,
   /** Let SVG use full container width (default caps at 850px). */
   fullBleed = false,
+  /** Starting zoom level (default 1). Values < 1 zoom out. */
+  initialZoom = 1,
 }) {
   const [hoveredNode, setHoveredNode] = useState(null)
 
   /* zoom / pan state */
   const containerRef = useRef(null)
-  const [zoom, setZoom] = useState(1)
+  const [zoom, setZoom] = useState(initialZoom)
   const [pan, setPan] = useState({ x: 0, y: 0 })
+
+  // Center the graph in the container on mount when fillHeight is used
+  useEffect(() => {
+    if (!fillHeight || !pannable) return
+    const el = containerRef.current
+    if (!el) return
+    const { width, height } = el.getBoundingClientRect()
+    if (!width || !height) return
+    const side = Math.min(width, height) * initialZoom
+    const offsetX = (width - side) / 2
+    const offsetY = (height - side) / 2
+    setPan({ x: offsetX, y: offsetY })
+  }, [fillHeight, pannable, initialZoom])
   const dragRef = useRef({ active: false, startX: 0, startY: 0, panX: 0, panY: 0 })
   const pinchRef = useRef({ active: false, dist: 0, zoom: 1 })
 
@@ -814,13 +869,22 @@ export default function NetworkGraph({
         const linkId = `${link.source}-${link.target}`
         const isActive = activeElements.links.has(linkId)
 
+        // Quadratic bezier: control point pushed radially outward from center
+        // so edges arc away from the film node, visually separating crossing lines.
+        const mx = (src.x + tgt.x) / 2
+        const my = (src.y + tgt.y) / 2
+        const dx = mx - rcx
+        const dy = my - rcy
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1
+        const bulge = 0.18
+        const cpx = mx + (dx / dist) * dist * bulge
+        const cpy = my + (dy / dist) * dist * bulge
+
         return (
-          <line
+          <path
             key={i}
-            x1={src.x}
-            y1={src.y}
-            x2={tgt.x}
-            y2={tgt.y}
+            d={`M ${src.x} ${src.y} Q ${cpx} ${cpy} ${tgt.x} ${tgt.y}`}
+            fill="none"
             stroke={isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.faint}
             strokeWidth={isActive ? 2 : 1}
             opacity={isActive ? 0.8 : 0.1}
@@ -893,11 +957,15 @@ export default function NetworkGraph({
       >
         <div style={transformStyle} className="h-full w-full">
           <div
-            className={`mx-auto w-full ${fullBleed ? 'max-w-none' : 'max-w-[min(100%,850px)]'} ${viewportMaxSize ? 'h-full' : ''}`}
+            className={`mx-auto w-full ${fullBleed ? 'max-w-none' : 'max-w-[min(100%,850px)]'} ${viewportMaxSize || fillHeight ? 'h-full' : ''}`}
           >
             {viewportMaxSize ? (
               <div className="relative h-full w-full">
                 <div className="h-full w-full">{svgContent}</div>
+              </div>
+            ) : fillHeight ? (
+              <div className="relative h-full w-full">
+                <div className="absolute inset-0">{svgContent}</div>
               </div>
             ) : (
               <div className="relative w-full" style={{ paddingBottom: '100%' }}>

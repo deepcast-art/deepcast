@@ -42,8 +42,9 @@ export default function InviteScreening() {
   const { token } = useParams()
   const [searchParams] = useSearchParams()
   const directPlay = searchParams.get('play') === '1'
+  const startTimeParam = searchParams.get('t')
   const navigate = useNavigate()
-  const { signUp, signOut, fetchProfile, user, resetPassword } = useAuth()
+  const { signUp, signOut, fetchProfile, user } = useAuth()
 
   /* ---------- DATA STATE ---------- */
 
@@ -82,6 +83,7 @@ export default function InviteScreening() {
   const [letterSending, setLetterSending] = useState(false)
   const [letterError, setLetterError] = useState('')
   const [letterSuccess, setLetterSuccess] = useState('')
+  const [newPassword, setNewPassword] = useState('')
 
   const [preScreeningPrologue, setPreScreeningPrologue] = useState({
     visible: false,
@@ -478,6 +480,10 @@ export default function InviteScreening() {
       setLetterError('Please enter your name and a valid email.')
       return
     }
+    if (!isInviteRecipientSession && newPassword && newPassword.length < 8) {
+      setLetterError('Password must be at least 8 characters.')
+      return
+    }
     if (slotsRemaining <= 0) {
       setLetterError('All invitations have been sent.')
       return
@@ -490,25 +496,38 @@ export default function InviteScreening() {
       if (user?.id && isInviteRecipientSession) {
         senderId = user.id
       } else {
-        // Auto-create an account using the invite's recipient email
-        const accountEmail = (invite?.recipient_email || '').trim() || letterSenderEmail.trim()
+        const accountEmail = letterSenderEmail.trim() || (invite?.recipient_email || '').trim()
         const accountName = letterSenderName.trim() || (invite?.recipient_name || '').trim()
         if (accountEmail && accountEmail.includes('@')) {
-          const tempPwd = Array.from(
+          const pwd = newPassword.trim() || Array.from(
             { length: 24 },
             () => 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^'[
               Math.floor(Math.random() * 58)
             ]
           ).join('')
           try {
-            const r = await signUp(accountEmail, tempPwd, accountName, 'viewer', accountName, '')
+            const r = await signUp(accountEmail, pwd, accountName, 'viewer', accountName, '')
             senderId = r?.user?.id || null
-            // Send a "set your password" email so the user can log back in later
-            try { await resetPassword(accountEmail) } catch { /* non-blocking */ }
           } catch {
-            // Account may already exist — proceed; dashboard auth will handle it
+            // Existing account — use their current session's id if available
+            senderId = user?.id || null
           }
         }
+      }
+
+      // Check if recipient already has an invite for this film
+      const { data: existing } = await supabase
+        .from('invites')
+        .select('id')
+        .eq('film_id', film.id)
+        .ilike('recipient_email', letterRecipientEmail.trim())
+        .limit(1)
+        .maybeSingle()
+
+      if (existing) {
+        setLetterError(`${letterRecipientFirst.trim() || 'This person'} has already received an invitation to this film. Try passing it on to someone else.`)
+        setLetterSending(false)
+        return
       }
 
       const recipientName = [
@@ -537,6 +556,13 @@ export default function InviteScreening() {
       }
 
       if (token) localStorage.setItem('viewer_invite_token', token)
+
+      // Snapshot current playback position so dashboard can offer "Resume"
+      const muxEl = document.querySelector('mux-player')
+      if (token && muxEl && muxEl.currentTime > 0 && !showPostFilm) {
+        localStorage.setItem(`screening_position_${token}`, Math.floor(muxEl.currentTime))
+      }
+
       navigate('/dashboard', {
         replace: true,
         state: { inviteSent: true, recipientName: letterRecipientFirst.trim() },
@@ -828,7 +854,7 @@ export default function InviteScreening() {
                   metadata={{ video_title: film.title }}
                   accentColor="#b1a180"
                   autoPlay
-                  startTime={Number(localStorage.getItem(`screening_position_${token}`)) || 0}
+                  startTime={Number(startTimeParam) || Number(localStorage.getItem(`screening_position_${token}`)) || 0}
                   onTimeUpdate={handleTimeUpdate}
                   onEnded={handleEnded}
                   onPause={() => setIsScreeningPaused(true)}
@@ -881,10 +907,12 @@ export default function InviteScreening() {
                   <button
                     type="button"
                     onClick={resumeFilm}
-                    className="flex-shrink-0 flex items-center justify-center gap-2 py-2.5 bg-[#080c18]/90 border-b border-[#b1a180]/20 slow-fade-text"
+                    className="flex-shrink-0 flex items-center justify-center gap-2.5 py-3 bg-[#b1a180]/10 border-b border-[#b1a180]/30 hover:bg-[#b1a180]/20 transition-colors duration-300 group"
                   >
-                    <svg className="w-3 h-3 text-[#b1a180] fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                    <span className="font-sans text-[8px] uppercase tracking-[0.3em] text-[#dddddd]/70">Resume Film</span>
+                    <div className="flex items-center justify-center w-6 h-6 rounded-full bg-[#b1a180] group-hover:bg-[#c9b898] transition-colors duration-300">
+                      <svg className="w-2.5 h-2.5 text-[#0a0f1a] fill-current ml-0.5" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    </div>
+                    <span className="font-sans text-[9px] uppercase tracking-[0.3em] text-[#dddddd]/90 font-medium">Resume Film</span>
                   </button>
                 )}
 
@@ -984,10 +1012,12 @@ export default function InviteScreening() {
                   <button
                     type="button"
                     onClick={resumeFilm}
-                    className="flex-shrink-0 flex items-center justify-center gap-2.5 py-3 border-b border-[#b1a180]/20 slow-fade-text hover:bg-[#b1a180]/5 transition-colors duration-300 group"
+                    className="flex-shrink-0 flex items-center justify-center gap-3 py-4 border-b border-[#b1a180]/30 bg-[#b1a180]/10 hover:bg-[#b1a180]/20 transition-colors duration-300 group"
                   >
-                    <svg className="w-3.5 h-3.5 text-[#b1a180] fill-current group-hover:scale-110 transition-transform" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                    <span className="font-sans text-[9px] uppercase tracking-[0.35em] text-[#dddddd]/60 group-hover:text-[#dddddd]/90 transition-colors">Resume Film</span>
+                    <div className="flex items-center justify-center w-7 h-7 rounded-full bg-[#b1a180] group-hover:bg-[#c9b898] transition-colors duration-300">
+                      <svg className="w-3 h-3 text-[#0a0f1a] fill-current ml-0.5" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    </div>
+                    <span className="font-sans text-[10px] uppercase tracking-[0.35em] text-[#dddddd]/90 group-hover:text-[#dddddd] transition-colors font-medium">Resume Film</span>
                   </button>
                 )}
 
@@ -1082,21 +1112,27 @@ export default function InviteScreening() {
                               <span>With intention,</span>
                               <input type="text" placeholder="Your Name" value={letterSenderName} onChange={(e) => setLetterSenderName(e.target.value)} className="w-[160px] bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none text-[#2a2a2a] placeholder-[#2a2a2a]/30" />
                             </div>
+                            {!isInviteRecipientSession && (
+                              <div className="flex flex-col gap-1 w-full max-w-[320px] text-center mt-3">
+                                <label className="font-sans text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Your Email</label>
+                                <input type="email" placeholder="your@email.com" value={letterSenderEmail} onChange={(e) => setLetterSenderEmail(e.target.value)} className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none transition-colors rounded-none" />
+                              </div>
+                            )}
+                            {!isInviteRecipientSession && (
+                              <div className="flex flex-col gap-1 w-full max-w-[320px] text-center mt-3">
+                                <label className="font-sans text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Create Password</label>
+                                <input type="password" placeholder="Min. 8 characters" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none transition-colors rounded-none" />
+                              </div>
+                            )}
                             <div className="flex flex-col gap-1 w-full max-w-[320px] text-center mt-4">
                               <label className="font-sans text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Deliver To</label>
                               <input type="email" placeholder="Their Email Address" value={letterRecipientEmail} onChange={(e) => setLetterRecipientEmail(e.target.value)} className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none transition-colors rounded-none" />
                             </div>
                           </div>
 
-
                           <div className="w-[80px] h-[1px] bg-gradient-to-r from-transparent via-[#2a2a2a]/30 to-transparent my-3" />
 
                           <div className="flex flex-col items-center gap-2 w-full max-w-[320px]">
-                            {!isInviteRecipientSession && (
-                              <p className="font-sans text-[9px] uppercase tracking-[0.18em] text-[#2a2a2a]/45 text-center">
-                                Your account will be created automatically.
-                              </p>
-                            )}
                             <button type="button" onClick={handleSendLetter} disabled={letterSending} className="mt-6 w-full py-3 bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-sans text-[11px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none mb-6 disabled:opacity-40">
                               {letterSending ? 'Sending…' : 'Seal & Send'}
                             </button>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import InviteForm from '../components/InviteForm'
@@ -75,13 +75,50 @@ function FilmNetworkPreview({ film, invites, creatorName, profileEmail, profileR
 }
 
 export default function Profile() {
-  const { profile, signOut, fetchProfile, user } = useAuth()
+  const { profile, signOut, fetchProfile, user, updatePassword } = useAuth()
+  const location = useLocation()
   const [watchedFilms, setWatchedFilms] = useState([])
   const [sentInvites, setSentInvites] = useState([])
   const [filmInvitesById, setFilmInvitesById] = useState({})
   const [creatorNameByFilmId, setCreatorNameByFilmId] = useState({})
   const [loading, setLoading] = useState(true)
   const [selectedFilm, setSelectedFilm] = useState(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordBusy, setPasswordBusy] = useState(false)
+  const [passwordError, setPasswordError] = useState('')
+  const [passwordSuccess, setPasswordSuccess] = useState('')
+
+  const handleSetPassword = async () => {
+    setPasswordError('')
+    setPasswordSuccess('')
+    if (newPassword.length < 8) {
+      setPasswordError('Password must be at least 8 characters.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Passwords do not match.')
+      return
+    }
+    setPasswordBusy(true)
+    try {
+      await updatePassword(newPassword)
+      setPasswordSuccess('Password updated successfully.')
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (err) {
+      setPasswordError(err.message || 'Failed to update password.')
+    } finally {
+      setPasswordBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    if (location.hash === '#set-password') {
+      const el = document.getElementById('set-password')
+      if (el) el.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [location.hash])
 
   useEffect(() => {
     if (profile) loadData()
@@ -356,6 +393,45 @@ export default function Profile() {
                   ))}
                 </div>
               )}
+            </section>
+
+            {/* Set / change password */}
+            <section id="set-password" className="mt-12 animate-fade-in animate-delay-400">
+              <h2 className="text-xs text-text-muted uppercase tracking-wider mb-6">
+                Set your password
+              </h2>
+              <div className="space-y-3 max-w-sm">
+                {passwordError && (
+                  <p className="text-error text-sm">{passwordError}</p>
+                )}
+                {passwordSuccess && (
+                  <p className="text-success text-sm">{passwordSuccess}</p>
+                )}
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="New password"
+                  minLength={8}
+                  className="w-full bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+                />
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm password"
+                  minLength={8}
+                  className="w-full bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={handleSetPassword}
+                  disabled={passwordBusy || !newPassword || !confirmPassword}
+                  className="dc-btn dc-btn-accent w-full py-3 text-sm cursor-pointer"
+                >
+                  {passwordBusy ? 'Saving…' : 'Save password'}
+                </button>
+              </div>
             </section>
 
             {/* Creator link */}
