@@ -758,6 +758,38 @@ app.post('/api/team/send-invite', async (req, res) => {
           .maybeSingle()
         existingProfile = fallbackRow || null
       }
+
+      // Auth account exists but no public.users row — create it and treat as existing viewer
+      if (!existingProfile) {
+        try {
+          const { data: authList } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 })
+          const authUser = authList?.users?.find(
+            (u) => normalizeEmail(u.email) === emailNorm
+          )
+          if (authUser) {
+            const safeName = emailNorm.split('@')[0] || 'Member'
+            const { data: created } = await supabase
+              .from('users')
+              .upsert(
+                {
+                  id: authUser.id,
+                  email: emailNorm,
+                  name: safeName,
+                  first_name: safeName,
+                  last_name: '',
+                  role: 'viewer',
+                  invite_allocation: 5,
+                },
+                { onConflict: 'id', ignoreDuplicates: false }
+              )
+              .select('id, role, team_creator_id')
+              .maybeSingle()
+            existingProfile = created || { id: authUser.id, role: 'viewer', team_creator_id: null }
+          }
+        } catch (adminErr) {
+          console.warn('auth.admin.listUsers fallback failed:', adminErr?.message)
+        }
+      }
     }
 
     if (existingProfile) {
