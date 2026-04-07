@@ -237,16 +237,9 @@ export default function InviteScreening() {
     )
   }, [user?.email, invite?.recipient_email])
 
-  /* ---------- PROLOGUE SEQUENCE (starts once data is loaded) ---------- */
+  /* ---------- PROLOGUE SEQUENCE (runs on mount) ---------- */
 
   useEffect(() => {
-    if (status === 'invalid' || status === 'expired') {
-      setPrologueState({ text1: false, text2: false, textsVisible: false, overlayVisible: false, mounted: false })
-      setViewVisible(true)
-      return
-    }
-    if (status !== 'valid') return
-
     let d = 800
     const t1 = setTimeout(() => setPrologueState((s) => ({ ...s, text1: true })), d)
     d += 2200
@@ -259,6 +252,13 @@ export default function InviteScreening() {
     }, d + 2000)
     const t5 = setTimeout(() => setPrologueState((s) => ({ ...s, mounted: false })), d + 5000)
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); clearTimeout(t5) }
+  }, [])
+
+  useEffect(() => {
+    if (status === 'invalid' || status === 'expired') {
+      setPrologueState({ text1: false, text2: false, textsVisible: false, overlayVisible: false, mounted: false })
+      setViewVisible(true)
+    }
   }, [status])
 
   /* ---------- SCROLL REVEAL ---------- */
