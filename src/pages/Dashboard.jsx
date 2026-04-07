@@ -578,6 +578,9 @@ export default function Dashboard() {
                     nodesData={graphLayout.nodesData}
                     linksData={graphLayout.linksData}
                     viewBoxH={graphLayout.viewBoxH}
+                    viewBoxW={graphLayout.viewBoxW}
+                    ringRadii={graphLayout.ringRadii}
+                    sectionLabels={graphLayout.sectionLabels}
                     rootNode={graphLayout.rootNode}
                     defaultActiveNodes={graphLayout.defaultActiveNodes}
                     defaultActiveLinks={graphLayout.defaultActiveLinks}
@@ -760,15 +763,13 @@ export default function Dashboard() {
                       <NetworkGraph
                         fillHeight
                         pannable
-                        plainShell
-                        fullBleed
                         transparentSurface
-                        zoomControlsPosition="center-right"
-                        initialZoom={0.8}
                         nodesData={graphLayout.nodesData}
                         linksData={graphLayout.linksData}
                         viewBoxH={graphLayout.viewBoxH}
+                        viewBoxW={graphLayout.viewBoxW}
                         ringRadii={graphLayout.ringRadii}
+                        sectionLabels={graphLayout.sectionLabels}
                         rootNode={graphLayout.rootNode}
                         defaultActiveNodes={graphLayout.defaultActiveNodes}
                         defaultActiveLinks={graphLayout.defaultActiveLinks}

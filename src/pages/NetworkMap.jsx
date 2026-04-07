@@ -381,6 +381,9 @@ export default function NetworkMap() {
                         nodesData={graphLayout.nodesData}
                         linksData={graphLayout.linksData}
                         viewBoxH={graphLayout.viewBoxH}
+                        viewBoxW={graphLayout.viewBoxW}
+                        ringRadii={graphLayout.ringRadii}
+                        sectionLabels={graphLayout.sectionLabels}
                         rootNode={graphLayout.rootNode}
                         defaultActiveNodes={graphLayout.defaultActiveNodes}
                         defaultActiveLinks={graphLayout.defaultActiveLinks}

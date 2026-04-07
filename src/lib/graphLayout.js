@@ -51,7 +51,7 @@ export const TWO_PI = 2 * Math.PI
 export const normAngle = (a) => ((a % TWO_PI) + TWO_PI) % TWO_PI
 
 /* ================================================================
-   generateGraphData — static standalone layout
+   generateGraphData — static standalone layout (demo / landing)
    ================================================================ */
 export function generateGraphData(userShares = 0) {
   const CX = 425, CY = 270
@@ -110,7 +110,7 @@ export function generateGraphData(userShares = 0) {
     sectionStart = sectionEnd
   }
 
-  // Ring 2 — seam algorithm (same as rings 3–5)
+  // Ring 2 — seam algorithm
   const sharers2 = ring1Nodes.filter((n) => n.count > 0)
   if (sharers2.length > 0) {
     const minGap2 = MIN_SPACING / R2
@@ -228,7 +228,10 @@ export function generateGraphData(userShares = 0) {
 }
 
 /* ================================================================
-   buildGraphLayout — real-data layout (Dashboard / NetworkMap / etc.)
+   buildGraphLayout — real-data layout (Dashboard / InviteScreening)
+
+   Uses the same seam-based radial algorithm from the spec.
+   Builds rings from actual invite chain depth (parent_invite_id).
    ================================================================ */
 function toFirstName(value, fallback = 'Invitee') {
   if (!value) return fallback
@@ -264,15 +267,19 @@ export function buildGraphLayout({
 }) {
   if (!filmInvites?.length) return null
 
+  /* --- Compute invite chain depth via parent_invite_id --- */
   const inviteById = new Map(filmInvites.map((r) => [r.id, r]))
 
   const depthCache = new Map()
   function getDepth(id) {
     if (depthCache.has(id)) return depthCache.get(id)
     const inv = inviteById.get(id)
-    if (!inv || !inv.parent_invite_id || !inviteById.has(inv.parent_invite_id)) { depthCache.set(id, 1); return 1 }
-    depthCache.set(id, 1)
-    const d = 1 + getDepth(inv.parent_invite_id); depthCache.set(id, d); return d
+    if (!inv || !inv.parent_invite_id || !inviteById.has(inv.parent_invite_id)) {
+      depthCache.set(id, 1); return 1
+    }
+    depthCache.set(id, 1) // guard against cycles
+    const d = 1 + getDepth(inv.parent_invite_id)
+    depthCache.set(id, d); return d
   }
   filmInvites.forEach((r) => getDepth(r.id))
 
@@ -286,39 +293,49 @@ export function buildGraphLayout({
   const ring1Invites = byDepth.get(1) || []
   if (!ring1Invites.length) return null
 
+  /* --- Group ring-1 by sender (= "team") --- */
   const senderGroupMap = new Map()
   for (const inv of ring1Invites) {
     const sk = senderKey(inv)
-    if (!senderGroupMap.has(sk)) senderGroupMap.set(sk, { label: toFirstName(inv.sender_name || inv.sender_email, 'Member'), invites: [] })
+    if (!senderGroupMap.has(sk))
+      senderGroupMap.set(sk, { label: toFirstName(inv.sender_name || inv.sender_email, 'Member'), invites: [] })
     senderGroupMap.get(sk).invites.push(inv)
   }
-  const teams = [...senderGroupMap.entries()].map(([id, v]) => ({ id, label: v.label, invites: v.invites }))
+  const teams = [...senderGroupMap.entries()].map(([id, v]) => ({
+    id, label: v.label, invites: v.invites,
+  }))
 
+  /* --- Build parent→children map for deeper tiers --- */
   const childrenByParentId = new Map()
   for (const inv of filmInvites) {
     if (inv.parent_invite_id && depthCache.get(inv.id) > 1) {
-      if (!childrenByParentId.has(inv.parent_invite_id)) childrenByParentId.set(inv.parent_invite_id, [])
+      if (!childrenByParentId.has(inv.parent_invite_id))
+        childrenByParentId.set(inv.parent_invite_id, [])
       childrenByParentId.get(inv.parent_invite_id).push(inv)
     }
   }
 
-  const MIN_SPACING = 28
-  const R1_BASE = 120
-  const RING_GAP = 55
+  /* --- Spec constants --- */
+  const MIN_SPACING = 32
+  const R1_BASE = 200
+  const RING_GAP = 65
 
   const totalR1 = ring1Invites.length
   const R1 = Math.max(R1_BASE, Math.ceil((totalR1 * MIN_SPACING) / TWO_PI))
   const maxRealDepth = Math.max(...byDepth.keys(), 1)
 
+  /* --- Compute ring radii for all tiers --- */
   let prevR = R1
   const ringRadii = [0, R1]
   for (let d = 2; d <= maxRealDepth; d++) {
     const N = (byDepth.get(d) || []).length
     if (!N) break
     const R = Math.max(prevR + RING_GAP, Math.ceil((N * MIN_SPACING) / TWO_PI))
-    ringRadii.push(R); prevR = R
+    ringRadii.push(R)
+    prevR = R
   }
 
+  /* --- ViewBox sizing (auto-expand) --- */
   const maxR = ringRadii[ringRadii.length - 1]
   const pad = 80
   const viewBoxW = Math.max(850, Math.ceil(maxR * 2) + pad * 2)
@@ -326,33 +343,70 @@ export function buildGraphLayout({
   const cx = Math.round(viewBoxW / 2)
   const cy = Math.round(viewBoxH / 2)
 
-  const nodesData = [], linksData = [], sectionLabels = []
+  /* --- Place nodes and links --- */
+  const nodesData = []
+  const linksData = []
+  const sectionLabels = []
   const nodeIdSet = new Set()
-  const addNode = (n) => { if (!nodeIdSet.has(n.id)) { nodeIdSet.add(n.id); nodesData.push(n) } }
+  const addNode = (n) => {
+    if (!nodeIdSet.has(n.id)) {
+      nodeIdSet.add(n.id)
+      nodesData.push(n)
+    }
+  }
 
-  addNode({ id: rootId, label: toFirstName(filmTitle, 'Film'), x: cx, y: cy, size: 1.2, type: 'film', tier: 0, angle: 0 })
+  addNode({
+    id: rootId,
+    label: toFirstName(filmTitle, 'Film'),
+    x: cx, y: cy,
+    size: 1.2, type: 'film', tier: 0, angle: 0,
+  })
 
+  /* --- Ring 1: team-section layout (spec §Ring 1) --- */
   const r1NodeByInviteId = new Map()
   let sectionStart = -Math.PI / 2
+
   for (const team of teams) {
     const N = team.invites.length
     const sectionAngle = (N / totalR1) * TWO_PI
     const sectionMid = sectionStart + sectionAngle / 2
-    sectionLabels.push({ label: team.label, angle: sectionMid, r: R1 - 38, cx, cy, teamId: team.id })
+
+    sectionLabels.push({
+      label: team.label,
+      angle: sectionMid,
+      r: R1 - 40,
+      cx, cy,
+      teamId: team.id,
+    })
+
     for (let j = 0; j < N; j++) {
       const inv = team.invites[j]
       const angle = N === 1 ? sectionMid : sectionStart + ((j + 0.5) / N) * sectionAngle
       const rk = recipientKey(inv)
       const isViewer = viewerRKey && rk === viewerRKey
-      addNode({ id: rk, label: isViewer ? 'You' : toFirstName(inv.recipient_name || inv.recipient_email), x: cx + R1 * Math.cos(angle), y: cy + R1 * Math.sin(angle), size: isViewer ? 1.3 : 1.0, type: isViewer ? 'viewer' : 'person', tier: 1, angle, teamId: team.id })
+
+      addNode({
+        id: rk,
+        label: isViewer ? 'You' : toFirstName(inv.recipient_name || inv.recipient_email),
+        x: cx + R1 * Math.cos(angle),
+        y: cy + R1 * Math.sin(angle),
+        size: isViewer ? 1.3 : 1.0,
+        type: isViewer ? 'viewer' : 'person',
+        tier: 1, angle, teamId: team.id,
+      })
       linksData.push({ source: rootId, target: rk })
       r1NodeByInviteId.set(inv.id, { id: rk, angle, teamId: team.id })
     }
+
     sectionStart += sectionAngle
   }
 
+  /* --- Rings 2+: seam-based radial layout (spec §Rings 3-5+) --- */
   let prevRingNodes = ring1Invites
-    .map((inv) => { const p = r1NodeByInviteId.get(inv.id); return p ? { ...p, inviteId: inv.id } : null })
+    .map((inv) => {
+      const p = r1NodeByInviteId.get(inv.id)
+      return p ? { ...p, inviteId: inv.id } : null
+    })
     .filter(Boolean)
 
   for (let depth = 2; depth <= maxRealDepth; depth++) {
@@ -360,6 +414,7 @@ export function buildGraphLayout({
     if (!tierR) break
     const minGap = MIN_SPACING / tierR
 
+    /* Step 1: select sharers (parents that have children at this depth) */
     const sharers = []
     for (const pn of prevRingNodes) {
       const kids = childrenByParentId.get(pn.inviteId) || []
@@ -367,8 +422,10 @@ export function buildGraphLayout({
     }
     if (!sharers.length) break
 
+    /* Step 2: sort by parent angle */
     sharers.sort((a, b) => normAngle(a.parent.angle) - normAngle(b.parent.angle))
 
+    /* Step 3: find largest gap — place seam there */
     let maxGap = 0, seamIdx = 0
     for (let i = 0; i < sharers.length; i++) {
       const cur = normAngle(sharers[i].parent.angle)
@@ -378,7 +435,10 @@ export function buildGraphLayout({
       if (nxt - cur > maxGap) { maxGap = nxt - cur; seamIdx = i }
     }
 
+    /* Reorder to start after the gap */
     const ordered = sharers.map((_, i) => sharers[(seamIdx + 1 + i) % sharers.length])
+
+    /* Step 4: monotonic angles */
     const baseAngle = normAngle(ordered[0].parent.angle)
     for (const s of ordered) {
       let a = normAngle(s.parent.angle)
@@ -386,6 +446,7 @@ export function buildGraphLayout({
       s._mono = a
     }
 
+    /* Step 5: place children in contiguous blocks centered on parent */
     const pending = []
     for (const s of ordered) {
       s.children.forEach((inv, k) => {
@@ -398,37 +459,65 @@ export function buildGraphLayout({
       })
     }
 
+    /* Step 6: forward collision resolution */
     for (let i = 1; i < pending.length; i++)
       if (pending[i].angle - pending[i - 1].angle < minGap)
         pending[i].angle = pending[i - 1].angle + minGap
 
+    /* Step 7: place nodes */
     const thisRingNodes = []
     for (const p of pending) {
       const rk = recipientKey(p.inv)
       const isViewer = viewerRKey && rk === viewerRKey
-      addNode({ id: rk, label: isViewer ? 'You' : toFirstName(p.inv.recipient_name || p.inv.recipient_email), x: cx + tierR * Math.cos(p.angle), y: cy + tierR * Math.sin(p.angle), size: isViewer ? 1.3 : 1.0, type: isViewer ? 'viewer' : 'person', tier: depth, angle: p.angle, teamId: p.teamId })
+      addNode({
+        id: rk,
+        label: isViewer ? 'You' : toFirstName(p.inv.recipient_name || p.inv.recipient_email),
+        x: cx + tierR * Math.cos(p.angle),
+        y: cy + tierR * Math.sin(p.angle),
+        size: isViewer ? 1.3 : 1.0,
+        type: isViewer ? 'viewer' : 'person',
+        tier: depth, angle: p.angle, teamId: p.teamId,
+      })
       linksData.push({ source: p.parentId, target: rk })
       thisRingNodes.push({ id: rk, angle: p.angle, teamId: p.teamId, inviteId: p.inv.id })
     }
     prevRingNodes = thisRingNodes
   }
 
-  const defaultNodes = new Set(), defaultLinks = new Set()
+  /* --- Default highlight: path from film → viewer --- */
+  const defaultNodes = new Set()
+  const defaultLinks = new Set()
   if (viewerRKey && nodeIdSet.has(viewerRKey)) {
     const reverseLinks = new Map()
     for (const link of linksData) {
       if (!reverseLinks.has(link.target)) reverseLinks.set(link.target, [])
       reverseLinks.get(link.target).push(link.source)
     }
-    let cur = viewerRKey; defaultNodes.add(cur)
+    let cur = viewerRKey
+    defaultNodes.add(cur)
     const visited = new Set([cur])
     while (cur !== rootId) {
       const parents = (reverseLinks.get(cur) || []).filter((p) => !visited.has(p))
       if (!parents.length) break
-      const parent = parents[0]; defaultNodes.add(parent); defaultLinks.add(`${parent}-${cur}`); visited.add(parent); cur = parent
+      const parent = parents[0]
+      defaultNodes.add(parent)
+      defaultLinks.add(`${parent}-${cur}`)
+      visited.add(parent)
+      cur = parent
     }
     defaultNodes.add(rootId)
   }
 
-  return { nodesData, linksData, viewBoxH, viewBoxW, cx, cy, ringRadii, sectionLabels, rootNode: nodesData.find((n) => n.id === rootId), defaultActiveNodes: defaultNodes, defaultActiveLinks: defaultLinks }
+  return {
+    nodesData,
+    linksData,
+    viewBoxH,
+    viewBoxW,
+    cx, cy,
+    ringRadii,
+    sectionLabels,
+    rootNode: nodesData.find((n) => n.id === rootId),
+    defaultActiveNodes: defaultNodes,
+    defaultActiveLinks: defaultLinks,
+  }
 }

@@ -65,7 +65,9 @@ function FilmNetworkPreview({ film, invites, creatorName, profileEmail, profileR
           nodesData={graphLayout.nodesData}
           linksData={graphLayout.linksData}
           viewBoxH={graphLayout.viewBoxH}
+          viewBoxW={graphLayout.viewBoxW}
           ringRadii={graphLayout.ringRadii}
+          sectionLabels={graphLayout.sectionLabels}
           rootNode={graphLayout.rootNode}
           defaultActiveNodes={graphLayout.defaultActiveNodes}
           defaultActiveLinks={graphLayout.defaultActiveLinks}

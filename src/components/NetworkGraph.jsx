@@ -1,6 +1,10 @@
 import { useState, useMemo, useRef, useCallback, cloneElement } from 'react'
 export { buildGraphLayout, inviteRecipientKey } from '../lib/graphLayout'
 
+/* ------------------------------------------------------------------ */
+/*  PALETTE                                                            */
+/* ------------------------------------------------------------------ */
+
 const GRAPH_COLORS = {
   ink: '#080c18',
   warm: '#dddddd',
@@ -12,19 +16,71 @@ const GRAPH_COLORS = {
 const VIEWBOX_W = 850
 
 /* ------------------------------------------------------------------ */
-/*  HUMAN NODE                                                         */
+/*  FILM NODE — camera/projector icon at center                        */
+/* ------------------------------------------------------------------ */
+
+function FilmNode({ x, y, size, isActive, isFaded, onMouseEnter, onMouseLeave }) {
+  const r = 18 * size
+  const iconScale = size * 0.38
+
+  return (
+    <g
+      transform={`translate(${x}, ${y})`}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      style={{
+        cursor: 'pointer',
+        opacity: isFaded ? 0.28 : 1,
+        transition: 'opacity 500ms ease-out',
+      }}
+    >
+      <circle cx="0" cy="0" r={r * 1.6} fill={GRAPH_COLORS.amber} opacity={0.06} />
+      <circle
+        cx="0" cy="0" r={r}
+        fill="none"
+        stroke={isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.faint}
+        strokeWidth={1}
+        opacity={0.5}
+        style={{ transition: 'stroke 500ms ease' }}
+      />
+      <g transform={`scale(${iconScale})`}>
+        <rect x="-22" y="-14" width="34" height="28" rx="3"
+          fill="none"
+          stroke={isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.warm}
+          strokeWidth="2"
+          style={{ transition: 'stroke 500ms ease' }}
+        />
+        <polygon points="14,-8 24,0 14,8"
+          fill="none"
+          stroke={isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.warm}
+          strokeWidth="2" strokeLinejoin="round"
+          style={{ transition: 'stroke 500ms ease' }}
+        />
+        <circle cx="-12" cy="-18" r="5"
+          fill="none"
+          stroke={isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.warm}
+          strokeWidth="1.5"
+          style={{ transition: 'stroke 500ms ease' }}
+        />
+        <circle cx="0" cy="-18" r="5"
+          fill="none"
+          stroke={isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.warm}
+          strokeWidth="1.5"
+          style={{ transition: 'stroke 500ms ease' }}
+        />
+      </g>
+    </g>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  HUMAN NODE — head + body silhouette                                */
 /* ------------------------------------------------------------------ */
 
 function HumanNode({
-  x,
-  y,
-  size,
-  label,
-  isActive,
-  isFaded,
-  isPathEnd,
-  onMouseEnter,
-  onMouseLeave,
+  x, y, size, label,
+  isActive, isFaded, isPathEnd,
+  onMouseEnter, onMouseLeave,
 }) {
   const headR = 4 * size
   const headCy = -4.5 * size
@@ -45,10 +101,8 @@ function HumanNode({
     >
       {isPathEnd && (
         <ellipse
-          cx="0"
-          cy={-2 * size}
-          rx={13.5 * size}
-          ry={11.5 * size}
+          cx="0" cy={-2 * size}
+          rx={13.5 * size} ry={11.5 * size}
           fill="none"
           stroke={GRAPH_COLORS.amber}
           strokeWidth={1.35}
@@ -59,7 +113,8 @@ function HumanNode({
       <g
         style={{
           fill: isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.warm,
-          transition: 'fill 500ms ease',
+          opacity: isActive ? 1 : 0.45,
+          transition: 'fill 500ms ease, opacity 500ms ease',
         }}
       >
         <circle cx="0" cy={headCy} r={headR} />
@@ -89,6 +144,120 @@ function HumanNode({
 }
 
 /* ------------------------------------------------------------------ */
+/*  SECTION LABEL — team name inside ring 1                            */
+/* ------------------------------------------------------------------ */
+
+function SectionLabel({ label, angle, r, cx, cy }) {
+  const x = cx + r * Math.cos(angle)
+  const y = cy + r * Math.sin(angle)
+  let rotation = (angle * 180) / Math.PI + 90
+  if (rotation > 90 && rotation < 270) rotation += 180
+
+  return (
+    <text
+      x={x} y={y}
+      textAnchor="middle"
+      dominantBaseline="middle"
+      transform={`rotate(${rotation}, ${x}, ${y})`}
+      style={{
+        fontFamily: "'DM Sans', sans-serif",
+        fontSize: '8px',
+        fontWeight: 500,
+        letterSpacing: '0.18em',
+        textTransform: 'uppercase',
+        fill: GRAPH_COLORS.amber,
+        opacity: 0.5,
+        pointerEvents: 'none',
+      }}
+    >
+      {label}
+    </text>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  TEAM LEGEND — bottom-left overlay, click to highlight              */
+/* ------------------------------------------------------------------ */
+
+function TeamLegend({ teams, selectedTeamId, onSelect }) {
+  if (!teams.length) return null
+
+  return (
+    <div
+      className="absolute bottom-3 left-3 z-20 flex flex-col gap-0.5 rounded px-2.5 py-2"
+      style={{
+        background: 'rgba(8,12,24,0.75)',
+        backdropFilter: 'blur(8px)',
+        border: `0.5px solid ${GRAPH_COLORS.faint}30`,
+        maxHeight: '40%',
+        overflowY: 'auto',
+      }}
+    >
+      <span
+        style={{
+          fontFamily: "'DM Sans', sans-serif",
+          fontSize: '8px',
+          fontWeight: 600,
+          letterSpacing: '0.2em',
+          textTransform: 'uppercase',
+          color: GRAPH_COLORS.faint,
+          marginBottom: '3px',
+        }}
+      >
+        Film Team
+      </span>
+      {teams.map((t) => {
+        const active = selectedTeamId === t.id
+        return (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => onSelect(active ? null : t.id)}
+            className="flex items-center gap-2 rounded-sm px-1.5 py-[3px] text-left transition-colors duration-200"
+            style={{
+              background: active ? `${GRAPH_COLORS.amber}18` : 'transparent',
+            }}
+          >
+            <span
+              className="shrink-0 rounded-full"
+              style={{
+                width: 6,
+                height: 6,
+                background: active ? GRAPH_COLORS.amber : `${GRAPH_COLORS.warm}50`,
+                transition: 'background 300ms ease',
+              }}
+            />
+            <span
+              style={{
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '10px',
+                fontWeight: active ? 600 : 400,
+                letterSpacing: '0.08em',
+                color: active ? GRAPH_COLORS.amber : `${GRAPH_COLORS.warm}90`,
+                transition: 'color 300ms ease',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {t.label}
+            </span>
+            <span
+              style={{
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '9px',
+                color: `${GRAPH_COLORS.warm}40`,
+                marginLeft: '2px',
+              }}
+            >
+              {t.count}
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /*  MAIN COMPONENT                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -99,6 +268,7 @@ export default function NetworkGraph({
   viewBoxW: viewBoxWProp = null,
   rootNode = null,
   ringRadii = [],
+  sectionLabels = [],
   defaultActiveNodes = new Set(),
   defaultActiveLinks = new Set(),
   fillHeight = false,
@@ -106,6 +276,7 @@ export default function NetworkGraph({
   transparentSurface = false,
 }) {
   const [hoveredNode, setHoveredNode] = useState(null)
+  const [selectedTeamId, setSelectedTeamId] = useState(null)
   const scrollRef = useRef(null)
   const dragRef = useRef({ active: false, x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
@@ -114,6 +285,57 @@ export default function NetworkGraph({
   const rootX = rootNode?.x ?? vbW / 2
   const rootY = rootNode?.y ?? viewBoxH / 2
 
+  /* --- Deduplicated team list for legend --- */
+  const legendTeams = useMemo(() => {
+    if (!sectionLabels.length) return []
+    const seen = new Map()
+    for (const sl of sectionLabels) {
+      if (!seen.has(sl.teamId)) {
+        const count = nodesData.filter((n) => n.teamId === sl.teamId && n.type !== 'film').length
+        seen.set(sl.teamId, { id: sl.teamId, label: sl.label, count })
+      }
+    }
+    return [...seen.values()]
+  }, [sectionLabels, nodesData])
+
+  /* --- Team-based highlight: all nodes & links in the team's subtree --- */
+  const teamHighlight = useMemo(() => {
+    if (!selectedTeamId) return null
+    const nodes = new Set()
+    const links = new Set()
+
+    // Start with all ring-1 nodes that belong to this team
+    const teamRoots = nodesData.filter((n) => n.teamId === selectedTeamId && n.type !== 'film')
+    for (const n of teamRoots) nodes.add(n.id)
+
+    // Walk descendants from those roots
+    const walkDown = (nodeId) => {
+      for (const link of linksData) {
+        if (link.source === nodeId && !nodes.has(link.target)) {
+          nodes.add(link.target)
+          links.add(`${link.source}-${link.target}`)
+          walkDown(link.target)
+        }
+      }
+    }
+    for (const n of teamRoots) walkDown(n.id)
+
+    // Include the film root and its links to team ring-1 nodes
+    const filmRoot = nodesData.find((n) => n.type === 'film')
+    if (filmRoot) {
+      nodes.add(filmRoot.id)
+      for (const n of teamRoots) {
+        const linkId = `${filmRoot.id}-${n.id}`
+        if (linksData.some((l) => l.source === filmRoot.id && l.target === n.id)) {
+          links.add(linkId)
+        }
+      }
+    }
+
+    return { nodes, links }
+  }, [selectedTeamId, nodesData, linksData])
+
+  /* --- Panning handlers --- */
   const handlePanPointerDown = useCallback((e) => {
     if (e.pointerType === 'touch') return
     if (e.button !== 0) return
@@ -121,12 +343,8 @@ export default function NetworkGraph({
     if (!el) return
     dragRef.current = { active: true, x: e.clientX, y: e.clientY }
     setIsPanning(true)
-    try {
-      el.setPointerCapture(e.pointerId)
-    } catch {
-      dragRef.current = { active: false, x: 0, y: 0 }
-      setIsPanning(false)
-    }
+    try { el.setPointerCapture(e.pointerId) }
+    catch { dragRef.current = { active: false, x: 0, y: 0 }; setIsPanning(false) }
   }, [])
 
   const handlePanPointerMove = useCallback((e) => {
@@ -147,11 +365,7 @@ export default function NetworkGraph({
     setIsPanning(false)
     const el = scrollRef.current
     if (el && e?.pointerId != null) {
-      try {
-        el.releasePointerCapture(e.pointerId)
-      } catch {
-        /* already released */
-      }
+      try { el.releasePointerCapture(e.pointerId) } catch { /* already released */ }
     }
   }, [])
 
@@ -180,41 +394,54 @@ export default function NetworkGraph({
     if (absorb) e.stopPropagation()
   }, [])
 
+  /* --- Active/hovered state (hover takes priority over team selection) --- */
   const activeElements = useMemo(() => {
-    if (!hoveredNode) return { nodes: defaultActiveNodes, links: defaultActiveLinks }
+    if (hoveredNode) {
+      const activeNodes = new Set()
+      const activeLinks = new Set()
 
-    const activeNodes = new Set()
-    const activeLinks = new Set()
+      const findDescendants = (nodeId) => {
+        activeNodes.add(nodeId)
+        linksData.forEach((link) => {
+          if (link.source === nodeId && !activeNodes.has(link.target)) {
+            activeLinks.add(`${link.source}-${link.target}`)
+            findDescendants(link.target)
+          }
+        })
+      }
 
-    const findDescendants = (nodeId) => {
-      activeNodes.add(nodeId)
-      linksData.forEach((link) => {
-        if (link.source === nodeId && !activeNodes.has(link.target)) {
-          activeLinks.add(`${link.source}-${link.target}`)
-          findDescendants(link.target)
-        }
-      })
+      const findAncestors = (nodeId) => {
+        activeNodes.add(nodeId)
+        linksData.forEach((link) => {
+          if (link.target === nodeId && !activeNodes.has(link.source)) {
+            activeLinks.add(`${link.source}-${link.target}`)
+            findAncestors(link.source)
+          }
+        })
+      }
+
+      findDescendants(hoveredNode)
+      findAncestors(hoveredNode)
+      return { nodes: activeNodes, links: activeLinks }
     }
 
-    const findAncestors = (nodeId) => {
-      activeNodes.add(nodeId)
-      linksData.forEach((link) => {
-        if (link.target === nodeId && !activeNodes.has(link.source)) {
-          activeLinks.add(`${link.source}-${link.target}`)
-          findAncestors(link.source)
-        }
-      })
-    }
+    if (teamHighlight) return teamHighlight
 
-    findDescendants(hoveredNode)
-    findAncestors(hoveredNode)
-    return { nodes: activeNodes, links: activeLinks }
-  }, [hoveredNode, linksData, defaultActiveNodes, defaultActiveLinks])
+    return { nodes: defaultActiveNodes, links: defaultActiveLinks }
+  }, [hoveredNode, teamHighlight, linksData, defaultActiveNodes, defaultActiveLinks])
 
   const hasActive = activeElements.nodes.size > 0
 
+  /* --- Build node lookup for link rendering --- */
+  const nodeById = useMemo(() => {
+    const map = new Map()
+    nodesData.forEach((n) => map.set(n.id, n))
+    return map
+  }, [nodesData])
+
   const graphIntrinsicPaddingPct = (viewBoxH / vbW) * 100
 
+  /* --- SVG --- */
   const svgInner = (
     <svg
       width="100%"
@@ -223,22 +450,14 @@ export default function NetworkGraph({
       className="relative z-10 block"
       preserveAspectRatio="xMidYMid meet"
     >
-      {/* Ring decorations from ringRadii prop */}
-      {ringRadii.filter((r) => r > 0).map((r, i) => (
-        <circle
-          key={i}
-          cx={rootX}
-          cy={rootY}
-          r={r}
-          fill="none"
-          stroke={GRAPH_COLORS.faint}
-          strokeWidth="1"
-          strokeDasharray="2 5"
-          opacity="0.18"
-        />
-      ))}
+      {/* Ring circles (dashed) */}
+      <g stroke={GRAPH_COLORS.faint} strokeWidth="1" fill="none" opacity="0.18">
+        {ringRadii.filter((r) => r > 0).map((r, i) => (
+          <circle key={i} cx={rootX} cy={rootY} r={r} strokeDasharray="2 5" />
+        ))}
+      </g>
 
-      {/* Fallback decorative grid when no ring data */}
+      {/* Fallback grid when no ring data */}
       {ringRadii.filter((r) => r > 0).length === 0 && (
         <g stroke={GRAPH_COLORS.faint} strokeWidth="1" fill="none" opacity="0.15">
           <circle cx={rootX} cy={rootY} r="150" strokeDasharray="1 4" />
@@ -248,65 +467,99 @@ export default function NetworkGraph({
         </g>
       )}
 
-      {/* Links (bezier curves) */}
+      {/* Section labels (team names) */}
+      {sectionLabels.map((sl, i) => (
+        <SectionLabel key={i} label={sl.label} angle={sl.angle} r={sl.r} cx={sl.cx} cy={sl.cy} />
+      ))}
+
+      {/* Links */}
       {linksData.map((link, i) => {
-        const src = nodesData.find((n) => n.id === link.source)
-        const tgt = nodesData.find((n) => n.id === link.target)
+        const src = nodeById.get(link.source)
+        const tgt = nodeById.get(link.target)
         if (!src || !tgt) return null
 
         const linkId = `${link.source}-${link.target}`
         const isActive = activeElements.links.has(linkId)
-        const cpX = (src.x + tgt.x) / 2
-        const d = `M ${src.x} ${src.y + src.size * 3} C ${cpX} ${src.y + src.size * 3}, ${cpX} ${tgt.y + tgt.size * 3}, ${tgt.x} ${tgt.y + tgt.size * 3}`
+
+        const dx = tgt.x - src.x
+        const dy = tgt.y - src.y
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1
+        const mx = (src.x + tgt.x) / 2
+        const my = (src.y + tgt.y) / 2
+        const bulge = dist * 0.08
+        const nx = -dy / dist
+        const ny = dx / dist
+        const cpX = mx + nx * bulge
+        const cpY = my + ny * bulge
+
+        const d = `M ${src.x} ${src.y} Q ${cpX} ${cpY} ${tgt.x} ${tgt.y}`
 
         return (
-          <g
+          <path
             key={i}
-            style={{
-              opacity: isActive ? 1 : hasActive ? 0.12 : 0.20,
-              transition: 'opacity 500ms ease-out',
-            }}
-          >
-            <path
-              d={d}
-              fill="none"
-              stroke={isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.muted}
-              strokeWidth={isActive ? 2.35 : 1.5}
-              opacity={isActive ? 1 : 0.48}
-              strokeDasharray={isActive ? 'none' : '2 3'}
-              strokeLinecap="round"
-              style={{ transition: 'stroke 500ms ease, opacity 500ms ease, stroke-width 500ms ease' }}
-            />
-          </g>
+            d={d}
+            fill="none"
+            stroke={isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.muted}
+            strokeWidth={isActive ? 2.25 : 1.2}
+            opacity={isActive ? 0.9 : hasActive ? 0.08 : 0.18}
+            strokeDasharray={isActive ? 'none' : '2 3'}
+            strokeLinecap="round"
+            style={{ transition: 'stroke 500ms ease, opacity 500ms ease, stroke-width 500ms ease' }}
+          />
         )
       })}
 
-      {/* Nodes (human icons) */}
-      {nodesData.map((node) => (
-        <HumanNode
-          key={node.id}
-          x={node.x}
-          y={node.y}
-          size={node.size}
-          label={node.label}
-          isActive={activeElements.nodes.has(node.id)}
-          isFaded={hasActive && !activeElements.nodes.has(node.id)}
-          isPathEnd={node.type === 'viewer'}
-          onMouseEnter={() => setHoveredNode(node.id)}
-          onMouseLeave={() => setHoveredNode(null)}
-        />
-      ))}
+      {/* Nodes */}
+      {nodesData.map((node) => {
+        const isActive = activeElements.nodes.has(node.id)
+        const isFaded = hasActive && !isActive
+
+        if (node.type === 'film') {
+          return (
+            <FilmNode
+              key={node.id}
+              x={node.x} y={node.y}
+              size={node.size}
+              isActive={isActive}
+              isFaded={isFaded}
+              onMouseEnter={() => setHoveredNode(node.id)}
+              onMouseLeave={() => setHoveredNode(null)}
+            />
+          )
+        }
+
+        return (
+          <HumanNode
+            key={node.id}
+            x={node.x} y={node.y}
+            size={node.size}
+            label={node.label}
+            isActive={isActive}
+            isFaded={isFaded}
+            isPathEnd={node.type === 'viewer'}
+            onMouseEnter={() => setHoveredNode(node.id)}
+            onMouseLeave={() => setHoveredNode(null)}
+          />
+        )
+      })}
     </svg>
   )
 
+  /* --- Shell styles --- */
   const shellStyle = {
     backgroundColor: transparentSurface ? 'transparent' : GRAPH_COLORS.ink,
-    border:
-      transparentSurface
-        ? 'none'
-        : `0.5px solid ${GRAPH_COLORS.faint}40`,
+    border: transparentSurface ? 'none' : `0.5px solid ${GRAPH_COLORS.faint}40`,
   }
 
+  const legend = (
+    <TeamLegend
+      teams={legendTeams}
+      selectedTeamId={selectedTeamId}
+      onSelect={setSelectedTeamId}
+    />
+  )
+
+  /* --- Pannable mode --- */
   if (pannable) {
     const svgInScrollBox = cloneElement(svgInner, {
       className: 'absolute inset-0 z-10 block h-full w-full',
@@ -348,11 +601,12 @@ export default function NetworkGraph({
             </div>
           </div>
         </div>
+        {legend}
       </div>
     )
   }
 
-  // Non-pannable
+  /* --- Non-pannable mode --- */
   return (
     <div
       className={`relative z-10 w-full ${fillHeight ? 'h-full min-h-0' : ''}`}
@@ -362,6 +616,7 @@ export default function NetworkGraph({
       }}
     >
       {svgInner}
+      {legend}
     </div>
   )
 }

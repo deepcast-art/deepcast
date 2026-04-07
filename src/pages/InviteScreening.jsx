@@ -538,10 +538,22 @@ export default function InviteScreening() {
         localStorage.setItem(`screening_position_${token}`, Math.floor(muxEl.currentTime))
       }
 
-      navigate('/dashboard', {
-        replace: true,
-        state: { inviteSent: true, recipientName: letterRecipientFirst.trim() },
-      })
+      setSentLetters((prev) => [
+        ...prev,
+        {
+          id: Date.now(),
+          firstName: letterRecipientFirst.trim(),
+          lastName: letterRecipientLast.trim(),
+          email: letterRecipientEmail.trim(),
+          name: recipientName,
+        },
+      ])
+      setLetterRecipientFirst('')
+      setLetterRecipientLast('')
+      setLetterRecipientEmail('')
+      setLetterNote('')
+      setNewPassword('')
+      setCurrentView('dashboard')
     } catch (err) {
       setLetterError(err.message || 'Failed to send. Please try again.')
     } finally {
@@ -793,12 +805,13 @@ export default function InviteScreening() {
                   <NetworkGraph
                     fillHeight
                     pannable
-                    plainShell
-                    fullBleed
                     transparentSurface
                     nodesData={graphLayout.nodesData}
                     linksData={graphLayout.linksData}
                     viewBoxH={graphLayout.viewBoxH}
+                    viewBoxW={graphLayout.viewBoxW}
+                    ringRadii={graphLayout.ringRadii}
+                    sectionLabels={graphLayout.sectionLabels}
                     rootNode={graphLayout.rootNode}
                     defaultActiveNodes={graphLayout.defaultActiveNodes}
                     defaultActiveLinks={graphLayout.defaultActiveLinks}
@@ -903,13 +916,13 @@ export default function InviteScreening() {
                         <NetworkGraph
                           fillHeight
                           pannable
-                          plainShell
-                          fullBleed
                           transparentSurface
                           nodesData={graphLayout.nodesData}
                           linksData={graphLayout.linksData}
                           viewBoxH={graphLayout.viewBoxH}
+                          viewBoxW={graphLayout.viewBoxW}
                           ringRadii={graphLayout.ringRadii}
+                          sectionLabels={graphLayout.sectionLabels}
                           rootNode={graphLayout.rootNode}
                           defaultActiveNodes={graphLayout.defaultActiveNodes}
                           defaultActiveLinks={graphLayout.defaultActiveLinks}
@@ -965,7 +978,7 @@ export default function InviteScreening() {
                         {showPostFilm && (
                           <button
                             type="button"
-                            onClick={() => navigate('/dashboard', { replace: true })}
+                            onClick={() => setCurrentView('dashboard')}
                             className="mt-2 w-full py-1.5 font-sans text-[9px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors"
                           >
                             Skip — Go to dashboard
@@ -993,9 +1006,9 @@ export default function InviteScreening() {
                     </div>
                     <span className="font-sans text-[10px] uppercase tracking-[0.35em] text-[#dddddd]/90 group-hover:text-[#dddddd] transition-colors font-medium">Resume Film</span>
                   </button>
-                </>
-              )}
+                )}
 
+                <div className="flex min-h-0 flex-1">
               {/* Left column — context + map */}
               <div className="flex min-h-0 w-full shrink-0 flex-col justify-start gap-8 border-b border-[#b1a180]/20 px-8 py-28 lg:w-[40%] lg:min-h-0 lg:max-h-[100dvh] lg:justify-center lg:overflow-y-auto lg:border-b-0 lg:border-r lg:py-12">
                 <div className="flex flex-col gap-2">
@@ -1033,9 +1046,13 @@ export default function InviteScreening() {
                       <NetworkGraph
                         fillHeight
                         pannable
+                        transparentSurface
                         nodesData={graphLayout.nodesData}
                         linksData={graphLayout.linksData}
                         viewBoxH={graphLayout.viewBoxH}
+                        viewBoxW={graphLayout.viewBoxW}
+                        ringRadii={graphLayout.ringRadii}
+                        sectionLabels={graphLayout.sectionLabels}
                         rootNode={graphLayout.rootNode}
                         defaultActiveNodes={graphLayout.defaultActiveNodes}
                         defaultActiveLinks={graphLayout.defaultActiveLinks}
@@ -1137,7 +1154,7 @@ export default function InviteScreening() {
                           {showPostFilm && (
                             <button
                               type="button"
-                              onClick={() => navigate('/dashboard', { replace: true })}
+                              onClick={() => setCurrentView('dashboard')}
                               className="mt-2 w-full max-w-[320px] py-2 font-sans text-[9px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors"
                             >
                               Skip — Go to dashboard
@@ -1239,13 +1256,13 @@ export default function InviteScreening() {
                     <NetworkGraph
                       fillHeight
                       pannable
-                      plainShell
-                      fullBleed
                       transparentSurface
                       nodesData={dashboardGraphLayout.nodesData}
                       linksData={dashboardGraphLayout.linksData}
                       viewBoxH={dashboardGraphLayout.viewBoxH}
+                      viewBoxW={dashboardGraphLayout.viewBoxW}
                       ringRadii={dashboardGraphLayout.ringRadii}
+                      sectionLabels={dashboardGraphLayout.sectionLabels}
                       rootNode={dashboardGraphLayout.rootNode}
                       defaultActiveNodes={dashboardGraphLayout.defaultActiveNodes}
                       defaultActiveLinks={dashboardGraphLayout.defaultActiveLinks}
