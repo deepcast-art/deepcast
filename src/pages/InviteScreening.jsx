@@ -237,9 +237,20 @@ export default function InviteScreening() {
     )
   }, [user?.email, invite?.recipient_email])
 
-  /* ---------- PROLOGUE SEQUENCE (runs on mount) ---------- */
+  /* ---------- PROLOGUE SEQUENCE (after invite is valid; avoids generic copy + spinner race) ---------- */
 
   useEffect(() => {
+    if (status !== 'valid' || directPlay) return undefined
+
+    setPrologueState({
+      text1: false,
+      text2: false,
+      textsVisible: true,
+      overlayVisible: true,
+      mounted: true,
+    })
+    setViewVisible(false)
+
     let d = 800
     const t1 = setTimeout(() => setPrologueState((s) => ({ ...s, text1: true })), d)
     d += 2200
@@ -251,8 +262,14 @@ export default function InviteScreening() {
       setViewVisible(true)
     }, d + 2000)
     const t5 = setTimeout(() => setPrologueState((s) => ({ ...s, mounted: false })), d + 5000)
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); clearTimeout(t5) }
-  }, [])
+    return () => {
+      clearTimeout(t1)
+      clearTimeout(t2)
+      clearTimeout(t3)
+      clearTimeout(t4)
+      clearTimeout(t5)
+    }
+  }, [status, directPlay, token])
 
   useEffect(() => {
     if (status === 'invalid' || status === 'expired') {
