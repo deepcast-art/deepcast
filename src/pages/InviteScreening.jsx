@@ -237,52 +237,28 @@ export default function InviteScreening() {
     )
   }, [user?.email, invite?.recipient_email])
 
-  /* ---------- PROLOGUE SEQUENCE ---------- */
+  /* ---------- PROLOGUE SEQUENCE (starts once data is loaded) ---------- */
 
   useEffect(() => {
+    if (status === 'invalid' || status === 'expired') {
+      setPrologueState({ text1: false, text2: false, textsVisible: false, overlayVisible: false, mounted: false })
+      setViewVisible(true)
+      return
+    }
+    if (status !== 'valid') return
+
     let d = 800
-    const t1 = setTimeout(
-      () => setPrologueState((s) => ({ ...s, text1: true })),
-      d
-    )
+    const t1 = setTimeout(() => setPrologueState((s) => ({ ...s, text1: true })), d)
     d += 2200
-    const t2 = setTimeout(
-      () => setPrologueState((s) => ({ ...s, text2: true })),
-      d
-    )
+    const t2 = setTimeout(() => setPrologueState((s) => ({ ...s, text2: true })), d)
     d += 3200
-    const t3 = setTimeout(
-      () => setPrologueState((s) => ({ ...s, textsVisible: false })),
-      d
-    )
+    const t3 = setTimeout(() => setPrologueState((s) => ({ ...s, textsVisible: false })), d)
     const t4 = setTimeout(() => {
       setPrologueState((s) => ({ ...s, overlayVisible: false }))
       setViewVisible(true)
     }, d + 2000)
-    const t5 = setTimeout(
-      () => setPrologueState((s) => ({ ...s, mounted: false })),
-      d + 5000
-    )
-    return () => {
-      clearTimeout(t1)
-      clearTimeout(t2)
-      clearTimeout(t3)
-      clearTimeout(t4)
-      clearTimeout(t5)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (status === 'invalid' || status === 'expired') {
-      setPrologueState({
-        text1: false,
-        text2: false,
-        textsVisible: false,
-        overlayVisible: false,
-        mounted: false,
-      })
-      setViewVisible(true)
-    }
+    const t5 = setTimeout(() => setPrologueState((s) => ({ ...s, mounted: false })), d + 5000)
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); clearTimeout(t5) }
   }, [status])
 
   /* ---------- SCROLL REVEAL ---------- */
@@ -673,8 +649,7 @@ export default function InviteScreening() {
               className="font-display font-light text-base md:text-lg text-[#dddddd]/85 leading-relaxed"
               style={{
                 transition: 'opacity 2.5s ease-in-out',
-                opacity:
-                  prologueState.textsVisible && prologueState.text1 ? 1 : 0,
+                opacity: prologueState.textsVisible && prologueState.text1 ? 1 : 0,
               }}
             >
               A thoughtfully curated film experience for {recipientFirstName},
@@ -683,8 +658,7 @@ export default function InviteScreening() {
               className="font-display font-light text-base md:text-lg text-[#dddddd]/85 leading-relaxed"
               style={{
                 transition: 'opacity 2.5s ease-in-out',
-                opacity:
-                  prologueState.textsVisible && prologueState.text2 ? 1 : 0,
+                opacity: prologueState.textsVisible && prologueState.text2 ? 1 : 0,
               }}
             >
               gifted by {sharerDisplayName || 'someone who chose you'}.
