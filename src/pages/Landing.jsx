@@ -200,9 +200,16 @@ export default function Landing() {
           </Link>*/}
         </div>
 
-        <div className="flex justify-center mb-8 dc-fade-in dc-fade-in-2">
-          <Link to="/" className="inline-flex hover:opacity-90 transition-opacity">
-            <DeepcastLogo variant="wordmark" className="h-9 sm:h-10 w-auto" />
+        <div className="flex justify-center mb-10 dc-fade-in dc-fade-in-2">
+          <Link
+            to="/"
+            className="inline-flex max-w-[min(92vw,46rem)] justify-center hover:opacity-90 transition-opacity"
+            aria-label="Deepcast home"
+          >
+            <DeepcastLogo
+              variant="wordmark"
+              className="!text-[clamp(3rem,13vw,7rem)] w-auto max-w-full leading-none"
+            />
           </Link>
         </div>
 
@@ -313,7 +320,7 @@ export default function Landing() {
             Watch the film
           </Link>
         </div>
-{/*
+
         {/* GRAPH */}
         {graphLayout && (
           <div className="dc-fade-in dc-fade-in-5 border-t border-border pt-12">
