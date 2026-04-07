@@ -298,37 +298,54 @@ export default function NetworkGraph({
     return [...seen.values()]
   }, [sectionLabels, nodesData])
 
-  /* --- Team-based highlight: all nodes & links in the team's subtree --- */
+  /* --- Team-based highlight: full subtree for this crew + path up to film --- */
   const teamHighlight = useMemo(() => {
     if (!selectedTeamId) return null
+
+    const outgoing = new Map()
+    const incoming = new Map()
+    for (const l of linksData) {
+      if (!outgoing.has(l.source)) outgoing.set(l.source, [])
+      outgoing.get(l.source).push(l.target)
+      if (!incoming.has(l.target)) incoming.set(l.target, [])
+      incoming.get(l.target).push(l.source)
+    }
+
     const nodes = new Set()
-    const links = new Set()
+    for (const n of nodesData) {
+      if (n.type !== 'film' && n.teamId === selectedTeamId) nodes.add(n.id)
+    }
 
-    // Start with all ring-1 nodes that belong to this team
-    const teamRoots = nodesData.filter((n) => n.teamId === selectedTeamId && n.type !== 'film')
-    for (const n of teamRoots) nodes.add(n.id)
-
-    // Walk descendants from those roots
-    const walkDown = (nodeId) => {
-      for (const link of linksData) {
-        if (link.source === nodeId && !nodes.has(link.target)) {
-          nodes.add(link.target)
-          links.add(`${link.source}-${link.target}`)
-          walkDown(link.target)
+    // Expand downstream: every descendant of any node tagged with this team
+    let grew = true
+    while (grew) {
+      grew = false
+      for (const id of [...nodes]) {
+        for (const t of outgoing.get(id) || []) {
+          if (!nodes.has(t)) {
+            nodes.add(t)
+            grew = true
+          }
         }
       }
     }
-    for (const n of teamRoots) walkDown(n.id)
 
-    // Include the film root and its links to team ring-1 nodes
-    const filmRoot = nodesData.find((n) => n.type === 'film')
-    if (filmRoot) {
-      nodes.add(filmRoot.id)
-      for (const n of teamRoots) {
-        const linkId = `${filmRoot.id}-${n.id}`
-        if (linksData.some((l) => l.source === filmRoot.id && l.target === n.id)) {
-          links.add(linkId)
+    // Expand upstream: include ancestors so paths from the film to this crew light up
+    const upQ = [...nodes]
+    while (upQ.length) {
+      const id = upQ.shift()
+      for (const s of incoming.get(id) || []) {
+        if (!nodes.has(s)) {
+          nodes.add(s)
+          upQ.push(s)
         }
+      }
+    }
+
+    const links = new Set()
+    for (const l of linksData) {
+      if (nodes.has(l.source) && nodes.has(l.target)) {
+        links.add(`${l.source}-${l.target}`)
       }
     }
 
