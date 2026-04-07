@@ -99,7 +99,11 @@ export const api = {
     )
     if (!res.ok) {
       const error = await res.json().catch(() => ({}))
-      throw new Error(error.error || 'Request failed')
+      const base = error.error || 'Request failed'
+      const d = error.details
+      const details =
+        d == null ? '' : typeof d === 'string' ? d : JSON.stringify(d)
+      throw new Error(details ? `${base}: ${details}` : base)
     }
     return res.json()
   },
@@ -119,5 +123,11 @@ export const api = {
     request('/team/register', {
       method: 'POST',
       body: JSON.stringify({ token, password, fullName }),
+    }),
+
+  removeTeamMember: (creatorId, memberId) =>
+    request('/team/remove-member', {
+      method: 'POST',
+      body: JSON.stringify({ creatorId, memberId }),
     }),
 }

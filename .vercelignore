@@ -1,6 +1,7 @@
 node_modules
 dist
 public/intro.mp4
+# Never deploy local secrets; use Vercel / Render env UI for any build-time vars.
 .env
 .env.*
 .git

@@ -26,9 +26,25 @@
 
 @font-face {
   font-family: 'Phoenix';
+  src: url('/fonts/Phoenix-Semi-Bold.otf') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Phoenix';
   src: url('/fonts/phoenix-italic-regular.otf') format('opentype');
   font-weight: 400;
   font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Neue Haas Grotesk Display Pro';
+  src: url('/fonts/neue-haas-grotesk-display-55-roman.ttf') format('truetype');
+  font-weight: 300;
+  font-style: normal;
   font-display: swap;
 }
 
@@ -47,4 +63,6 @@
   font-weight: 400;
   font-style: normal;
   font-display: swap;
+  /* Only download Latin glyphs — skips extended language sets in the file */
+  unicode-range: U+0020-007E, U+00A0-00FF, U+2018, U+2019, U+201C, U+201D, U+2026, U+2013, U+2014;
 }

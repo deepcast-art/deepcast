@@ -12,6 +12,8 @@ const Upload = lazy(() => import('./pages/Upload.jsx'))
 const NetworkMap = lazy(() => import('./pages/NetworkMap.jsx'))
 const PostShare = lazy(() => import('./pages/PostShare.jsx'))
 const TeamJoin = lazy(() => import('./pages/TeamJoin.jsx'))
+const Unsubscribe = lazy(() => import('./pages/Unsubscribe.jsx'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword.jsx'))
 
 function RouteFallback({ inverse = false }) {
   return (
@@ -90,10 +92,26 @@ export default function App() {
         }
       />
       <Route
+        path="/reset-password"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <ResetPassword />
+          </Suspense>
+        }
+      />
+      <Route
         path="/team/join"
         element={
           <Suspense fallback={<RouteFallback />}>
             <TeamJoin />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/unsubscribe"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <Unsubscribe />
           </Suspense>
         }
       />

@@ -8,15 +8,13 @@
   --font-serif-v3: 'Garamond Premier Pro Italic', Garamond, Georgia, 'Times New Roman', serif;
   --font-mono: 'Courier New', Courier, monospace;
 
-  /* Font weights — brand uses 300 / 400 / 500 only */
-  --font-light: 300;
-  --font-regular: 400;
-  --font-medium: 500;
+  /* Do not define --font-light / --font-regular / --font-medium here — Tailwind v4 maps those
+     names to font-family utilities and breaks `font-light` (weight). Use default --font-weight-* tokens. */
 
   /* Core palette — website V3 (dark canvas, soft gold, cool undertone) */
   --color-ink: #080c18;
   --color-warm: #dddddd;
-  --color-paper: #121a33;
+  --color-paper: #e8dfd3;
   --color-amber: #b1a180;
   --color-amber-dim: #8a7358;
   --color-amber-pale: #3d3528;
@@ -121,6 +119,8 @@ body {
   font-weight: 300;
   line-height: 1.7;
   min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Film grain overlay — matches Deepcast-website-main tactile treatment */

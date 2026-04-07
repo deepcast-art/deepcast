@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { supabase } from '../lib/supabase'
 
 export { parseInviteRecipientForPrefill } from '../lib/invitePrefill'
 
@@ -148,6 +149,21 @@ export default function InviteForm({
       }
 
       for (const recipient of validRecipients) {
+        const { data: existing } = await supabase
+          .from('invites')
+          .select('id')
+          .eq('film_id', filmId)
+          .ilike('recipient_email', recipient.email.trim())
+          .limit(1)
+          .maybeSingle()
+
+        if (existing) {
+          const name = recipient.firstName.trim() || recipient.email.trim().split('@')[0]
+          setError(`${name} has already received an invitation to this film. Try someone else.`)
+          setSending(false)
+          return
+        }
+
         const recipientNote = recipient.note.trim()
         const fromFields = [recipient.firstName, recipient.lastName].filter(Boolean).join(' ').trim()
         const recipientName =

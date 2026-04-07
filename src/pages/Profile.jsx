@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import InviteForm from '../components/InviteForm'
@@ -65,11 +65,7 @@ function FilmNetworkPreview({ film, invites, creatorName, profileEmail, profileR
           nodesData={graphLayout.nodesData}
           linksData={graphLayout.linksData}
           viewBoxH={graphLayout.viewBoxH}
-          viewBoxW={graphLayout.viewBoxW}
-          cx={graphLayout.cx}
-          cy={graphLayout.cy}
           ringRadii={graphLayout.ringRadii}
-          sectionLabels={graphLayout.sectionLabels}
           rootNode={graphLayout.rootNode}
           defaultActiveNodes={graphLayout.defaultActiveNodes}
           defaultActiveLinks={graphLayout.defaultActiveLinks}
@@ -80,13 +76,50 @@ function FilmNetworkPreview({ film, invites, creatorName, profileEmail, profileR
 }
 
 export default function Profile() {
-  const { profile, signOut, fetchProfile, user } = useAuth()
+  const { profile, signOut, fetchProfile, user, updatePassword } = useAuth()
+  const location = useLocation()
   const [watchedFilms, setWatchedFilms] = useState([])
   const [sentInvites, setSentInvites] = useState([])
   const [filmInvitesById, setFilmInvitesById] = useState({})
   const [creatorNameByFilmId, setCreatorNameByFilmId] = useState({})
   const [loading, setLoading] = useState(true)
   const [selectedFilm, setSelectedFilm] = useState(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordBusy, setPasswordBusy] = useState(false)
+  const [passwordError, setPasswordError] = useState('')
+  const [passwordSuccess, setPasswordSuccess] = useState('')
+
+  const handleSetPassword = async () => {
+    setPasswordError('')
+    setPasswordSuccess('')
+    if (newPassword.length < 8) {
+      setPasswordError('Password must be at least 8 characters.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Passwords do not match.')
+      return
+    }
+    setPasswordBusy(true)
+    try {
+      await updatePassword(newPassword)
+      setPasswordSuccess('Password updated successfully.')
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (err) {
+      setPasswordError(err.message || 'Failed to update password.')
+    } finally {
+      setPasswordBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    if (location.hash === '#set-password') {
+      const el = document.getElementById('set-password')
+      if (el) el.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [location.hash])
 
   useEffect(() => {
     if (profile) loadData()
@@ -191,48 +224,50 @@ export default function Profile() {
   }
 
   return (
-    <div className="min-h-screen px-6 py-12">
+    <div className="min-h-screen px-4 py-8 sm:px-6 sm:py-12">
       <div className="max-w-2xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-12 animate-fade-in">
+        <div className="flex flex-col gap-6 mb-10 animate-fade-in sm:mb-12 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <Link to="/" className="inline-flex hover:opacity-80 transition-opacity">
-              <DeepcastLogo variant="ink" className="h-8" />
+              <DeepcastLogo variant="ink" className="h-7 sm:h-8" />
             </Link>
-            <h1 className="text-2xl font-display mt-4">{profile.name}</h1>
+            <h1 className="text-xl font-display mt-3 sm:text-2xl sm:mt-4">{profile.name}</h1>
             <p className="text-text-muted text-sm mt-1">{profile.email}</p>
             <p className="text-text-muted text-xs uppercase tracking-wider mt-2">
               {profile.role === 'team_member' ? 'Team member' : profile.role}
             </p>
           </div>
-          <div className="text-right">
-            <p className="text-accent text-2xl font-light">
-              {profile.role === 'creator' || profile.role === 'team_member'
-                ? 'Unlimited'
-                : profile.invite_allocation}
-            </p>
-            <p className="text-text-muted text-xs uppercase tracking-wider">invites</p>
+          <div className="flex flex-row flex-wrap items-center gap-x-6 gap-y-2 sm:flex-col sm:items-end sm:text-right">
+            <div className="flex items-baseline gap-2 sm:flex-col sm:items-end sm:gap-0">
+              <p className="text-accent text-2xl font-light">
+                {profile.role === 'creator' || profile.role === 'team_member'
+                  ? 'Unlimited'
+                  : profile.invite_allocation}
+              </p>
+              <p className="text-text-muted text-xs uppercase tracking-wider">invites</p>
+            </div>
             <Link
               to={
                 profile.role === 'viewer' && watchedFilms.length > 0
                   ? `/network?filmId=${watchedFilms[0].id}`
                   : '/network'
               }
-              className="block text-text-muted text-xs uppercase tracking-wider mt-4 hover:text-text transition-colors"
+              className="text-text-muted text-xs uppercase tracking-wider hover:text-text transition-colors"
             >
               Network map
             </Link>
             {(profile.role === 'creator' || profile.role === 'team_member') && (
               <Link
                 to="/dashboard"
-                className="block text-text-muted text-xs uppercase tracking-wider mt-3 hover:text-text transition-colors"
+                className="text-text-muted text-xs uppercase tracking-wider hover:text-text transition-colors"
               >
                 Dashboard
               </Link>
             )}
             <button
               onClick={signOut}
-              className="text-text-muted text-xs hover:text-text transition-colors mt-3 cursor-pointer"
+              className="text-text-muted text-xs hover:text-text transition-colors cursor-pointer"
             >
               Sign out
             </button>
@@ -257,17 +292,17 @@ export default function Profile() {
                   {watchedFilms.map((film) => (
                     <div
                       key={film.id}
-                      className="flex items-center gap-4 p-4 bg-bg-card rounded-none border border-border"
+                      className="flex flex-col gap-3 p-4 bg-bg-card rounded-none border border-border sm:flex-row sm:items-center sm:gap-4"
                     >
                       {film.thumbnail_url && (
                         <img
                           src={ensureHttpsUrl(film.thumbnail_url) ?? film.thumbnail_url}
                           alt={film.title}
-                          className="w-20 h-12 object-cover rounded"
+                          className="w-full h-32 object-cover rounded sm:w-20 sm:h-12"
                         />
                       )}
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">{film.title}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">{film.title}</p>
                         {film.description && (
                           <p className="text-text-muted text-xs mt-1 line-clamp-1">
                             {film.description}
@@ -292,7 +327,7 @@ export default function Profile() {
                           onClick={() =>
                             setSelectedFilm(selectedFilm?.id === film.id ? null : film)
                           }
-                          className="text-accent text-xs hover:text-accent-hover transition-colors cursor-pointer"
+                          className="self-start text-accent text-xs hover:text-accent-hover transition-colors cursor-pointer sm:self-center"
                         >
                           Invite
                         </button>
@@ -342,16 +377,16 @@ export default function Profile() {
                   {sentInvites.map((inv) => (
                     <div
                       key={inv.id}
-                      className="flex items-center justify-between p-4 bg-bg-card rounded-none border border-border"
+                      className="flex flex-col gap-2 p-4 bg-bg-card rounded-none border border-border sm:flex-row sm:items-center sm:justify-between"
                     >
-                      <div>
-                        <p className="text-sm">{inv.recipient_email}</p>
+                      <div className="min-w-0">
+                        <p className="text-sm truncate">{inv.recipient_email}</p>
                         <p className="text-text-muted text-xs mt-1">
                           {inv.films?.title}
                         </p>
                       </div>
                       <span
-                        className={`text-xs uppercase tracking-wider ${statusColor[inv.status]}`}
+                        className={`shrink-0 text-xs uppercase tracking-wider ${statusColor[inv.status]}`}
                       >
                         {inv.status}
                       </span>
@@ -359,6 +394,45 @@ export default function Profile() {
                   ))}
                 </div>
               )}
+            </section>
+
+            {/* Set / change password */}
+            <section id="set-password" className="mt-12 animate-fade-in animate-delay-400">
+              <h2 className="text-xs text-text-muted uppercase tracking-wider mb-6">
+                Set your password
+              </h2>
+              <div className="space-y-3 max-w-sm">
+                {passwordError && (
+                  <p className="text-error text-sm">{passwordError}</p>
+                )}
+                {passwordSuccess && (
+                  <p className="text-success text-sm">{passwordSuccess}</p>
+                )}
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="New password"
+                  minLength={8}
+                  className="w-full bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+                />
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm password"
+                  minLength={8}
+                  className="w-full bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={handleSetPassword}
+                  disabled={passwordBusy || !newPassword || !confirmPassword}
+                  className="dc-btn dc-btn-accent w-full py-3 text-sm cursor-pointer"
+                >
+                  {passwordBusy ? 'Saving…' : 'Save password'}
+                </button>
+              </div>
             </section>
 
             {/* Creator link */}

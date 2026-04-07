@@ -1,5 +1,5 @@
 /**
- * Deepcast wordmark — lowercase “deepcast” in Neue Haas Grotesk Display (matches brand),
+ * Deepcast wordmark — lowercase “deepcast” in Phoenix Semi Bold,
  * or legacy vector wordmark for serif/legacy variants.
  */
 export default function DeepcastLogo({
@@ -28,7 +28,7 @@ export default function DeepcastLogo({
         <text
           x="400"
           y="140"
-          fontFamily="'Neue Haas Grotesk Display Pro', 'Helvetica Neue', Helvetica, sans-serif"
+          fontFamily="'Phoenix', 'Helvetica Neue', Helvetica, sans-serif"
           fontSize="110"
           fontWeight="600"
           fill="currentColor"

@@ -203,9 +203,8 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session }, error }) => {
-      // Clear stale/invalid sessions (e.g. deleted users with leftover tokens)
-      if (error || (!session && localStorage.getItem('sb-wmtjgpxhjtbocsmutqqc-auth-token'))) {
-        console.warn('Clearing stale auth session')
+      if (error) {
+        console.warn('getSession error:', error.message || error)
         await supabase.auth.signOut().catch(() => {})
         setSession(null)
         setUser(null)
@@ -332,9 +331,23 @@ export function AuthProvider({ children }) {
     })
     if (error) throw error
 
+    let accessToken = data.session?.access_token
+    if (!accessToken && data.user) {
+      const { data: refreshed } = await supabase.auth.getSession()
+      accessToken = refreshed.session?.access_token
+    }
+
     let currentProfile = null
     if (data.user) {
-      currentProfile = await fetchProfile(data.user.id, data.session?.access_token)
+      currentProfile = await fetchProfile(data.user.id, accessToken)
+
+      if (!currentProfile) {
+        currentProfile = await fetchProfileViaSupabaseClient(data.user.id)
+        if (currentProfile) {
+          setProfile(currentProfile)
+          setProfileLoaded(true)
+        }
+      }
 
       if (!currentProfile) {
         throw new Error(
@@ -353,9 +366,21 @@ export function AuthProvider({ children }) {
     setProfileLoaded(false)
   }
 
+  const resetPassword = async (email, redirectTo) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: redirectTo || `${window.location.origin}/reset-password`,
+    })
+    if (error) throw error
+  }
+
+  const updatePassword = async (newPassword) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    if (error) throw error
+  }
+
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, loading, profileLoaded, signUp, signIn, signOut, fetchProfile }}
+      value={{ session, user, profile, loading, profileLoaded, signUp, signIn, signOut, fetchProfile, resetPassword, updatePassword }}
     >
       {children}
     </AuthContext.Provider>
