@@ -4,7 +4,8 @@ import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import InviteForm from '../components/InviteForm'
 import DeepcastLogo from '../components/DeepcastLogo'
-import NetworkGraph, { buildGraphLayout, inviteRecipientKey } from '../components/NetworkGraph'
+import NetworkGraph from '../components/NetworkGraph'
+import { buildGraphLayout, inviteRecipientKey } from '../lib/graphLayout'
 import { ensureHttpsUrl } from '../lib/httpsUrl.js'
 
 function recipientKeyForRow(row) {
@@ -64,6 +65,11 @@ function FilmNetworkPreview({ film, invites, creatorName, profileEmail, profileR
           nodesData={graphLayout.nodesData}
           linksData={graphLayout.linksData}
           viewBoxH={graphLayout.viewBoxH}
+          viewBoxW={graphLayout.viewBoxW}
+          cx={graphLayout.cx}
+          cy={graphLayout.cy}
+          ringRadii={graphLayout.ringRadii}
+          sectionLabels={graphLayout.sectionLabels}
           rootNode={graphLayout.rootNode}
           defaultActiveNodes={graphLayout.defaultActiveNodes}
           defaultActiveLinks={graphLayout.defaultActiveLinks}

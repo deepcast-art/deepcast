@@ -5,6 +5,7 @@
 export default function DeepcastLogo({
   variant = 'wordmark',
   className = '',
+  size = null,
   title = 'Deepcast',
 }) {
   if (variant === 'serif' || variant === 'legacy') {
@@ -29,7 +30,7 @@ export default function DeepcastLogo({
           y="140"
           fontFamily="'Neue Haas Grotesk Display Pro', 'Helvetica Neue', Helvetica, sans-serif"
           fontSize="110"
-          fontWeight="400"
+          fontWeight="600"
           fill="currentColor"
           textAnchor="middle"
           letterSpacing="-0.02em"
@@ -47,8 +48,8 @@ export default function DeepcastLogo({
       role="img"
       aria-label={title}
       className={[
-        'inline-block shrink-0 font-display font-normal lowercase leading-none tracking-[-0.02em]',
-        'text-[1.65rem] sm:text-[1.9rem]',
+        'inline-block shrink-0 font-display font-semibold lowercase leading-none tracking-[-0.02em]',
+        size ?? 'text-[1.65rem] sm:text-[1.9rem]',
         onLight ? 'text-[#080c18]' : 'text-[#d1d1d1]',
         className,
       ]

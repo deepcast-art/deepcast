@@ -4,7 +4,8 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
 import DeepcastLogo from '../components/DeepcastLogo'
-import NetworkGraph, { buildGraphLayout, inviteRecipientKey } from '../components/NetworkGraph'
+import NetworkGraph from '../components/NetworkGraph'
+import { buildGraphLayout, inviteRecipientKey } from '../lib/graphLayout'
 
 function recipientKeyForRow(row) {
   if (!row) return null
@@ -380,6 +381,11 @@ export default function NetworkMap() {
                         nodesData={graphLayout.nodesData}
                         linksData={graphLayout.linksData}
                         viewBoxH={graphLayout.viewBoxH}
+                        viewBoxW={graphLayout.viewBoxW}
+                        cx={graphLayout.cx}
+                        cy={graphLayout.cy}
+                        ringRadii={graphLayout.ringRadii}
+                        sectionLabels={graphLayout.sectionLabels}
                         rootNode={graphLayout.rootNode}
                         defaultActiveNodes={graphLayout.defaultActiveNodes}
                         defaultActiveLinks={graphLayout.defaultActiveLinks}

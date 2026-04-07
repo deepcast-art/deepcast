@@ -3,7 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { INTRO_FILM_MUX_PLAYBACK_ID } from '../lib/introFilm'
 import DeepcastLogo from '../components/DeepcastLogo'
-import NetworkGraph, { buildGraphLayout } from '../components/NetworkGraph'
+import NetworkGraph from '../components/NetworkGraph'
+import { buildGraphLayout } from '../lib/graphLayout'
 
 const MuxPlayer = lazy(() =>
   import('@mux/mux-player-react').then((m) => ({ default: m.default }))
@@ -87,7 +88,7 @@ export default function Landing() {
       const { data: allInvites } = await supabase
         .from('invites')
         .select(
-          'id, film_id, sender_name, sender_email, sender_id, recipient_name, recipient_email, status, created_at'
+          'id, film_id, sender_name, sender_email, sender_id, recipient_name, recipient_email, status, parent_invite_id, created_at'
         )
         .order('created_at', { ascending: true })
 
@@ -176,7 +177,7 @@ export default function Landing() {
 
         <div className="flex justify-center mb-8 dc-fade-in dc-fade-in-2">
           <Link to="/" className="inline-flex hover:opacity-90 transition-opacity">
-            <DeepcastLogo variant="wordmark" className="h-9 sm:h-10 w-auto" />
+            <DeepcastLogo variant="wordmark" size="text-[3.5rem] sm:text-[5rem] md:text-[6.5rem]" />
           </Link>
         </div>
 
@@ -295,6 +296,11 @@ export default function Landing() {
                   nodesData={graphLayout.nodesData}
                   linksData={graphLayout.linksData}
                   viewBoxH={graphLayout.viewBoxH}
+                  viewBoxW={graphLayout.viewBoxW}
+                  cx={graphLayout.cx}
+                  cy={graphLayout.cy}
+                  ringRadii={graphLayout.ringRadii}
+                  sectionLabels={graphLayout.sectionLabels}
                   rootNode={graphLayout.rootNode}
                   defaultActiveNodes={graphLayout.defaultActiveNodes}
                   defaultActiveLinks={graphLayout.defaultActiveLinks}

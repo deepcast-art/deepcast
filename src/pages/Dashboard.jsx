@@ -4,7 +4,8 @@ import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import InviteForm from '../components/InviteForm'
 import DeepcastLogo from '../components/DeepcastLogo'
-import NetworkGraph, { buildGraphLayout, inviteRecipientKey } from '../components/NetworkGraph'
+import NetworkGraph from '../components/NetworkGraph'
+import { buildGraphLayout, inviteRecipientKey } from '../lib/graphLayout'
 import { api } from '../lib/api'
 import { ensureHttpsUrl } from '../lib/httpsUrl.js'
 
@@ -454,7 +455,7 @@ export default function Dashboard() {
         <aside className="flex w-full min-h-0 shrink-0 flex-col gap-6 overflow-y-auto border-b border-faint/30 bg-ink/80 px-6 py-10 panel-scroll lg:max-h-[100dvh] lg:w-[22%] lg:min-h-screen lg:border-b-0 lg:border-r">
           <div className="shrink-0 animate-fade-in">
             <Link to="/" className="inline-block">
-              <DeepcastLogo variant="wordmark" className="!text-4xl sm:!text-5xl text-warm" />
+              <DeepcastLogo variant="wordmark" size="text-4xl sm:text-5xl" className="text-warm" />
             </Link>
             <h2 className="font-serif-v3 mt-3 text-xl text-warm">{profile.name}</h2>
           </div>
@@ -516,6 +517,11 @@ export default function Dashboard() {
                     nodesData={graphLayout.nodesData}
                     linksData={graphLayout.linksData}
                     viewBoxH={graphLayout.viewBoxH}
+                    viewBoxW={graphLayout.viewBoxW}
+                    cx={graphLayout.cx}
+                    cy={graphLayout.cy}
+                    ringRadii={graphLayout.ringRadii}
+                    sectionLabels={graphLayout.sectionLabels}
                     rootNode={graphLayout.rootNode}
                     defaultActiveNodes={graphLayout.defaultActiveNodes}
                     defaultActiveLinks={graphLayout.defaultActiveLinks}

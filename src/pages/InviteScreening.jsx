@@ -12,7 +12,8 @@ import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import NetworkGraph, { buildGraphLayout } from '../components/NetworkGraph'
+import NetworkGraph from '../components/NetworkGraph'
+import { buildGraphLayout } from '../lib/graphLayout'
 import './screening-room.css'
 
 const VIEWER_SHARE_LIMIT = 5
@@ -79,8 +80,8 @@ export default function InviteScreening() {
   /* ---------- DATA FETCHING ---------- */
 
   useEffect(() => {
-    void import('@mux/mux-player-react')
-  }, [])
+    if (status === 'valid') void import('@mux/mux-player-react')
+  }, [status])
 
   useEffect(() => {
     validateInvite()
@@ -488,7 +489,7 @@ export default function InviteScreening() {
               <div className="reveal-up" style={{ transitionDelay: '200ms' }}>
                 <DeepcastLogo
                   variant="wordmark"
-                  className="h-12 w-auto max-w-[min(90vw,440px)] md:h-16"
+                  size="text-[3.5rem] sm:text-[4.5rem] md:text-[5rem]"
                 />
               </div>
               <button
@@ -539,6 +540,11 @@ export default function InviteScreening() {
                     nodesData={graphLayout.nodesData}
                     linksData={graphLayout.linksData}
                     viewBoxH={graphLayout.viewBoxH}
+                    viewBoxW={graphLayout.viewBoxW}
+                    cx={graphLayout.cx}
+                    cy={graphLayout.cy}
+                    ringRadii={graphLayout.ringRadii}
+                    sectionLabels={graphLayout.sectionLabels}
                     rootNode={graphLayout.rootNode}
                     defaultActiveNodes={graphLayout.defaultActiveNodes}
                     defaultActiveLinks={graphLayout.defaultActiveLinks}
@@ -701,6 +707,11 @@ export default function InviteScreening() {
                         nodesData={graphLayout.nodesData}
                         linksData={graphLayout.linksData}
                         viewBoxH={graphLayout.viewBoxH}
+                        viewBoxW={graphLayout.viewBoxW}
+                        cx={graphLayout.cx}
+                        cy={graphLayout.cy}
+                        ringRadii={graphLayout.ringRadii}
+                        sectionLabels={graphLayout.sectionLabels}
                         rootNode={graphLayout.rootNode}
                         defaultActiveNodes={graphLayout.defaultActiveNodes}
                         defaultActiveLinks={graphLayout.defaultActiveLinks}
