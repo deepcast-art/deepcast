@@ -184,7 +184,7 @@ function TeamLegend({ teams, selectedTeamId, onSelect }) {
 
   return (
     <div
-      className="absolute bottom-3 left-3 z-20 flex flex-col gap-0.5 rounded px-2.5 py-2"
+      className="dc-team-legend absolute bottom-3 left-3 z-20 flex flex-col gap-0.5 rounded px-2.5 py-2"
       style={{
         background: 'rgba(8,12,24,0.75)',
         backdropFilter: 'blur(8px)',
@@ -391,6 +391,12 @@ export default function NetworkGraph({
     setIsPanning(false)
   }, [])
 
+  const clearTeamSelectionIfOutsideLegend = useCallback((e) => {
+    const t = e.target
+    if (t instanceof Element && t.closest('.dc-team-legend')) return
+    setSelectedTeamId(null)
+  }, [])
+
   const handleWheelCapture = useCallback((e) => {
     const el = scrollRef.current
     if (!el) return
@@ -590,6 +596,7 @@ export default function NetworkGraph({
           transparentSurface ? '' : 'shadow-2xl'
         } ${fillHeight ? 'h-full min-h-0 max-h-full' : 'min-h-[320px]'}`}
         style={shellStyle}
+        onClick={clearTeamSelectionIfOutsideLegend}
       >
         <div
           ref={scrollRef}
@@ -631,6 +638,7 @@ export default function NetworkGraph({
         ...shellStyle,
         height: fillHeight ? '100%' : `${Math.min(700, viewBoxH)}px`,
       }}
+      onClick={clearTeamSelectionIfOutsideLegend}
     >
       {svgInner}
       {legend}
