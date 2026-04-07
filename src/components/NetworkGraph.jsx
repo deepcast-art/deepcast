@@ -504,24 +504,13 @@ export default function NetworkGraph({
         const linkId = `${link.source}-${link.target}`
         const isActive = activeElements.links.has(linkId)
 
-        const dx = tgt.x - src.x
-        const dy = tgt.y - src.y
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1
-        const mx = (src.x + tgt.x) / 2
-        const my = (src.y + tgt.y) / 2
-        const bulge = dist * 0.08
-        const nx = -dy / dist
-        const ny = dx / dist
-        const cpX = mx + nx * bulge
-        const cpY = my + ny * bulge
-
-        const d = `M ${src.x} ${src.y} Q ${cpX} ${cpY} ${tgt.x} ${tgt.y}`
-
         return (
-          <path
+          <line
             key={i}
-            d={d}
-            fill="none"
+            x1={src.x}
+            y1={src.y}
+            x2={tgt.x}
+            y2={tgt.y}
             stroke={isActive ? GRAPH_COLORS.amber : GRAPH_COLORS.muted}
             strokeWidth={isActive ? 2.25 : 1.2}
             opacity={isActive ? 0.9 : hasActive ? 0.08 : 0.18}
