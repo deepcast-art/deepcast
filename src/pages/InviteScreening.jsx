@@ -12,7 +12,7 @@ import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import NetworkGraph, { buildGraphLayout } from '../components/NetworkGraph'
+import NetworkGraph, { buildGraphLayout, inviteRecipientKey } from '../components/NetworkGraph'
 import './screening-room.css'
 
 const VIEWER_SHARE_LIMIT = 5
