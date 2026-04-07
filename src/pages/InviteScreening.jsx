@@ -725,7 +725,7 @@ export default function InviteScreening() {
               >
                 <DeepcastLogo
                   variant="wordmark"
-                  className="h-12 w-auto max-w-[min(90vw,440px)] md:h-16"
+                  className="!text-8xl w-auto max-w-[min(90vw,440px)] leading-none"
                 />
               </div>
               <button

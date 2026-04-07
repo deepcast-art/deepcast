@@ -49,7 +49,7 @@ export default function DeepcastLogo({
       aria-label={title}
       className={[
         'inline-block shrink-0 font-display font-semibold lowercase leading-none tracking-[-0.02em]',
-        size ?? 'text-[1.65rem] sm:text-[1.9rem]',
+        size ?? 'text-8xl',
         onLight ? 'text-[#080c18]' : 'text-[#d1d1d1]',
         className,
       ]

@@ -208,7 +208,7 @@ export default function Landing() {
           >
             <DeepcastLogo
               variant="wordmark"
-              className="!text-[clamp(3rem,13vw,7rem)] w-auto max-w-full leading-none"
+              className="!text-[clamp(2.25rem,10vw,5rem)] w-auto max-w-full leading-none"
             />
           </Link>
         </div>
@@ -325,7 +325,7 @@ export default function Landing() {
         {graphLayout && (
           <div className="dc-fade-in dc-fade-in-5 border-t border-border pt-12">
             <div className="mx-auto mb-6 h-10 w-px bg-border" />
-            <div className="w-full overflow-hidden rounded-none border border-faint/40 bg-paper/70">
+            <div className="w-full overflow-hidden rounded-none border-[0.5px] border-[#4a5580]/40 bg-[#121a33]">
               <div className="h-[min(52vh,420px)] w-full min-h-[320px]">
                 <NetworkGraph
                   fillHeight
