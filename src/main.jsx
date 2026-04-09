@@ -25,11 +25,13 @@ if (typeof window !== 'undefined') {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <div className="dc-tactile-grain" aria-hidden />
-    <BrowserRouter>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </BrowserRouter>
+    <div className="min-h-dvh overflow-x-hidden">
+      <div className="dc-tactile-grain" aria-hidden />
+      <BrowserRouter>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </BrowserRouter>
+    </div>
   </StrictMode>,
 )

@@ -119,8 +119,30 @@ body {
   font-weight: 300;
   line-height: 1.7;
   min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: hidden;
   -webkit-tap-highlight-color: transparent;
+}
+
+#root {
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+  overflow-x: hidden;
+}
+
+/* Images never overflow narrow viewports (videos are sized by components / shadow DOM) */
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* iOS: avoid auto-zoom on focus when font size is below 16px */
+@media (max-width: 640px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+  textarea,
+  select {
+    font-size: 16px;
+  }
 }
 
 /* Film grain overlay — matches Deepcast-website-main tactile treatment */

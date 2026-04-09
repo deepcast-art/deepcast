@@ -60,8 +60,8 @@ export default function PostShare() {
   if (!profile) return null
 
   return (
-    <div className="min-h-screen dc-share-page-bg px-6 py-12 dc-fade-in">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-dvh dc-share-page-bg px-4 pb-[max(2rem,env(safe-area-inset-bottom,0px))] pt-[max(1.5rem,env(safe-area-inset-top,0px))] sm:px-6 sm:py-12 dc-fade-in">
+      <div className="max-w-4xl mx-auto min-w-0">
         <div className="flex justify-center sm:justify-start mb-6">
           <Link to="/" className="inline-flex hover:opacity-80 transition-opacity">
             <DeepcastLogo variant="on-light" className="h-10 sm:h-11 w-auto" />

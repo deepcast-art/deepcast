@@ -934,21 +934,21 @@ export default function InviteScreening() {
             </div>
 
             <div
-              className={`absolute inset-0 z-[100] flex flex-col overflow-y-auto panel-scroll bg-[#080c18] transition-opacity duration-[800ms] ease-[cubic-bezier(0.16,1,0.3,1)] lg:max-h-[100dvh] lg:min-h-0 lg:flex-row lg:overflow-hidden ${
+              className={`absolute inset-0 z-[100] flex min-h-0 flex-col overflow-y-auto panel-scroll bg-[#080c18] transition-opacity duration-[800ms] ease-[cubic-bezier(0.16,1,0.3,1)] lg:max-h-[100dvh] lg:flex-row lg:overflow-hidden ${
                 isScreeningPaused
                   ? 'opacity-100 pointer-events-auto'
                   : 'opacity-0 pointer-events-none'
               }`}
             >
 
-              {/* ── Mobile: landscape two-column layout ── */}
-              <div className="md:hidden w-full h-full flex flex-col overflow-hidden">
+              {/* ── Mobile: stacked layout (portrait-friendly; scrolls as needed) ── */}
+              <div className="md:hidden w-full min-h-0 flex-1 flex flex-col overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]">
 
                 {!showPostFilm && (
                   <button
                     type="button"
                     onClick={resumeFilm}
-                    className="flex-shrink-0 flex items-center justify-center gap-2.5 py-3 bg-[#b1a180]/10 border-b border-[#b1a180]/30 hover:bg-[#b1a180]/20 transition-colors duration-300 group"
+                    className="flex-shrink-0 flex items-center justify-center gap-2.5 py-3.5 bg-[#b1a180]/10 border-b border-[#b1a180]/30 hover:bg-[#b1a180]/20 transition-colors duration-300 group touch-manipulation"
                   >
                     <div className="flex items-center justify-center w-6 h-6 rounded-full bg-[#b1a180] group-hover:bg-[#c9b898] transition-colors duration-300">
                       <svg className="w-2.5 h-2.5 text-[#0a0f1a] fill-current ml-0.5" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
@@ -957,16 +957,16 @@ export default function InviteScreening() {
                   </button>
                 )}
 
-                <div className="flex-1 flex flex-row overflow-hidden">
+                <div className="flex min-h-0 flex-1 flex-col gap-5 px-4 pt-4 pb-6">
 
-                  {/* Left: heading + network graph */}
-                  <div className="w-[38%] flex flex-col justify-center px-5 py-3 border-r border-[#b1a180]/15">
-                    <h2 className="font-serif-v3 text-xl italic text-[#dddddd] font-light mb-2">Pass it on.</h2>
-                    <p className="font-display font-light text-[10px] text-[#dddddd]/40 leading-[1.6] mb-3">
+                  {/* Context + map — full width */}
+                  <div className="w-full shrink-0 flex flex-col">
+                    <h2 className="font-serif-v3 text-2xl italic text-[#dddddd] font-light mb-2">Pass it on.</h2>
+                    <p className="font-display font-light text-[11px] text-[#dddddd]/50 leading-relaxed mb-4">
                       If you choose not to share, the film&apos;s journey ends with you. That&apos;s ok — but know that it was carried this far by people who believed in it.
                     </p>
                     {graphLayout && (
-                      <div className="flex-1 min-h-0 overflow-hidden opacity-70">
+                      <div className="w-full h-[min(42svh,320px)] min-h-[200px] max-h-[360px] overflow-hidden rounded border border-[#4a5580]/30 bg-[#121a33] opacity-90 touch-manipulation">
                         <NetworkGraph
                           fillHeight
                           pannable
@@ -986,9 +986,9 @@ export default function InviteScreening() {
                     )}
                   </div>
 
-                  {/* Right: compact letter form */}
-                  <div className="w-[62%] flex flex-col justify-center items-center px-4 py-2 overflow-y-auto panel-scroll">
-                    <div className="relative w-full p-4 overflow-hidden" style={{
+                  {/* Letter form — full width */}
+                  <div className="w-full flex flex-col justify-start items-stretch min-w-0">
+                    <div className="relative w-full min-w-0 p-4 sm:p-5 overflow-hidden" style={{
                       background: 'linear-gradient(168deg, #e8e2d6 0%, #ddd8cc 30%, #d5cfc3 60%, #ddd7cb 100%)',
                       borderRadius: '6px',
                       boxShadow: '0 2px 20px rgba(0,0,0,0.25), 0 0 0 0.5px rgba(180,170,150,0.4)',
@@ -998,7 +998,7 @@ export default function InviteScreening() {
                         opacity: 0.08, mixBlendMode: 'multiply',
                       }} />
 
-                      <div className="relative z-10 flex flex-col items-center text-center">
+                      <div className="relative z-10 flex flex-col items-center text-center text-[#2a2a2a]">
                         <h3 className="font-sans text-[10px] uppercase tracking-[0.4em] text-[#2a2a2a]/70 mb-3">A Letter of Invitation</h3>
 
                         {letterError && (
@@ -1010,20 +1010,20 @@ export default function InviteScreening() {
 
                         {slotsRemaining > 0 ? (
                           <>
-                            <div className="font-serif-v3 text-[13px] text-[#2a2a2a] w-full">
-                              <div className="flex items-end justify-center gap-2 mb-2">
+                            <div className="font-serif-v3 text-[13px] w-full min-w-0">
+                              <div className="flex flex-wrap items-end justify-center gap-x-2 gap-y-2 mb-2">
                                 <span className="italic text-[14px]">Dear</span>
-                                <input type="text" placeholder="First" value={letterRecipientFirst} onChange={(e) => setLetterRecipientFirst(e.target.value)} className="w-[70px] bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none text-[#2a2a2a] placeholder-[#2a2a2a]/25 text-[13px]" />
-                                <input type="text" placeholder="Last" value={letterRecipientLast} onChange={(e) => setLetterRecipientLast(e.target.value)} className="w-[70px] bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none text-[#2a2a2a] placeholder-[#2a2a2a]/25 text-[13px]" />
+                                <input type="text" placeholder="First" value={letterRecipientFirst} onChange={(e) => setLetterRecipientFirst(e.target.value)} className="min-w-[4.5rem] flex-1 max-w-[9rem] bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none text-[#2a2a2a] placeholder-[#2a2a2a]/25 text-base" inputMode="text" autoComplete="given-name" />
+                                <input type="text" placeholder="Last" value={letterRecipientLast} onChange={(e) => setLetterRecipientLast(e.target.value)} className="min-w-[4.5rem] flex-1 max-w-[9rem] bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none text-[#2a2a2a] placeholder-[#2a2a2a]/25 text-base" inputMode="text" autoComplete="family-name" />
                               </div>
-                              <textarea rows={2} placeholder="Write a note — tell them why this film made you think of them..." value={letterNote} onChange={(e) => setLetterNote(e.target.value)} className="w-full bg-transparent border-b-[0.5px] border-[#2a2a2a]/15 text-center focus:outline-none resize-none placeholder-[#2a2a2a]/25 italic text-[12px] text-[#2a2a2a] pb-1 leading-relaxed" />
+                              <textarea rows={3} placeholder="Write a note — tell them why this film made you think of them..." value={letterNote} onChange={(e) => setLetterNote(e.target.value)} className="w-full min-h-[4.5rem] bg-transparent border-b-[0.5px] border-[#2a2a2a]/15 text-center focus:outline-none resize-y placeholder-[#2a2a2a]/25 italic text-[#2a2a2a] pb-1 leading-relaxed text-base" />
                             </div>
-                            <input type="email" placeholder="Their email" value={letterRecipientEmail} onChange={(e) => setLetterRecipientEmail(e.target.value)} className="w-[70%] mx-auto block mt-2 text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/25 pb-1 text-[12px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/25 focus:outline-none rounded-none" />
+                            <input type="email" placeholder="Their email" value={letterRecipientEmail} onChange={(e) => setLetterRecipientEmail(e.target.value)} className="w-full max-w-md mx-auto block mt-3 text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/25 pb-1 font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/25 focus:outline-none rounded-none text-base" inputMode="email" autoComplete="email" />
 
                             <div className="w-[40px] h-[1px] bg-[#2a2a2a]/15 my-2.5" />
 
 
-                            <button type="button" onClick={handleSendLetter} disabled={letterSending} className="mt-3 w-full py-2.5 bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-sans text-[11px] tracking-[0.3em] uppercase transition-colors duration-300 rounded-none disabled:opacity-40">
+                            <button type="button" onClick={handleSendLetter} disabled={letterSending} className="mt-3 w-full py-3 min-h-[44px] bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-sans text-[11px] tracking-[0.3em] uppercase transition-colors duration-300 rounded-none disabled:opacity-40 touch-manipulation">
                               {letterSending ? 'Sending…' : 'Seal & Send'}
                             </button>
                           </>
@@ -1111,6 +1111,7 @@ export default function InviteScreening() {
                         rootNode={graphLayout.rootNode}
                         defaultActiveNodes={graphLayout.defaultActiveNodes}
                         defaultActiveLinks={graphLayout.defaultActiveLinks}
+                        showLegend={false}
                       />
                     </div>
                   </div>
@@ -1247,16 +1248,16 @@ export default function InviteScreening() {
               <div className="w-full h-[0.5px] bg-[#b1a180] opacity-20 reveal-up" style={{ transitionDelay: '100ms' }} />
 
               {/* Stats */}
-              <div className="flex flex-row md:flex-col gap-6 reveal-up" style={{ transitionDelay: '200ms' }}>
-                <div className="flex flex-col gap-1">
+              <div className="flex flex-row flex-wrap justify-between gap-y-4 gap-x-4 md:flex-col md:justify-start md:gap-6 reveal-up" style={{ transitionDelay: '200ms' }}>
+                <div className="flex min-w-0 flex-1 flex-col gap-1 basis-[28%] md:basis-auto">
                   <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Invites Sent</span>
                   <span className="font-serif-v3 text-2xl md:text-3xl text-[#dddddd]">{sentLetters.length}</span>
                 </div>
-                <div className="flex flex-col gap-1">
+                <div className="flex min-w-0 flex-1 flex-col gap-1 basis-[28%] md:basis-auto">
                   <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Invites Left</span>
                   <span className="font-serif-v3 text-2xl md:text-3xl text-[#b1a180]">{slotsRemaining}</span>
                 </div>
-                <div className="flex flex-col gap-1">
+                <div className="flex min-w-0 flex-1 flex-col gap-1 basis-[28%] md:basis-auto">
                   <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">New Viewers</span>
                   <span className="font-serif-v3 text-2xl md:text-3xl text-[#dddddd]">0</span>
                 </div>
@@ -1286,7 +1287,7 @@ export default function InviteScreening() {
             </div>
 
             {/* ── Right main panel ── */}
-            <div className="w-full md:w-[78%] min-h-screen flex flex-col px-5 md:px-10 py-8 md:py-12 overflow-y-auto panel-scroll">
+            <div className="w-full md:w-[78%] min-h-screen flex flex-col px-4 sm:px-5 md:px-10 py-6 sm:py-8 md:py-12 overflow-y-auto panel-scroll pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
 
               {/* Network impact section */}
               <section className="w-full mb-12 reveal-up" style={{ transitionDelay: '200ms' }}>
@@ -1299,15 +1300,15 @@ export default function InviteScreening() {
                   </p>
                 </div>
 
-                <div className="flex flex-col md:flex-row md:items-baseline justify-between mb-4 border-b border-[#4a5580]/40 pb-4">
-                  <h3 className="font-sans text-[10px] uppercase tracking-[0.3em] text-[#dddddd]/50">My Network Impact</h3>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between mb-4 border-b border-[#4a5580]/40 pb-4">
+                  <h3 className="font-sans text-[10px] uppercase tracking-[0.3em] text-[#dddddd]/50 shrink-0">My Network Impact</h3>
                   {film?.title && (
-                    <span className="font-serif-v3 text-[12px] italic tracking-widest text-[#dddddd]/70">{film.title}</span>
+                    <span className="font-serif-v3 text-[11px] sm:text-[12px] italic tracking-widest text-[#dddddd]/70 break-words text-right sm:max-w-[70%]">{film.title}</span>
                   )}
                 </div>
 
                 {dashboardGraphLayout ? (
-                  <div className="w-full bg-[#121a33] border-[0.5px] border-[#4a5580]/40 overflow-hidden shadow-2xl" style={{ height: '340px' }}>
+                  <div className="w-full bg-[#121a33] border-[0.5px] border-[#4a5580]/40 overflow-hidden shadow-2xl min-h-[220px] h-[min(52svh,400px)] max-h-[480px] md:h-[340px] md:max-h-none touch-manipulation">
                     <NetworkGraph
                       fillHeight
                       pannable
@@ -1325,7 +1326,7 @@ export default function InviteScreening() {
                     />
                   </div>
                 ) : (
-                  <div className="w-full h-[340px] bg-[#121a33] border-[0.5px] border-[#4a5580]/40 flex items-center justify-center">
+                  <div className="w-full min-h-[220px] h-[min(52svh,400px)] max-h-[480px] md:h-[340px] md:max-h-none bg-[#121a33] border-[0.5px] border-[#4a5580]/40 flex items-center justify-center">
                     <span className="font-sans text-[9px] uppercase tracking-widest text-[#dddddd]/20">Network loading…</span>
                   </div>
                 )}
@@ -1352,7 +1353,7 @@ export default function InviteScreening() {
                               <h4 className="font-serif-v3 text-2xl italic text-[#dddddd]">{name}</h4>
                               <p className="font-sans text-[11px] text-[#dddddd]/40 mt-0.5">{letter.email}</p>
                             </div>
-                            <div className="flex gap-10">
+                            <div className="flex flex-col gap-4 sm:flex-row sm:gap-10">
                               <div className="flex flex-col">
                                 <span className="text-[9px] uppercase tracking-widest text-[#dddddd]/40">Shares Initiated</span>
                                 <span className="font-serif-v3 text-[#b1a180] text-lg">0</span>

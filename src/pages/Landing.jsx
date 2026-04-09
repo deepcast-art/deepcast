@@ -176,7 +176,7 @@ export default function Landing() {
         </>
       ) : null}
       <div
-        className={`relative z-10 flex min-h-screen w-full flex-col items-center px-6 py-12 ${
+        className={`relative z-10 flex min-h-screen w-full flex-col items-center px-4 pb-[max(3rem,env(safe-area-inset-bottom,0px))] pt-[max(2.5rem,env(safe-area-inset-top,0px))] sm:px-6 sm:py-12 ${
           heroBgUrl ? '' : 'bg-bg'
         }`}
       >
@@ -315,7 +315,7 @@ export default function Landing() {
         <div className="dc-fade-in dc-fade-in-6 mb-16">
           <Link
             to="/login"
-            className="inline-flex items-center justify-center bg-ink text-warm font-medium rounded-none px-8 py-3.5 text-sm hover:bg-accent-hover transition-colors min-w-[200px]"
+            className="inline-flex w-full max-w-xs touch-manipulation items-center justify-center bg-ink text-warm font-medium rounded-none px-8 py-3.5 text-sm hover:bg-accent-hover transition-colors min-h-[48px] sm:w-auto sm:min-w-[200px]"
           >
             Watch the film
           </Link>
@@ -326,7 +326,7 @@ export default function Landing() {
           <div className="dc-fade-in dc-fade-in-5 border-t border-border pt-12">
             <div className="mx-auto mb-6 h-10 w-px bg-border" />
             <div className="w-full overflow-hidden rounded-none border-[0.5px] border-[#4a5580]/40 bg-[#121a33]">
-              <div className="h-[min(52vh,420px)] w-full min-h-[320px]">
+              <div className="h-[min(48svh,420px)] w-full min-h-[220px] touch-manipulation sm:min-h-[320px]">
                 <NetworkGraph
                   fillHeight
                   pannable

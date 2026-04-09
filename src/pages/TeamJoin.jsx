@@ -62,8 +62,8 @@ export default function TeamJoin() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12 bg-bg-page">
-      <div className="w-full max-w-sm">
+    <div className="min-h-dvh flex flex-col items-center justify-center px-4 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] pt-[max(1rem,env(safe-area-inset-top,0px))] sm:px-6 sm:py-12 bg-bg-page">
+      <div className="w-full max-w-sm min-w-0">
         <div className="text-center mb-10">
           <Link to="/" className="inline-flex justify-center hover:opacity-80 transition-opacity">
             <DeepcastLogo variant="ink" className="h-8" />
@@ -126,7 +126,7 @@ export default function TeamJoin() {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full bg-ink text-warm text-sm font-medium rounded-none py-3 hover:bg-accent-hover transition-colors disabled:opacity-50 cursor-pointer"
+              className="w-full min-h-[44px] touch-manipulation bg-ink text-warm text-sm font-medium rounded-none py-3 hover:bg-accent-hover transition-colors disabled:opacity-50 cursor-pointer"
             >
               {submitting ? 'Creating account…' : 'Create account & go to dashboard'}
             </button>

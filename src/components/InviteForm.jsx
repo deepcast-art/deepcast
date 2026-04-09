@@ -395,7 +395,7 @@ export default function InviteForm({
               !senderEmailInput.includes('@') ||
               !senderPasswordInput.trim()))
         }
-        className="dc-btn dc-btn-accent w-full mt-4 py-3 text-sm cursor-pointer"
+        className="dc-btn dc-btn-accent w-full mt-4 min-h-[44px] touch-manipulation py-3 text-sm cursor-pointer"
       >
         {sending ? 'Sending...' : 'Send the invitations.'}
       </button>

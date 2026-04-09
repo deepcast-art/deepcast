@@ -307,7 +307,7 @@ export default function Upload() {
 
   if (loadingEditFilm) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-6">
+      <div className="min-h-dvh flex items-center justify-center px-4 sm:px-6">
         <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
       </div>
     )
@@ -315,8 +315,8 @@ export default function Upload() {
 
   if (step === 'ready' && film) {
     return (
-      <div className="min-h-screen px-6 py-12">
-        <div className="max-w-lg mx-auto text-center animate-fade-in">
+      <div className="min-h-dvh px-4 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] pt-[max(2rem,env(safe-area-inset-top,0px))] sm:px-6 sm:py-12">
+        <div className="max-w-lg mx-auto min-w-0 text-center animate-fade-in">
           <div className="flex justify-center mb-8">
             <DeepcastLogo variant="ink" className="h-8" />
           </div>
@@ -352,7 +352,7 @@ export default function Upload() {
 
   if (step === 'uploading' || step === 'processing') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6">
+      <div className="min-h-dvh flex flex-col items-center justify-center px-4 sm:px-6">
         <div className="max-w-sm w-full text-center animate-fade-in">
           <div className="flex justify-center mb-8">
             <DeepcastLogo variant="ink" className="h-8" />
@@ -396,8 +396,8 @@ export default function Upload() {
           : null
 
   return (
-    <div className="min-h-screen px-6 py-12">
-      <div className="max-w-lg mx-auto">
+    <div className="min-h-dvh px-4 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] pt-[max(2rem,env(safe-area-inset-top,0px))] sm:px-6 sm:py-12">
+      <div className="max-w-lg mx-auto min-w-0">
         <div className="mb-10 animate-fade-in">
           <Link to="/dashboard" className="text-text-muted text-sm hover:text-text transition-colors">
             &larr; Dashboard

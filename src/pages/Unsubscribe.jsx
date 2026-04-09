@@ -3,8 +3,8 @@ import DeepcastLogo from '../components/DeepcastLogo'
 
 export default function Unsubscribe() {
   return (
-    <div className="min-h-screen bg-bg-page text-text dc-fade-in">
-      <div className="mx-auto flex min-h-screen max-w-lg flex-col px-6 py-16">
+    <div className="min-h-dvh bg-bg-page text-text dc-fade-in">
+      <div className="mx-auto flex min-h-dvh max-w-lg flex-col px-4 pb-[max(2rem,env(safe-area-inset-bottom,0px))] pt-[max(2rem,env(safe-area-inset-top,0px))] sm:px-6 sm:py-16">
         <Link to="/" className="mb-12 inline-block w-fit">
           <DeepcastLogo variant="ink" className="h-8" />
         </Link>

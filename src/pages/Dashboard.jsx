@@ -519,8 +519,8 @@ export default function Dashboard() {
     const firstNameDisplay = profile.name?.trim().split(/\s+/)[0] || profile.name || 'there'
 
     return (
-      <div className="relative z-10 flex min-h-screen w-full flex-col overflow-hidden bg-bg-page text-warm lg:flex-row">
-        <aside className="flex w-full min-h-0 shrink-0 flex-col gap-6 overflow-y-auto border-b border-faint/30 bg-ink/80 px-6 py-10 panel-scroll lg:max-h-[100dvh] lg:w-[22%] lg:min-h-screen lg:border-b-0 lg:border-r">
+      <div className="relative z-10 flex min-h-dvh w-full flex-col overflow-hidden bg-bg-page text-warm lg:flex-row">
+        <aside className="flex w-full min-h-0 shrink-0 flex-col gap-6 overflow-y-auto border-b border-faint/30 bg-ink/80 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] pt-[max(1rem,env(safe-area-inset-top,0px))] sm:px-6 sm:py-10 panel-scroll lg:max-h-[100dvh] lg:w-[22%] lg:min-h-screen lg:border-b-0 lg:border-r lg:px-6 lg:py-10">
           <div className="shrink-0 animate-fade-in">
             <Link to="/" className="inline-block">
               <DeepcastLogo variant="wordmark" className="!text-4xl sm:!text-5xl text-warm" />
@@ -609,7 +609,7 @@ export default function Dashboard() {
           </div>
         </aside>
 
-        <main className="flex w-full min-h-0 flex-1 flex-col overflow-y-auto bg-[#0c1225] px-6 py-10 panel-scroll md:px-12 lg:flex-1 lg:py-14 lg:pl-14 lg:pr-16">
+        <main className="flex w-full min-h-0 flex-1 flex-col overflow-y-auto bg-[#0c1225] px-4 py-8 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] panel-scroll sm:px-6 sm:py-10 md:px-12 lg:flex-1 lg:py-14 lg:pl-14 lg:pr-16">
           {inviteSentConfirmation && (
             <div className="mb-8 w-full max-w-6xl border border-[#5b8a5e]/30 bg-[#5b8a5e]/10 px-6 py-4 animate-fade-in">
               <p className="font-sans text-[11px] uppercase tracking-[0.25em] text-[#5b8a5e]">
@@ -958,16 +958,16 @@ export default function Dashboard() {
 
   /* ===================== CREATOR / TEAM V3 DIPTYCH ===================== */
   return (
-    <div className="relative z-10 flex min-h-screen w-full flex-col overflow-hidden bg-bg-page text-warm lg:flex-row">
+    <div className="relative z-10 flex min-h-dvh w-full flex-col overflow-hidden bg-bg-page text-warm lg:flex-row">
       {/* Mobile top bar */}
-      <div className="flex items-center justify-between border-b border-faint/30 bg-ink/80 px-4 py-3 lg:hidden">
+      <div className="flex items-center justify-between border-b border-faint/30 bg-ink/80 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))] lg:hidden">
         <Link to="/" className="inline-block opacity-90 hover:opacity-100">
           <DeepcastLogo variant="wordmark" className="h-5 w-auto text-warm" />
         </Link>
         <button
           type="button"
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="flex h-9 w-9 items-center justify-center text-warm/70"
+          className="flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center text-warm/70"
           aria-label="Toggle menu"
         >
           <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -980,7 +980,7 @@ export default function Dashboard() {
         </button>
       </div>
 
-      <aside className={`${sidebarOpen ? 'flex' : 'hidden'} lg:flex w-full shrink-0 flex-col gap-6 overflow-y-auto border-b border-faint/30 bg-ink/80 px-6 py-10 panel-scroll lg:w-[22%] lg:min-h-screen lg:border-b-0 lg:border-r`}>
+      <aside className={`${sidebarOpen ? 'flex' : 'hidden'} lg:flex w-full shrink-0 flex-col gap-6 overflow-y-auto border-b border-faint/30 bg-ink/80 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] pt-6 sm:px-6 sm:py-10 panel-scroll lg:w-[22%] lg:min-h-screen lg:border-b-0 lg:border-r lg:px-6 lg:py-10`}>
         <div className="animate-fade-in">
           <Link to="/" className="hidden opacity-90 hover:opacity-100 lg:inline-block">
             <DeepcastLogo variant="wordmark" className="h-7 w-auto text-warm" />
@@ -1030,7 +1030,7 @@ export default function Dashboard() {
         </nav>
       </aside>
 
-      <main className="flex w-full min-w-0 flex-1 flex-col overflow-y-auto px-6 py-10 panel-scroll lg:w-[78%] lg:px-10 lg:py-12">
+      <main className="flex w-full min-w-0 flex-1 flex-col overflow-y-auto px-4 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] pt-8 sm:px-6 sm:py-10 panel-scroll lg:w-[78%] lg:px-10 lg:py-12">
         {profile.role === 'creator' && (
           <section className="mb-10 animate-fade-in border border-border bg-bg-card p-6">
             <h2 className="mb-4 text-xs font-medium uppercase tracking-wider text-text-muted">

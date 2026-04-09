@@ -273,8 +273,8 @@ export default function NetworkMap() {
   if (!profile) return null
 
   return (
-    <div className="min-h-screen px-4 py-8 sm:px-6 sm:py-12">
-      <div className="max-w-3xl mx-auto">
+    <div className="min-h-dvh px-4 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] pt-[max(1rem,env(safe-area-inset-top,0px))] sm:px-6 sm:py-12">
+      <div className="max-w-3xl mx-auto min-w-0">
         <div className="flex flex-col gap-4 mb-8 animate-fade-in sm:mb-12 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
           <div>
             <Link to="/" className="inline-flex hover:opacity-80 transition-opacity">
@@ -370,7 +370,7 @@ export default function NetworkMap() {
                 ) : (
                   <>
                     <div
-                      className="flex h-[min(52vh,520px)] w-full min-h-[320px] flex-col"
+                      className="flex h-[min(52svh,520px)] w-full min-h-[220px] sm:min-h-[320px] flex-col touch-manipulation"
                       role="img"
                       aria-label="Invite network map"
                     >

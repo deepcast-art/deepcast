@@ -57,7 +57,7 @@ function FilmNetworkPreview({ film, invites, creatorName, profileEmail, profileR
       className="mt-4 block cursor-pointer overflow-hidden border border-faint/40 bg-paper/70 transition-colors hover:border-accent/40"
     >
       <span className="sr-only">Open full invitation map for {film.title}</span>
-      <div className="h-[260px] w-full">
+      <div className="h-[min(42svh,260px)] min-h-[200px] w-full sm:h-[260px] sm:min-h-0">
         <NetworkGraph
           fillHeight
           pannable
@@ -226,8 +226,8 @@ export default function Profile() {
   }
 
   return (
-    <div className="min-h-screen px-4 py-8 sm:px-6 sm:py-12">
-      <div className="max-w-2xl mx-auto">
+    <div className="min-h-dvh px-4 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] pt-[max(1rem,env(safe-area-inset-top,0px))] sm:px-6 sm:py-12">
+      <div className="max-w-2xl mx-auto min-w-0">
         {/* Header */}
         <div className="flex flex-col gap-6 mb-10 animate-fade-in sm:mb-12 sm:flex-row sm:items-center sm:justify-between">
           <div>
