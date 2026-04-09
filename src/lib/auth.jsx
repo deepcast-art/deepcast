@@ -9,6 +9,7 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [profileLoaded, setProfileLoaded] = useState(false)
+  const [isRecovery, setIsRecovery] = useState(false)
   const isSigningUp = useRef(false)
 
   const SUPABASE_URL = 'https://wmtjgpxhjtbocsmutqqc.supabase.co'
@@ -227,9 +228,21 @@ export function AuthProvider({ children }) {
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
         setSession(session)
         setUser(session?.user ?? null)
+
+        if (event === 'PASSWORD_RECOVERY') {
+          // Recovery session — just flag it, skip profile fetch
+          setIsRecovery(true)
+          setLoading(false)
+          return
+        }
+
+        if (event === 'SIGNED_OUT') {
+          setIsRecovery(false)
+        }
+
         if (session?.user && !isSigningUp.current) {
           fetchProfile(session.user.id, session.access_token).catch(() => {})
         } else if (!session?.user) {
@@ -380,7 +393,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, loading, profileLoaded, signUp, signIn, signOut, fetchProfile, resetPassword, updatePassword }}
+      value={{ session, user, profile, loading, profileLoaded, isRecovery, signUp, signIn, signOut, fetchProfile, resetPassword, updatePassword }}
     >
       {children}
     </AuthContext.Provider>

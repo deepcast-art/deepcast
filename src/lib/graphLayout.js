@@ -67,11 +67,19 @@ export function generateGraphData(userShares = 0) {
 
   const R1 = Math.max(R1_BASE, Math.ceil((totalCount * MIN_SPACING) / TWO_PI))
 
+  // Compute total ring-2 count (including userShares) for radius + uniform slot sizing
   let totalT2 = userShares
   for (const r of allRecipients)
-    if (r.name !== 'You') totalT2 += (TIER2_SHARERS[r.name] || 0)
+    totalT2 += (TIER2_SHARERS[r.name] || 0)
 
   const R2 = Math.max(R1 + GAP, Math.ceil((totalT2 * MIN_SPACING) / TWO_PI))
+
+  // Ring 2 — uniform slot placement (spec §Ring 2)
+  // Each child gets an evenly-spaced slot in team-iteration order.
+  // This keeps ring-2 nodes well-distributed so rings 3+ stay radial with no crossings.
+  const t2SlotAngle = totalT2 > 0 ? TWO_PI / totalT2 : 0
+  const t2StartAngle = -Math.PI / 2
+  let globalT2Idx = 0
 
   const nodes = [{ id: 'film', label: '', x: CX, y: CY, size: 1.0, type: 'film', tier: 0, teamId: null, angle: 0 }]
   const links = []
@@ -80,7 +88,6 @@ export function generateGraphData(userShares = 0) {
 
   let t2NameIdx = 0, globalIdx = 0
   let sectionStart = -Math.PI / 2
-  const ring1Nodes = []
 
   for (const team of TEAM_DATA) {
     const N = team.recipients.length
@@ -103,56 +110,25 @@ export function generateGraphData(userShares = 0) {
       })
       links.push({ source: 'film', target: nodeId })
 
+      // Place ring-2 children inline using uniform slots
       const t2Count = isYou ? userShares : (TIER2_SHARERS[name] || 0)
-      ring1Nodes.push({ id: nodeId, angle, teamId: team.id, count: t2Count })
+      for (let k = 0; k < t2Count; k++) {
+        const t2Angle = t2StartAngle + globalT2Idx * t2SlotAngle
+        globalT2Idx++
+        const t2NodeId = `${nodeId}_s${k}`
+        const t2Label = TIER2_NAMES[t2NameIdx++ % TIER2_NAMES.length]
+        nodes.push({
+          id: t2NodeId, label: t2Label,
+          x: CX + R2 * Math.cos(t2Angle), y: CY + R2 * Math.sin(t2Angle),
+          size: 1.0, type: 'human', tier: 2, teamId: team.id, angle: t2Angle,
+        })
+        links.push({ source: nodeId, target: t2NodeId })
+        tier2Nodes.push({ id: t2NodeId, teamId: team.id, angle: t2Angle })
+      }
+
       globalIdx++
     }
     sectionStart = sectionEnd
-  }
-
-  // Ring 2 — seam algorithm
-  const sharers2 = ring1Nodes.filter((n) => n.count > 0)
-  if (sharers2.length > 0) {
-    const minGap2 = MIN_SPACING / R2
-    sharers2.sort((a, b) => normAngle(a.angle) - normAngle(b.angle))
-
-    let maxGap2 = 0, seamIdx2 = 0
-    for (let i = 0; i < sharers2.length; i++) {
-      const cur = normAngle(sharers2[i].angle)
-      const nxt = i < sharers2.length - 1 ? normAngle(sharers2[i + 1].angle) : normAngle(sharers2[0].angle) + TWO_PI
-      if (nxt - cur > maxGap2) { maxGap2 = nxt - cur; seamIdx2 = i }
-    }
-
-    const ordered2 = sharers2.map((_, i) => sharers2[(seamIdx2 + 1 + i) % sharers2.length])
-    const baseAngle2 = normAngle(ordered2[0].angle)
-    for (const s of ordered2) {
-      let a = normAngle(s.angle)
-      if (a < baseAngle2 - 0.001) a += TWO_PI
-      s._mono = a
-    }
-
-    const pending2 = []
-    for (const s of ordered2) {
-      for (let k = 0; k < s.count; k++) {
-        pending2.push({
-          nodeId: `${s.id}_s${k}`,
-          label: TIER2_NAMES[t2NameIdx++ % TIER2_NAMES.length],
-          parentId: s.id,
-          teamId: s.teamId,
-          angle: s._mono + (k - (s.count - 1) / 2) * minGap2,
-        })
-      }
-    }
-
-    for (let i = 1; i < pending2.length; i++)
-      if (pending2[i].angle - pending2[i - 1].angle < minGap2)
-        pending2[i].angle = pending2[i - 1].angle + minGap2
-
-    for (const p of pending2) {
-      nodes.push({ id: p.nodeId, label: p.label, x: CX + R2 * Math.cos(p.angle), y: CY + R2 * Math.sin(p.angle), size: 1.0, type: 'human', tier: 2, teamId: p.teamId, angle: p.angle })
-      links.push({ source: p.parentId, target: p.nodeId })
-      tier2Nodes.push({ id: p.nodeId, teamId: p.teamId, angle: p.angle })
-    }
   }
 
   // Rings 3–5

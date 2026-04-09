@@ -274,6 +274,7 @@ export default function NetworkGraph({
   fillHeight = false,
   pannable = false,
   transparentSurface = false,
+  showLegend = true,
 }) {
   const [hoveredNode, setHoveredNode] = useState(null)
   const [selectedTeamId, setSelectedTeamId] = useState(null)
@@ -563,13 +564,13 @@ export default function NetworkGraph({
     border: transparentSurface ? 'none' : `0.5px solid ${GRAPH_COLORS.faint}40`,
   }
 
-  const legend = (
+  const legend = showLegend ? (
     <TeamLegend
       teams={legendTeams}
       selectedTeamId={selectedTeamId}
       onSelect={setSelectedTeamId}
     />
-  )
+  ) : null
 
   /* --- Pannable mode --- */
   if (pannable) {

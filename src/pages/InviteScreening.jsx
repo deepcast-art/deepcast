@@ -17,10 +17,46 @@ import './screening-room.css'
 
 const VIEWER_SHARE_LIMIT = 5
 
+/* ------------------------------------------------------------------ */
+/*  INVITE CTX — decrypt sender/recipient names embedded in invite URL */
+/* ------------------------------------------------------------------ */
+
+function base64urlToBytes(b64url) {
+  const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = b64.padEnd(b64.length + (4 - (b64.length % 4)) % 4, '=')
+  const binary = atob(padded)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return bytes
+}
+
+function hexToBytes(hex) {
+  const bytes = new Uint8Array(hex.length / 2)
+  for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16)
+  return bytes
+}
+
+async function decryptInviteCtx(ctxParam) {
+  const secret = import.meta.env.VITE_INVITE_CTX_SECRET
+  if (!secret || !ctxParam) return null
+  try {
+    const data = base64urlToBytes(ctxParam)
+    const iv = data.slice(0, 16)
+    const encrypted = data.slice(16)
+    const cryptoKey = await window.crypto.subtle.importKey(
+      'raw', hexToBytes(secret), { name: 'AES-CBC' }, false, ['decrypt']
+    )
+    const decrypted = await window.crypto.subtle.decrypt({ name: 'AES-CBC', iv }, cryptoKey, encrypted)
+    return JSON.parse(new TextDecoder().decode(decrypted))
+  } catch {
+    return null
+  }
+}
+
 const screeningAssociationName =
   (typeof import.meta.env.VITE_SCREENING_ASSOCIATION_NAME === 'string' &&
     import.meta.env.VITE_SCREENING_ASSOCIATION_NAME.trim()) ||
-  'Brain Farm'
+  ''
 
 const MuxPlayer = lazy(() =>
   import('@mux/mux-player-react').then((m) => ({ default: m.default }))
@@ -92,6 +128,10 @@ export default function InviteScreening() {
     fading: false,
   })
 
+  // Names decoded from the encrypted ?ctx= param in the invite URL.
+  // Available immediately on mount — no DB round-trip needed for the prologue.
+  const [ctxRecipientFirst, setCtxRecipientFirst] = useState(null)
+
   /* ---------- DASHBOARD STATE ---------- */
 
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
@@ -156,6 +196,18 @@ export default function InviteScreening() {
       setLetterSenderEmail(invite.recipient_email)
   }, [invite])
 
+  // Decode sender + recipient names from the encrypted ?ctx= param immediately on mount.
+  // This populates the prologue without waiting for validateInvite to return.
+  useEffect(() => {
+    const ctx = searchParams.get('ctx')
+    if (!ctx) return
+    decryptInviteCtx(ctx).then((names) => {
+      if (!names) return
+      if (names.s) setSharerDisplayName((prev) => prev || names.s)
+      if (names.r) setCtxRecipientFirst(names.r)
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   /* ---------- NETWORK GRAPH ---------- */
 
   const viewerRecipientKey = invite
@@ -209,11 +261,12 @@ export default function InviteScreening() {
   }, [graphLayout, filmInvites])
 
   const recipientFirstName = useMemo(() => {
+    if (ctxRecipientFirst) return ctxRecipientFirst
     if (!invite) return 'you'
     const fromName = invite.recipient_name?.trim().split(/\s+/)[0]
     if (fromName) return fromName
     return invite.recipient_email?.split('@')[0] || 'you'
-  }, [invite])
+  }, [invite, ctxRecipientFirst])
 
   const entryRecipientLabel = useMemo(() => {
     const r = (recipientFirstName || '').trim()
@@ -228,6 +281,15 @@ export default function InviteScreening() {
     const cap = first.charAt(0).toUpperCase() + first.slice(1)
     return cap || 'Your host'
   }, [sharerDisplayName])
+
+  // When the invite came directly from the film crew (no parent invite), append the association name
+  const sharerWithTeam = useMemo(() => {
+    if (!sharerDisplayName) return null
+    if (invite !== null && invite.parent_invite_id === null) {
+      return `${sharerDisplayName} · ${screeningAssociationName}`
+    }
+    return sharerDisplayName
+  }, [sharerDisplayName, invite])
 
   /** Logged-in user must match this invite’s recipient — otherwise “dashboard” is the wrong account (e.g. sender still signed in). */
   const isInviteRecipientSession = useMemo(() => {
@@ -251,17 +313,17 @@ export default function InviteScreening() {
     })
     setViewVisible(false)
 
-    let d = 800
+    let d = 600
     const t1 = setTimeout(() => setPrologueState((s) => ({ ...s, text1: true })), d)
-    d += 2200
+    d += 1650
     const t2 = setTimeout(() => setPrologueState((s) => ({ ...s, text2: true })), d)
-    d += 3200
+    d += 2400
     const t3 = setTimeout(() => setPrologueState((s) => ({ ...s, textsVisible: false })), d)
     const t4 = setTimeout(() => {
       setPrologueState((s) => ({ ...s, overlayVisible: false }))
       setViewVisible(true)
-    }, d + 2000)
-    const t5 = setTimeout(() => setPrologueState((s) => ({ ...s, mounted: false })), d + 5000)
+    }, d + 1500)
+    const t5 = setTimeout(() => setPrologueState((s) => ({ ...s, mounted: false })), d + 3750)
     return () => {
       clearTimeout(t1)
       clearTimeout(t2)
@@ -327,8 +389,8 @@ export default function InviteScreening() {
     setPreScreeningPrologue({ visible: true, textVisible: false, text2Visible: false, fading: false })
     entrySplashTimerRef.current = null
 
-    const t1 = window.setTimeout(() => setPreScreeningPrologue(s => ({ ...s, textVisible: true })), 800)
-    const t2 = window.setTimeout(() => setPreScreeningPrologue(s => ({ ...s, text2Visible: true })), 3500)
+    const t1 = window.setTimeout(() => setPreScreeningPrologue(s => ({ ...s, textVisible: true })), 600)
+    const t2 = window.setTimeout(() => setPreScreeningPrologue(s => ({ ...s, text2Visible: true })), 2625)
     const t3 = window.setTimeout(() => {
       // Begin fade-out AND silently switch the view underneath so the landing never flashes
       setPreScreeningPrologue(s => ({ ...s, fading: true }))
@@ -338,7 +400,7 @@ export default function InviteScreening() {
       setIsScreeningPaused(false)
       setCurrentView('screening')
       setViewVisible(true)
-    }, 12500)
+    }, 9375)
     const t4 = window.setTimeout(() => {
       setPreScreeningPrologue({ visible: false, textVisible: false, text2Visible: false, fading: false })
       entrySplashRunningRef.current = false
@@ -346,7 +408,7 @@ export default function InviteScreening() {
         const mux = document.querySelector('mux-player')
         if (mux && typeof mux.play === 'function') void mux.play().catch(() => {})
       })
-    }, 15500)
+    }, 11625)
 
     entrySplashTimerRef.current = { clear: () => [t1, t2, t3, t4].forEach(clearTimeout) }
   }, [finalizeEnterScreening])
@@ -678,7 +740,7 @@ export default function InviteScreening() {
                 opacity: prologueState.textsVisible && prologueState.text2 ? 1 : 0,
               }}
             >
-              gifted by {sharerDisplayName || 'someone who chose you'}.
+              gifted by {sharerWithTeam || 'someone who chose you'}.
             </div>
           </div>
         </div>
@@ -730,7 +792,7 @@ export default function InviteScreening() {
             >
               <div className="h-1.5 w-1.5 rounded-full bg-[#b1a180]/60" />
               <span className="font-display text-[11px] font-light uppercase tracking-[0.25em] text-[#dddddd]/50 md:text-[12px]">
-                Gifted by {sharerDisplayName || 'your host'}
+                Gifted by {sharerWithTeam || 'your host'}
               </span>
             </div>
 
@@ -806,6 +868,7 @@ export default function InviteScreening() {
                     rootNode={graphLayout.rootNode}
                     defaultActiveNodes={graphLayout.defaultActiveNodes}
                     defaultActiveLinks={graphLayout.defaultActiveLinks}
+                    showLegend={false}
                   />
                 ) : (
                   <div className="flex h-full flex-1 items-center justify-center px-6 text-sm text-[#dddddd]/40">
@@ -917,6 +980,7 @@ export default function InviteScreening() {
                           rootNode={graphLayout.rootNode}
                           defaultActiveNodes={graphLayout.defaultActiveNodes}
                           defaultActiveLinks={graphLayout.defaultActiveLinks}
+                          showLegend={false}
                         />
                       </div>
                     )}
@@ -1257,6 +1321,7 @@ export default function InviteScreening() {
                       rootNode={dashboardGraphLayout.rootNode}
                       defaultActiveNodes={dashboardGraphLayout.defaultActiveNodes}
                       defaultActiveLinks={dashboardGraphLayout.defaultActiveLinks}
+                      showLegend={false}
                     />
                   </div>
                 ) : (

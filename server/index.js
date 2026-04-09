@@ -138,6 +138,26 @@ function generateToken() {
   return crypto.randomBytes(4).toString('hex') // 8 char hex string
 }
 
+/**
+ * Encrypts {s: senderFirst, r: recipientFirst} with AES-256-CBC.
+ * IV is prepended; result is base64url-encoded for safe URL embedding.
+ * Client decrypts with VITE_INVITE_CTX_SECRET via WebCrypto.
+ */
+function encryptInviteCtx(senderFirst, recipientFirst) {
+  const secret = process.env.INVITE_CTX_SECRET
+  if (!secret || secret.length !== 64) return null
+  try {
+    const key = Buffer.from(secret, 'hex')
+    const iv = crypto.randomBytes(16)
+    const payload = JSON.stringify({ s: senderFirst || '', r: recipientFirst || '' })
+    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv)
+    const encrypted = Buffer.concat([cipher.update(payload, 'utf8'), cipher.final()])
+    return Buffer.concat([iv, encrypted]).toString('base64url')
+  } catch {
+    return null
+  }
+}
+
 function generateTeamInviteToken() {
   return crypto.randomBytes(24).toString('hex')
 }
@@ -385,10 +405,12 @@ app.post('/api/invites/send', async (req, res) => {
 
     // Send email via Resend
     const baseUrl = resolveBaseUrl(appUrl, req.get('origin'))
-    const inviteUrl = `${baseUrl}/i/${token}`
+    const senderFirst = senderName ? senderName.trim().split(/\s+/)[0] : ''
+    const recipientFirstName = recipientName ? recipientName.trim().split(/\s+/)[0] : null
+    const ctx = encryptInviteCtx(senderFirst, recipientFirstName || '')
+    const inviteUrl = ctx ? `${baseUrl}/i/${token}?ctx=${ctx}` : `${baseUrl}/i/${token}`
     const displaySender = senderName || 'Someone'
     const displaySenderEmail = senderEmail || null
-    const recipientFirstName = recipientName ? recipientName.trim().split(/\s+/)[0] : null
 
     try {
       const htmlBody = buildInviteEmailHtml(
@@ -506,12 +528,14 @@ app.post('/api/invites/resend-last', async (req, res) => {
 
     const inviteOrdinal = inviteCount || null
     const baseUrl = resolveBaseUrl(appUrl, req.get('origin'))
-    const inviteUrl = `${baseUrl}/i/${invite.token}`
     const displaySender = invite.sender_name || 'Someone'
     const displaySenderEmail = invite.sender_email || null
     const recipientFirstName = invite.recipient_name
       ? invite.recipient_name.trim().split(/\s+/)[0]
       : null
+    const senderFirst = invite.sender_name ? invite.sender_name.trim().split(/\s+/)[0] : ''
+    const ctx = encryptInviteCtx(senderFirst, recipientFirstName || '')
+    const inviteUrl = ctx ? `${baseUrl}/i/${invite.token}?ctx=${ctx}` : `${baseUrl}/i/${invite.token}`
 
     try {
       const htmlBody = buildInviteEmailHtml(
@@ -602,12 +626,14 @@ app.post('/api/invites/resend', async (req, res) => {
 
     const inviteOrdinal = inviteCount || null
     const baseUrl = resolveBaseUrl(appUrl, req.get('origin'))
-    const inviteUrl = `${baseUrl}/i/${invite.token}`
     const displaySender = invite.sender_name || 'Someone'
     const displaySenderEmail = invite.sender_email || null
     const recipientFirstName = invite.recipient_name
       ? invite.recipient_name.trim().split(/\s+/)[0]
       : null
+    const senderFirst = invite.sender_name ? invite.sender_name.trim().split(/\s+/)[0] : ''
+    const ctx = encryptInviteCtx(senderFirst, recipientFirstName || '')
+    const inviteUrl = ctx ? `${baseUrl}/i/${invite.token}?ctx=${ctx}` : `${baseUrl}/i/${invite.token}`
 
     try {
       const htmlBody = buildInviteEmailHtml(

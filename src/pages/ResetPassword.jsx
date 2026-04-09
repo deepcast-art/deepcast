@@ -4,7 +4,7 @@ import { useAuth } from '../lib/auth'
 import DeepcastLogo from '../components/DeepcastLogo'
 
 export default function ResetPassword() {
-  const { session, resetPassword, updatePassword } = useAuth()
+  const { isRecovery, resetPassword, updatePassword } = useAuth()
   const navigate = useNavigate()
 
   const [email, setEmail] = useState('')
@@ -14,8 +14,6 @@ export default function ResetPassword() {
   const [error, setError] = useState('')
   const [sent, setSent] = useState(false)
   const [updated, setUpdated] = useState(false)
-
-  const isRecovery = Boolean(session?.user)
 
   useEffect(() => {
     const stored =

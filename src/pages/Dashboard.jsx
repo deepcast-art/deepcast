@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import InviteForm from '../components/InviteForm'
@@ -27,6 +27,7 @@ function formatNamesList(names) {
 
 export default function Dashboard() {
   const { profile, signOut, fetchProfile } = useAuth()
+  const navigate = useNavigate()
   const location = useLocation()
   const inviteSentConfirmation = location.state?.inviteSent
     ? location.state.recipientName || 'your invitee'
@@ -56,6 +57,7 @@ export default function Dashboard() {
   const [viewerSentInvites, setViewerSentInvites] = useState([])
   const [viewerFilmId, setViewerFilmId] = useState(null)
   const [viewerFilmTitle, setViewerFilmTitle] = useState('')
+  const [viewerFilmThumbnail, setViewerFilmThumbnail] = useState(null)
   const [viewerInviteToken, setViewerInviteToken] = useState(null)
   const [viewerFilmInvites, setViewerFilmInvites] = useState([])
   const [viewerAllFilms, setViewerAllFilms] = useState([])
@@ -184,6 +186,7 @@ export default function Dashboard() {
     if (!filmId) {
       setViewerFilmId(null)
       setViewerFilmTitle('')
+      setViewerFilmThumbnail(null)
       setViewerAllFilms([])
       setViewerFilmInvites([])
       setViewerCreatorName('')
@@ -202,6 +205,7 @@ export default function Dashboard() {
       .single()
 
     setViewerFilmTitle(filmRow?.title || '')
+    setViewerFilmThumbnail(filmRow?.thumbnail_url || null)
 
     let cname = ''
     if (filmRow?.creator_id) {
@@ -440,6 +444,13 @@ export default function Dashboard() {
       }, 4000)
     }
   }
+
+  const handleWatchPrimaryFilm = useCallback(() => {
+    const t = viewerInviteToken
+    if (!t) return
+    localStorage.removeItem(`screening_position_${t}`)
+    navigate(`/i/${t}?play=1`)
+  }, [viewerInviteToken, navigate])
 
   const openShareModal = () => {
     setModalError('')
@@ -721,6 +732,46 @@ export default function Dashboard() {
                         {viewerFilmTitle}
                       </span>
                     </div>
+                    {viewerFilmId && (
+                      <div className="mb-6 flex w-full flex-col gap-4 border border-faint/30 bg-[#0a0f1a] p-5 sm:flex-row sm:items-center sm:gap-6 sm:p-6">
+                        {viewerFilmThumbnail ? (
+                          <img
+                            src={ensureHttpsUrl(viewerFilmThumbnail) ?? viewerFilmThumbnail}
+                            alt={viewerFilmTitle || 'Film thumbnail'}
+                            className="aspect-video w-full max-w-[min(100%,20rem)] shrink-0 object-cover sm:h-24 sm:w-40 sm:max-w-none"
+                          />
+                        ) : (
+                          <div className="flex aspect-video w-full max-w-[min(100%,20rem)] shrink-0 items-center justify-center bg-faint/10 sm:h-24 sm:w-40 sm:max-w-none">
+                            <svg className="h-8 w-8 text-warm/20 fill-current" viewBox="0 0 24 24" aria-hidden>
+                              <path d="M8 5v14l11-7z" />
+                            </svg>
+                          </div>
+                        )}
+                        <div className="flex min-w-0 flex-1 flex-col gap-4">
+                          <div className="min-w-0">
+                            <span className="mb-1 block font-sans text-[9px] uppercase tracking-[0.28em] text-warm/40">
+                              Your screening
+                            </span>
+                            <p className="font-serif-v3 text-lg italic leading-snug text-warm sm:text-xl">
+                              {viewerFilmTitle || 'Film'}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-3">
+                            <button
+                              type="button"
+                              onClick={handleWatchPrimaryFilm}
+                              disabled={!viewerInviteToken}
+                              className="inline-flex items-center gap-2 border border-accent/50 bg-transparent px-5 py-2.5 font-sans text-[10px] font-medium uppercase tracking-[0.28em] text-accent transition-colors hover:border-accent hover:bg-accent/[0.08] disabled:pointer-events-none disabled:opacity-40"
+                            >
+                              <svg className="h-2.5 w-2.5 fill-current" viewBox="0 0 24 24" aria-hidden>
+                                <path d="M8 5v14l11-7z" />
+                              </svg>
+                              Watch again
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <div className="relative flex h-[min(52vh,560px)] w-full overflow-hidden bg-[#121a33] sm:h-[min(56vh,620px)]">
                       <NetworkGraph
                         fillHeight
