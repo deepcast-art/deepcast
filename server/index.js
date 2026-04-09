@@ -63,7 +63,9 @@ if (supabaseKeyRole !== 'service_role') {
 const supabase = createClient(supabaseUrl, supabaseKey)
 
 // App base URL
-const APP_URL = process.env.APP_URL || 'http://localhost:5173'
+// Public origin for invite links, email templates, unsubscribe, etc. Production must set APP_URL on
+// the host (e.g. Render). The localhost default is only when env is missing — local dev / tests.
+const APP_URL = process.env.APP_URL || 'http://localhost:3000'
 
 // ============ MUX ROUTES ============
 

@@ -3,8 +3,20 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import DeepcastLogo from '../components/DeepcastLogo'
 
+function formatResetRequestError(err) {
+  const msg = (err?.message || '').trim()
+  if (!msg) return 'Could not send reset email. Try again in a moment.'
+  if (/rate limit|too many requests|429/i.test(msg)) {
+    return 'Too many attempts. Wait a few minutes, then try again.'
+  }
+  if (/invalid email|valid email/i.test(msg)) {
+    return 'Enter a valid email address.'
+  }
+  return msg
+}
+
 export default function ResetPassword() {
-  const { isRecovery, resetPassword, updatePassword } = useAuth()
+  const { isRecovery, resetPassword, updatePassword, signOut } = useAuth()
   const navigate = useNavigate()
 
   const [email, setEmail] = useState('')
@@ -29,7 +41,7 @@ export default function ResetPassword() {
       await resetPassword(email)
       setSent(true)
     } catch (err) {
-      setError(err.message || 'Could not send reset email.')
+      setError(formatResetRequestError(err))
     } finally {
       setLoading(false)
     }
@@ -51,8 +63,9 @@ export default function ResetPassword() {
     setLoading(true)
     try {
       await updatePassword(newPassword)
+      await signOut().catch(() => {})
       setUpdated(true)
-      setTimeout(() => navigate('/dashboard'), 2000)
+      setTimeout(() => navigate('/login'), 2000)
     } catch (err) {
       setError(err.message || 'Could not update password.')
     } finally {
@@ -73,34 +86,39 @@ export default function ResetPassword() {
           <p className="text-text-muted text-sm">
             {isRecovery
               ? 'Choose a new password for your account.'
-              : 'Enter your email and we\u2019ll send a reset link.'}
+              : 'We\u2019ll email you a link to choose a new password.'}
           </p>
         </div>
 
         {updated ? (
           <div className="text-center animate-fade-in">
             <p className="text-accent text-sm mb-4">Password updated successfully.</p>
-            <p className="text-text-muted text-sm">Redirecting to dashboard\u2026</p>
+            <p className="text-text-muted text-sm">Redirecting to sign in\u2026</p>
           </div>
         ) : sent ? (
-          <div className="text-center animate-fade-in">
-            <p className="text-accent text-sm mb-4">
-              Check your inbox for a reset link.
+          <div className="text-center animate-fade-in space-y-4">
+            <p className="text-text text-sm leading-relaxed">
+              If an account exists for{' '}
+              <span className="font-medium text-warm">{email.trim()}</span>, you&apos;ll get an email
+              with a reset link shortly.
             </p>
-            <p className="text-text-muted text-sm mb-6">
-              Didn&apos;t receive it? Check spam, or{' '}
+            <p className="text-text-muted text-sm leading-relaxed">
+              Check spam and promotions folders. Make sure this is the same address you used to sign
+              up or accept an invitation — otherwise no message will be sent.
+            </p>
+            <p className="text-text-muted text-sm mb-2">
               <button
                 type="button"
                 onClick={() => setSent(false)}
                 className="text-accent hover:text-accent-hover transition-colors underline"
               >
-                try again
+                Use a different email
               </button>
-              .
+              {' · '}
+              <Link to="/login" className="text-text-muted hover:text-text transition-colors">
+                Back to sign in
+              </Link>
             </p>
-            <Link to="/login" className="text-sm text-text-muted hover:text-text transition-colors">
-              &larr; Back to sign in
-            </Link>
           </div>
         ) : isRecovery ? (
           <form onSubmit={handleUpdatePassword} className="space-y-5 animate-fade-in">
@@ -161,9 +179,14 @@ export default function ResetPassword() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                autoComplete="email"
                 className="w-full bg-bg-card border border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
                 placeholder="you@example.com"
               />
+              <p className="mt-2 text-xs text-text-muted leading-relaxed">
+                Use the exact email from your Deepcast account (sign-up or invitation). If that address
+                doesn&apos;t have an account yet, you won&apos;t receive a reset email.
+              </p>
             </div>
             <button
               type="submit"

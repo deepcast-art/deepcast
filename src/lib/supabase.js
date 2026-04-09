@@ -13,4 +13,9 @@ try {
   localStorage.removeItem(STORAGE_KEY)
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    // Recovery / magic links use hash fragments; must be parsed on first load.
+    detectSessionInUrl: true,
+  },
+})

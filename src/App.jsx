@@ -1,5 +1,5 @@
-import { lazy, Suspense } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { lazy, Suspense, useEffect } from 'react'
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from './lib/auth'
 
 const Landing = lazy(() => import('./pages/Landing.jsx'))
@@ -30,6 +30,21 @@ function RouteFallback({ inverse = false }) {
   )
 }
 
+/** If auth is in password-recovery mode, always show /reset-password (hash may already be consumed). */
+function RecoveryRouteSync() {
+  const { isRecovery } = useAuth()
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+
+  useEffect(() => {
+    if (isRecovery && pathname !== '/reset-password') {
+      navigate('/reset-password', { replace: true })
+    }
+  }, [isRecovery, pathname, navigate])
+
+  return null
+}
+
 function ProtectedRoute({ children, requiredRole, requiredRoles }) {
   const { user, profile, loading, profileLoaded } = useAuth()
 
@@ -58,6 +73,8 @@ function ProtectedRoute({ children, requiredRole, requiredRoles }) {
 
 export default function App() {
   return (
+    <>
+      <RecoveryRouteSync />
     <Routes>
       <Route
         path="/"
@@ -168,5 +185,6 @@ export default function App() {
         }
       />
     </Routes>
+    </>
   )
 }

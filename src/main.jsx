@@ -6,6 +6,23 @@ import './fonts.css'
 import './index.css'
 import App from './App.jsx'
 
+// Supabase recovery emails often redirect to Site URL root with tokens in the hash. The reset form
+// lives at /reset-password — rewrite before React so the hash is parsed on the correct route.
+if (typeof window !== 'undefined') {
+  try {
+    const { pathname, hash } = window.location
+    if (
+      hash &&
+      (hash.includes('type=recovery') || hash.includes('type%3Drecovery')) &&
+      pathname !== '/reset-password'
+    ) {
+      window.history.replaceState(window.history.state, '', `/reset-password${hash}`)
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <div className="dc-tactile-grain" aria-hidden />
