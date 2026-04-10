@@ -67,6 +67,15 @@ const supabase = createClient(supabaseUrl, supabaseKey)
 // the host (e.g. Render). The localhost default is only when env is missing — local dev / tests.
 const APP_URL = process.env.APP_URL || 'http://localhost:3000'
 
+/** Liveness for deploy pipelines and smoke tests — no DB or external services. */
+app.get('/api/health', (_req, res) => {
+  res.json({
+    ok: true,
+    service: 'deepcast-api',
+    timestamp: new Date().toISOString(),
+  })
+})
+
 // ============ MUX ROUTES ============
 
 // Create a Mux direct upload URL

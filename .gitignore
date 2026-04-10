@@ -37,3 +37,8 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+
+# Playwright / Vitest
+playwright-report/
+test-results/
+blob-report/
