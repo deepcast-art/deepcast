@@ -3,6 +3,7 @@ import {
   useMemo,
   useRef,
   useCallback,
+  useEffect,
   cloneElement,
   useLayoutEffect,
 } from 'react'
@@ -287,6 +288,8 @@ export default function NetworkGraph({
   transparentSurface = false,
   showLegend = true,
   showZoomControls = false,
+  /** Pinch / ctrl+wheel zoom + single-finger pan (e.g. mobile full-screen background) */
+  interactiveZoom = false,
   centerInViewport = false,
 }) {
   const [hoveredNode, setHoveredNode] = useState(null)
@@ -295,6 +298,10 @@ export default function NetworkGraph({
   const dragRef = useRef({ active: false, x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
   const [zoom, setZoom] = useState(1)
+  const zoomRef = useRef(1)
+  const pinchRef = useRef(null)
+
+  const zoomLayerActive = showZoomControls || interactiveZoom
   const aspectRatio = viewBoxH / (viewBoxWProp ?? VIEWBOX_W)
   const defaultGraphW = VIEWBOX_W
   const defaultGraphH = defaultGraphW * aspectRatio
@@ -371,9 +378,66 @@ export default function NetworkGraph({
     return { nodes, links }
   }, [selectedTeamId, nodesData, linksData])
 
+  useEffect(() => {
+    zoomRef.current = zoom
+  }, [zoom])
+
+  /* --- Pinch zoom (touch) + ctrl/trackpad wheel zoom --- */
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el || !zoomLayerActive) return
+
+    const onTouchStart = (e) => {
+      if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX
+        const dy = e.touches[0].clientY - e.touches[1].clientY
+        pinchRef.current = {
+          startDist: Math.hypot(dx, dy),
+          startZoom: zoomRef.current,
+        }
+      }
+    }
+    const onTouchMove = (e) => {
+      if (e.touches.length !== 2 || !pinchRef.current?.startDist) return
+      e.preventDefault()
+      const dx = e.touches[0].clientX - e.touches[1].clientX
+      const dy = e.touches[0].clientY - e.touches[1].clientY
+      const dist = Math.hypot(dx, dy)
+      const ratio = dist / pinchRef.current.startDist
+      const next = Math.min(
+        ZOOM_MAX,
+        Math.max(ZOOM_MIN, pinchRef.current.startZoom * ratio)
+      )
+      setZoom(next)
+    }
+    const endPinch = () => {
+      pinchRef.current = null
+    }
+
+    const onWheelZoom = (e) => {
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      const factor = e.deltaY > 0 ? 0.9 : 1.1
+      setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z * factor)))
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    el.addEventListener('touchend', endPinch)
+    el.addEventListener('touchcancel', endPinch)
+    el.addEventListener('wheel', onWheelZoom, { passive: false })
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', endPinch)
+      el.removeEventListener('touchcancel', endPinch)
+      el.removeEventListener('wheel', onWheelZoom)
+    }
+  }, [zoomLayerActive])
+
   /* --- Panning handlers --- */
   const handlePanPointerDown = useCallback((e) => {
-    if (e.pointerType === 'touch') return
+    if (e.pointerType === 'touch' && !interactiveZoom) return
     if (e.button !== 0) return
     const el = scrollRef.current
     if (!el) return
@@ -381,7 +445,7 @@ export default function NetworkGraph({
     setIsPanning(true)
     try { el.setPointerCapture(e.pointerId) }
     catch { dragRef.current = { active: false, x: 0, y: 0 }; setIsPanning(false) }
-  }, [])
+  }, [interactiveZoom])
 
   const handlePanPointerMove = useCallback((e) => {
     if (!dragRef.current.active) return
@@ -417,6 +481,7 @@ export default function NetworkGraph({
   }, [])
 
   const handleWheelCapture = useCallback((e) => {
+    if (zoomLayerActive && (e.ctrlKey || e.metaKey)) return
     const el = scrollRef.current
     if (!el) return
     const { scrollTop, scrollLeft, scrollHeight, scrollWidth, clientHeight, clientWidth } = el
@@ -434,7 +499,7 @@ export default function NetworkGraph({
       if ((dx < 0 && !atLeft) || (dx > 0 && !atRight)) absorb = true
     }
     if (absorb) e.stopPropagation()
-  }, [])
+  }, [zoomLayerActive])
 
   const centerScroll = useCallback(() => {
     const el = scrollRef.current
@@ -446,7 +511,7 @@ export default function NetworkGraph({
 
   useLayoutEffect(() => {
     const el = scrollRef.current
-    if (!el || !showZoomControls) return
+    if (!el || !zoomLayerActive) return
     const update = () => {
       const cw = el.clientWidth
       const gw = Math.min(850, cw)
@@ -457,7 +522,7 @@ export default function NetworkGraph({
     const ro = new ResizeObserver(update)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [showZoomControls, aspectRatio])
+  }, [zoomLayerActive, aspectRatio])
 
   useLayoutEffect(() => {
     if (!centerInViewport) return
@@ -638,7 +703,7 @@ export default function NetworkGraph({
     )
 
     const zoomedGraph =
-      showZoomControls ? (
+      zoomLayerActive ? (
         <div
           style={{
             width: graphPx.w * zoom,
@@ -670,9 +735,11 @@ export default function NetworkGraph({
       zoomedGraph
     )
 
-    const mapAriaLabel = showZoomControls
-      ? 'Invitation map: scroll with wheel or trackpad, drag to pan; use zoom controls to magnify or reduce'
-      : 'Invitation map: scroll with wheel or trackpad, drag to pan'
+    const mapAriaLabel = interactiveZoom
+      ? 'Invitation map: drag to pan, pinch or ctrl+scroll to zoom'
+      : showZoomControls
+        ? 'Invitation map: scroll with wheel or trackpad, drag to pan; use zoom controls to magnify or reduce'
+        : 'Invitation map: scroll with wheel or trackpad, drag to pan'
 
     return (
       <div
@@ -688,7 +755,7 @@ export default function NetworkGraph({
           aria-label={mapAriaLabel}
           className={`relative z-10 min-h-0 w-full flex-1 overflow-auto overscroll-contain [scrollbar-width:thin] touch-pan-x touch-pan-y select-none ${
             isPanning ? 'cursor-grabbing' : 'cursor-grab'
-          }`}
+          } ${interactiveZoom ? 'touch-manipulation' : ''}`}
           style={{
             WebkitOverflowScrolling: 'touch',
             overscrollBehavior: 'contain',
