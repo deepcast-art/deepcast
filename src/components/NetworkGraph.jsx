@@ -1,4 +1,11 @@
-import { useState, useMemo, useRef, useCallback, cloneElement } from 'react'
+import {
+  useState,
+  useMemo,
+  useRef,
+  useCallback,
+  cloneElement,
+  useLayoutEffect,
+} from 'react'
 export { buildGraphLayout, inviteRecipientKey } from '../lib/graphLayout'
 
 /* ------------------------------------------------------------------ */
@@ -14,6 +21,10 @@ const GRAPH_COLORS = {
 }
 
 const VIEWBOX_W = 850
+
+const ZOOM_MIN = 0.5
+const ZOOM_MAX = 3
+const ZOOM_STEP = 1.2
 
 /* ------------------------------------------------------------------ */
 /*  FILM NODE — camera/projector icon at center                        */
@@ -275,12 +286,19 @@ export default function NetworkGraph({
   pannable = false,
   transparentSurface = false,
   showLegend = true,
+  showZoomControls = false,
+  centerInViewport = false,
 }) {
   const [hoveredNode, setHoveredNode] = useState(null)
   const [selectedTeamId, setSelectedTeamId] = useState(null)
   const scrollRef = useRef(null)
   const dragRef = useRef({ active: false, x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
+  const [zoom, setZoom] = useState(1)
+  const aspectRatio = viewBoxH / (viewBoxWProp ?? VIEWBOX_W)
+  const defaultGraphW = VIEWBOX_W
+  const defaultGraphH = defaultGraphW * aspectRatio
+  const [graphPx, setGraphPx] = useState({ w: defaultGraphW, h: defaultGraphH })
 
   const vbW = viewBoxWProp ?? VIEWBOX_W
   const rootX = rootNode?.x ?? vbW / 2
@@ -417,6 +435,34 @@ export default function NetworkGraph({
     }
     if (absorb) e.stopPropagation()
   }, [])
+
+  const centerScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const { scrollWidth, scrollHeight, clientWidth, clientHeight } = el
+    el.scrollLeft = Math.max(0, (scrollWidth - clientWidth) / 2)
+    el.scrollTop = Math.max(0, (scrollHeight - clientHeight) / 2)
+  }, [])
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (!el || !showZoomControls) return
+    const update = () => {
+      const cw = el.clientWidth
+      const gw = Math.min(850, cw)
+      const gh = gw * aspectRatio
+      setGraphPx({ w: gw, h: gh })
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [showZoomControls, aspectRatio])
+
+  useLayoutEffect(() => {
+    if (!centerInViewport) return
+    requestAnimationFrame(() => centerScroll())
+  }, [centerInViewport, graphPx.w, graphPx.h, centerScroll])
 
   /* --- Active/hovered state (hover takes priority over team selection) --- */
   const activeElements = useMemo(() => {
@@ -580,6 +626,54 @@ export default function NetworkGraph({
       height: '100%',
     })
 
+    const graphColumn = (
+      <div className="mx-auto w-full max-w-[min(100%,850px)] shrink-0">
+        <div
+          className="relative w-full"
+          style={{ paddingBottom: `${graphIntrinsicPaddingPct}%` }}
+        >
+          <div className="absolute inset-0 min-h-0">{svgInScrollBox}</div>
+        </div>
+      </div>
+    )
+
+    const zoomedGraph =
+      showZoomControls ? (
+        <div
+          style={{
+            width: graphPx.w * zoom,
+            height: graphPx.h * zoom,
+            marginLeft: 'auto',
+            marginRight: 'auto',
+          }}
+        >
+          <div
+            style={{
+              width: graphPx.w,
+              height: graphPx.h,
+              transform: `scale(${zoom})`,
+              transformOrigin: 'top left',
+            }}
+          >
+            {graphColumn}
+          </div>
+        </div>
+      ) : (
+        graphColumn
+      )
+
+    const scrollBody = centerInViewport ? (
+      <div className="flex min-h-full min-w-full shrink-0 items-center justify-center">
+        {zoomedGraph}
+      </div>
+    ) : (
+      zoomedGraph
+    )
+
+    const mapAriaLabel = showZoomControls
+      ? 'Invitation map: scroll with wheel or trackpad, drag to pan; use zoom controls to magnify or reduce'
+      : 'Invitation map: scroll with wheel or trackpad, drag to pan'
+
     return (
       <div
         className={`relative z-10 flex w-full flex-col ${
@@ -591,7 +685,7 @@ export default function NetworkGraph({
         <div
           ref={scrollRef}
           role="region"
-          aria-label="Invitation map: scroll with wheel or trackpad, drag to pan"
+          aria-label={mapAriaLabel}
           className={`relative z-10 min-h-0 w-full flex-1 overflow-auto overscroll-contain [scrollbar-width:thin] touch-pan-x touch-pan-y select-none ${
             isPanning ? 'cursor-grabbing' : 'cursor-grab'
           }`}
@@ -606,15 +700,46 @@ export default function NetworkGraph({
           onPointerCancel={endPan}
           onLostPointerCapture={handlePanLostCapture}
         >
-          <div className="mx-auto w-full max-w-[min(100%,850px)] shrink-0">
-            <div
-              className="relative w-full"
-              style={{ paddingBottom: `${graphIntrinsicPaddingPct}%` }}
-            >
-              <div className="absolute inset-0 min-h-0">{svgInScrollBox}</div>
-            </div>
-          </div>
+          {scrollBody}
         </div>
+        {showZoomControls && (
+          <div
+            className="pointer-events-auto absolute bottom-3 right-3 z-30 flex items-center gap-0.5 rounded px-1.5 py-1"
+            style={{
+              background: 'rgba(8,12,24,0.82)',
+              backdropFilter: 'blur(8px)',
+              border: `0.5px solid ${GRAPH_COLORS.faint}40`,
+            }}
+          >
+            <button
+              type="button"
+              aria-label="Magnify map"
+              className="flex h-7 w-7 items-center justify-center rounded font-sans text-[15px] font-medium leading-none text-[#dddddd] transition-colors hover:bg-[#6a7aaa]/20"
+              onClick={() => setZoom((z) => Math.min(ZOOM_MAX, z * ZOOM_STEP))}
+            >
+              +
+            </button>
+            <button
+              type="button"
+              aria-label="Reduce map"
+              className="flex h-7 w-7 items-center justify-center rounded font-sans text-[15px] font-medium leading-none text-[#dddddd] transition-colors hover:bg-[#6a7aaa]/20"
+              onClick={() => setZoom((z) => Math.max(ZOOM_MIN, z / ZOOM_STEP))}
+            >
+              −
+            </button>
+            <button
+              type="button"
+              aria-label="Actual size, one to one"
+              className="px-1.5 font-sans text-[9px] font-semibold uppercase tracking-[0.12em] text-[#dddddd]/90 transition-colors hover:bg-[#6a7aaa]/20"
+              onClick={() => {
+                setZoom(1)
+                requestAnimationFrame(() => centerScroll())
+              }}
+            >
+              1:1
+            </button>
+          </div>
+        )}
         {legend}
       </div>
     )
