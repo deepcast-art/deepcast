@@ -151,6 +151,8 @@ export default function InviteScreening() {
   const [viewVisible, setViewVisible] = useState(false)
   const [isScreeningPaused, setIsScreeningPaused] = useState(true)
   const [showPostFilm, setShowPostFilm] = useState(false)
+  /** Mobile: after the film ends, show a thank-you screen before the “Pass it on” letter flow. */
+  const [mobileThankYouVisible, setMobileThankYouVisible] = useState(false)
 
   /* ---------- LETTER FORM STATE ---------- */
 
@@ -199,6 +201,7 @@ export default function InviteScreening() {
 
   useEffect(() => {
     iosVideoFullscreenDoneRef.current = false
+    setMobileThankYouVisible(false)
   }, [token])
 
   useEffect(() => {
@@ -607,15 +610,18 @@ export default function InviteScreening() {
     // Clear stored position so "watch again" always starts from the beginning
     if (token) localStorage.removeItem(`screening_position_${token}`)
 
-    // Already has an account (sent invite before) → go straight to dashboard
-    if (user?.id && isInviteRecipientSession) {
+    // Signed in → dashboard (thank-you / pass-it-on flow is for guests)
+    if (user?.id) {
       if (token) localStorage.setItem('viewer_invite_token', token)
       navigate('/dashboard', { replace: true })
       return
     }
 
-    // First time finishing — show "Pass it on" to collect invite + create account
     setShowPostFilm(true)
+    // Mobile: dedicated thank-you step first; desktop goes straight to “Pass it on” + letter
+    if (!isDesktop) {
+      setMobileThankYouVisible(true)
+    }
   }
 
   /* ---------- LETTER FORM ---------- */
@@ -1286,6 +1292,35 @@ export default function InviteScreening() {
 
                 <div className="flex min-h-0 flex flex-1 flex-col gap-4 px-3 pb-10 pt-3 scroll-mt-4 sm:px-4 landscape:min-h-0 landscape:flex-1 landscape:gap-2 landscape:overflow-hidden landscape:pb-3 landscape:pt-2">
 
+                  {mobileThankYouVisible ? (
+                    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-2 py-6 text-center landscape:py-4">
+                      <p className="font-sans text-[10px] uppercase tracking-[0.35em] text-[#b1a180]/90">
+                        Deepcast
+                      </p>
+                      <h2 className="font-serif-v3 text-[1.75rem] leading-snug italic text-[#dddddd] font-light landscape:text-[1.5rem]">
+                        Thank you for watching.
+                      </h2>
+                      <p className="font-serif-v3 text-[13px] italic leading-relaxed text-[#dddddd]/65 max-w-sm landscape:text-[12px]">
+                        If you&apos;d like to carry the film forward, you can invite someone next.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setMobileThankYouVisible(false)}
+                        className="mt-2 w-full max-w-xs py-3.5 min-h-[48px] bg-[#b1a180]/20 hover:bg-[#b1a180]/28 active:bg-[#b1a180]/35 border border-[#b1a180]/35 text-[#dddddd] font-sans text-[11px] tracking-[0.28em] uppercase transition-colors rounded-sm touch-manipulation"
+                      >
+                        Continue
+                      </button>
+                      {user && (
+                        <Link
+                          to="/dashboard"
+                          className="font-sans text-[10px] uppercase tracking-[0.22em] text-[#b1a180]/80 hover:text-[#dddddd]/90 transition-colors"
+                        >
+                          Go to dashboard
+                        </Link>
+                      )}
+                    </div>
+                  ) : (
+                    <>
                   <div className="w-full shrink-0 landscape:pb-1">
                     <h2 className="font-serif-v3 text-[1.65rem] leading-tight italic text-[#dddddd] font-light mb-2 text-left landscape:mb-0 landscape:text-[1.35rem]">
                       Pass it on.
@@ -1509,6 +1544,8 @@ export default function InviteScreening() {
                     </div>
                   </div>
                 </div>
+                    </>
+                  )}
                 </div>
               </div>
 
