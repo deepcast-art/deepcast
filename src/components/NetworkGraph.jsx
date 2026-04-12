@@ -27,6 +27,11 @@ const ZOOM_MIN = 0.5
 const ZOOM_MAX = 3
 const ZOOM_STEP = 1.2
 
+/** Dampen pinch scale delta toward 1 (0.5 = half the pinch “speed”) */
+function dampPinchRatio(ratio, damp) {
+  return 1 + (ratio - 1) * damp
+}
+
 /* ------------------------------------------------------------------ */
 /*  FILM NODE — camera/projector icon at center                        */
 /* ------------------------------------------------------------------ */
@@ -290,7 +295,12 @@ export default function NetworkGraph({
   showZoomControls = false,
   /** Pinch / ctrl+wheel zoom + single-finger pan (e.g. mobile full-screen background) */
   interactiveZoom = false,
-  centerInViewport = false,
+  /** Gentler drag-to-pan, pinch zoom, and ctrl+wheel zoom (mobile layouts) */
+  softTouchInteraction = false,
+  /** Gradient masks when more graph exists off-screen in that direction */
+  edgeScrollFades = false,
+  /** Match the container behind the graph (e.g. #080c18 landing, #121a33 panel) */
+  edgeFadeColor = '#121a33',
 }) {
   const [hoveredNode, setHoveredNode] = useState(null)
   const [selectedTeamId, setSelectedTeamId] = useState(null)
@@ -300,8 +310,22 @@ export default function NetworkGraph({
   const [zoom, setZoom] = useState(1)
   const zoomRef = useRef(1)
   const pinchRef = useRef(null)
+  const [edgeFade, setEdgeFade] = useState({
+    top: false,
+    bottom: false,
+    left: false,
+    right: false,
+  })
 
-  const zoomLayerActive = showZoomControls || interactiveZoom
+  /** Scaled layout + fit-to-viewport (all pannable graphs use this). */
+  const layoutZoom = pannable || showZoomControls || interactiveZoom
+  /** Pinch + ctrl/trackpad wheel zoom only when explicitly enabled. */
+  const gestureZoom = showZoomControls || interactiveZoom
+
+  const panDamp = softTouchInteraction ? 0.42 : 1
+  const pinchDamp = softTouchInteraction ? 0.52 : 1
+  const wheelZoomDown = softTouchInteraction ? 0.965 : 0.9
+  const wheelZoomUp = softTouchInteraction ? 1.036 : 1.1
   const aspectRatio = viewBoxH / (viewBoxWProp ?? VIEWBOX_W)
   const defaultGraphW = VIEWBOX_W
   const defaultGraphH = defaultGraphW * aspectRatio
@@ -385,7 +409,7 @@ export default function NetworkGraph({
   /* --- Pinch zoom (touch) + ctrl/trackpad wheel zoom --- */
   useEffect(() => {
     const el = scrollRef.current
-    if (!el || !zoomLayerActive) return
+    if (!el || !gestureZoom) return
 
     const onTouchStart = (e) => {
       if (e.touches.length === 2) {
@@ -403,7 +427,8 @@ export default function NetworkGraph({
       const dx = e.touches[0].clientX - e.touches[1].clientX
       const dy = e.touches[0].clientY - e.touches[1].clientY
       const dist = Math.hypot(dx, dy)
-      const ratio = dist / pinchRef.current.startDist
+      const rawRatio = dist / pinchRef.current.startDist
+      const ratio = dampPinchRatio(rawRatio, pinchDamp)
       const next = Math.min(
         ZOOM_MAX,
         Math.max(ZOOM_MIN, pinchRef.current.startZoom * ratio)
@@ -417,7 +442,7 @@ export default function NetworkGraph({
     const onWheelZoom = (e) => {
       if (!e.ctrlKey && !e.metaKey) return
       e.preventDefault()
-      const factor = e.deltaY > 0 ? 0.9 : 1.1
+      const factor = e.deltaY > 0 ? wheelZoomDown : wheelZoomUp
       setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z * factor)))
     }
 
@@ -433,11 +458,12 @@ export default function NetworkGraph({
       el.removeEventListener('touchcancel', endPinch)
       el.removeEventListener('wheel', onWheelZoom)
     }
-  }, [zoomLayerActive])
+  }, [gestureZoom, pinchDamp, wheelZoomDown, wheelZoomUp])
 
   /* --- Panning handlers --- */
   const handlePanPointerDown = useCallback((e) => {
-    if (e.pointerType === 'touch' && !interactiveZoom) return
+    const allowTouchPan = interactiveZoom || softTouchInteraction
+    if (e.pointerType === 'touch' && !allowTouchPan) return
     if (e.button !== 0) return
     const el = scrollRef.current
     if (!el) return
@@ -445,7 +471,7 @@ export default function NetworkGraph({
     setIsPanning(true)
     try { el.setPointerCapture(e.pointerId) }
     catch { dragRef.current = { active: false, x: 0, y: 0 }; setIsPanning(false) }
-  }, [interactiveZoom])
+  }, [interactiveZoom, softTouchInteraction])
 
   const handlePanPointerMove = useCallback((e) => {
     if (!dragRef.current.active) return
@@ -455,9 +481,9 @@ export default function NetworkGraph({
     const dy = e.clientY - dragRef.current.y
     dragRef.current.x = e.clientX
     dragRef.current.y = e.clientY
-    el.scrollLeft -= dx
-    el.scrollTop -= dy
-  }, [])
+    el.scrollLeft -= dx * panDamp
+    el.scrollTop -= dy * panDamp
+  }, [panDamp])
 
   const endPan = useCallback((e) => {
     if (!dragRef.current.active) return
@@ -481,7 +507,7 @@ export default function NetworkGraph({
   }, [])
 
   const handleWheelCapture = useCallback((e) => {
-    if (zoomLayerActive && (e.ctrlKey || e.metaKey)) return
+    if (gestureZoom && (e.ctrlKey || e.metaKey)) return
     const el = scrollRef.current
     if (!el) return
     const { scrollTop, scrollLeft, scrollHeight, scrollWidth, clientHeight, clientWidth } = el
@@ -499,7 +525,22 @@ export default function NetworkGraph({
       if ((dx < 0 && !atLeft) || (dx > 0 && !atRight)) absorb = true
     }
     if (absorb) e.stopPropagation()
-  }, [zoomLayerActive])
+  }, [gestureZoom])
+
+  const updateEdgeFades = useCallback(() => {
+    const el = scrollRef.current
+    if (!el || !edgeScrollFades) return
+    const { scrollTop, scrollLeft, scrollHeight, scrollWidth, clientHeight, clientWidth } = el
+    const m = 4
+    const canY = scrollHeight > clientHeight + 2
+    const canX = scrollWidth > clientWidth + 2
+    setEdgeFade({
+      top: canY && scrollTop > m,
+      bottom: canY && scrollTop + clientHeight < scrollHeight - m,
+      left: canX && scrollLeft > m,
+      right: canX && scrollLeft + clientWidth < scrollWidth - m,
+    })
+  }, [edgeScrollFades])
 
   const centerScroll = useCallback(() => {
     const el = scrollRef.current
@@ -511,23 +552,47 @@ export default function NetworkGraph({
 
   useLayoutEffect(() => {
     const el = scrollRef.current
-    if (!el || !zoomLayerActive) return
+    if (!el || !layoutZoom) return
+    const applyFitAndCenter = (gw, gh) => {
+      const cw = el.clientWidth
+      const ch = el.clientHeight
+      if (cw >= 16 && ch >= 16 && gw > 0 && gh > 0) {
+        const fit = Math.min(cw / gw, ch / gh)
+        const nextZoom = Math.max(
+          ZOOM_MIN,
+          Math.min(ZOOM_MAX, Math.min(1, fit))
+        )
+        setZoom(nextZoom)
+      }
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          centerScroll()
+          updateEdgeFades()
+        })
+      })
+    }
     const update = () => {
       const cw = el.clientWidth
       const gw = Math.min(850, cw)
       const gh = gw * aspectRatio
       setGraphPx({ w: gw, h: gh })
+      applyFitAndCenter(gw, gh)
     }
     update()
     const ro = new ResizeObserver(update)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [zoomLayerActive, aspectRatio])
+  }, [layoutZoom, aspectRatio, centerScroll, updateEdgeFades])
 
   useLayoutEffect(() => {
-    if (!centerInViewport) return
-    requestAnimationFrame(() => centerScroll())
-  }, [centerInViewport, graphPx.w, graphPx.h, centerScroll])
+    if (!edgeScrollFades) return
+    const el = scrollRef.current
+    if (!el) return
+    updateEdgeFades()
+    const ro = new ResizeObserver(() => updateEdgeFades())
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [edgeScrollFades, updateEdgeFades, graphPx.w, graphPx.h, zoom, nodesData.length])
 
   /* --- Active/hovered state (hover takes priority over team selection) --- */
   const activeElements = useMemo(() => {
@@ -702,37 +767,34 @@ export default function NetworkGraph({
       </div>
     )
 
-    const zoomedGraph =
-      zoomLayerActive ? (
+    const zoomedGraph = layoutZoom ? (
+      <div
+        style={{
+          width: graphPx.w * zoom,
+          height: graphPx.h * zoom,
+          marginLeft: 'auto',
+          marginRight: 'auto',
+        }}
+      >
         <div
           style={{
-            width: graphPx.w * zoom,
-            height: graphPx.h * zoom,
-            marginLeft: 'auto',
-            marginRight: 'auto',
+            width: graphPx.w,
+            height: graphPx.h,
+            transform: `scale(${zoom})`,
+            transformOrigin: 'top left',
           }}
         >
-          <div
-            style={{
-              width: graphPx.w,
-              height: graphPx.h,
-              transform: `scale(${zoom})`,
-              transformOrigin: 'top left',
-            }}
-          >
-            {graphColumn}
-          </div>
+          {graphColumn}
         </div>
-      ) : (
-        graphColumn
-      )
+      </div>
+    ) : (
+      graphColumn
+    )
 
-    const scrollBody = centerInViewport ? (
+    const scrollBody = (
       <div className="flex min-h-full min-w-full shrink-0 items-center justify-center">
         {zoomedGraph}
       </div>
-    ) : (
-      zoomedGraph
     )
 
     const mapAriaLabel = interactiveZoom
@@ -750,24 +812,65 @@ export default function NetworkGraph({
         onClick={clearTeamSelectionIfOutsideLegend}
       >
         <div
-          ref={scrollRef}
-          role="region"
-          aria-label={mapAriaLabel}
-          className={`relative z-10 min-h-0 w-full flex-1 overflow-auto overscroll-contain [scrollbar-width:thin] touch-pan-x touch-pan-y select-none ${
-            isPanning ? 'cursor-grabbing' : 'cursor-grab'
-          } ${interactiveZoom ? 'touch-manipulation' : ''}`}
-          style={{
-            WebkitOverflowScrolling: 'touch',
-            overscrollBehavior: 'contain',
-          }}
-          onWheelCapture={handleWheelCapture}
-          onPointerDown={handlePanPointerDown}
-          onPointerMove={handlePanPointerMove}
-          onPointerUp={endPan}
-          onPointerCancel={endPan}
-          onLostPointerCapture={handlePanLostCapture}
+          className={`relative z-10 flex min-h-0 w-full flex-1 flex-col ${edgeScrollFades ? 'overflow-hidden' : ''}`}
         >
-          {scrollBody}
+          <div
+            ref={scrollRef}
+            role="region"
+            aria-label={mapAriaLabel}
+            className={`relative z-10 min-h-0 w-full flex-1 overflow-auto overscroll-contain [scrollbar-width:thin] touch-pan-x touch-pan-y select-none ${
+              isPanning ? 'cursor-grabbing' : 'cursor-grab'
+            } ${interactiveZoom || softTouchInteraction ? 'touch-manipulation' : ''}`}
+            style={{
+              WebkitOverflowScrolling: 'touch',
+              overscrollBehavior: 'contain',
+            }}
+            onScroll={edgeScrollFades ? updateEdgeFades : undefined}
+            onWheelCapture={handleWheelCapture}
+            onPointerDown={handlePanPointerDown}
+            onPointerMove={handlePanPointerMove}
+            onPointerUp={endPan}
+            onPointerCancel={endPan}
+            onLostPointerCapture={handlePanLostCapture}
+          >
+            {scrollBody}
+          </div>
+          {edgeScrollFades && (
+            <>
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 top-0 z-20 h-14 transition-opacity duration-500 ease-out"
+                style={{
+                  opacity: edgeFade.top ? 1 : 0,
+                  background: `linear-gradient(to bottom, ${edgeFadeColor}, transparent)`,
+                }}
+              />
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-14 transition-opacity duration-500 ease-out"
+                style={{
+                  opacity: edgeFade.bottom ? 1 : 0,
+                  background: `linear-gradient(to top, ${edgeFadeColor}, transparent)`,
+                }}
+              />
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-y-0 left-0 z-20 w-11 transition-opacity duration-500 ease-out"
+                style={{
+                  opacity: edgeFade.left ? 1 : 0,
+                  background: `linear-gradient(to right, ${edgeFadeColor}, transparent)`,
+                }}
+              />
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-y-0 right-0 z-20 w-11 transition-opacity duration-500 ease-out"
+                style={{
+                  opacity: edgeFade.right ? 1 : 0,
+                  background: `linear-gradient(to left, ${edgeFadeColor}, transparent)`,
+                }}
+              />
+            </>
+          )}
         </div>
         {showZoomControls && (
           <div
