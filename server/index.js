@@ -1260,7 +1260,14 @@ app.get('/api/invites/validate/:token', async (req, res) => {
       return res.status(404).json({ error: 'Invite not found' })
     }
 
-    if (new Date(inv.expires_at) < new Date()) {
+    const skipExpiryCheck =
+      process.env.SKIP_INVITE_EXPIRY_CHECK === '1' ||
+      process.env.SKIP_INVITE_EXPIRY_CHECK === 'true'
+    if (
+      !skipExpiryCheck &&
+      inv.expires_at &&
+      new Date(inv.expires_at) < new Date()
+    ) {
       return res.status(410).json({ error: 'Invite expired' })
     }
 
