@@ -41,7 +41,8 @@ export const api = {
 
   // Invites
   validateInvite: async (token) => {
-    const res = await fetch(`${API_BASE}/invites/validate/${token}`)
+    const enc = encodeURIComponent(token)
+    const res = await fetch(`${API_BASE}/invites/validate/${enc}`)
     if (res.ok) return res.json()
     if (res.status === 410) throw new Error('expired')
     if (res.status === 404) throw new Error('invalid')

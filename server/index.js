@@ -67,6 +67,19 @@ const supabase = createClient(supabaseUrl, supabaseKey)
 // the host (e.g. Render). The localhost default is only when env is missing — local dev / tests.
 const APP_URL = process.env.APP_URL || 'http://localhost:3000'
 
+/**
+ * Film screening invite links expire after this many days (default 365).
+ * New invites only — existing rows keep their stored expires_at unless you update them in SQL.
+ * Set INVITE_EXPIRY_DAYS (e.g. 7 for tests). Capped at 3650 (~10y).
+ */
+function getFilmInviteExpiryDays() {
+  const raw = process.env.INVITE_EXPIRY_DAYS
+  if (raw == null || String(raw).trim() === '') return 365
+  const n = parseInt(String(raw), 10)
+  if (!Number.isFinite(n) || n <= 0) return 365
+  return Math.min(n, 3650)
+}
+
 /** Liveness for deploy pipelines and smoke tests — no DB or external services. */
 app.get('/api/health', (_req, res) => {
   res.json({
@@ -380,7 +393,7 @@ app.post('/api/invites/send', async (req, res) => {
     // Create invite
     const token = generateToken()
     const expiresAt = new Date()
-    expiresAt.setDate(expiresAt.getDate() + 7)
+    expiresAt.setDate(expiresAt.getDate() + getFilmInviteExpiryDays())
 
     const { data: invite, error: inviteError } = await supabase
       .from('invites')
@@ -1263,7 +1276,12 @@ app.get('/api/invites/validate/:token', async (req, res) => {
     const skipExpiryCheck =
       process.env.SKIP_INVITE_EXPIRY_CHECK === '1' ||
       process.env.SKIP_INVITE_EXPIRY_CHECK === 'true'
+    /** When true, past expires_at returns 410. Default false so screening links stay usable long-term. */
+    const enforceExpiry =
+      process.env.INVITE_ENFORCE_EXPIRY === '1' ||
+      process.env.INVITE_ENFORCE_EXPIRY === 'true'
     if (
+      enforceExpiry &&
       !skipExpiryCheck &&
       inv.expires_at &&
       new Date(inv.expires_at) < new Date()

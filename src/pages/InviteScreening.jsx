@@ -24,6 +24,15 @@ function isLandscapeOrientation() {
   return window.matchMedia('(orientation: landscape)').matches
 }
 
+/** iPhone / iPad / iPod touch (including iPadOS desktop UA). */
+function isIOS() {
+  if (typeof navigator === 'undefined') return false
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  )
+}
+
 function ordinalSuffix(n) {
   if (n == null || Number.isNaN(Number(n))) return ''
   const num = Math.floor(Number(n))
@@ -114,6 +123,9 @@ export default function InviteScreening() {
   const navigate = useNavigate()
   const { signUp, signOut, fetchProfile, user, profile } = useAuth()
   const isDesktop = useMediaQueryMdUp()
+  const isIOSDevice = useMemo(() => isIOS(), [])
+  const muxPlayerRef = useRef(null)
+  const iosVideoFullscreenDoneRef = useRef(false)
 
   /* ---------- DATA STATE ---------- */
 
@@ -184,6 +196,10 @@ export default function InviteScreening() {
   useEffect(() => {
     void import('@mux/mux-player-react')
   }, [])
+
+  useEffect(() => {
+    iosVideoFullscreenDoneRef.current = false
+  }, [token])
 
   useEffect(() => {
     validateInvite()
@@ -412,23 +428,60 @@ export default function InviteScreening() {
 
   /* ---------- NAVIGATION ---------- */
 
-  const finalizeEnterScreening = useCallback(() => {
+  const requestScreeningFullscreen = useCallback(() => {
+    // iOS Safari has no usable document fullscreen; use native video fullscreen instead.
+    if (isIOSDevice) return
+    if (typeof document === 'undefined') return
     const el = document.documentElement
-    if (el.requestFullscreen) el.requestFullscreen().catch(() => {})
-    else if (el.webkitRequestFullscreen)
-      el.webkitRequestFullscreen().catch(() => {})
+    const req =
+      el.requestFullscreen ||
+      el.webkitRequestFullscreen ||
+      el.webkitRequestFullScreen ||
+      el.msRequestFullscreen
+    if (typeof req === 'function') {
+      void req.call(el).catch(() => {})
+    }
+  }, [isIOSDevice])
+
+  /** Native iOS video fullscreen (webkit); mux-player exposes the underlying mux-video as `.media`. */
+  const tryIOSNativeVideoFullscreen = useCallback(() => {
+    if (!isIOSDevice || iosVideoFullscreenDoneRef.current) return
+    const mux = muxPlayerRef.current
+    if (!mux) return
+    const media = mux.media
+    const video =
+      media && typeof media.webkitEnterFullscreen === 'function'
+        ? media
+        : mux.shadowRoot?.querySelector?.('video')
+    if (!video || typeof video.webkitEnterFullscreen !== 'function') return
+    if (video.webkitDisplayingFullscreen) {
+      iosVideoFullscreenDoneRef.current = true
+      return
+    }
+    try {
+      video.webkitEnterFullscreen()
+      iosVideoFullscreenDoneRef.current = true
+    } catch {
+      /* ignored — may require a user gesture on some iOS versions */
+    }
+  }, [isIOSDevice])
+
+  const finalizeEnterScreening = useCallback(() => {
+    requestScreeningFullscreen()
     setIsScreeningPaused(false)
     setCurrentView('screening')
     setViewVisible(true)
     queueMicrotask(() => {
-      const mux = document.querySelector('mux-player')
+      const mux = muxPlayerRef.current || document.querySelector('mux-player')
       if (mux && typeof mux.play === 'function')
         void mux.play().catch(() => {})
+      queueMicrotask(() => tryIOSNativeVideoFullscreen())
     })
-  }, [])
+  }, [requestScreeningFullscreen, tryIOSNativeVideoFullscreen])
   // Note: finalizeEnterScreening is kept for any direct (non-prologue) navigation paths.
 
   const startPreScreeningSequence = useCallback(() => {
+    requestScreeningFullscreen()
     setPreScreeningPrologue({ visible: true, textVisible: false, text2Visible: false, fading: false })
     entrySplashTimerRef.current = null
 
@@ -437,9 +490,6 @@ export default function InviteScreening() {
     const t3 = window.setTimeout(() => {
       // Begin fade-out AND silently switch the view underneath so the landing never flashes
       setPreScreeningPrologue((s) => ({ ...s, fading: true }))
-      const el = document.documentElement
-      if (el.requestFullscreen) el.requestFullscreen().catch(() => {})
-      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen().catch(() => {})
       setIsScreeningPaused(false)
       setCurrentView('screening')
       setViewVisible(true)
@@ -448,26 +498,34 @@ export default function InviteScreening() {
       setPreScreeningPrologue({ visible: false, textVisible: false, text2Visible: false, fading: false })
       entrySplashRunningRef.current = false
       queueMicrotask(() => {
-        const mux = document.querySelector('mux-player')
+        const mux = muxPlayerRef.current || document.querySelector('mux-player')
         if (mux && typeof mux.play === 'function') void mux.play().catch(() => {})
+        queueMicrotask(() => tryIOSNativeVideoFullscreen())
       })
     }, 11625)
 
     entrySplashTimerRef.current = { clear: () => [t1, t2, t3, t4].forEach(clearTimeout) }
-  }, [])
+  }, [requestScreeningFullscreen, tryIOSNativeVideoFullscreen])
 
   const handleOpenInvitationClick = useCallback(() => {
     if (entrySplashRunningRef.current || mobileRotateGateActive) return
 
     // Mobile: require landscape before the scripted prologue + film (matches “cinematic” widescreen).
     if (!isDesktop && !isLandscapeOrientation()) {
+      // User gesture — request fullscreen here so iOS/Android allow it before rotation.
+      requestScreeningFullscreen()
       setMobileRotateGateActive(true)
       return
     }
 
     entrySplashRunningRef.current = true
     startPreScreeningSequence()
-  }, [isDesktop, mobileRotateGateActive, startPreScreeningSequence])
+  }, [
+    isDesktop,
+    mobileRotateGateActive,
+    requestScreeningFullscreen,
+    startPreScreeningSequence,
+  ])
 
   useEffect(() => {
     if (!mobileRotateGateActive) return
@@ -731,6 +789,7 @@ export default function InviteScreening() {
   }, [currentView, token])
 
   const handleWatchAgainFromStart = useCallback(() => {
+    iosVideoFullscreenDoneRef.current = false
     if (token) localStorage.removeItem(`screening_position_${token}`)
     navigate(`/i/${token}?play=1`, { replace: true })
   }, [token, navigate])
@@ -1152,6 +1211,7 @@ export default function InviteScreening() {
                 fallback={<div className="absolute inset-0 bg-black" />}
               >
                 <MuxPlayer
+                  ref={muxPlayerRef}
                   streamType="on-demand"
                   playbackId={film.mux_playback_id}
                   metadata={{ video_title: film.title }}
@@ -1161,8 +1221,11 @@ export default function InviteScreening() {
                   onTimeUpdate={handleTimeUpdate}
                   onEnded={handleEnded}
                   onPause={() => setIsScreeningPaused(true)}
-                  onPlay={() => setIsScreeningPaused(false)}
-                  playsInline
+                  onPlay={() => {
+                    setIsScreeningPaused(false)
+                    tryIOSNativeVideoFullscreen()
+                  }}
+                  playsInline={!isIOSDevice}
                   preload="metadata"
                   style={{
                     position: 'absolute',
