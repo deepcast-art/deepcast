@@ -58,6 +58,21 @@ function useMediaQueryMdUp() {
   return matches
 }
 
+/** Matches Tailwind `lg:` — same breakpoint as stacked screening UI (`lg:hidden` column). */
+function useMediaQueryLgUp() {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)').matches : false
+  )
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)')
+    const fn = () => setMatches(mq.matches)
+    mq.addEventListener('change', fn)
+    setMatches(mq.matches)
+    return () => mq.removeEventListener('change', fn)
+  }, [])
+  return matches
+}
+
 /* ------------------------------------------------------------------ */
 /*  INVITE CTX — decrypt sender/recipient names embedded in invite URL */
 /* ------------------------------------------------------------------ */
@@ -123,6 +138,7 @@ export default function InviteScreening() {
   const navigate = useNavigate()
   const { signUp, signOut, fetchProfile, user, profile } = useAuth()
   const isDesktop = useMediaQueryMdUp()
+  const isLgUp = useMediaQueryLgUp()
   const isIOSDevice = useMemo(() => isIOS(), [])
   const muxPlayerRef = useRef(null)
   const iosVideoFullscreenDoneRef = useRef(false)
@@ -628,8 +644,8 @@ export default function InviteScreening() {
     }
 
     setShowPostFilm(true)
-    // Mobile: dedicated thank-you step first; desktop goes straight to “Pass it on” + letter
-    if (!isDesktop) {
+    // Stacked layout (< lg): thank-you first, then “Pass it on”; wide desktop: straight to letter flow
+    if (!isLgUp) {
       setMobileThankYouVisible(true)
     }
   }
@@ -1223,35 +1239,41 @@ export default function InviteScreening() {
         {status === 'valid' && currentView === 'screening' && (
           <div className="fixed inset-0 z-50 flex overflow-hidden bg-[#080c18]">
             {film.mux_playback_id ? (
-              <Suspense
-                fallback={<div className="absolute inset-0 bg-black" />}
+              <div
+                className={`absolute inset-0 z-[5] transition-opacity duration-[900ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                  showPostFilm && !isLgUp ? 'opacity-0 pointer-events-none' : 'opacity-100'
+                }`}
               >
-                <MuxPlayer
-                  ref={muxPlayerRef}
-                  streamType="on-demand"
-                  playbackId={film.mux_playback_id}
-                  metadata={{ video_title: film.title }}
-                  accentColor="#b1a180"
-                  autoPlay
-                  startTime={Number(startTimeParam) || Number(localStorage.getItem(`screening_position_${token}`)) || 0}
-                  onTimeUpdate={handleTimeUpdate}
-                  onEnded={handleEnded}
-                  onPause={() => setIsScreeningPaused(true)}
-                  onPlay={() => {
-                    setIsScreeningPaused(false)
-                    tryIOSNativeVideoFullscreen()
-                  }}
-                  playsInline={!isIOSDevice}
-                  preload="metadata"
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    width: '100%',
-                    height: '100%',
-                    zIndex: 10,
-                  }}
-                />
-              </Suspense>
+                <Suspense
+                  fallback={<div className="absolute inset-0 bg-black" />}
+                >
+                  <MuxPlayer
+                    ref={muxPlayerRef}
+                    streamType="on-demand"
+                    playbackId={film.mux_playback_id}
+                    metadata={{ video_title: film.title }}
+                    accentColor="#b1a180"
+                    autoPlay
+                    startTime={Number(startTimeParam) || Number(localStorage.getItem(`screening_position_${token}`)) || 0}
+                    onTimeUpdate={handleTimeUpdate}
+                    onEnded={handleEnded}
+                    onPause={() => setIsScreeningPaused(true)}
+                    onPlay={() => {
+                      setIsScreeningPaused(false)
+                      tryIOSNativeVideoFullscreen()
+                    }}
+                    playsInline={!isIOSDevice}
+                    preload="metadata"
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: '100%',
+                      height: '100%',
+                      zIndex: 10,
+                    }}
+                  />
+                </Suspense>
+              </div>
             ) : (
               <div className="absolute inset-0 flex items-center justify-center text-[#dddddd]/50 z-10">
                 Video is being processed…
@@ -1309,7 +1331,7 @@ export default function InviteScreening() {
                 <div className="flex min-h-0 flex flex-1 flex-col gap-4 px-3 pb-10 pt-3 scroll-mt-4 sm:px-4 landscape:min-h-0 landscape:flex-1 landscape:gap-2 landscape:overflow-hidden landscape:pb-3 landscape:pt-2">
 
                   {mobileThankYouVisible ? (
-                    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-2 py-6 text-center landscape:py-4">
+                    <div className="screening-thank-you-enter flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-2 py-6 text-center landscape:py-4">
                       <p className="font-sans text-[10px] uppercase tracking-[0.35em] text-[#b1a180]/90">
                         Deepcast
                       </p>
