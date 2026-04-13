@@ -133,6 +133,7 @@ function Spinner({ className = '' }) {
 export default function InviteScreening() {
   const { token } = useParams()
   const [searchParams] = useSearchParams()
+  const ctxInUrl = searchParams.get('ctx')
   const directPlay = searchParams.get('play') === '1'
   const startTimeParam = searchParams.get('t')
   const navigate = useNavigate()
@@ -200,6 +201,8 @@ export default function InviteScreening() {
   // Names decoded from the encrypted ?ctx= param in the invite URL.
   // Available immediately on mount — no DB round-trip needed for the prologue.
   const [ctxRecipientFirst, setCtxRecipientFirst] = useState(null)
+  /** True after ?ctx= decrypt finishes (or no ctx in URL) — unlocks welcome prologue before API returns. */
+  const [ctxDecryptDone, setCtxDecryptDone] = useState(false)
 
   /* ---------- DASHBOARD STATE ---------- */
 
@@ -213,6 +216,10 @@ export default function InviteScreening() {
   const loadDurationCapturedRef = useRef(false)
   const entrySplashTimerRef = useRef(null)
   const entrySplashRunningRef = useRef(false)
+  /** After first prologue, auto-start the scripted pre-screening (when URL has ?ctx=). */
+  const autoOpenInvitationDoneRef = useRef(false)
+  /** Prevents the welcome prologue timer stack from running twice (early + valid). */
+  const prologueWelcomeStartedRef = useRef(false)
   const [mobileRotateGateActive, setMobileRotateGateActive] = useState(false)
   /** After media can play, if autoplay still fails (no user gesture), show tap-to-start. */
   const screeningMediaReadyRef = useRef(false)
@@ -242,6 +249,9 @@ export default function InviteScreening() {
     setPassItOnFromUserPause(false)
     screeningMediaReadyRef.current = false
     setScreeningNeedsUserGesturePlay(false)
+    autoOpenInvitationDoneRef.current = false
+    prologueWelcomeStartedRef.current = false
+    setCtxDecryptDone(false)
   }, [token])
 
   useEffect(() => {
@@ -306,17 +316,21 @@ export default function InviteScreening() {
       setLetterSenderEmail(invite.recipient_email)
   }, [invite])
 
-  // Decode sender + recipient names from the encrypted ?ctx= param immediately on mount.
-  // This populates the prologue without waiting for validateInvite to return.
+  // Decode sender + recipient names from ?ctx= immediately; then ctxDecryptDone allows welcome prologue before API.
   useEffect(() => {
     const ctx = searchParams.get('ctx')
-    if (!ctx) return
+    if (!ctx) {
+      setCtxDecryptDone(true)
+      return
+    }
     decryptInviteCtx(ctx).then((names) => {
-      if (!names) return
-      if (names.s) setSharerDisplayName((prev) => prev || names.s)
-      if (names.r) setCtxRecipientFirst(names.r)
+      if (names) {
+        if (names.s) setSharerDisplayName((prev) => prev || names.s)
+        if (names.r) setCtxRecipientFirst(names.r)
+      }
+      setCtxDecryptDone(true)
     })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   /* ---------- NETWORK GRAPH ---------- */
 
@@ -411,11 +425,19 @@ export default function InviteScreening() {
     )
   }, [user?.email, invite?.recipient_email])
 
-  /* ---------- PROLOGUE SEQUENCE (after invite is valid; avoids generic copy + spinner race) ---------- */
+  /* ---------- PROLOGUE SEQUENCE (with ?ctx=, can start as soon as decrypt finishes — no API wait) ---------- */
+
+  const shouldStartWelcomePrologue =
+    directPlay
+      ? false
+      : status === 'valid' || (status === 'loading' && Boolean(ctxInUrl) && ctxDecryptDone)
 
   useEffect(() => {
-    if (status !== 'valid' || directPlay) return undefined
+    if (directPlay) return undefined
+    if (!shouldStartWelcomePrologue) return undefined
+    if (prologueWelcomeStartedRef.current) return undefined
 
+    prologueWelcomeStartedRef.current = true
     setPrologueState({
       text1: false,
       text2: false,
@@ -443,10 +465,11 @@ export default function InviteScreening() {
       clearTimeout(t4)
       clearTimeout(t5)
     }
-  }, [status, directPlay, token])
+  }, [shouldStartWelcomePrologue, directPlay, token])
 
   useEffect(() => {
     if (status === 'invalid' || status === 'expired') {
+      prologueWelcomeStartedRef.current = false
       setPrologueState({ text1: false, text2: false, textsVisible: false, overlayVisible: false, mounted: false })
       setViewVisible(true)
     }
@@ -679,6 +702,22 @@ export default function InviteScreening() {
       window.removeEventListener('resize', tryStart)
     }
   }, [mobileRotateGateActive, startPreScreeningSequence])
+
+  /** Rich invite links include ?ctx=; after the welcome prologue, start the pre-screening sequence without a second tap. */
+  useEffect(() => {
+    if (directPlay) return
+    if (status !== 'valid') return
+    if (currentView !== 'landing') return
+    if (!ctxInUrl) return
+    if (!viewVisible) return
+    if (autoOpenInvitationDoneRef.current) return
+
+    autoOpenInvitationDoneRef.current = true
+    const t = window.setTimeout(() => {
+      handleOpenInvitationClick()
+    }, 0)
+    return () => clearTimeout(t)
+  }, [ctxInUrl, currentView, directPlay, handleOpenInvitationClick, status, viewVisible])
 
   /* ---------- WATCH PROGRESS ---------- */
 
@@ -1162,9 +1201,20 @@ export default function InviteScreening() {
       >
         {/* Still loading data after prologue finished */}
         {status === 'loading' && (
-          <div className="font-display font-normal min-h-screen flex flex-col items-center justify-center gap-4">
-            <Spinner />
-            <span className="sr-only">Loading</span>
+          <div className="font-display font-normal min-h-screen flex flex-col items-center justify-center gap-6 px-6">
+            {ctxInUrl ? (
+              <>
+                <p className="font-serif-v3 text-center text-lg italic text-[#dddddd]/85 md:text-xl">
+                  Opening your invitation…
+                </p>
+                <Spinner />
+              </>
+            ) : (
+              <>
+                <Spinner />
+                <span className="sr-only">Loading</span>
+              </>
+            )}
           </div>
         )}
 
