@@ -171,6 +171,8 @@ export default function InviteScreening() {
   const [completionThankYouVisible, setCompletionThankYouVisible] = useState(false)
   /** While playing: hide “Now Screening” + film title after 5s; reset when playback pauses. */
   const [filmTitleHidden, setFilmTitleHidden] = useState(false)
+  /** True after first play / meaningful progress — avoids showing Pass it on before the film has started. */
+  const [screeningPlaybackEverStarted, setScreeningPlaybackEverStarted] = useState(false)
 
   /* ---------- LETTER FORM STATE ---------- */
 
@@ -211,6 +213,16 @@ export default function InviteScreening() {
   const entrySplashRunningRef = useRef(false)
   const [mobileRotateGateActive, setMobileRotateGateActive] = useState(false)
 
+  /** Narrow viewports: paused mid-film → full Pass it on layer (reference flow). */
+  const narrowPausePassItOn = useMemo(
+    () =>
+      !isLgUp && isScreeningPaused && !showPostFilm && screeningPlaybackEverStarted,
+    [isLgUp, isScreeningPaused, showPostFilm, screeningPlaybackEverStarted]
+  )
+  const passItOnLayerActive = showPostFilm || narrowPausePassItOn
+  const passItOnContentVisible =
+    (showPostFilm && !completionThankYouVisible) || narrowPausePassItOn
+
   /* ---------- DATA FETCHING ---------- */
 
   useEffect(() => {
@@ -221,6 +233,7 @@ export default function InviteScreening() {
     iosVideoFullscreenDoneRef.current = false
     setCompletionThankYouVisible(false)
     setFilmTitleHidden(false)
+    setScreeningPlaybackEverStarted(false)
   }, [token])
 
   useEffect(() => {
@@ -618,6 +631,7 @@ export default function InviteScreening() {
   async function handleTimeUpdate(e) {
     const p = e.target
     if (!p.duration) return
+    if (p.currentTime > 0.05) setScreeningPlaybackEverStarted(true)
     const pct = Math.round((p.currentTime / p.duration) * 100)
 
     // Persist playback position so the user can resume later
@@ -1281,7 +1295,7 @@ export default function InviteScreening() {
             {film.mux_playback_id ? (
               <div
                 className={`absolute inset-0 z-[5] transition-opacity duration-[900ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
-                  showPostFilm && !isLgUp ? 'opacity-0 pointer-events-none' : 'opacity-100'
+                  passItOnLayerActive && !isLgUp ? 'opacity-0 pointer-events-none' : 'opacity-100'
                 }`}
               >
                 <Suspense
@@ -1303,6 +1317,7 @@ export default function InviteScreening() {
                     }}
                     onPlay={() => {
                       setIsScreeningPaused(false)
+                      setScreeningPlaybackEverStarted(true)
                       tryIOSNativeVideoFullscreen()
                     }}
                     playsInline={!isIOSDevice}
@@ -1345,8 +1360,8 @@ export default function InviteScreening() {
               </div>
             </div>
 
-            {/* Mid-playback pause only — full “Pass it on” UI is gated on showPostFilm (film ended). */}
-            {isScreeningPaused && !showPostFilm && (
+            {/* Mid-playback pause on lg+: slim resume strip. Narrow: full Pass it on layer (see passItOnLayerActive). */}
+            {isLgUp && isScreeningPaused && !showPostFilm && (
               <div
                 className="absolute inset-0 z-[90] flex flex-col justify-end bg-[#050a12]/45 pointer-events-auto"
                 role="presentation"
@@ -1368,7 +1383,7 @@ export default function InviteScreening() {
 
             <div
               className={`absolute inset-0 z-[100] flex min-h-0 flex-col overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] panel-scroll bg-[#080c18] transition-opacity duration-[800ms] ease-[cubic-bezier(0.16,1,0.3,1)] lg:max-h-[100dvh] lg:flex-row lg:overflow-hidden ${
-                showPostFilm
+                passItOnLayerActive
                   ? 'opacity-100 pointer-events-auto'
                   : 'opacity-0 pointer-events-none'
               }`}
@@ -1419,10 +1434,32 @@ export default function InviteScreening() {
                 </div>
               )}
 
-              {showPostFilm && !completionThankYouVisible && (
+              {passItOnContentVisible && (
               <>
               {/* ── Stacked (phone + tablet + phone landscape): use lg: so viewports &gt;768px (e.g. landscape phones) still stack — otherwise desktop diptych hides the letter card. ── */}
               <div className="lg:hidden flex h-full min-h-0 w-full flex-1 flex-col bg-[#080c18] landscape:max-h-[100dvh] landscape:overflow-hidden">
+
+                {narrowPausePassItOn && (
+                  <div className="sticky top-0 z-10 shrink-0 border-b border-[#b1a180]/25 bg-[#080c18]/95 backdrop-blur-md pb-1 pt-[max(0.5rem,env(safe-area-inset-top))]">
+                    <button
+                      type="button"
+                      onClick={resumeFilm}
+                      className="flex w-full items-center justify-center gap-2.5 py-3.5 touch-manipulation"
+                    >
+                      <svg className="h-2.5 w-2.5 shrink-0 fill-[#dddddd]/85" viewBox="0 0 24 24" aria-hidden>
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                      <span className="font-sans text-[10px] font-medium uppercase tracking-[0.35em] text-[#dddddd]/90">
+                        Resume Film
+                      </span>
+                    </button>
+                    <div className="flex justify-center px-10 pb-2">
+                      <div className="relative h-px w-full max-w-[min(100%,20rem)] bg-[#b1a180]/35">
+                        <div className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#b1a180]/55 bg-[#080c18]" />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex min-h-0 flex flex-1 flex-col gap-4 px-3 pb-10 pt-3 scroll-mt-4 sm:px-4 landscape:min-h-0 landscape:flex-1 landscape:gap-2 landscape:overflow-hidden landscape:pb-3 landscape:pt-2">
 
@@ -1608,13 +1645,13 @@ export default function InviteScreening() {
                               {letterSending ? 'Sending…' : 'Seal & Send'}
                             </button>
 
-                            {showPostFilm && (
+                            {passItOnLayerActive && (
                               <p className="mt-3 text-center font-sans text-[9px] uppercase tracking-[0.15em] text-[#6b5d4a]/55 landscape:mt-1 landscape:text-[7px] landscape:hidden">
                                 After sending, you&apos;ll go to your dashboard.
                               </p>
                             )}
 
-                            {showPostFilm && !isInviteRecipientSession && user && (
+                            {passItOnLayerActive && !isInviteRecipientSession && user && (
                               <div className="mt-4 flex flex-col items-center gap-2 border-t border-[#6b5d4a]/15 pt-4 text-center landscape:hidden">
                                 <p className="font-sans text-[10px] leading-relaxed text-[#6b5d4a]/70">
                                   Signed in as a different email. Sign out to use{' '}
@@ -1630,7 +1667,7 @@ export default function InviteScreening() {
                               </div>
                             )}
 
-                            {showPostFilm && (
+                            {passItOnLayerActive && (
                               <button
                                 type="button"
                                 onClick={() => setCurrentView('dashboard')}
@@ -1783,14 +1820,14 @@ export default function InviteScreening() {
                             <button type="button" onClick={handleSendLetter} disabled={letterSending} className="mt-6 w-full py-3 bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-sans text-[11px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none mb-6 disabled:opacity-40">
                               {letterSending ? 'Sending…' : 'Seal & Send'}
                             </button>
-                            {showPostFilm && (
+                            {passItOnLayerActive && (
                               <p className="text-center font-sans text-[9px] uppercase tracking-[0.15em] text-[#2a2a2a]/40 -mt-4 mb-4">
                                 After sending, you&apos;ll go to your dashboard.
                               </p>
                             )}
                           </div>
 
-                          {showPostFilm && !isInviteRecipientSession && user && (
+                          {passItOnLayerActive && !isInviteRecipientSession && user && (
                             <div className="flex flex-col items-center gap-2 border-t border-[#2a2a2a]/10 pt-4 mt-2 text-center w-full max-w-[320px]">
                               <p className="font-sans text-[10px] leading-relaxed text-[#2a2a2a]/50">
                                 Signed in as a different email. Sign out to use{' '}
@@ -1799,7 +1836,7 @@ export default function InviteScreening() {
                               <button type="button" onClick={() => void signOut()} className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#2a2a2a]/50 hover:text-[#2a2a2a]">Sign out</button>
                             </div>
                           )}
-                          {showPostFilm && (
+                          {passItOnLayerActive && (
                             <button
                               type="button"
                               onClick={() => setCurrentView('dashboard')}
