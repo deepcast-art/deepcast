@@ -1525,7 +1525,7 @@ export default function InviteScreening() {
               {passItOnContentVisible && (
               <>
               {/* ── Stacked (phone + tablet + phone landscape): use lg: so viewports &gt;768px (e.g. landscape phones) still stack — otherwise desktop diptych hides the letter card. ── */}
-              <div className="lg:hidden flex h-full min-h-0 w-full flex-1 flex-col bg-[#080c18] portrait:min-h-0 portrait:overflow-hidden landscape:max-h-[100dvh] landscape:overflow-hidden">
+              <div className="lg:hidden flex h-full min-h-0 w-full flex-1 flex-col bg-[#080c18] portrait:min-h-[200dvh] landscape:max-h-[100dvh] landscape:overflow-hidden">
 
                 {narrowPausePassItOn && (
                   <div className="sticky top-0 z-10 shrink-0 border-b border-[#b1a180]/25 bg-[#080c18]/95 backdrop-blur-md pb-1 pt-[max(0.5rem,env(safe-area-inset-top))]">
@@ -1549,13 +1549,13 @@ export default function InviteScreening() {
                   </div>
                 )}
 
-                <div className="flex min-h-0 flex flex-1 flex-col gap-4 px-3 pb-10 pt-3 scroll-mt-4 sm:px-4 portrait:min-h-0 portrait:overflow-hidden portrait:gap-2 portrait:pb-4 landscape:min-h-0 landscape:flex-1 landscape:gap-2 landscape:overflow-hidden landscape:pb-3 landscape:pt-2">
+                <div className="flex min-h-0 flex flex-1 flex-col gap-4 px-3 pb-10 pt-3 scroll-mt-4 sm:px-4 portrait:gap-2 portrait:pb-8 landscape:min-h-0 landscape:flex-1 landscape:gap-2 landscape:overflow-hidden landscape:pb-3 landscape:pt-2">
 
                   <div className="w-full shrink-0 landscape:pb-1">
                     <h2 className="font-serif-v3 text-[1.65rem] leading-tight italic text-[#dddddd] font-light mb-2 text-left portrait:mb-1 landscape:mb-0 landscape:text-[1.35rem]">
                       Pass it on.
                     </h2>
-                    <p className="font-serif-v3 text-[12px] italic leading-relaxed text-[#dddddd]/65 max-w-none text-left sm:text-[13px] portrait:line-clamp-3 portrait:text-[11px] portrait:leading-snug landscape:line-clamp-2 landscape:text-[11px] landscape:leading-snug">
+                    <p className="font-serif-v3 text-[12px] italic leading-relaxed text-[#dddddd]/65 max-w-none text-left sm:text-[13px] portrait:text-[12px] landscape:line-clamp-2 landscape:text-[11px] landscape:leading-snug">
                       If you choose not to share, the film&apos;s journey ends with you. That&apos;s ok — but know
                       that it was carried this far by people who believed in it.
                     </p>
@@ -1565,7 +1565,7 @@ export default function InviteScreening() {
                   <div
                     className={`flex min-h-0 w-full items-stretch gap-3 ${
                       graphLayout
-                        ? 'flex-col-reverse flex-1 portrait:min-h-0 portrait:overflow-hidden landscape:flex-row landscape:flex-1 landscape:min-h-0'
+                        ? 'flex-col-reverse portrait:flex-col landscape:flex-row landscape:flex-1 landscape:min-h-0'
                         : 'flex-col'
                     }`}
                   >
@@ -1598,12 +1598,12 @@ export default function InviteScreening() {
                   <div
                     className={`flex min-w-0 flex-col items-stretch pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] ${
                       graphLayout
-                        ? 'w-full min-h-0 flex-1 portrait:min-h-0 portrait:overflow-hidden portrait:flex portrait:flex-col landscape:h-full landscape:min-h-0 landscape:max-h-none landscape:overflow-hidden landscape:flex landscape:flex-col'
+                        ? 'w-full portrait:flex portrait:flex-col landscape:h-full landscape:min-h-0 landscape:max-h-none landscape:overflow-hidden landscape:flex landscape:flex-col'
                         : 'w-full'
                     }`}
                   >
                     <div
-                      className="relative flex w-full min-h-0 flex-col overflow-hidden rounded-lg px-3 py-5 sm:px-5 sm:py-6 portrait:min-h-0 portrait:flex-1 portrait:px-2.5 portrait:py-3 portrait:sm:px-4 landscape:min-h-0 landscape:flex-1 landscape:px-2.5 landscape:py-2 landscape:sm:px-3 landscape:sm:py-2.5"
+                      className="relative flex w-full flex-col overflow-hidden rounded-lg px-3 py-5 sm:px-5 sm:py-6 portrait:px-2.5 portrait:py-5 portrait:sm:px-4 landscape:min-h-0 landscape:flex-1 landscape:px-2.5 landscape:py-2 landscape:sm:px-3 landscape:sm:py-2.5"
                       style={{
                         background:
                           'linear-gradient(168deg, #e8e2d6 0%, #ddd8cc 30%, #d5cfc3 60%, #ddd7cb 100%)',
