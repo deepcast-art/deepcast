@@ -644,7 +644,7 @@ export default function InviteScreening() {
   const handleOpenInvitationClick = useCallback(() => {
     if (entrySplashRunningRef.current || mobileRotateGateActive) return
 
-    // Mobile: require landscape before the scripted prologue + film (matches “cinematic” widescreen).
+    // Mobile: require landscape before the scripted prologue + film (matches "cinematic" widescreen).
     if (!isDesktop && !isLandscapeOrientation()) {
       // User gesture — request fullscreen here so iOS/Android allow it before rotation.
       requestScreeningFullscreen()
@@ -652,6 +652,7 @@ export default function InviteScreening() {
       return
     }
 
+    requestScreeningFullscreen()
     entrySplashRunningRef.current = true
     startPreScreeningSequence()
   }, [
@@ -1169,7 +1170,8 @@ export default function InviteScreening() {
 
         {/* ========================= LANDING ========================= */}
         {status === 'valid' && currentView === 'landing' && !isDesktop && (
-          <section className="relative min-h-[100dvh] w-full">
+          // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
+          <section className="relative h-[100dvh] w-full overflow-hidden" onClick={requestScreeningFullscreen}>
             <div className="fixed inset-0 z-0 h-[100dvh] w-full bg-[#080c18]">
               {graphLayout ? (
                 <NetworkGraph
