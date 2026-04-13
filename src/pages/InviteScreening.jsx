@@ -214,6 +214,9 @@ export default function InviteScreening() {
   const entrySplashTimerRef = useRef(null)
   const entrySplashRunningRef = useRef(false)
   const [mobileRotateGateActive, setMobileRotateGateActive] = useState(false)
+  /** After media can play, if autoplay still fails (no user gesture), show tap-to-start. */
+  const screeningMediaReadyRef = useRef(false)
+  const [screeningNeedsUserGesturePlay, setScreeningNeedsUserGesturePlay] = useState(false)
 
   /** Narrow viewports: full Pass it on only when user pressed pause mid-film (reference flow). */
   const narrowPausePassItOn = useMemo(
@@ -237,6 +240,8 @@ export default function InviteScreening() {
     setFilmTitleHidden(false)
     setScreeningPlaybackEverStarted(false)
     setPassItOnFromUserPause(false)
+    screeningMediaReadyRef.current = false
+    setScreeningNeedsUserGesturePlay(false)
   }, [token])
 
   useEffect(() => {
@@ -550,7 +555,24 @@ export default function InviteScreening() {
     }
   }, [isIOSDevice])
 
-  /** Pass it on on narrow layout only when the viewer explicitly pauses (not end-of-film / script pause). */
+  /** Start playback; browsers often block autoplay until media is ready or user gestures — see screeningNeedsUserGesturePlay. */
+  const tryScreeningPlay = useCallback(() => {
+    const mux = muxPlayerRef.current || document.querySelector('mux-player')
+    if (!mux || typeof mux.play !== 'function') return
+    void mux
+      .play()
+      .then(() => setScreeningNeedsUserGesturePlay(false))
+      .catch(() => {
+        if (screeningMediaReadyRef.current) setScreeningNeedsUserGesturePlay(true)
+      })
+  }, [])
+
+  const handleMuxScreeningCanPlay = useCallback(() => {
+    screeningMediaReadyRef.current = true
+    tryScreeningPlay()
+  }, [tryScreeningPlay])
+
+  /** Pass it on on narrow layout when viewer pauses mid-film (mux may emit non-trusted pause events — do not gate on isTrusted). */
   const handleMuxPause = useCallback(
     (e) => {
       setIsScreeningPaused(true)
@@ -569,19 +591,14 @@ export default function InviteScreening() {
         return
       }
 
-      const ne = e?.nativeEvent ?? e
-      if (ne?.isTrusted === false) {
-        setPassItOnFromUserPause(false)
-        return
-      }
+      if (currentTime > 0.01) setScreeningPlaybackEverStarted(true)
 
       if (isLgUp) {
         setPassItOnFromUserPause(false)
         return
       }
 
-      if (currentTime > 0.02) setPassItOnFromUserPause(true)
-      else setPassItOnFromUserPause(false)
+      setPassItOnFromUserPause(true)
     },
     [isLgUp, exitScreeningFullscreen]
   )
@@ -592,12 +609,10 @@ export default function InviteScreening() {
     setCurrentView('screening')
     setViewVisible(true)
     queueMicrotask(() => {
-      const mux = muxPlayerRef.current || document.querySelector('mux-player')
-      if (mux && typeof mux.play === 'function')
-        void mux.play().catch(() => {})
+      tryScreeningPlay()
       queueMicrotask(() => tryIOSNativeVideoFullscreen())
     })
-  }, [requestScreeningFullscreen, tryIOSNativeVideoFullscreen])
+  }, [requestScreeningFullscreen, tryIOSNativeVideoFullscreen, tryScreeningPlay])
   // Note: finalizeEnterScreening is kept for any direct (non-prologue) navigation paths.
 
   const startPreScreeningSequence = useCallback(() => {
@@ -618,14 +633,13 @@ export default function InviteScreening() {
       setPreScreeningPrologue({ visible: false, textVisible: false, text2Visible: false, fading: false })
       entrySplashRunningRef.current = false
       queueMicrotask(() => {
-        const mux = muxPlayerRef.current || document.querySelector('mux-player')
-        if (mux && typeof mux.play === 'function') void mux.play().catch(() => {})
+        tryScreeningPlay()
         queueMicrotask(() => tryIOSNativeVideoFullscreen())
       })
     }, 11625)
 
     entrySplashTimerRef.current = { clear: () => [t1, t2, t3, t4].forEach(clearTimeout) }
-  }, [requestScreeningFullscreen, tryIOSNativeVideoFullscreen])
+  }, [requestScreeningFullscreen, tryIOSNativeVideoFullscreen, tryScreeningPlay])
 
   const handleOpenInvitationClick = useCallback(() => {
     if (entrySplashRunningRef.current || mobileRotateGateActive) return
@@ -874,10 +888,29 @@ export default function InviteScreening() {
   /** Mid-playback “Resume Film” — restore screening fullscreen on narrow viewports (matches exit-on-pause). */
   const resumeFilm = useCallback(() => {
     if (!isLgUp) requestScreeningFullscreen()
-    const el = muxPlayerRef.current || document.querySelector('mux-player')
-    if (el && typeof el.play === 'function') void el.play().catch(() => {})
+    tryScreeningPlay()
     if (!isLgUp) queueMicrotask(() => tryIOSNativeVideoFullscreen())
-  }, [isLgUp, requestScreeningFullscreen, tryIOSNativeVideoFullscreen])
+  }, [isLgUp, requestScreeningFullscreen, tryIOSNativeVideoFullscreen, tryScreeningPlay])
+
+  /** Prologue ends async — player may mount late; retry play until autoplay succeeds or user taps. */
+  useEffect(() => {
+    if (currentView !== 'screening' || !film?.mux_playback_id) return
+    if (showPostFilm) return
+    if (passItOnFromUserPause && !isLgUp) return
+    let cancelled = false
+    let n = 0
+    const id = window.setInterval(() => {
+      if (cancelled) return
+      n += 1
+      tryScreeningPlay()
+      if (n >= 28) window.clearInterval(id)
+    }, 200)
+    tryScreeningPlay()
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
+  }, [currentView, film?.mux_playback_id, token, tryScreeningPlay, showPostFilm, passItOnFromUserPause, isLgUp])
 
   /* ---------- DASHBOARD HELPERS ---------- */
 
@@ -1351,15 +1384,18 @@ export default function InviteScreening() {
                     startTime={Number(startTimeParam) || Number(localStorage.getItem(`screening_position_${token}`)) || 0}
                     onTimeUpdate={handleTimeUpdate}
                     onEnded={handleEnded}
+                    onCanPlay={handleMuxScreeningCanPlay}
                     onPause={handleMuxPause}
                     onPlay={() => {
                       setIsScreeningPaused(false)
                       setPassItOnFromUserPause(false)
                       setScreeningPlaybackEverStarted(true)
+                      setScreeningNeedsUserGesturePlay(false)
                       tryIOSNativeVideoFullscreen()
                     }}
-                    playsInline={!isIOSDevice}
-                    preload="metadata"
+                    onPlaying={() => setScreeningNeedsUserGesturePlay(false)}
+                    playsInline
+                    preload="auto"
                     style={{
                       position: 'absolute',
                       inset: 0,
@@ -1369,6 +1405,18 @@ export default function InviteScreening() {
                     }}
                   />
                 </Suspense>
+                {screeningNeedsUserGesturePlay && !showPostFilm && (
+                  <button
+                    type="button"
+                    onClick={() => tryScreeningPlay()}
+                    className="absolute inset-0 z-[25] flex flex-col items-center justify-center gap-3 bg-[#050a12]/65 px-6 text-center touch-manipulation backdrop-blur-[2px]"
+                  >
+                    <span className="font-sans text-[10px] uppercase tracking-[0.35em] text-[#b1a180]/95">
+                      Playback ready
+                    </span>
+                    <span className="font-serif-v3 text-lg italic text-[#dddddd]">Tap to play the film</span>
+                  </button>
+                )}
               </div>
             ) : (
               <div className="absolute inset-0 flex items-center justify-center text-[#dddddd]/50 z-10">
