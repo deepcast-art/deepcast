@@ -1029,7 +1029,7 @@ export default function InviteScreening() {
 
       <div
         className={`relative z-10 w-full h-screen transition-opacity duration-[1200ms] ease-in-out ${
-          viewVisible ? 'opacity-100' : 'opacity-0'
+          viewVisible || status === 'loading' ? 'opacity-100' : 'opacity-0'
         } ${currentView === 'screening' ? 'overflow-hidden' : 'overflow-y-auto'}`}
       >
         {/* Still loading data after prologue finished */}
