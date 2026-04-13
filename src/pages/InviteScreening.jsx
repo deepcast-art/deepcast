@@ -173,6 +173,8 @@ export default function InviteScreening() {
   const [filmTitleHidden, setFilmTitleHidden] = useState(false)
   /** True after first play / meaningful progress — avoids showing Pass it on before the film has started. */
   const [screeningPlaybackEverStarted, setScreeningPlaybackEverStarted] = useState(false)
+  /** Narrow layout: full Pass it on only after the viewer explicitly pauses (not buffering / end / programmatic). */
+  const [passItOnFromUserPause, setPassItOnFromUserPause] = useState(false)
 
   /* ---------- LETTER FORM STATE ---------- */
 
@@ -213,11 +215,11 @@ export default function InviteScreening() {
   const entrySplashRunningRef = useRef(false)
   const [mobileRotateGateActive, setMobileRotateGateActive] = useState(false)
 
-  /** Narrow viewports: paused mid-film → full Pass it on layer (reference flow). */
+  /** Narrow viewports: full Pass it on only when user pressed pause mid-film (reference flow). */
   const narrowPausePassItOn = useMemo(
     () =>
-      !isLgUp && isScreeningPaused && !showPostFilm && screeningPlaybackEverStarted,
-    [isLgUp, isScreeningPaused, showPostFilm, screeningPlaybackEverStarted]
+      !isLgUp && !showPostFilm && screeningPlaybackEverStarted && passItOnFromUserPause,
+    [isLgUp, showPostFilm, screeningPlaybackEverStarted, passItOnFromUserPause]
   )
   const passItOnLayerActive = showPostFilm || narrowPausePassItOn
   const passItOnContentVisible =
@@ -234,6 +236,7 @@ export default function InviteScreening() {
     setCompletionThankYouVisible(false)
     setFilmTitleHidden(false)
     setScreeningPlaybackEverStarted(false)
+    setPassItOnFromUserPause(false)
   }, [token])
 
   useEffect(() => {
@@ -547,6 +550,42 @@ export default function InviteScreening() {
     }
   }, [isIOSDevice])
 
+  /** Pass it on on narrow layout only when the viewer explicitly pauses (not end-of-film / script pause). */
+  const handleMuxPause = useCallback(
+    (e) => {
+      setIsScreeningPaused(true)
+      if (!isLgUp) exitScreeningFullscreen()
+
+      const mux = muxPlayerRef.current
+      const mediaEl = mux?.media || e?.target
+      const duration =
+        typeof mediaEl?.duration === 'number' && Number.isFinite(mediaEl.duration) ? mediaEl.duration : 0
+      const currentTime = typeof mediaEl?.currentTime === 'number' ? mediaEl.currentTime : 0
+      const ended = Boolean(mediaEl?.ended)
+      const nearEnd = duration > 0 && currentTime >= duration - 0.45
+
+      if (ended || nearEnd) {
+        setPassItOnFromUserPause(false)
+        return
+      }
+
+      const ne = e?.nativeEvent ?? e
+      if (ne?.isTrusted === false) {
+        setPassItOnFromUserPause(false)
+        return
+      }
+
+      if (isLgUp) {
+        setPassItOnFromUserPause(false)
+        return
+      }
+
+      if (currentTime > 0.02) setPassItOnFromUserPause(true)
+      else setPassItOnFromUserPause(false)
+    },
+    [isLgUp, exitScreeningFullscreen]
+  )
+
   const finalizeEnterScreening = useCallback(() => {
     requestScreeningFullscreen()
     setIsScreeningPaused(false)
@@ -679,6 +718,7 @@ export default function InviteScreening() {
 
   function handleEnded() {
     setIsScreeningPaused(true)
+    setPassItOnFromUserPause(false)
 
     if (sessionId)
       supabase
@@ -1311,12 +1351,10 @@ export default function InviteScreening() {
                     startTime={Number(startTimeParam) || Number(localStorage.getItem(`screening_position_${token}`)) || 0}
                     onTimeUpdate={handleTimeUpdate}
                     onEnded={handleEnded}
-                    onPause={() => {
-                      setIsScreeningPaused(true)
-                      if (!isLgUp) exitScreeningFullscreen()
-                    }}
+                    onPause={handleMuxPause}
                     onPlay={() => {
                       setIsScreeningPaused(false)
+                      setPassItOnFromUserPause(false)
                       setScreeningPlaybackEverStarted(true)
                       tryIOSNativeVideoFullscreen()
                     }}
@@ -1437,7 +1475,7 @@ export default function InviteScreening() {
               {passItOnContentVisible && (
               <>
               {/* ── Stacked (phone + tablet + phone landscape): use lg: so viewports &gt;768px (e.g. landscape phones) still stack — otherwise desktop diptych hides the letter card. ── */}
-              <div className="lg:hidden flex h-full min-h-0 w-full flex-1 flex-col bg-[#080c18] landscape:max-h-[100dvh] landscape:overflow-hidden">
+              <div className="lg:hidden flex h-full min-h-0 w-full flex-1 flex-col bg-[#080c18] portrait:min-h-0 portrait:overflow-hidden landscape:max-h-[100dvh] landscape:overflow-hidden">
 
                 {narrowPausePassItOn && (
                   <div className="sticky top-0 z-10 shrink-0 border-b border-[#b1a180]/25 bg-[#080c18]/95 backdrop-blur-md pb-1 pt-[max(0.5rem,env(safe-area-inset-top))]">
@@ -1461,29 +1499,29 @@ export default function InviteScreening() {
                   </div>
                 )}
 
-                <div className="flex min-h-0 flex flex-1 flex-col gap-4 px-3 pb-10 pt-3 scroll-mt-4 sm:px-4 landscape:min-h-0 landscape:flex-1 landscape:gap-2 landscape:overflow-hidden landscape:pb-3 landscape:pt-2">
+                <div className="flex min-h-0 flex flex-1 flex-col gap-4 px-3 pb-10 pt-3 scroll-mt-4 sm:px-4 portrait:min-h-0 portrait:overflow-hidden portrait:gap-2 portrait:pb-4 landscape:min-h-0 landscape:flex-1 landscape:gap-2 landscape:overflow-hidden landscape:pb-3 landscape:pt-2">
 
                   <div className="w-full shrink-0 landscape:pb-1">
-                    <h2 className="font-serif-v3 text-[1.65rem] leading-tight italic text-[#dddddd] font-light mb-2 text-left landscape:mb-0 landscape:text-[1.35rem]">
+                    <h2 className="font-serif-v3 text-[1.65rem] leading-tight italic text-[#dddddd] font-light mb-2 text-left portrait:mb-1 landscape:mb-0 landscape:text-[1.35rem]">
                       Pass it on.
                     </h2>
-                    <p className="font-serif-v3 text-[12px] italic leading-relaxed text-[#dddddd]/65 max-w-none text-left sm:text-[13px] landscape:line-clamp-2 landscape:text-[11px] landscape:leading-snug">
+                    <p className="font-serif-v3 text-[12px] italic leading-relaxed text-[#dddddd]/65 max-w-none text-left sm:text-[13px] portrait:line-clamp-3 portrait:text-[11px] portrait:leading-snug landscape:line-clamp-2 landscape:text-[11px] landscape:leading-snug">
                       If you choose not to share, the film&apos;s journey ends with you. That&apos;s ok — but know
                       that it was carried this far by people who believed in it.
                     </p>
                   </div>
 
-                  {/* Map + letter: portrait = letter first, network below; landscape = graph | letter */}
+                  {/* Map + letter: portrait = letter first (no page scroll), fixed-height graph below; landscape = graph | letter */}
                   <div
                     className={`flex min-h-0 w-full items-stretch gap-3 ${
                       graphLayout
-                        ? 'flex-col-reverse landscape:flex-row landscape:flex-1 landscape:min-h-0'
+                        ? 'flex-col-reverse flex-1 portrait:min-h-0 portrait:overflow-hidden landscape:flex-row landscape:flex-1 landscape:min-h-0'
                         : 'flex-col'
                     }`}
                   >
                     {graphLayout && (
-                      <div className="flex w-full min-w-0 shrink-0 flex-col landscape:h-full landscape:min-h-0 landscape:w-[40%] landscape:shrink-0 landscape:max-w-none sm:landscape:w-[38%]">
-                        <div className="min-h-[200px] h-[min(38svh,260px)] w-full shrink-0 overflow-hidden rounded-md border border-[#4a5580]/35 bg-[#121a33] shadow-inner touch-manipulation landscape:h-full landscape:min-h-0 landscape:max-h-none landscape:flex-1">
+                      <div className="flex w-full min-w-0 shrink-0 flex-col portrait:shrink-0 landscape:h-full landscape:min-h-0 landscape:w-[40%] landscape:shrink-0 landscape:max-w-none sm:landscape:w-[38%]">
+                        <div className="h-[min(28dvh,220px)] min-h-[140px] max-h-[240px] w-full shrink-0 overflow-hidden rounded-md border border-[#4a5580]/35 bg-[#121a33] shadow-inner touch-manipulation portrait:flex-none landscape:h-[min(38svh,260px)] landscape:min-h-[200px] landscape:max-h-none landscape:flex-1">
                           <NetworkGraph
                             fillHeight
                             pannable
@@ -1510,12 +1548,12 @@ export default function InviteScreening() {
                   <div
                     className={`flex min-w-0 flex-col items-stretch pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] ${
                       graphLayout
-                        ? 'w-full min-h-0 flex-1 portrait:max-h-none portrait:overflow-visible landscape:h-full landscape:min-h-0 landscape:max-h-none landscape:overflow-hidden landscape:flex landscape:flex-col'
+                        ? 'w-full min-h-0 flex-1 portrait:min-h-0 portrait:overflow-hidden portrait:flex portrait:flex-col landscape:h-full landscape:min-h-0 landscape:max-h-none landscape:overflow-hidden landscape:flex landscape:flex-col'
                         : 'w-full'
                     }`}
                   >
                     <div
-                      className="relative flex w-full min-h-0 flex-col overflow-hidden rounded-lg px-3 py-5 sm:px-5 sm:py-6 landscape:min-h-0 landscape:flex-1 landscape:px-2.5 landscape:py-2 landscape:sm:px-3 landscape:sm:py-2.5"
+                      className="relative flex w-full min-h-0 flex-col overflow-hidden rounded-lg px-3 py-5 sm:px-5 sm:py-6 portrait:min-h-0 portrait:flex-1 portrait:px-2.5 portrait:py-3 portrait:sm:px-4 landscape:min-h-0 landscape:flex-1 landscape:px-2.5 landscape:py-2 landscape:sm:px-3 landscape:sm:py-2.5"
                       style={{
                         background:
                           'linear-gradient(168deg, #e8e2d6 0%, #ddd8cc 30%, #d5cfc3 60%, #ddd7cb 100%)',
@@ -1531,8 +1569,8 @@ export default function InviteScreening() {
                           mixBlendMode: 'multiply',
                         }}
                       />
-                      <div className="relative z-10 flex min-h-0 flex-col overflow-y-auto text-[#2a2a2a] portrait:overflow-y-auto landscape:overflow-visible landscape:min-h-0 landscape:flex-1 landscape:[zoom:0.9] landscape:overscroll-contain [-webkit-overflow-scrolling:touch]">
-                        <h3 className="font-sans text-[9px] uppercase tracking-[0.45em] text-[#6b5d4a] mb-4 text-center sm:mb-6 landscape:mb-1 landscape:text-[7px] landscape:tracking-[0.38em]">
+                      <div className="relative z-10 flex min-h-0 flex-col overflow-y-auto text-[#2a2a2a] portrait:min-h-0 portrait:flex-1 portrait:overflow-hidden portrait:flex portrait:flex-col landscape:overflow-visible landscape:min-h-0 landscape:flex-1 landscape:[zoom:0.9] landscape:overscroll-contain [-webkit-overflow-scrolling:touch]">
+                        <h3 className="font-sans text-[9px] uppercase tracking-[0.45em] text-[#6b5d4a] mb-4 text-center portrait:mb-2 sm:mb-6 landscape:mb-1 landscape:text-[7px] landscape:tracking-[0.38em]">
                           A Letter of Invitation
                         </h3>
 
@@ -1549,8 +1587,8 @@ export default function InviteScreening() {
 
                         {slotsRemaining > 0 ? (
                           <>
-                            <div className="font-serif-v3 w-full space-y-4 text-center landscape:space-y-1.5">
-                              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-center sm:gap-x-2 landscape:flex-row landscape:flex-nowrap landscape:gap-x-2 landscape:gap-y-0 landscape:justify-center">
+                            <div className="font-serif-v3 w-full space-y-4 text-center portrait:min-h-0 portrait:flex-1 portrait:flex portrait:flex-col portrait:space-y-2 portrait:justify-between landscape:space-y-1.5">
+                              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-center sm:gap-x-2 portrait:gap-2 landscape:flex-row landscape:flex-nowrap landscape:gap-x-2 landscape:gap-y-0 landscape:justify-center">
                                 <span className="italic text-[15px] sm:inline landscape:text-[12px]">Dear</span>
                                 <input
                                   type="text"
@@ -1570,11 +1608,11 @@ export default function InviteScreening() {
                                 />
                               </div>
                               <textarea
-                                rows={4}
+                                rows={3}
                                 placeholder="Write a note — tell them why this film made you think of them..."
                                 value={letterNote}
                                 onChange={(e) => setLetterNote(e.target.value)}
-                                className="w-full bg-transparent text-center text-[15px] italic leading-relaxed text-[#2a2a2a] placeholder-[#2a2a2a]/35 focus:outline-none resize-y min-h-[5.5rem] border-b border-[#6b5d4a]/25 pb-2 landscape:min-h-0 landscape:h-[4.25rem] landscape:resize-none landscape:py-1 landscape:text-[12px] landscape:leading-snug"
+                                className="w-full bg-transparent text-center text-[15px] italic leading-relaxed text-[#2a2a2a] placeholder-[#2a2a2a]/35 focus:outline-none resize-none min-h-[5.5rem] border-b border-[#6b5d4a]/25 pb-2 portrait:min-h-[3.25rem] portrait:text-[13px] portrait:leading-snug landscape:min-h-0 landscape:h-[4.25rem] landscape:py-1 landscape:text-[12px] landscape:leading-snug"
                               />
                               <input
                                 type="email"
@@ -1588,12 +1626,12 @@ export default function InviteScreening() {
                             </div>
 
                             {slotsRemaining > 1 && (
-                              <p className="mt-4 text-center font-sans text-[9px] font-medium uppercase tracking-[0.28em] text-[#6b5d4a]/90 landscape:mt-1 landscape:text-[7px] landscape:tracking-[0.22em]">
+                              <p className="mt-4 text-center font-sans text-[9px] font-medium uppercase tracking-[0.28em] text-[#6b5d4a]/90 portrait:mt-2 landscape:mt-1 landscape:text-[7px] landscape:tracking-[0.22em]">
                                 + Add another ({slotsRemaining - 1} left)
                               </p>
                             )}
 
-                            <div className="mt-5 flex flex-wrap items-end justify-center gap-x-3 gap-y-2 border-t border-[#6b5d4a]/15 pt-5 font-serif-v3 text-[15px] text-[#2a2a2a] landscape:mt-2 landscape:gap-x-2 landscape:gap-y-0 landscape:pt-2 landscape:text-[12px]">
+                            <div className="mt-5 flex flex-wrap items-end justify-center gap-x-3 gap-y-2 border-t border-[#6b5d4a]/15 pt-5 font-serif-v3 text-[15px] text-[#2a2a2a] portrait:mt-3 portrait:pt-3 landscape:mt-2 landscape:gap-x-2 landscape:gap-y-0 landscape:pt-2 landscape:text-[12px]">
                               <span className="italic">With intention,</span>
                               <input
                                 type="text"
@@ -1606,7 +1644,7 @@ export default function InviteScreening() {
                             </div>
 
                             {!isInviteRecipientSession && (
-                              <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-end sm:gap-4 landscape:mt-2 landscape:flex-row landscape:items-end landscape:gap-2 landscape:gap-y-0">
+                              <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-end sm:gap-4 portrait:mt-3 portrait:gap-3 landscape:mt-2 landscape:flex-row landscape:items-end landscape:gap-2 landscape:gap-y-0">
                                 <label className="flex flex-1 flex-col gap-1.5 text-center landscape:min-w-0 landscape:gap-0.5">
                                   <span className="font-sans text-[8px] uppercase tracking-[0.25em] text-[#6b5d4a]/80 landscape:text-[7px]">
                                     Your email
@@ -1640,7 +1678,7 @@ export default function InviteScreening() {
                               type="button"
                               onClick={handleSendLetter}
                               disabled={letterSending}
-                              className="mt-8 w-full py-3.5 min-h-[48px] bg-[#a89472] hover:bg-[#978768] active:bg-[#8a7d62] text-[#f5f2ec] font-sans text-[11px] tracking-[0.32em] uppercase transition-colors rounded-sm disabled:opacity-40 touch-manipulation landscape:mt-3 landscape:min-h-0 landscape:py-2 landscape:text-[10px] landscape:tracking-[0.28em]"
+                              className="mt-8 w-full py-3.5 min-h-[48px] bg-[#a89472] hover:bg-[#978768] active:bg-[#8a7d62] text-[#f5f2ec] font-sans text-[11px] tracking-[0.32em] uppercase transition-colors rounded-sm disabled:opacity-40 touch-manipulation portrait:mt-4 portrait:min-h-[44px] landscape:mt-3 landscape:min-h-0 landscape:py-2 landscape:text-[10px] landscape:tracking-[0.28em]"
                             >
                               {letterSending ? 'Sending…' : 'Seal & Send'}
                             </button>
