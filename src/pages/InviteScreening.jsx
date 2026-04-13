@@ -153,6 +153,8 @@ export default function InviteScreening() {
   const [showPostFilm, setShowPostFilm] = useState(false)
   /** Mobile: after the film ends, show a thank-you screen before the “Pass it on” letter flow. */
   const [mobileThankYouVisible, setMobileThankYouVisible] = useState(false)
+  /** While playing: hide “Now Screening” + film title after 5s; reset when playback pauses. */
+  const [filmTitleHidden, setFilmTitleHidden] = useState(false)
 
   /* ---------- LETTER FORM STATE ---------- */
 
@@ -202,7 +204,15 @@ export default function InviteScreening() {
   useEffect(() => {
     iosVideoFullscreenDoneRef.current = false
     setMobileThankYouVisible(false)
+    setFilmTitleHidden(false)
   }, [token])
+
+  useEffect(() => {
+    if (currentView !== 'screening' || isScreeningPaused) return
+    setFilmTitleHidden(false)
+    const id = window.setTimeout(() => setFilmTitleHidden(true), 5000)
+    return () => clearTimeout(id)
+  }, [currentView, isScreeningPaused, token])
 
   useEffect(() => {
     validateInvite()
@@ -1255,13 +1265,19 @@ export default function InviteScreening() {
                   : 'opacity-0 pointer-events-none'
               }`}
             >
-              <p className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#b1a180] mb-2 drop-shadow-md">
-                Now Screening
-              </p>
-              <h2 className="font-serif-v3 text-2xl md:text-3xl text-[#dddddd] drop-shadow-lg">
-                {film.title}
-                {creatorName ? ` · ${creatorName}` : ''}
-              </h2>
+              <div
+                className={`transition-opacity duration-700 ease-in-out ${
+                  filmTitleHidden ? 'opacity-0' : 'opacity-100'
+                }`}
+              >
+                <p className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#b1a180] mb-2 drop-shadow-md">
+                  Now Screening
+                </p>
+                <h2 className="font-serif-v3 text-2xl md:text-3xl text-[#dddddd] drop-shadow-lg">
+                  {film.title}
+                  {creatorName ? ` · ${creatorName}` : ''}
+                </h2>
+              </div>
             </div>
 
             <div
