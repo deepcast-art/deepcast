@@ -167,8 +167,8 @@ export default function InviteScreening() {
   const [viewVisible, setViewVisible] = useState(false)
   const [isScreeningPaused, setIsScreeningPaused] = useState(true)
   const [showPostFilm, setShowPostFilm] = useState(false)
-  /** Mobile: after the film ends, show a thank-you screen before the “Pass it on” letter flow. */
-  const [mobileThankYouVisible, setMobileThankYouVisible] = useState(false)
+  /** After the film ends (guests): full thank-you step before “Pass it on” — all viewports. */
+  const [completionThankYouVisible, setCompletionThankYouVisible] = useState(false)
   /** While playing: hide “Now Screening” + film title after 5s; reset when playback pauses. */
   const [filmTitleHidden, setFilmTitleHidden] = useState(false)
 
@@ -219,7 +219,7 @@ export default function InviteScreening() {
 
   useEffect(() => {
     iosVideoFullscreenDoneRef.current = false
-    setMobileThankYouVisible(false)
+    setCompletionThankYouVisible(false)
     setFilmTitleHidden(false)
   }, [token])
 
@@ -495,6 +495,45 @@ export default function InviteScreening() {
     }
   }, [isIOSDevice])
 
+  /** Leave browser / native video fullscreen so fixed overlays (resume bar, post-film Pass it on) can use the full viewport. */
+  const exitScreeningFullscreen = useCallback(() => {
+    if (typeof document !== 'undefined') {
+      const doc = document
+      const fsEl =
+        doc.fullscreenElement ||
+        doc.webkitFullscreenElement ||
+        doc.webkitCurrentFullScreenElement ||
+        doc.msFullscreenElement
+      const exit =
+        doc.exitFullscreen ||
+        doc.webkitExitFullscreen ||
+        doc.webkitExitFullScreen ||
+        doc.msExitFullscreen
+      if (fsEl && typeof exit === 'function') void exit.call(doc).catch(() => {})
+    }
+
+    if (!isIOSDevice) return
+    const mux = muxPlayerRef.current
+    if (!mux) return
+    const media = mux.media
+    const video =
+      media && typeof media.webkitEnterFullscreen === 'function'
+        ? media
+        : mux.shadowRoot?.querySelector?.('video')
+    if (!video) return
+    if (!video.webkitDisplayingFullscreen) return
+    try {
+      const leave =
+        video.webkitExitFullscreen ||
+        video.webkitExitFullScreen ||
+        (typeof video.webkitCancelFullScreen === 'function' ? video.webkitCancelFullScreen : null)
+      if (typeof leave === 'function') leave.call(video)
+      iosVideoFullscreenDoneRef.current = false
+    } catch {
+      /* ignored */
+    }
+  }, [isIOSDevice])
+
   const finalizeEnterScreening = useCallback(() => {
     requestScreeningFullscreen()
     setIsScreeningPaused(false)
@@ -643,11 +682,9 @@ export default function InviteScreening() {
       return
     }
 
+    if (!isLgUp) exitScreeningFullscreen()
     setShowPostFilm(true)
-    // Stacked layout (< lg): thank-you first, then “Pass it on”; wide desktop: straight to letter flow
-    if (!isLgUp) {
-      setMobileThankYouVisible(true)
-    }
+    setCompletionThankYouVisible(true)
   }
 
   /* ---------- LETTER FORM ---------- */
@@ -780,10 +817,13 @@ export default function InviteScreening() {
     }
   }
 
-  const resumeFilm = () => {
-    const el = document.querySelector('mux-player')
-    if (el) el.play()
-  }
+  /** Mid-playback “Resume Film” — restore screening fullscreen on narrow viewports (matches exit-on-pause). */
+  const resumeFilm = useCallback(() => {
+    if (!isLgUp) requestScreeningFullscreen()
+    const el = muxPlayerRef.current || document.querySelector('mux-player')
+    if (el && typeof el.play === 'function') void el.play().catch(() => {})
+    if (!isLgUp) queueMicrotask(() => tryIOSNativeVideoFullscreen())
+  }, [isLgUp, requestScreeningFullscreen, tryIOSNativeVideoFullscreen])
 
   /* ---------- DASHBOARD HELPERS ---------- */
 
@@ -1257,7 +1297,10 @@ export default function InviteScreening() {
                     startTime={Number(startTimeParam) || Number(localStorage.getItem(`screening_position_${token}`)) || 0}
                     onTimeUpdate={handleTimeUpdate}
                     onEnded={handleEnded}
-                    onPause={() => setIsScreeningPaused(true)}
+                    onPause={() => {
+                      setIsScreeningPaused(true)
+                      if (!isLgUp) exitScreeningFullscreen()
+                    }}
                     onPlay={() => {
                       setIsScreeningPaused(false)
                       tryIOSNativeVideoFullscreen()
@@ -1302,63 +1345,87 @@ export default function InviteScreening() {
               </div>
             </div>
 
+            {/* Mid-playback pause only — full “Pass it on” UI is gated on showPostFilm (film ended). */}
+            {isScreeningPaused && !showPostFilm && (
+              <div
+                className="absolute inset-0 z-[90] flex flex-col justify-end bg-[#050a12]/45 pointer-events-auto"
+                role="presentation"
+              >
+                <button
+                  type="button"
+                  onClick={resumeFilm}
+                  className="flex w-full shrink-0 items-center justify-center gap-2.5 border-t border-[#b1a180]/35 bg-[#080c18]/92 py-4 backdrop-blur-md landscape:py-3 touch-manipulation"
+                >
+                  <svg className="h-2.5 w-2.5 shrink-0 fill-[#dddddd]/85" viewBox="0 0 24 24" aria-hidden>
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                  <span className="font-sans text-[10px] font-medium uppercase tracking-[0.35em] text-[#dddddd]/90">
+                    Resume Film
+                  </span>
+                </button>
+              </div>
+            )}
+
             <div
               className={`absolute inset-0 z-[100] flex min-h-0 flex-col overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] panel-scroll bg-[#080c18] transition-opacity duration-[800ms] ease-[cubic-bezier(0.16,1,0.3,1)] lg:max-h-[100dvh] lg:flex-row lg:overflow-hidden ${
-                isScreeningPaused
+                showPostFilm
                   ? 'opacity-100 pointer-events-auto'
                   : 'opacity-0 pointer-events-none'
               }`}
             >
+              {showPostFilm && completionThankYouVisible && (
+                <div className="screening-thank-you-enter relative flex min-h-[100dvh] w-full shrink-0 flex-col items-center justify-center px-6 py-16 pb-[max(2rem,env(safe-area-inset-bottom))] text-center lg:min-h-[min(100dvh,100%)] lg:flex-1 lg:py-24">
+                  <div
+                    className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_55%_at_50%_12%,rgba(177,161,128,0.14),transparent_58%)]"
+                    aria-hidden
+                  />
+                  <div className="relative z-10 flex max-w-md flex-col items-center gap-7 sm:gap-8">
+                    <div className="h-px w-16 bg-[#b1a180]/50" aria-hidden />
+                    <p className="font-sans text-[10px] uppercase tracking-[0.42em] text-[#b1a180]/95">
+                      Deepcast
+                    </p>
+                    <div className="space-y-2">
+                      <h2 className="font-serif-v3 text-[1.9rem] leading-tight italic text-[#dddddd] font-light sm:text-[2.15rem]">
+                        Thank you for watching
+                      </h2>
+                      {film?.title && (
+                        <p className="font-display text-[13px] font-light tracking-[0.06em] text-[#dddddd]/50">
+                          {film.title}
+                          {creatorName ? ` · ${creatorName}` : ''}
+                        </p>
+                      )}
+                    </div>
+                    <p className="font-serif-v3 max-w-sm text-[15px] italic leading-relaxed text-[#dddddd]/75 sm:text-base">
+                      {recipientFirstName && recipientFirstName.toLowerCase() !== 'you' ? (
+                        <>
+                          <span className="text-[#dddddd]">{recipientFirstName}</span>, this screening was held for
+                          you.
+                        </>
+                      ) : (
+                        <>This screening was held for you.</>
+                      )}
+                    </p>
+                    <p className="font-serif-v3 max-w-sm text-[13px] italic leading-relaxed text-[#dddddd]/45">
+                      When you&apos;re ready, invite someone who should see it next.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setCompletionThankYouVisible(false)}
+                      className="mt-2 w-full max-w-xs py-3.5 min-h-[52px] bg-[#b1a180]/22 hover:bg-[#b1a180]/34 active:bg-[#b1a180]/42 border border-[#b1a180]/45 text-[#f5f2ec] font-sans text-[11px] tracking-[0.32em] uppercase transition-colors rounded-sm touch-manipulation"
+                    >
+                      Continue
+                    </button>
+                  </div>
+                </div>
+              )}
 
+              {showPostFilm && !completionThankYouVisible && (
+              <>
               {/* ── Stacked (phone + tablet + phone landscape): use lg: so viewports &gt;768px (e.g. landscape phones) still stack — otherwise desktop diptych hides the letter card. ── */}
               <div className="lg:hidden flex h-full min-h-0 w-full flex-1 flex-col bg-[#080c18] landscape:max-h-[100dvh] landscape:overflow-hidden">
 
-                {!showPostFilm && (
-                  <button
-                    type="button"
-                    onClick={resumeFilm}
-                    className="flex-shrink-0 flex w-full items-center justify-center gap-2.5 py-3 landscape:py-2.5 border-b border-[#b1a180]/30 bg-[#b1a180]/10 hover:bg-[#b1a180]/18 active:bg-[#b1a180]/22 touch-manipulation"
-                  >
-                    <svg className="h-2.5 w-2.5 shrink-0 fill-[#dddddd]/85" viewBox="0 0 24 24" aria-hidden>
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                    <span className="font-sans text-[10px] font-medium uppercase tracking-[0.35em] text-[#dddddd]/90">
-                      Resume Film
-                    </span>
-                  </button>
-                )}
-
                 <div className="flex min-h-0 flex flex-1 flex-col gap-4 px-3 pb-10 pt-3 scroll-mt-4 sm:px-4 landscape:min-h-0 landscape:flex-1 landscape:gap-2 landscape:overflow-hidden landscape:pb-3 landscape:pt-2">
 
-                  {mobileThankYouVisible ? (
-                    <div className="screening-thank-you-enter flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-2 py-6 text-center landscape:py-4">
-                      <p className="font-sans text-[10px] uppercase tracking-[0.35em] text-[#b1a180]/90">
-                        Deepcast
-                      </p>
-                      <h2 className="font-serif-v3 text-[1.75rem] leading-snug italic text-[#dddddd] font-light landscape:text-[1.5rem]">
-                        Thank you for watching.
-                      </h2>
-                      <p className="font-serif-v3 text-[13px] italic leading-relaxed text-[#dddddd]/65 max-w-sm landscape:text-[12px]">
-                        If you&apos;d like to carry the film forward, you can invite someone next.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setMobileThankYouVisible(false)}
-                        className="mt-2 w-full max-w-xs py-3.5 min-h-[48px] bg-[#b1a180]/20 hover:bg-[#b1a180]/28 active:bg-[#b1a180]/35 border border-[#b1a180]/35 text-[#dddddd] font-sans text-[11px] tracking-[0.28em] uppercase transition-colors rounded-sm touch-manipulation"
-                      >
-                        Continue
-                      </button>
-                      {user && (
-                        <Link
-                          to="/dashboard"
-                          className="font-sans text-[10px] uppercase tracking-[0.22em] text-[#b1a180]/80 hover:text-[#dddddd]/90 transition-colors"
-                        >
-                          Go to dashboard
-                        </Link>
-                      )}
-                    </div>
-                  ) : (
-                    <>
                   <div className="w-full shrink-0 landscape:pb-1">
                     <h2 className="font-serif-v3 text-[1.65rem] leading-tight italic text-[#dddddd] font-light mb-2 text-left landscape:mb-0 landscape:text-[1.35rem]">
                       Pass it on.
@@ -1369,11 +1436,11 @@ export default function InviteScreening() {
                     </p>
                   </div>
 
-                  {/* Map + letter: portrait = stacked; landscape = side by side, fills remaining viewport height */}
+                  {/* Map + letter: portrait = letter first, network below; landscape = graph | letter */}
                   <div
                     className={`flex min-h-0 w-full items-stretch gap-3 ${
                       graphLayout
-                        ? 'flex-col landscape:flex-row landscape:flex-1 landscape:min-h-0'
+                        ? 'flex-col-reverse landscape:flex-row landscape:flex-1 landscape:min-h-0'
                         : 'flex-col'
                     }`}
                   >
@@ -1582,27 +1649,11 @@ export default function InviteScreening() {
                     </div>
                   </div>
                 </div>
-                    </>
-                  )}
                 </div>
               </div>
 
               {/* ── Desktop (wide): top bar + two-column diptych — lg: matches stacked layout breakpoint above */}
               <div className="hidden lg:flex w-full h-full flex-col">
-
-                {/* Resume bar — full-width, pinned at top, hidden once film ended */}
-                {!showPostFilm && (
-                  <button
-                    type="button"
-                    onClick={resumeFilm}
-                    className="flex-shrink-0 flex items-center justify-center gap-3 py-4 border-b border-[#b1a180]/30 bg-[#b1a180]/10 hover:bg-[#b1a180]/20 transition-colors duration-300 group"
-                  >
-                    <div className="flex items-center justify-center w-7 h-7 rounded-full bg-[#b1a180] group-hover:bg-[#c9b898] transition-colors duration-300">
-                      <svg className="w-3 h-3 text-[#0a0f1a] fill-current ml-0.5" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                    </div>
-                    <span className="font-sans text-[10px] uppercase tracking-[0.35em] text-[#dddddd]/90 group-hover:text-[#dddddd] transition-colors font-medium">Resume Film</span>
-                  </button>
-                )}
 
                 <div className="flex min-h-0 flex-1">
               {/* Left column — context + map */}
@@ -1767,6 +1818,9 @@ export default function InviteScreening() {
 
                 </div>{/* end two-column body */}
               </div>{/* end desktop flex-col */}
+
+              </>
+              )}
 
             </div>
           </div>
