@@ -1221,7 +1221,7 @@ export default function InviteScreening() {
         {/* ========================= LANDING ========================= */}
         {status === 'valid' && currentView === 'landing' && !isDesktop && (
           // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
-          <section className="relative h-[100dvh] w-full overflow-hidden">
+          <section className="relative min-h-[100dvh] w-full">
             <div className="fixed inset-0 z-0 h-[100dvh] w-full bg-[#080c18]">
               {graphLayout ? (
                 <NetworkGraph
@@ -1621,7 +1621,7 @@ export default function InviteScreening() {
                   >
                     {graphLayout && (
                       <div className="flex w-full min-w-0 shrink-0 flex-col portrait:shrink-0 landscape:h-full landscape:min-h-0 landscape:w-[40%] landscape:shrink-0 landscape:max-w-none sm:landscape:w-[38%]">
-                        <div className="h-[min(28dvh,220px)] min-h-[140px] max-h-[240px] w-full shrink-0 overflow-hidden rounded-md border border-[#4a5580]/35 bg-[#121a33] shadow-inner touch-manipulation portrait:flex-none landscape:h-[min(38svh,260px)] landscape:min-h-[200px] landscape:max-h-none landscape:flex-1">
+                        <div className="h-[min(28dvh,220px)] min-h-[140px] max-h-[240px] w-full shrink-0 overflow-hidden rounded-md border border-[#b1a180]/15 bg-[#080c18] shadow-inner touch-manipulation portrait:flex-none landscape:h-[min(38svh,260px)] landscape:min-h-[200px] landscape:max-h-none landscape:flex-1">
                           <NetworkGraph
                             fillHeight
                             pannable
@@ -1629,7 +1629,7 @@ export default function InviteScreening() {
                             interactiveZoom
                             softTouchInteraction
                             edgeScrollFades
-                            edgeFadeColor="#121a33"
+                            edgeFadeColor="#080c18"
                             nodesData={graphLayout.nodesData}
                             linksData={graphLayout.linksData}
                             viewBoxH={graphLayout.viewBoxH}
