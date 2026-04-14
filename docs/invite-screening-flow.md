@@ -1,5 +1,20 @@
 # Invite Screening Flow
 
+## 0. Cold Start — Render Server Wake-Up
+
+On first load the Render backend may be asleep. The invite page handles this automatically:
+
+| Attempt | Delay | Action |
+|---------|-------|--------|
+| 1 | Immediate | Try `validateInvite` |
+| 2 | +2 s | Retry on network error |
+| — | — | **Auto page reload** (wakes Render) |
+| 3 | +2 s | Retry after reload |
+| 4 | +2 s | Retry |
+| — | — | **Auto page reload** again if still failing |
+
+No user action needed. The page reloads itself up to twice while the server wakes. If all retries fail the "Can't reach the server" error is shown.
+
 ## 1. Landing (Portrait Mobile)
 
 - Page opens full-screen (`min-h-[100dvh]`), network graph fills the background.
@@ -16,7 +31,7 @@
 
 ## 3. Screening (Fullscreen Video)
 
-- Film plays fullscreen.
+- Film plays **fullscreen** from the moment it starts and stays fullscreen until the user pauses.
 - **"Now Screening" + film title** appear top-left on play start, fade after **5 seconds**.
 - Title reappears (resets) whenever playback resumes from pause.
 - If autoplay is blocked by the browser, a **"Tap to play the film"** overlay appears.

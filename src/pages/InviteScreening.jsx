@@ -278,10 +278,10 @@ export default function InviteScreening() {
   }, [directPlay, status])
 
   async function validateInvite() {
-    const MAX_ATTEMPTS = 5
-    const DELAYS = [0, 2000, 4000, 6000, 8000]
+    // Attempts: 0 (immediate) → 1 (2s) → page reload → 2 (2s) → 3 (2s) → page reload → give up
+    const DELAYS = [0, 2000, 2000, 2000]
 
-    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    for (let attempt = 0; attempt < DELAYS.length; attempt++) {
       if (attempt > 0) {
         await new Promise((res) => setTimeout(res, DELAYS[attempt]))
       }
@@ -310,10 +310,15 @@ export default function InviteScreening() {
           setStatus('invalid')
           return
         }
-        // Network error (Render cold start) — retry unless this was the last attempt
-        if (attempt === MAX_ATTEMPTS - 1) setStatus('network')
+        // Network error — reload after attempt 1 (2 tries done) and after attempt 3 (4 tries done)
+        if (attempt === 1 || attempt === 3) {
+          window.location.reload()
+          return
+        }
       }
     }
+    // All attempts failed without a reload opportunity
+    setStatus('network')
   }
 
   useEffect(() => {
