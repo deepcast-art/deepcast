@@ -1156,7 +1156,7 @@ export default function InviteScreening() {
                 opacity: prologueState.textsVisible && prologueState.text2 ? 1 : 0,
               }}
             >
-              gifted by {sharerWithTeam || 'someone who chose you'}.
+              gifted by {sharerDisplayName?.trim() || 'someone who chose you'}.
             </div>
           </div>
         </div>
