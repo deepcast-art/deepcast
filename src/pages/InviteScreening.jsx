@@ -1611,11 +1611,11 @@ export default function InviteScreening() {
                     </p>
                   </div>
 
-                  {/* Map + letter: portrait = letter first (no page scroll), fixed-height graph below; landscape = graph | letter */}
+                  {/* Map + letter: portrait = invite card on top, graph below (flex-col-reverse: letter 2nd in DOM → top); landscape = graph | letter */}
                   <div
                     className={`flex min-h-0 w-full items-stretch gap-3 ${
                       graphLayout
-                        ? 'flex-col-reverse portrait:flex-col landscape:flex-row landscape:flex-1 landscape:min-h-0'
+                        ? 'flex-col-reverse landscape:flex-row landscape:flex-1 landscape:min-h-0'
                         : 'flex-col'
                     }`}
                   >
@@ -1669,7 +1669,7 @@ export default function InviteScreening() {
                           mixBlendMode: 'multiply',
                         }}
                       />
-                      <div className="relative z-10 flex min-h-0 flex-col overflow-y-auto text-[#2a2a2a] portrait:min-h-0 portrait:flex-1 portrait:overflow-hidden portrait:flex portrait:flex-col landscape:overflow-visible landscape:min-h-0 landscape:flex-1 landscape:[zoom:0.9] landscape:overscroll-contain [-webkit-overflow-scrolling:touch]">
+                      <div className="relative z-10 flex min-h-0 flex-col overflow-y-auto text-[#2a2a2a] portrait:min-h-0 portrait:flex-1 portrait:overflow-hidden portrait:flex portrait:flex-col landscape:min-h-0 landscape:flex-1 landscape:overflow-y-auto landscape:overflow-x-hidden landscape:[zoom:0.9] landscape:overscroll-contain [-webkit-overflow-scrolling:touch]">
                         <h3 className="font-sans text-[9px] uppercase tracking-[0.45em] text-[#6b5d4a] mb-4 text-center portrait:mb-2 sm:mb-6 landscape:mb-1 landscape:text-[7px] landscape:tracking-[0.38em]">
                           A Letter of Invitation
                         </h3>
