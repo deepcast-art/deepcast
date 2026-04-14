@@ -38,4 +38,19 @@ test.describe('Public pages', () => {
     await page.goto('/unsubscribe')
     await expect(page.getByRole('heading', { name: /screening invitation emails/i })).toBeVisible()
   })
+
+  /**
+   * Regression guard: `/i/:token` must keep loading (InviteScreening lazy bundle + validate flow).
+   * Invalid tokens still render an error state — we only assert the route does not white-screen.
+   */
+  test('open invite route /i/:token renders', async ({ page }) => {
+    const jsErrors = []
+    page.on('pageerror', (err) => jsErrors.push(err.message))
+    await page.goto('/i/e2e-smoke-invite-token', { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('body')).toBeVisible()
+    await expect(
+      page.getByText(/screening|Opening your invitation|no longer available|Can.t reach the server|Loading/i).first()
+    ).toBeVisible({ timeout: 45_000 })
+    expect(jsErrors, 'no uncaught JS errors on invite route').toEqual([])
+  })
 })

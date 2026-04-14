@@ -1778,7 +1778,7 @@ export default function InviteScreening() {
                               type="button"
                               onClick={handleSendLetter}
                               disabled={letterSending}
-                              className="mt-8 w-full py-3.5 min-h-[48px] bg-[#a89472] hover:bg-[#978768] active:bg-[#8a7d62] text-[#f5f2ec] font-sans text-[11px] tracking-[0.32em] uppercase transition-colors rounded-sm disabled:opacity-40 touch-manipulation portrait:mt-4 portrait:min-h-[44px] landscape:mt-3 landscape:min-h-0 landscape:py-2 landscape:text-[10px] landscape:tracking-[0.28em]"
+                              className="mt-8 w-full shrink-0 py-3.5 min-h-[48px] bg-[#a89472] hover:bg-[#978768] active:bg-[#8a7d62] text-[#f5f2ec] font-sans text-[11px] tracking-[0.32em] uppercase transition-colors rounded-sm disabled:opacity-40 touch-manipulation portrait:mt-4 portrait:min-h-[44px] landscape:mt-3 landscape:min-h-[48px] landscape:py-3.5 landscape:text-[11px] landscape:tracking-[0.3em]"
                             >
                               {letterSending ? 'Sending…' : 'Seal & Send'}
                             </button>
