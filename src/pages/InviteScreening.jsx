@@ -1609,10 +1609,10 @@ export default function InviteScreening() {
               {passItOnContentVisible && (
               <>
               {/* ── Stacked (phone + tablet + phone landscape): use lg: so viewports &gt;768px (e.g. landscape phones) still stack — otherwise desktop diptych hides the letter card. ── */}
-              <div className="lg:hidden flex h-full min-h-0 w-full flex-1 flex-col bg-[#080c18] portrait:h-auto portrait:flex-none landscape:max-h-[100dvh] landscape:overflow-hidden">
+              <div className="lg:hidden flex h-full min-h-0 w-full flex-1 flex-col bg-[#080c18] portrait:h-auto portrait:flex-none landscape:flex-row landscape:max-h-[100dvh] landscape:overflow-hidden">
 
                 {narrowPausePassItOn && (
-                  <div className="sticky top-0 z-10 shrink-0 border-b border-[#b1a180]/25 bg-[#080c18]/95 backdrop-blur-md pb-1 pt-[max(0.5rem,env(safe-area-inset-top))]">
+                  <div className="sticky top-0 z-10 shrink-0 border-b border-[#b1a180]/25 bg-[#080c18]/95 backdrop-blur-md pb-1 pt-[max(0.5rem,env(safe-area-inset-top))] landscape:hidden">
                     <button
                       type="button"
                       onClick={resumeFilm}
@@ -1633,60 +1633,47 @@ export default function InviteScreening() {
                   </div>
                 )}
 
-                <div className="flex flex-col gap-4 px-3 pb-10 pt-3 sm:px-4 portrait:gap-4 portrait:pb-10 landscape:min-h-0 landscape:flex-1 landscape:gap-2 landscape:overflow-hidden landscape:pb-3 landscape:pt-2">
+                {/* LEFT col (landscape) / TOP section (portrait): Pass it on header + graph */}
+                <div className="flex flex-col portrait:px-3 portrait:pt-3 portrait:pb-0 landscape:w-[44%] landscape:shrink-0 landscape:h-full landscape:min-h-0 landscape:max-h-[100dvh] landscape:overflow-hidden landscape:px-3 landscape:py-3 landscape:border-r landscape:border-[#b1a180]/10">
 
-                  <div className="w-full shrink-0 landscape:pb-1">
-                    <h2 className="font-serif-v3 text-[1.65rem] leading-tight italic text-[#dddddd] font-light mb-2 text-left portrait:mb-1 landscape:mb-0 landscape:text-[1.35rem]">
+                  <div className="w-full shrink-0 portrait:mb-2 landscape:mb-2">
+                    <h2 className="font-serif-v3 text-[1.65rem] leading-tight italic text-[#dddddd] font-light mb-2 text-left landscape:text-[1.35rem] landscape:mb-1">
                       Pass it on.
                     </h2>
-                    <p className="font-serif-v3 text-[12px] italic leading-relaxed text-[#dddddd]/65 max-w-none text-left sm:text-[13px] portrait:text-[12px] landscape:line-clamp-2 landscape:text-[11px] landscape:leading-snug">
+                    <p className="font-serif-v3 text-[12px] italic leading-relaxed text-[#dddddd]/65 max-w-none text-left sm:text-[13px] landscape:line-clamp-2 landscape:text-[11px] landscape:leading-snug">
                       If you choose not to share, the film&apos;s journey ends with you. That&apos;s ok — but know
                       that it was carried this far by people who believed in it.
                     </p>
                   </div>
 
-                  {/* Map + letter: portrait = invite card on top, graph below (flex-col-reverse: letter 2nd in DOM → top); landscape = graph | letter */}
-                  <div
-                    className={`flex w-full items-stretch gap-3 ${
-                      graphLayout
-                        ? 'flex-col-reverse landscape:flex-row landscape:flex-1 landscape:min-h-0'
-                        : 'flex-col'
-                    }`}
-                  >
-                    {graphLayout && (
-                      <div className="flex w-full min-w-0 shrink-0 flex-col portrait:shrink-0 landscape:h-full landscape:min-h-0 landscape:w-[40%] landscape:shrink-0 landscape:max-w-none sm:landscape:w-[38%]">
-                        <div className="h-[min(28dvh,220px)] min-h-[140px] max-h-[240px] w-full shrink-0 overflow-hidden rounded-md border border-[#b1a180]/15 bg-[#080c18] shadow-inner touch-manipulation portrait:flex-none landscape:h-[min(38svh,260px)] landscape:min-h-[200px] landscape:max-h-none landscape:flex-1">
-                          <NetworkGraph
-                            fillHeight
-                            pannable
-                            transparentSurface
-                            interactiveZoom
-                            softTouchInteraction
-                            edgeScrollFades
-                            edgeFadeColor="#080c18"
-                            nodesData={graphLayout.nodesData}
-                            linksData={graphLayout.linksData}
-                            viewBoxH={graphLayout.viewBoxH}
-                            viewBoxW={graphLayout.viewBoxW}
-                            ringRadii={graphLayout.ringRadii}
-                            sectionLabels={graphLayout.sectionLabels}
-                            rootNode={graphLayout.rootNode}
-                            defaultActiveNodes={graphLayout.defaultActiveNodes}
-                            defaultActiveLinks={graphLayout.defaultActiveLinks}
-                            showLegend={false}
-                          />
-                        </div>
-                      </div>
-                    )}
+                  {graphLayout && (
+                    <div className="portrait:h-[min(28dvh,220px)] portrait:min-h-[140px] portrait:max-h-[240px] portrait:w-full portrait:shrink-0 landscape:flex-1 landscape:min-h-0 landscape:w-full overflow-hidden rounded-md border border-[#b1a180]/15 bg-[#080c18] shadow-inner touch-manipulation">
+                      <NetworkGraph
+                        fillHeight
+                        pannable
+                        transparentSurface
+                        interactiveZoom
+                        softTouchInteraction
+                        edgeScrollFades
+                        edgeFadeColor="#080c18"
+                        nodesData={graphLayout.nodesData}
+                        linksData={graphLayout.linksData}
+                        viewBoxH={graphLayout.viewBoxH}
+                        viewBoxW={graphLayout.viewBoxW}
+                        ringRadii={graphLayout.ringRadii}
+                        sectionLabels={graphLayout.sectionLabels}
+                        rootNode={graphLayout.rootNode}
+                        defaultActiveNodes={graphLayout.defaultActiveNodes}
+                        defaultActiveLinks={graphLayout.defaultActiveLinks}
+                        showLegend={false}
+                      />
+                    </div>
+                  )}
+                </div>
 
+                {/* RIGHT col (landscape) / BOTTOM section (portrait): Letter of Invitation */}
+                <div className="flex flex-col portrait:px-3 portrait:pb-10 portrait:pt-3 landscape:flex-1 landscape:min-h-0 landscape:h-full landscape:overflow-hidden landscape:px-2 landscape:py-2">
                   <div
-                    className={`flex min-w-0 flex-col items-stretch pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] ${
-                      graphLayout
-                        ? 'w-full landscape:h-full landscape:min-h-0 landscape:max-h-none landscape:overflow-hidden landscape:flex landscape:flex-col'
-                        : 'w-full'
-                    }`}
-                  >
-                    <div
                       className="relative flex w-full flex-col rounded-lg px-3 py-5 sm:px-5 sm:py-6 portrait:px-4 portrait:py-6 landscape:min-h-0 landscape:flex-1 landscape:overflow-hidden landscape:px-2.5 landscape:py-2 landscape:sm:px-3 landscape:sm:py-2.5"
                       style={{
                         background:
@@ -1858,8 +1845,6 @@ export default function InviteScreening() {
                     </div>
                   </div>
                 </div>
-                </div>
-              </div>
 
               {/* ── Desktop (wide): top bar + two-column diptych — lg: matches stacked layout breakpoint above */}
               <div className="hidden lg:flex w-full h-full flex-col">
