@@ -1633,21 +1633,19 @@ export default function InviteScreening() {
                   </div>
                 )}
 
-                {/* LEFT col (landscape) / TOP section (portrait): Pass it on header + graph */}
-                <div className="flex flex-col portrait:px-3 portrait:pt-3 portrait:pb-0 landscape:w-[44%] landscape:shrink-0 landscape:h-full landscape:min-h-0 landscape:max-h-[100dvh] landscape:overflow-hidden landscape:px-3 landscape:py-3 landscape:border-r landscape:border-[#b1a180]/10">
-
-                  <div className="w-full shrink-0 portrait:mb-2 landscape:mb-2">
-                    <h2 className="font-serif-v3 text-[1.65rem] leading-tight italic text-[#dddddd] font-light mb-2 text-left landscape:text-[1.35rem] landscape:mb-1">
+                {/* LANDSCAPE ONLY: Left col — header + graph */}
+                <div className="portrait:hidden landscape:flex landscape:flex-col landscape:w-[44%] landscape:shrink-0 landscape:h-full landscape:min-h-0 landscape:max-h-[100dvh] landscape:overflow-hidden landscape:px-3 landscape:py-3 landscape:border-r landscape:border-[#b1a180]/10">
+                  <div className="w-full shrink-0 mb-2">
+                    <h2 className="font-serif-v3 text-[1.35rem] leading-tight italic text-[#dddddd] font-light mb-1 text-left">
                       Pass it on.
                     </h2>
-                    <p className="font-serif-v3 text-[12px] italic leading-relaxed text-[#dddddd]/65 max-w-none text-left sm:text-[13px] landscape:line-clamp-2 landscape:text-[11px] landscape:leading-snug">
+                    <p className="font-serif-v3 text-[11px] italic leading-snug text-[#dddddd]/65 max-w-none text-left line-clamp-2">
                       If you choose not to share, the film&apos;s journey ends with you. That&apos;s ok — but know
                       that it was carried this far by people who believed in it.
                     </p>
                   </div>
-
                   {graphLayout && (
-                    <div className="portrait:h-[min(28dvh,220px)] portrait:min-h-[140px] portrait:max-h-[240px] portrait:w-full portrait:shrink-0 landscape:flex-1 landscape:min-h-0 landscape:w-full overflow-hidden rounded-md border border-[#b1a180]/15 bg-[#080c18] shadow-inner touch-manipulation">
+                    <div className="flex-1 min-h-0 w-full overflow-hidden rounded-md border border-[#b1a180]/15 bg-[#080c18] shadow-inner touch-manipulation">
                       <NetworkGraph
                         fillHeight
                         pannable
@@ -1671,8 +1669,19 @@ export default function InviteScreening() {
                   )}
                 </div>
 
-                {/* RIGHT col (landscape) / BOTTOM section (portrait): Letter of Invitation */}
-                <div className="flex flex-col portrait:px-3 portrait:pb-10 portrait:pt-3 landscape:flex-1 landscape:min-h-0 landscape:h-full landscape:overflow-hidden landscape:px-2 landscape:py-2">
+                {/* PORTRAIT ONLY: Header — above letter card */}
+                <div className="landscape:hidden shrink-0 px-3 pt-3 pb-2">
+                  <h2 className="font-serif-v3 text-[1.65rem] leading-tight italic text-[#dddddd] font-light mb-2 text-left">
+                    Pass it on.
+                  </h2>
+                  <p className="font-serif-v3 text-[12px] italic leading-relaxed text-[#dddddd]/65 max-w-none text-left sm:text-[13px]">
+                    If you choose not to share, the film&apos;s journey ends with you. That&apos;s ok — but know
+                    that it was carried this far by people who believed in it.
+                  </p>
+                </div>
+
+                {/* Letter card — both orientations */}
+                <div className="flex flex-col portrait:px-3 portrait:pb-4 portrait:pt-0 landscape:flex-1 landscape:min-h-0 landscape:h-full landscape:overflow-hidden landscape:px-2 landscape:py-2">
                   <div
                       className="relative flex w-full flex-col rounded-lg px-3 py-5 sm:px-5 sm:py-6 portrait:px-4 portrait:py-6 landscape:min-h-0 landscape:flex-1 landscape:overflow-hidden landscape:px-2.5 landscape:py-2 landscape:sm:px-3 landscape:sm:py-2.5"
                       style={{
@@ -1844,7 +1853,34 @@ export default function InviteScreening() {
                       </div>
                     </div>
                   </div>
-                </div>
+
+                {/* PORTRAIT ONLY: Network graph at bottom — partially visible, scroll to see */}
+                {graphLayout && (
+                  <div className="landscape:hidden shrink-0 px-3 pt-2 pb-10">
+                    <div className="h-[min(28dvh,220px)] min-h-[140px] max-h-[240px] w-full overflow-hidden rounded-md border border-[#b1a180]/15 bg-[#080c18] shadow-inner touch-manipulation">
+                      <NetworkGraph
+                        fillHeight
+                        pannable
+                        transparentSurface
+                        interactiveZoom
+                        softTouchInteraction
+                        edgeScrollFades
+                        edgeFadeColor="#080c18"
+                        nodesData={graphLayout.nodesData}
+                        linksData={graphLayout.linksData}
+                        viewBoxH={graphLayout.viewBoxH}
+                        viewBoxW={graphLayout.viewBoxW}
+                        ringRadii={graphLayout.ringRadii}
+                        sectionLabels={graphLayout.sectionLabels}
+                        rootNode={graphLayout.rootNode}
+                        defaultActiveNodes={graphLayout.defaultActiveNodes}
+                        defaultActiveLinks={graphLayout.defaultActiveLinks}
+                        showLegend={false}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* ── Desktop (wide): top bar + two-column diptych — lg: matches stacked layout breakpoint above */}
               <div className="hidden lg:flex w-full h-full flex-col">
