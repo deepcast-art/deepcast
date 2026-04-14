@@ -278,33 +278,40 @@ export default function InviteScreening() {
   }, [directPlay, status])
 
   async function validateInvite() {
-    try {
-      const r = await api.validateInvite(token)
-      setInvite(r.invite)
-      setFilm(r.film)
-      if (r.sessionId) setSessionId(r.sessionId)
-      const name =
-        (typeof r.senderDisplayName === 'string' &&
-          r.senderDisplayName.trim()) ||
-        r.invite?.sender_name?.trim() ||
-        (r.invite?.sender_email
-          ? r.invite.sender_email.split('@')[0]
-          : '') ||
-        'A friend'
-      setSharerDisplayName(name)
-      if (Array.isArray(r.filmInvites)) setFilmInvites(r.filmInvites)
-      if (typeof r.creatorName === 'string') setCreatorName(r.creatorName)
-      setStatus('valid')
-    } catch (err) {
-      const msg = String(err?.message || '')
-      if (msg === 'expired') setStatus('expired')
-      else if (
-        /failed to fetch|networkerror|load failed|network request failed/i.test(msg) ||
-        err?.name === 'TypeError'
-      ) {
-        setStatus('network')
-      } else {
-        setStatus('invalid')
+    const MAX_ATTEMPTS = 5
+    const DELAYS = [0, 2000, 4000, 6000, 8000]
+
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      if (attempt > 0) {
+        await new Promise((res) => setTimeout(res, DELAYS[attempt]))
+      }
+      try {
+        const r = await api.validateInvite(token)
+        setInvite(r.invite)
+        setFilm(r.film)
+        if (r.sessionId) setSessionId(r.sessionId)
+        const name =
+          (typeof r.senderDisplayName === 'string' &&
+            r.senderDisplayName.trim()) ||
+          r.invite?.sender_name?.trim() ||
+          (r.invite?.sender_email
+            ? r.invite.sender_email.split('@')[0]
+            : '') ||
+          'A friend'
+        setSharerDisplayName(name)
+        if (Array.isArray(r.filmInvites)) setFilmInvites(r.filmInvites)
+        if (typeof r.creatorName === 'string') setCreatorName(r.creatorName)
+        setStatus('valid')
+        return
+      } catch (err) {
+        const msg = String(err?.message || '')
+        if (msg === 'expired') { setStatus('expired'); return }
+        if (!/failed to fetch|networkerror|load failed|network request failed/i.test(msg) && err?.name !== 'TypeError') {
+          setStatus('invalid')
+          return
+        }
+        // Network error (Render cold start) — retry unless this was the last attempt
+        if (attempt === MAX_ATTEMPTS - 1) setStatus('network')
       }
     }
   }
