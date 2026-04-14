@@ -1221,7 +1221,7 @@ export default function InviteScreening() {
         {/* ========================= LANDING ========================= */}
         {status === 'valid' && currentView === 'landing' && !isDesktop && (
           // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
-          <section className="relative h-[100dvh] w-full overflow-hidden" onClick={requestScreeningFullscreen}>
+          <section className="relative h-[100dvh] w-full overflow-hidden">
             <div className="fixed inset-0 z-0 h-[100dvh] w-full bg-[#080c18]">
               {graphLayout ? (
                 <NetworkGraph
@@ -1575,7 +1575,7 @@ export default function InviteScreening() {
               {passItOnContentVisible && (
               <>
               {/* ── Stacked (phone + tablet + phone landscape): use lg: so viewports &gt;768px (e.g. landscape phones) still stack — otherwise desktop diptych hides the letter card. ── */}
-              <div className="lg:hidden flex h-full min-h-0 w-full flex-1 flex-col bg-[#080c18] portrait:min-h-[200dvh] landscape:max-h-[100dvh] landscape:overflow-hidden">
+              <div className="lg:hidden flex h-full min-h-0 w-full flex-1 flex-col bg-[#080c18] portrait:h-auto portrait:flex-none landscape:max-h-[100dvh] landscape:overflow-hidden">
 
                 {narrowPausePassItOn && (
                   <div className="sticky top-0 z-10 shrink-0 border-b border-[#b1a180]/25 bg-[#080c18]/95 backdrop-blur-md pb-1 pt-[max(0.5rem,env(safe-area-inset-top))]">
@@ -1599,7 +1599,7 @@ export default function InviteScreening() {
                   </div>
                 )}
 
-                <div className="flex min-h-0 flex flex-1 flex-col gap-4 px-3 pb-10 pt-3 scroll-mt-4 sm:px-4 portrait:gap-2 portrait:pb-8 landscape:min-h-0 landscape:flex-1 landscape:gap-2 landscape:overflow-hidden landscape:pb-3 landscape:pt-2">
+                <div className="flex flex-col gap-4 px-3 pb-10 pt-3 sm:px-4 portrait:gap-4 portrait:pb-10 landscape:min-h-0 landscape:flex-1 landscape:gap-2 landscape:overflow-hidden landscape:pb-3 landscape:pt-2">
 
                   <div className="w-full shrink-0 landscape:pb-1">
                     <h2 className="font-serif-v3 text-[1.65rem] leading-tight italic text-[#dddddd] font-light mb-2 text-left portrait:mb-1 landscape:mb-0 landscape:text-[1.35rem]">
@@ -1613,7 +1613,7 @@ export default function InviteScreening() {
 
                   {/* Map + letter: portrait = invite card on top, graph below (flex-col-reverse: letter 2nd in DOM → top); landscape = graph | letter */}
                   <div
-                    className={`flex min-h-0 w-full items-stretch gap-3 ${
+                    className={`flex w-full items-stretch gap-3 ${
                       graphLayout
                         ? 'flex-col-reverse landscape:flex-row landscape:flex-1 landscape:min-h-0'
                         : 'flex-col'
@@ -1648,12 +1648,12 @@ export default function InviteScreening() {
                   <div
                     className={`flex min-w-0 flex-col items-stretch pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] ${
                       graphLayout
-                        ? 'w-full portrait:flex portrait:flex-col landscape:h-full landscape:min-h-0 landscape:max-h-none landscape:overflow-hidden landscape:flex landscape:flex-col'
+                        ? 'w-full landscape:h-full landscape:min-h-0 landscape:max-h-none landscape:overflow-hidden landscape:flex landscape:flex-col'
                         : 'w-full'
                     }`}
                   >
                     <div
-                      className="relative flex w-full flex-col overflow-hidden rounded-lg px-3 py-5 sm:px-5 sm:py-6 portrait:px-2.5 portrait:py-5 portrait:sm:px-4 landscape:min-h-0 landscape:flex-1 landscape:px-2.5 landscape:py-2 landscape:sm:px-3 landscape:sm:py-2.5"
+                      className="relative flex w-full flex-col rounded-lg px-3 py-5 sm:px-5 sm:py-6 portrait:px-4 portrait:py-6 landscape:min-h-0 landscape:flex-1 landscape:overflow-hidden landscape:px-2.5 landscape:py-2 landscape:sm:px-3 landscape:sm:py-2.5"
                       style={{
                         background:
                           'linear-gradient(168deg, #e8e2d6 0%, #ddd8cc 30%, #d5cfc3 60%, #ddd7cb 100%)',
@@ -1669,7 +1669,7 @@ export default function InviteScreening() {
                           mixBlendMode: 'multiply',
                         }}
                       />
-                      <div className="relative z-10 flex min-h-0 flex-col overflow-y-auto text-[#2a2a2a] portrait:min-h-0 portrait:flex-1 portrait:overflow-hidden portrait:flex portrait:flex-col landscape:min-h-0 landscape:flex-1 landscape:overflow-y-auto landscape:overflow-x-hidden landscape:[zoom:0.9] landscape:overscroll-contain [-webkit-overflow-scrolling:touch]">
+                      <div className="relative z-10 flex flex-col text-[#2a2a2a] landscape:min-h-0 landscape:flex-1 landscape:overflow-y-auto landscape:overflow-x-hidden landscape:[zoom:0.9] landscape:overscroll-contain [-webkit-overflow-scrolling:touch]">
                         <h3 className="font-sans text-[9px] uppercase tracking-[0.45em] text-[#6b5d4a] mb-4 text-center portrait:mb-2 sm:mb-6 landscape:mb-1 landscape:text-[7px] landscape:tracking-[0.38em]">
                           A Letter of Invitation
                         </h3>
@@ -1687,7 +1687,7 @@ export default function InviteScreening() {
 
                         {slotsRemaining > 0 ? (
                           <>
-                            <div className="font-serif-v3 w-full space-y-4 text-center portrait:min-h-0 portrait:flex-1 portrait:flex portrait:flex-col portrait:space-y-2 portrait:justify-between landscape:space-y-1.5">
+                            <div className="font-serif-v3 w-full space-y-4 text-center landscape:space-y-1.5">
                               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-center sm:gap-x-2 portrait:gap-2 landscape:flex-row landscape:flex-nowrap landscape:gap-x-2 landscape:gap-y-0 landscape:justify-center">
                                 <span className="italic text-[15px] sm:inline landscape:text-[12px]">Dear</span>
                                 <input
@@ -1712,7 +1712,7 @@ export default function InviteScreening() {
                                 placeholder="Write a note — tell them why this film made you think of them..."
                                 value={letterNote}
                                 onChange={(e) => setLetterNote(e.target.value)}
-                                className="w-full bg-transparent text-center text-[15px] italic leading-relaxed text-[#2a2a2a] placeholder-[#2a2a2a]/35 focus:outline-none resize-none min-h-[5.5rem] border-b border-[#6b5d4a]/25 pb-2 portrait:min-h-[3.25rem] portrait:text-[13px] portrait:leading-snug landscape:min-h-0 landscape:h-[4.25rem] landscape:py-1 landscape:text-[12px] landscape:leading-snug"
+                                className="w-full bg-transparent text-center text-[15px] italic leading-relaxed text-[#2a2a2a] placeholder-[#2a2a2a]/35 focus:outline-none resize-none min-h-[5.5rem] border-b border-[#6b5d4a]/25 pb-2 landscape:min-h-0 landscape:h-[4.25rem] landscape:py-1 landscape:text-[12px] landscape:leading-snug"
                               />
                               <input
                                 type="email"
