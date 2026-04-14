@@ -150,6 +150,7 @@ export default function InviteScreening() {
   const [sharerDisplayName, setSharerDisplayName] = useState(null)
   const [film, setFilm] = useState(null)
   const [status, setStatus] = useState('loading')
+  const [slowConnecting, setSlowConnecting] = useState(false)
   const [sessionId, setSessionId] = useState(null)
   const [filmInvites, setFilmInvites] = useState([])
   const [creatorName, setCreatorName] = useState('')
@@ -237,6 +238,11 @@ export default function InviteScreening() {
 
   /* ---------- DATA FETCHING ---------- */
 
+  /** Warm up Render's routing layer + Supabase connection pool before validateInvite fires. */
+  useEffect(() => {
+    fetch('/api/health').catch(() => {})
+  }, [])
+
   useEffect(() => {
     void import('@mux/mux-player-react')
   }, [])
@@ -265,6 +271,13 @@ export default function InviteScreening() {
     validateInvite()
   }, [token])
 
+  /** After 3 s still loading, surface a "Still connecting…" message so users don't bounce. */
+  useEffect(() => {
+    if (status !== 'loading') { setSlowConnecting(false); return }
+    const id = setTimeout(() => setSlowConnecting(true), 3000)
+    return () => clearTimeout(id)
+  }, [status])
+
   // When ?play=1 is present, skip prologue + landing and go straight to the screening room
   useEffect(() => {
     if (!directPlay || status !== 'valid') return
@@ -278,8 +291,8 @@ export default function InviteScreening() {
   }, [directPlay, status])
 
   async function validateInvite() {
-    // Attempts: 0 (immediate) → 1 (2s) → page reload → 2 (2s) → 3 (2s) → page reload → give up
-    const DELAYS = [0, 2000, 2000, 2000]
+    // Exponential backoff: 0 → 1s → 2s → 4s → 8s (5 attempts, ~15s total budget)
+    const DELAYS = [0, 1000, 2000, 4000, 8000]
 
     for (let attempt = 0; attempt < DELAYS.length; attempt++) {
       if (attempt > 0) {
@@ -306,19 +319,17 @@ export default function InviteScreening() {
       } catch (err) {
         const msg = String(err?.message || '')
         if (msg === 'expired') { setStatus('expired'); return }
-        if (!/failed to fetch|networkerror|load failed|network request failed/i.test(msg) && err?.name !== 'TypeError') {
-          setStatus('invalid')
-          return
-        }
-        // Network error — reload after attempt 1 (2 tries done) and after attempt 3 (4 tries done)
-        if (attempt === 1 || attempt === 3) {
-          window.location.reload()
-          return
-        }
+        // Retryable: network failures, aborted requests (timeout), and server-side 502/503
+        const isRetryable =
+          /failed to fetch|networkerror|load failed|network request failed/i.test(msg) ||
+          err?.name === 'TypeError' ||
+          err?.name === 'AbortError' ||
+          msg === 'server_unavailable'
+        if (!isRetryable) { setStatus('invalid'); return }
+        // All retries exhausted
+        if (attempt === DELAYS.length - 1) { setStatus('network'); return }
       }
     }
-    // All attempts failed without a reload opportunity
-    setStatus('network')
   }
 
   useEffect(() => {
@@ -1077,14 +1088,17 @@ export default function InviteScreening() {
     return (
       <div className="fixed inset-0 flex flex-col items-center justify-center px-6 text-center bg-[#080c18] text-[#dddddd]">
         <h1 className="font-body font-light text-2xl md:text-4xl mb-6 tracking-tight">
-          Can&apos;t reach the server
+          Connection timed out
         </h1>
-        <p className="font-body font-light text-sm text-[#dddddd]/55 max-w-md mx-auto leading-relaxed">
-          The invite page needs the API on port <span className="text-[#dddddd]/80">3001</span>. From the project
-          root run <span className="font-mono text-[#dddddd]/70">npm run dev</span> (starts Vite + API), or in two
-          terminals run <span className="font-mono text-[#dddddd]/70">npm run dev:server</span> and{' '}
-          <span className="font-mono text-[#dddddd]/70">npm run dev:client</span>. Then reload this page.
+        <p className="font-body font-light text-sm text-[#dddddd]/55 max-w-md mx-auto leading-relaxed mb-8">
+          We couldn&apos;t reach the server after several attempts. Please check your connection and try again.
         </p>
+        <button
+          onClick={() => { setStatus('loading'); setSlowConnecting(false); validateInvite() }}
+          className="font-body font-light text-sm text-[#dddddd]/70 border border-[#dddddd]/20 rounded px-5 py-2 hover:border-[#dddddd]/50 hover:text-[#dddddd] transition-colors"
+        >
+          Try again
+        </button>
       </div>
     )
   }
@@ -1108,6 +1122,14 @@ export default function InviteScreening() {
     <div className="font-body font-light min-h-screen text-[#dddddd] bg-[#080c18] overflow-hidden select-none">
       <div className="tactile-grain" aria-hidden />
       <div className="fixed inset-0 z-[-2] bg-[#080c18]" aria-hidden />
+
+      {status === 'loading' && slowConnecting && (
+        <div className="fixed inset-0 z-[3000] flex flex-col items-center justify-center pointer-events-none">
+          <p className="font-body font-light text-sm text-[#dddddd]/45 tracking-wide">
+            Still connecting, one moment…
+          </p>
+        </div>
+      )}
 
       {prologueState.mounted && (
         <div

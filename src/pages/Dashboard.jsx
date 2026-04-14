@@ -721,7 +721,7 @@ export default function Dashboard() {
                         {viewerFilmTitle}
                       </span>
                     </div>
-                    <div className="relative flex h-[min(52vh,560px)] w-full overflow-hidden bg-[#121a33] sm:h-[min(56vh,620px)]">
+                    <div className="relative flex h-[800vh] w-full overflow-hidden bg-[#121a33]">
                       <NetworkGraph
                         fillHeight
                         pannable

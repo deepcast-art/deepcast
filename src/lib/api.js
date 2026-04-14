@@ -1,7 +1,16 @@
 const API_BASE = '/api'
+const FETCH_TIMEOUT_MS = 10000
+
+function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController()
+  const id = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  return fetch(url, { ...options, signal: controller.signal }).finally(() =>
+    clearTimeout(id)
+  )
+}
 
 async function request(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetchWithTimeout(`${API_BASE}${path}`, {
     headers: {
       'Content-Type': 'application/json',
       ...options.headers,
@@ -42,10 +51,11 @@ export const api = {
   // Invites
   validateInvite: async (token) => {
     const enc = encodeURIComponent(token)
-    const res = await fetch(`${API_BASE}/invites/validate/${enc}`)
+    const res = await fetchWithTimeout(`${API_BASE}/invites/validate/${enc}`)
     if (res.ok) return res.json()
     if (res.status === 410) throw new Error('expired')
     if (res.status === 404) throw new Error('invalid')
+    if (res.status === 502 || res.status === 503) throw new Error('server_unavailable')
     const error = await res.json().catch(() => ({ error: 'Request failed' }))
     throw new Error(error.error || 'Request failed')
   },
