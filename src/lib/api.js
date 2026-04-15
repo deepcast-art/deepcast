@@ -10,7 +10,7 @@ function fetchWithTimeout(url, options = {}) {
 }
 
 async function request(path, options = {}) {
-  const res = await fetchWithTimeout(`${API_BASE}${path}`, {
+  const res = await fetch(`${API_BASE}${path}`, {
     headers: {
       'Content-Type': 'application/json',
       ...options.headers,

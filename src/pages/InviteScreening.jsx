@@ -7,13 +7,16 @@ import {
   useCallback,
   useMemo,
 } from 'react'
-import DeepcastLogo from '../components/DeepcastLogo'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { api } from '../lib/api'
 import { ensureHttpsUrl } from '../lib/httpsUrl.js'
 import { useAuth } from '../lib/auth'
 import NetworkGraph, { buildGraphLayout, inviteRecipientKey } from '../components/NetworkGraph'
+import MobileLanding from './screening/MobileLanding'
+import DesktopLanding from './screening/DesktopLanding'
+import MobilePassItOn from './screening/MobilePassItOn'
+import DesktopPassItOn from './screening/DesktopPassItOn'
 import './screening-room.css'
 
 const VIEWER_SHARE_LIMIT = 5
@@ -33,16 +36,6 @@ function isIOS() {
   )
 }
 
-function ordinalSuffix(n) {
-  if (n == null || Number.isNaN(Number(n))) return ''
-  const num = Math.floor(Number(n))
-  const j = num % 10
-  const k = num % 100
-  if (j === 1 && k !== 11) return `${num}st`
-  if (j === 2 && k !== 12) return `${num}nd`
-  if (j === 3 && k !== 13) return `${num}rd`
-  return `${num}th`
-}
 
 function useMediaQueryMdUp() {
   const [matches, setMatches] = useState(() =>
@@ -232,9 +225,11 @@ export default function InviteScreening() {
       !isLgUp && !showPostFilm && screeningPlaybackEverStarted && passItOnFromUserPause,
     [isLgUp, showPostFilm, screeningPlaybackEverStarted, passItOnFromUserPause]
   )
-  const passItOnLayerActive = showPostFilm || narrowPausePassItOn
+  /** Desktop: show pass-it-on whenever film is paused mid-playback (no manual "Pass it on" click needed). */
+  const desktopPassItOnActive = isLgUp && isScreeningPaused && screeningPlaybackEverStarted && !showPostFilm
+  const passItOnLayerActive = showPostFilm || narrowPausePassItOn || desktopPassItOnActive
   const passItOnContentVisible =
-    (showPostFilm && !completionThankYouVisible) || narrowPausePassItOn
+    (showPostFilm && !completionThankYouVisible) || narrowPausePassItOn || desktopPassItOnActive
 
   /* ---------- DATA FETCHING ---------- */
 
@@ -525,6 +520,8 @@ export default function InviteScreening() {
   /* ---------- NAVIGATION ---------- */
 
   const requestScreeningFullscreen = useCallback(() => {
+    // Desktop plays inline — fullscreen is mobile-only.
+    if (isLgUp) return
     // iOS Safari has no usable document fullscreen; use native video fullscreen instead.
     if (isIOSDevice) return
     if (typeof document === 'undefined') return
@@ -537,7 +534,7 @@ export default function InviteScreening() {
     if (typeof req === 'function') {
       void req.call(el).catch(() => {})
     }
-  }, [isIOSDevice])
+  }, [isIOSDevice, isLgUp])
 
   /** Native iOS video fullscreen (webkit); mux-player exposes the underlying mux-video as `.media`. */
   const tryIOSNativeVideoFullscreen = useCallback(() => {
@@ -815,7 +812,6 @@ export default function InviteScreening() {
 
     if (!isLgUp) exitScreeningFullscreen()
     setShowPostFilm(true)
-    setCompletionThankYouVisible(true)
   }
 
   /* ---------- LETTER FORM ---------- */
@@ -950,6 +946,7 @@ export default function InviteScreening() {
 
   /** Mid-playback “Resume Film” — restore screening fullscreen on narrow viewports (matches exit-on-pause). */
   const resumeFilm = useCallback(() => {
+    setPassItOnFromUserPause(false)
     if (!isLgUp) requestScreeningFullscreen()
     tryScreeningPlay()
     if (!isLgUp) queueMicrotask(() => tryIOSNativeVideoFullscreen())
@@ -959,6 +956,7 @@ export default function InviteScreening() {
   useEffect(() => {
     if (currentView !== 'screening' || !film?.mux_playback_id) return
     if (showPostFilm) return
+    if (desktopPassItOnActive) return
     if (passItOnFromUserPause && !isLgUp) return
     let cancelled = false
     let n = 0
@@ -1254,198 +1252,25 @@ export default function InviteScreening() {
 
         {/* ========================= LANDING ========================= */}
         {status === 'valid' && currentView === 'landing' && !isDesktop && (
-          // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
-          <section className="relative min-h-[100dvh] w-full">
-            <div className="fixed inset-0 z-0 h-[100dvh] w-full bg-[#080c18]">
-              {graphLayout ? (
-                <NetworkGraph
-                  fillHeight
-                  pannable
-                  transparentSurface
-                  interactiveZoom
-                  softTouchInteraction
-                  edgeScrollFades
-                  edgeFadeColor="#080c18"
-                  nodesData={graphLayout.nodesData}
-                  linksData={graphLayout.linksData}
-                  viewBoxH={graphLayout.viewBoxH}
-                  viewBoxW={graphLayout.viewBoxW}
-                  ringRadii={graphLayout.ringRadii}
-                  sectionLabels={graphLayout.sectionLabels}
-                  rootNode={graphLayout.rootNode}
-                  defaultActiveNodes={graphLayout.defaultActiveNodes}
-                  defaultActiveLinks={graphLayout.defaultActiveLinks}
-                  showLegend={false}
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center px-6 text-sm text-[#dddddd]/40">
-                  {filmInvites.length > 0
-                    ? 'Preparing your invitation map…'
-                    : 'Your private path to this film begins here.'}
-                </div>
-              )}
-            </div>
-
-            <div className="relative z-10 flex min-h-[100dvh] w-full flex-col pointer-events-none">
-              <div
-                className="pointer-events-auto absolute left-6 top-8 z-20 flex items-center gap-3 slow-fade-text reveal-up"
-                style={{ transitionDelay: '1200ms' }}
-              >
-                <div className="h-1.5 w-1.5 rounded-full bg-[#b1a180]/60" />
-                <span className="font-display text-[11px] font-light uppercase tracking-[0.25em] text-[#dddddd]/50">
-                  Gifted by {sharerWithTeam || 'your host'}
-                </span>
-              </div>
-
-              <div className="flex min-h-[100dvh] flex-1 flex-col px-6 pb-12 pt-28">
-                <div
-                  className="mx-auto flex w-full max-w-md flex-1 flex-col items-center text-center"
-                  style={{
-                    opacity: viewVisible ? 1 : 0,
-                    transition: 'opacity 1.2s ease-out 0.6s',
-                  }}
-                >
-                  <div className="flex flex-col gap-2 pt-4">
-                    {peopleCount != null ? (
-                      <>
-                        <p className="font-display text-[9px] font-light uppercase leading-relaxed tracking-[0.35em] text-[#dddddd]/70">
-                          YOU ARE THE {ordinalSuffix(peopleCount)} PERSON TO BE INVITED.
-                        </p>
-                        <p className="font-display text-[9px] font-light uppercase tracking-[0.35em] text-[#dddddd]/70">
-                          BY PRIVATE INVITATION ONLY.
-                        </p>
-                      </>
-                    ) : (
-                      <p className="font-display text-[9px] font-light uppercase tracking-[0.35em] text-[#dddddd]/70">
-                        BY PRIVATE INVITATION ONLY.
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-auto flex flex-col items-center gap-10">
-                  <div
-                    className="reveal-up flex w-full max-w-[min(92vw,42rem)] justify-center px-1"
-                    style={{ transitionDelay: '200ms' }}
-                  >
-                    <DeepcastLogo
-                      variant="wordmark"
-                      className="!text-7xl w-auto max-w-[min(90vw,440px)] leading-none sm:!text-8xl"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleOpenInvitationClick}
-                    className="group pointer-events-auto flex cursor-pointer flex-col items-center gap-3 border-0 bg-transparent p-0 reveal-up"
-                    style={{ transitionDelay: '500ms' }}
-                  >
-                    <span className="font-sans text-[9px] uppercase tracking-[0.3em] text-[#b1a180] transition-colors duration-300 group-hover:text-[#dddddd]">
-                      Enter
-                    </span>
-                    <div className="relative w-fit overflow-hidden py-1">
-                      <span className="font-serif-v3 text-2xl italic text-[#dddddd]">
-                        Open your invitation
-                      </span>
-                      <div className="absolute bottom-0 left-0 h-[0.5px] w-full -translate-x-full bg-[#b1a180] transition-transform duration-[600ms] ease-out group-hover:translate-x-0" />
-                    </div>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
+          <MobileLanding
+            graphLayout={graphLayout}
+            filmInvites={filmInvites}
+            sharerWithTeam={sharerWithTeam}
+            peopleCount={peopleCount}
+            viewVisible={viewVisible}
+            handleOpenInvitationClick={handleOpenInvitationClick}
+          />
         )}
 
         {status === 'valid' && currentView === 'landing' && isDesktop && (
-          <section className="relative flex w-full flex-col overflow-hidden md:flex-row md:items-start">
-            <div
-              className="absolute top-8 left-6 z-20 flex items-center gap-3 slow-fade-text reveal-up md:left-16"
-              style={{ transitionDelay: '1200ms' }}
-            >
-              <div className="h-1.5 w-1.5 rounded-full bg-[#b1a180]/60" />
-              <span className="font-display text-[11px] font-light uppercase tracking-[0.25em] text-[#dddddd]/50 md:text-[12px]">
-                Gifted by {sharerWithTeam || 'your host'}
-              </span>
-            </div>
-
-            <div className="flex min-h-[100dvh] w-full shrink-0 flex-col items-center justify-center gap-10 bg-[#080c18] px-8 py-12 md:sticky md:top-0 md:h-[100dvh] md:max-h-[100dvh] md:min-h-0 md:w-1/2 md:shrink-0 md:px-16 md:py-0">
-              <div
-                className="reveal-up flex w-full max-w-[min(92vw,42rem)] justify-center px-1"
-                style={{ transitionDelay: '200ms' }}
-              >
-                <DeepcastLogo
-                  variant="wordmark"
-                  className="!text-8xl w-auto max-w-[min(90vw,440px)] leading-none"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={handleOpenInvitationClick}
-                className="group flex cursor-pointer flex-col items-center gap-3 border-0 bg-transparent p-0 reveal-up"
-                style={{ transitionDelay: '500ms' }}
-              >
-                <span className="font-sans text-[9px] uppercase tracking-[0.3em] text-[#b1a180] transition-colors duration-300 group-hover:text-[#dddddd]">
-                  Enter
-                </span>
-                <div className="relative w-fit overflow-hidden py-1">
-                  <span className="font-serif-v3 text-2xl italic text-[#dddddd]">
-                    Open your invitation
-                  </span>
-                  <div className="absolute bottom-0 left-0 h-[0.5px] w-full -translate-x-full bg-[#b1a180] transition-transform duration-[600ms] ease-out group-hover:translate-x-0" />
-                </div>
-              </button>
-            </div>
-
-            <div className="hidden h-[100dvh] w-[0.5px] flex-shrink-0 self-start bg-[#b1a180] opacity-30 md:block" />
-
-            <div className="flex min-h-[min(60vh,520px)] w-full shrink-0 flex-col bg-[#080c18] md:h-[100dvh] md:min-h-0 md:w-1/2 md:flex-1">
-              <div
-                className="flex shrink-0 justify-center bg-[#121a33] px-4 pb-4 pt-8 md:pt-10"
-                style={{
-                  opacity: viewVisible ? 1 : 0,
-                  transition: 'opacity 1.2s ease-out 0.6s',
-                }}
-              >
-                <div className="flex max-w-md flex-col items-center gap-1 px-2 text-center">
-                  {peopleCount != null ? (
-                    <p className="font-display text-[9px] font-light uppercase tracking-[0.35em] text-[#dddddd]/70">
-                      You are the {ordinalSuffix(peopleCount)} person to be invited to watch this film.
-                      By private invitation only.
-                    </p>
-                  ) : (
-                    <p className="font-display text-[9px] font-light uppercase tracking-[0.35em] text-[#dddddd]/70">
-                      By private invitation only.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="relative min-h-0 flex-1 overflow-hidden bg-[#121a33]">
-                {graphLayout ? (
-                  <NetworkGraph
-                    fillHeight
-                    pannable
-                    transparentSurface
-                    nodesData={graphLayout.nodesData}
-                    linksData={graphLayout.linksData}
-                    viewBoxH={graphLayout.viewBoxH}
-                    viewBoxW={graphLayout.viewBoxW}
-                    ringRadii={graphLayout.ringRadii}
-                    sectionLabels={graphLayout.sectionLabels}
-                    rootNode={graphLayout.rootNode}
-                    defaultActiveNodes={graphLayout.defaultActiveNodes}
-                    defaultActiveLinks={graphLayout.defaultActiveLinks}
-                    showLegend={false}
-                  />
-                ) : (
-                  <div className="flex h-full flex-1 items-center justify-center px-6 text-sm text-[#dddddd]/40">
-                    {filmInvites.length > 0
-                      ? 'Preparing your invitation map…'
-                      : 'Your private path to this film begins here.'}
-                  </div>
-                )}
-              </div>
-            </div>
-          </section>
+          <DesktopLanding
+            graphLayout={graphLayout}
+            filmInvites={filmInvites}
+            sharerWithTeam={sharerWithTeam}
+            peopleCount={peopleCount}
+            viewVisible={viewVisible}
+            handleOpenInvitationClick={handleOpenInvitationClick}
+          />
         )}
 
         {/* ====================== SCREENING ROOM (V3 diptych overlay) ====================== */}
@@ -1454,7 +1279,7 @@ export default function InviteScreening() {
             {film.mux_playback_id ? (
               <div
                 className={`absolute inset-0 z-[5] transition-opacity duration-[900ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
-                  passItOnLayerActive && !isLgUp ? 'opacity-0 pointer-events-none' : 'opacity-100'
+                  (passItOnLayerActive && !isLgUp) || desktopPassItOnActive || showPostFilm ? 'opacity-0 pointer-events-none' : 'opacity-100'
                 }`}
               >
                 <Suspense
@@ -1532,26 +1357,6 @@ export default function InviteScreening() {
               </div>
             </div>
 
-            {/* Mid-playback pause on lg+: slim resume strip. Narrow: full Pass it on layer (see passItOnLayerActive). */}
-            {isLgUp && isScreeningPaused && !showPostFilm && (
-              <div
-                className="absolute inset-0 z-[90] flex flex-col justify-end bg-[#050a12]/45 pointer-events-auto"
-                role="presentation"
-              >
-                <button
-                  type="button"
-                  onClick={resumeFilm}
-                  className="flex w-full shrink-0 items-center justify-center gap-2.5 border-t border-[#b1a180]/35 bg-[#080c18]/92 py-4 backdrop-blur-md landscape:py-3 touch-manipulation"
-                >
-                  <svg className="h-2.5 w-2.5 shrink-0 fill-[#dddddd]/85" viewBox="0 0 24 24" aria-hidden>
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
-                  <span className="font-sans text-[10px] font-medium uppercase tracking-[0.35em] text-[#dddddd]/90">
-                    Resume Film
-                  </span>
-                </button>
-              </div>
-            )}
 
             <div
               className={`absolute inset-0 z-[100] flex min-h-0 flex-col overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] panel-scroll bg-[#080c18] transition-opacity duration-[800ms] ease-[cubic-bezier(0.16,1,0.3,1)] lg:max-h-[100dvh] lg:flex-row lg:overflow-hidden ${
@@ -1608,446 +1413,67 @@ export default function InviteScreening() {
 
               {passItOnContentVisible && (
               <>
-              {/* ── Stacked (phone + tablet + phone landscape): use lg: so viewports &gt;768px (e.g. landscape phones) still stack — otherwise desktop diptych hides the letter card. ── */}
-              <div className="lg:hidden flex h-full min-h-0 w-full flex-1 flex-col bg-[#080c18] portrait:h-auto portrait:flex-none landscape:flex-row landscape:max-h-[100dvh] landscape:overflow-hidden">
-
-                {narrowPausePassItOn && (
-                  <div className="sticky top-0 z-10 shrink-0 border-b border-[#b1a180]/25 bg-[#080c18]/95 backdrop-blur-md pb-1 pt-[max(0.5rem,env(safe-area-inset-top))] landscape:hidden">
-                    <button
-                      type="button"
-                      onClick={resumeFilm}
-                      className="flex w-full items-center justify-center gap-2.5 py-3.5 touch-manipulation"
-                    >
-                      <svg className="h-2.5 w-2.5 shrink-0 fill-[#dddddd]/85" viewBox="0 0 24 24" aria-hidden>
-                        <path d="M8 5v14l11-7z" />
-                      </svg>
-                      <span className="font-sans text-[10px] font-medium uppercase tracking-[0.35em] text-[#dddddd]/90">
-                        Resume Film
-                      </span>
-                    </button>
-                    <div className="flex justify-center px-10 pb-2">
-                      <div className="relative h-px w-full max-w-[min(100%,20rem)] bg-[#b1a180]/35">
-                        <div className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#b1a180]/55 bg-[#080c18]" />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* LANDSCAPE ONLY: Left col — header + graph */}
-                <div className="portrait:hidden landscape:flex landscape:flex-col landscape:w-[44%] landscape:shrink-0 landscape:h-full landscape:min-h-0 landscape:max-h-[100dvh] landscape:overflow-hidden landscape:px-3 landscape:py-3 landscape:border-r landscape:border-[#b1a180]/10">
-                  <div className="w-full shrink-0 mb-2">
-                    <h2 className="font-serif-v3 text-[1.35rem] leading-tight italic text-[#dddddd] font-light mb-1 text-left">
-                      Pass it on.
-                    </h2>
-                    <p className="font-serif-v3 text-[11px] italic leading-snug text-[#dddddd]/65 max-w-none text-left line-clamp-2">
-                      If you choose not to share, the film&apos;s journey ends with you. That&apos;s ok — but know
-                      that it was carried this far by people who believed in it.
-                    </p>
-                  </div>
-                  {graphLayout && (
-                    <div className="flex-1 min-h-0 w-full overflow-hidden rounded-md border border-[#b1a180]/15 bg-[#080c18] shadow-inner touch-manipulation">
-                      <NetworkGraph
-                        fillHeight
-                        pannable
-                        transparentSurface
-                        interactiveZoom
-                        softTouchInteraction
-                        edgeScrollFades
-                        edgeFadeColor="#080c18"
-                        nodesData={graphLayout.nodesData}
-                        linksData={graphLayout.linksData}
-                        viewBoxH={graphLayout.viewBoxH}
-                        viewBoxW={graphLayout.viewBoxW}
-                        ringRadii={graphLayout.ringRadii}
-                        sectionLabels={graphLayout.sectionLabels}
-                        rootNode={graphLayout.rootNode}
-                        defaultActiveNodes={graphLayout.defaultActiveNodes}
-                        defaultActiveLinks={graphLayout.defaultActiveLinks}
-                        showLegend={false}
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* PORTRAIT ONLY: Header — above letter card */}
-                <div className="landscape:hidden shrink-0 px-3 pt-3 pb-2">
-                  <h2 className="font-serif-v3 text-[1.65rem] leading-tight italic text-[#dddddd] font-light mb-2 text-left">
-                    Pass it on.
-                  </h2>
-                  <p className="font-serif-v3 text-[12px] italic leading-relaxed text-[#dddddd]/65 max-w-none text-left sm:text-[13px]">
-                    If you choose not to share, the film&apos;s journey ends with you. That&apos;s ok — but know
-                    that it was carried this far by people who believed in it.
-                  </p>
-                </div>
-
-                {/* Letter card — both orientations */}
-                <div className="flex flex-col portrait:px-3 portrait:pb-4 portrait:pt-0 landscape:flex-1 landscape:min-h-0 landscape:h-full landscape:overflow-hidden landscape:px-2 landscape:py-2">
-                  <div
-                      className="relative flex w-full flex-col rounded-lg px-3 py-5 sm:px-5 sm:py-6 portrait:px-4 portrait:py-6 landscape:min-h-0 landscape:flex-1 landscape:overflow-hidden landscape:px-2.5 landscape:py-2 landscape:sm:px-3 landscape:sm:py-2.5"
-                      style={{
-                        background:
-                          'linear-gradient(168deg, #e8e2d6 0%, #ddd8cc 30%, #d5cfc3 60%, #ddd7cb 100%)',
-                        boxShadow:
-                          '0 2px 24px rgba(0,0,0,0.28), 0 0 0 0.5px rgba(180,170,150,0.45)',
-                      }}
-                    >
-                      <div
-                        className="absolute inset-0 pointer-events-none rounded-lg"
-                        style={{
-                          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 300 300' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='paper'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23paper)'/%3E%3C/svg%3E")`,
-                          opacity: 0.08,
-                          mixBlendMode: 'multiply',
-                        }}
-                      />
-                      <div className="relative z-10 flex flex-col text-[#2a2a2a] landscape:min-h-0 landscape:flex-1 landscape:overflow-y-auto landscape:overflow-x-hidden landscape:[zoom:0.9] landscape:overscroll-contain [-webkit-overflow-scrolling:touch]">
-                        <h3 className="font-sans text-[9px] uppercase tracking-[0.45em] text-[#6b5d4a] mb-4 text-center portrait:mb-2 sm:mb-6 landscape:mb-1 landscape:text-[7px] landscape:tracking-[0.38em]">
-                          A Letter of Invitation
-                        </h3>
-
-                        {letterError && (
-                          <p className="mb-3 text-[11px] font-sans text-[#b84233] bg-[#b84233]/10 px-3 py-2 w-full rounded-sm landscape:mb-1 landscape:py-1 landscape:text-[10px]">
-                            {letterError}
-                          </p>
-                        )}
-                        {letterSuccess && (
-                          <p className="mb-3 text-[11px] font-sans text-[#5b8a5e] bg-[#5b8a5e]/10 px-3 py-2 w-full rounded-sm landscape:mb-1 landscape:py-1 landscape:text-[10px]">
-                            {letterSuccess}
-                          </p>
-                        )}
-
-                        {slotsRemaining > 0 ? (
-                          <>
-                            <div className="font-serif-v3 w-full space-y-4 text-center landscape:space-y-1.5">
-                              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-center sm:gap-x-2 portrait:gap-2 landscape:flex-row landscape:flex-nowrap landscape:gap-x-2 landscape:gap-y-0 landscape:justify-center">
-                                <span className="italic text-[15px] sm:inline landscape:text-[12px]">Dear</span>
-                                <input
-                                  type="text"
-                                  placeholder="First"
-                                  value={letterRecipientFirst}
-                                  onChange={(e) => setLetterRecipientFirst(e.target.value)}
-                                  className="w-full sm:min-w-[5rem] sm:max-w-[10rem] sm:flex-1 bg-transparent border-b border-[#6b5d4a]/45 py-1 text-center text-[15px] text-[#2a2a2a] placeholder-[#2a2a2a]/35 focus:outline-none focus:border-[#6b5d4a] landscape:w-auto landscape:min-w-[4.5rem] landscape:max-w-[min(28%,7rem)] landscape:flex-1 landscape:py-0 landscape:text-[12px]"
-                                  autoComplete="given-name"
-                                />
-                                <input
-                                  type="text"
-                                  placeholder="Last"
-                                  value={letterRecipientLast}
-                                  onChange={(e) => setLetterRecipientLast(e.target.value)}
-                                  className="w-full sm:min-w-[5rem] sm:max-w-[10rem] sm:flex-1 bg-transparent border-b border-[#6b5d4a]/45 py-1 text-center text-[15px] text-[#2a2a2a] placeholder-[#2a2a2a]/35 focus:outline-none focus:border-[#6b5d4a] landscape:w-auto landscape:min-w-[4.5rem] landscape:max-w-[min(28%,7rem)] landscape:flex-1 landscape:py-0 landscape:text-[12px]"
-                                  autoComplete="family-name"
-                                />
-                              </div>
-                              <textarea
-                                rows={3}
-                                placeholder="Write a note — tell them why this film made you think of them..."
-                                value={letterNote}
-                                onChange={(e) => setLetterNote(e.target.value)}
-                                className="w-full bg-transparent text-center text-[15px] italic leading-relaxed text-[#2a2a2a] placeholder-[#2a2a2a]/35 focus:outline-none resize-none min-h-[5.5rem] border-b border-[#6b5d4a]/25 pb-2 landscape:min-h-0 landscape:h-[4.25rem] landscape:py-1 landscape:text-[12px] landscape:leading-snug"
-                              />
-                              <input
-                                type="email"
-                                placeholder="Their email"
-                                value={letterRecipientEmail}
-                                onChange={(e) => setLetterRecipientEmail(e.target.value)}
-                                className="w-full bg-transparent border-b border-[#6b5d4a]/45 py-2 text-center font-sans text-[14px] text-[#2a2a2a] placeholder-[#2a2a2a]/35 focus:outline-none landscape:py-0.5 landscape:text-[12px]"
-                                inputMode="email"
-                                autoComplete="email"
-                              />
-                            </div>
-
-                            {slotsRemaining > 1 && (
-                              <p className="mt-4 text-center font-sans text-[9px] font-medium uppercase tracking-[0.28em] text-[#6b5d4a]/90 portrait:mt-2 landscape:mt-1 landscape:text-[7px] landscape:tracking-[0.22em]">
-                                + Add another ({slotsRemaining - 1} left)
-                              </p>
-                            )}
-
-                            <div className="mt-5 flex flex-wrap items-end justify-center gap-x-3 gap-y-2 border-t border-[#6b5d4a]/15 pt-5 font-serif-v3 text-[15px] text-[#2a2a2a] portrait:mt-3 portrait:pt-3 landscape:mt-2 landscape:gap-x-2 landscape:gap-y-0 landscape:pt-2 landscape:text-[12px]">
-                              <span className="italic">With intention,</span>
-                              <input
-                                type="text"
-                                placeholder="Your name"
-                                value={letterSenderName}
-                                onChange={(e) => setLetterSenderName(e.target.value)}
-                                className="min-w-[10rem] max-w-[18rem] flex-1 bg-transparent border-b border-[#6b5d4a]/45 py-1 text-center italic focus:outline-none focus:border-[#6b5d4a] placeholder-[#2a2a2a]/35 landscape:min-w-0 landscape:max-w-[min(55%,12rem)] landscape:py-0 landscape:text-[12px]"
-                                autoComplete="name"
-                              />
-                            </div>
-
-                            {!isInviteRecipientSession && (
-                              <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-end sm:gap-4 portrait:mt-3 portrait:gap-3 landscape:mt-2 landscape:flex-row landscape:items-end landscape:gap-2 landscape:gap-y-0">
-                                <label className="flex flex-1 flex-col gap-1.5 text-center landscape:min-w-0 landscape:gap-0.5">
-                                  <span className="font-sans text-[8px] uppercase tracking-[0.25em] text-[#6b5d4a]/80 landscape:text-[7px]">
-                                    Your email
-                                  </span>
-                                  <input
-                                    type="email"
-                                    placeholder="your@email.com"
-                                    value={letterSenderEmail}
-                                    onChange={(e) => setLetterSenderEmail(e.target.value)}
-                                    className="w-full bg-transparent border-b border-[#6b5d4a]/45 py-1.5 text-center font-sans text-[14px] text-[#2a2a2a] placeholder-[#2a2a2a]/35 focus:outline-none landscape:py-0.5 landscape:text-[11px]"
-                                    autoComplete="email"
-                                  />
-                                </label>
-                                <label className="flex flex-1 flex-col gap-1.5 text-center landscape:min-w-0 landscape:gap-0.5">
-                                  <span className="font-sans text-[8px] uppercase tracking-[0.25em] text-[#6b5d4a]/80 landscape:text-[7px]">
-                                    Password
-                                  </span>
-                                  <input
-                                    type="password"
-                                    placeholder="Min. 8 characters"
-                                    value={newPassword}
-                                    onChange={(e) => setNewPassword(e.target.value)}
-                                    className="w-full bg-transparent border-b border-[#6b5d4a]/45 py-1.5 text-center font-sans text-[14px] text-[#2a2a2a] placeholder-[#2a2a2a]/35 focus:outline-none landscape:py-0.5 landscape:text-[11px]"
-                                    autoComplete="new-password"
-                                  />
-                                </label>
-                              </div>
-                            )}
-
-                            <button
-                              type="button"
-                              onClick={handleSendLetter}
-                              disabled={letterSending}
-                              className="mt-8 w-full shrink-0 py-3.5 min-h-[48px] bg-[#a89472] hover:bg-[#978768] active:bg-[#8a7d62] text-[#f5f2ec] font-sans text-[11px] tracking-[0.32em] uppercase transition-colors rounded-sm disabled:opacity-40 touch-manipulation portrait:mt-4 portrait:min-h-[44px] landscape:mt-3 landscape:min-h-[48px] landscape:py-3.5 landscape:text-[11px] landscape:tracking-[0.3em]"
-                            >
-                              {letterSending ? 'Sending…' : 'Seal & Send'}
-                            </button>
-
-                            {passItOnLayerActive && (
-                              <p className="mt-3 text-center font-sans text-[9px] uppercase tracking-[0.15em] text-[#6b5d4a]/55 landscape:mt-1 landscape:text-[7px] landscape:hidden">
-                                After sending, you&apos;ll go to your dashboard.
-                              </p>
-                            )}
-
-                            {passItOnLayerActive && !isInviteRecipientSession && user && (
-                              <div className="mt-4 flex flex-col items-center gap-2 border-t border-[#6b5d4a]/15 pt-4 text-center landscape:hidden">
-                                <p className="font-sans text-[10px] leading-relaxed text-[#6b5d4a]/70">
-                                  Signed in as a different email. Sign out to use{' '}
-                                  <span className="text-[#2a2a2a]/80">{invite?.recipient_email}</span>.
-                                </p>
-                                <button
-                                  type="button"
-                                  onClick={() => void signOut()}
-                                  className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#6b5d4a]/70 hover:text-[#2a2a2a]"
-                                >
-                                  Sign out
-                                </button>
-                              </div>
-                            )}
-
-                            {passItOnLayerActive && (
-                              <button
-                                type="button"
-                                onClick={() => setCurrentView('dashboard')}
-                                className="mt-4 w-full py-2 font-sans text-[9px] uppercase tracking-[0.25em] text-[#6b5d4a]/70 hover:text-[#2a2a2a]/90 transition-colors landscape:mt-1 landscape:py-1 landscape:text-[8px]"
-                              >
-                                Skip — Go to dashboard
-                              </button>
-                            )}
-                          </>
-                        ) : (
-                          <p className="font-serif-v3 text-center text-lg text-[#2a2a2a]/75 py-6">
-                            All invitations have been sent.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                {/* PORTRAIT ONLY: Network graph at bottom — partially visible, scroll to see */}
-                {graphLayout && (
-                  <div className="landscape:hidden shrink-0 px-3 pt-2 pb-10">
-                    <div className="h-[min(28dvh,220px)] min-h-[140px] max-h-[240px] w-full overflow-hidden rounded-md border border-[#b1a180]/15 bg-[#080c18] shadow-inner touch-manipulation">
-                      <NetworkGraph
-                        fillHeight
-                        pannable
-                        transparentSurface
-                        interactiveZoom
-                        softTouchInteraction
-                        edgeScrollFades
-                        edgeFadeColor="#080c18"
-                        nodesData={graphLayout.nodesData}
-                        linksData={graphLayout.linksData}
-                        viewBoxH={graphLayout.viewBoxH}
-                        viewBoxW={graphLayout.viewBoxW}
-                        ringRadii={graphLayout.ringRadii}
-                        sectionLabels={graphLayout.sectionLabels}
-                        rootNode={graphLayout.rootNode}
-                        defaultActiveNodes={graphLayout.defaultActiveNodes}
-                        defaultActiveLinks={graphLayout.defaultActiveLinks}
-                        showLegend={false}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* ── Desktop (wide): top bar + two-column diptych — lg: matches stacked layout breakpoint above */}
-              <div className="hidden lg:flex w-full h-full flex-col">
-
-                <div className="flex min-h-0 flex-1">
-              {/* Left column — context + map */}
-              <div className="flex min-h-0 w-full shrink-0 flex-col justify-start gap-8 border-b border-[#b1a180]/20 px-8 py-28 lg:w-[40%] lg:min-h-0 lg:max-h-[100dvh] lg:justify-center lg:overflow-y-auto lg:border-b-0 lg:border-r lg:py-12">
-                <div className="flex flex-col gap-2">
-                  <span className="font-sans text-[10px] uppercase tracking-[0.3em] text-[#b1a180]/90">
-                    {slotsRemaining > 0
-                      ? `${slotsRemaining} share${slotsRemaining !== 1 ? 's' : ''} remaining`
-                      : 'All shares sent'}
-                  </span>
-                  <h2 className="font-serif-v3 text-4xl md:text-5xl text-[#dddddd] tracking-tight">
-                    {showPostFilm ? 'Thank you for watching.' : 'Pass it on.'}
-                  </h2>
-                  {showPostFilm && user && (
-                    <Link
-                      to="/dashboard"
-                      className="font-sans text-[10px] uppercase tracking-[0.25em] text-[#b1a180] transition-opacity hover:opacity-80"
-                    >
-                      Go to dashboard
-                    </Link>
-                  )}
-                  <p className="font-body font-light text-[13px] text-[#dddddd]/70 leading-relaxed max-w-md">
-                    Who <span className="italic">needs</span> to see this? Not anyone and everyone — just the few
-                    people you know will resonate deeply.
-                  </p>
-                  <p className="font-body font-light text-[13px] text-[#dddddd]/55 leading-relaxed max-w-md">
-                    If you choose not to share, the film&apos;s journey ends with you. It was carried this far by
-                    people who believed in it.
-                  </p>
-                </div>
-                {graphLayout && (
-                  <div className="mt-2 flex w-full flex-1 flex-col min-h-[min(42vh,520px)] max-h-[min(68vh,900px)] lg:max-h-[min(62dvh,820px)]">
-                    <span className="mb-3 font-sans text-[9px] uppercase tracking-[0.3em] text-[#dddddd]/40">
-                      Invitation path
-                    </span>
-                    <div className="flex min-h-0 flex-1 overflow-hidden rounded border border-[#4a5580]/30">
-                      <NetworkGraph
-                        fillHeight
-                        pannable
-                        transparentSurface
-                        nodesData={graphLayout.nodesData}
-                        linksData={graphLayout.linksData}
-                        viewBoxH={graphLayout.viewBoxH}
-                        viewBoxW={graphLayout.viewBoxW}
-                        ringRadii={graphLayout.ringRadii}
-                        sectionLabels={graphLayout.sectionLabels}
-                        rootNode={graphLayout.rootNode}
-                        defaultActiveNodes={graphLayout.defaultActiveNodes}
-                        defaultActiveLinks={graphLayout.defaultActiveLinks}
-                        showLegend={false}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-                  {/* Vertical amber divider */}
-                  <div className="w-[0.5px] self-stretch bg-[#b1a180] opacity-20 flex-shrink-0" />
-
-                {/* Right column (60%) — letter card */}
-                <div className="w-[60%] h-full overflow-y-auto panel-scroll flex flex-col justify-center items-center px-6 py-8">
-                  <div className="relative w-full max-w-3xl p-4 overflow-hidden" style={{
-                    background: 'linear-gradient(168deg, #e8e2d6 0%, #ddd8cc 30%, #d5cfc3 60%, #ddd7cb 100%)',
-                    borderRadius: '8px',
-                    boxShadow: '0 2px 30px rgba(0,0,0,0.25), 0 0 0 0.5px rgba(180,170,150,0.4)',
-                  }}>
-                    <div className="absolute inset-0 pointer-events-none" style={{
-                      backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 300 300' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='paper'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23paper)'/%3E%3C/svg%3E")`,
-                      opacity: 0.08, mixBlendMode: 'multiply',
-                    }} />
-
-                    <div className="relative z-10 flex flex-col items-center text-center px-4">
-                      <div className="flex flex-col items-center gap-2 mb-4 mt-6">
-                        <h3 className="font-sans text-[10px] uppercase tracking-[0.45em] text-[#2a2a2a]/65">A Letter of Invitation</h3>
-                        <div className="h-[12px] w-[1px] bg-[#2a2a2a]/30" />
-                        <p className="font-sans text-[9px] uppercase tracking-[0.35em] text-[#2a2a2a]/55">
-                          Invitation {String(sentLetters.length + 1).padStart(2, '0')}
-                        </p>
-                      </div>
-
-                      {letterError && (
-                        <p className="mb-4 w-full text-[12px] font-sans text-[#b84233] bg-[#b84233]/10 border border-[#b84233]/25 px-4 py-2">{letterError}</p>
-                      )}
-                      {letterSuccess && (
-                        <p className="mb-4 w-full text-[12px] font-sans text-[#5b8a5e] bg-[#5b8a5e]/10 border border-[#5b8a5e]/25 px-4 py-2">{letterSuccess}</p>
-                      )}
-
-                      {slotsRemaining > 0 ? (
-                        <>
-                          <div className="flex flex-col items-center w-full relative border-[0.5px] border-[#2a2a2a]/15 p-6">
-                            <div className="font-serif-v3 text-lg leading-snug w-full max-w-xl text-[#2a2a2a]">
-                              <div className="flex flex-wrap justify-center items-end gap-x-4 gap-y-1 mb-3">
-                                <span className="italic">Dear</span>
-                                <input type="text" placeholder="First Name" value={letterRecipientFirst} onChange={(e) => setLetterRecipientFirst(e.target.value)} className="w-[120px] bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none text-[#2a2a2a] placeholder-[#2a2a2a]/30" />
-                                <input type="text" placeholder="Last Name" value={letterRecipientLast} onChange={(e) => setLetterRecipientLast(e.target.value)} className="w-[120px] bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none text-[#2a2a2a] placeholder-[#2a2a2a]/30" />
-                                <span>,</span>
-                              </div>
-                              <div className="mb-2">
-                                <textarea rows={2} placeholder="Write your note here. Tell them why this film made you think of them specifically..." value={letterNote} onChange={(e) => setLetterNote(e.target.value)} className="w-full bg-transparent border-none italic text-center focus:outline-none resize-none placeholder-[#2a2a2a]/30 leading-relaxed text-base text-[#2a2a2a]" />
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap justify-center items-end gap-x-4 gap-y-1 mt-1 font-serif-v3 text-lg text-[#2a2a2a]">
-                              <span>With intention,</span>
-                              <input type="text" placeholder="Your Name" value={letterSenderName} onChange={(e) => setLetterSenderName(e.target.value)} className="w-[160px] bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none text-[#2a2a2a] placeholder-[#2a2a2a]/30" />
-                            </div>
-                            {!isInviteRecipientSession && (
-                              <div className="flex flex-col gap-1 w-full max-w-[320px] text-center mt-3">
-                                <label className="font-sans text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Your Email</label>
-                                <input type="email" placeholder="your@email.com" value={letterSenderEmail} onChange={(e) => setLetterSenderEmail(e.target.value)} className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none transition-colors rounded-none" />
-                              </div>
-                            )}
-                            {!isInviteRecipientSession && (
-                              <div className="flex flex-col gap-1 w-full max-w-[320px] text-center mt-3">
-                                <label className="font-sans text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Create Password</label>
-                                <input type="password" placeholder="Min. 8 characters" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none transition-colors rounded-none" />
-                              </div>
-                            )}
-                            <div className="flex flex-col gap-1 w-full max-w-[320px] text-center mt-4">
-                              <label className="font-sans text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Deliver To</label>
-                              <input type="email" placeholder="Their Email Address" value={letterRecipientEmail} onChange={(e) => setLetterRecipientEmail(e.target.value)} className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none transition-colors rounded-none" />
-                            </div>
-                          </div>
-
-                          <div className="w-[80px] h-[1px] bg-gradient-to-r from-transparent via-[#2a2a2a]/30 to-transparent my-3" />
-
-                          <div className="flex flex-col items-center gap-2 w-full max-w-[320px]">
-                            <button type="button" onClick={handleSendLetter} disabled={letterSending} className="mt-6 w-full py-3 bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-sans text-[11px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none mb-6 disabled:opacity-40">
-                              {letterSending ? 'Sending…' : 'Seal & Send'}
-                            </button>
-                            {passItOnLayerActive && (
-                              <p className="text-center font-sans text-[9px] uppercase tracking-[0.15em] text-[#2a2a2a]/40 -mt-4 mb-4">
-                                After sending, you&apos;ll go to your dashboard.
-                              </p>
-                            )}
-                          </div>
-
-                          {passItOnLayerActive && !isInviteRecipientSession && user && (
-                            <div className="flex flex-col items-center gap-2 border-t border-[#2a2a2a]/10 pt-4 mt-2 text-center w-full max-w-[320px]">
-                              <p className="font-sans text-[10px] leading-relaxed text-[#2a2a2a]/50">
-                                Signed in as a different email. Sign out to use{' '}
-                                <span className="text-[#2a2a2a]/70">{invite?.recipient_email}</span>.
-                              </p>
-                              <button type="button" onClick={() => void signOut()} className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#2a2a2a]/50 hover:text-[#2a2a2a]">Sign out</button>
-                            </div>
-                          )}
-                          {passItOnLayerActive && (
-                            <button
-                              type="button"
-                              onClick={() => setCurrentView('dashboard')}
-                              className="mt-2 w-full max-w-[320px] py-2 font-sans text-[9px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors"
-                            >
-                              Skip — Go to dashboard
-                            </button>
-                          )}
-                        </>
-                      ) : (
-                        <p className="font-serif-v3 text-2xl text-[#2a2a2a]/80 my-10">All invitations have been sent.</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                </div>{/* end two-column body */}
-              </div>{/* end desktop flex-col */}
+              <MobilePassItOn
+                graphLayout={graphLayout}
+                narrowPausePassItOn={narrowPausePassItOn}
+                passItOnLayerActive={passItOnLayerActive}
+                slotsRemaining={slotsRemaining}
+                letterError={letterError}
+                letterSuccess={letterSuccess}
+                letterRecipientFirst={letterRecipientFirst}
+                setLetterRecipientFirst={setLetterRecipientFirst}
+                letterRecipientLast={letterRecipientLast}
+                setLetterRecipientLast={setLetterRecipientLast}
+                letterNote={letterNote}
+                setLetterNote={setLetterNote}
+                letterRecipientEmail={letterRecipientEmail}
+                setLetterRecipientEmail={setLetterRecipientEmail}
+                letterSenderName={letterSenderName}
+                setLetterSenderName={setLetterSenderName}
+                letterSenderEmail={letterSenderEmail}
+                setLetterSenderEmail={setLetterSenderEmail}
+                newPassword={newPassword}
+                setNewPassword={setNewPassword}
+                letterSending={letterSending}
+                handleSendLetter={handleSendLetter}
+                isInviteRecipientSession={isInviteRecipientSession}
+                invite={invite}
+                user={user}
+                signOut={signOut}
+                setCurrentView={setCurrentView}
+                resumeFilm={resumeFilm}
+              />
+              <DesktopPassItOn
+                graphLayout={graphLayout}
+                showPostFilm={showPostFilm}
+                passItOnLayerActive={passItOnLayerActive}
+                slotsRemaining={slotsRemaining}
+                sentLetters={sentLetters}
+                letterError={letterError}
+                letterSuccess={letterSuccess}
+                letterRecipientFirst={letterRecipientFirst}
+                setLetterRecipientFirst={setLetterRecipientFirst}
+                letterRecipientLast={letterRecipientLast}
+                setLetterRecipientLast={setLetterRecipientLast}
+                letterNote={letterNote}
+                setLetterNote={setLetterNote}
+                letterRecipientEmail={letterRecipientEmail}
+                setLetterRecipientEmail={setLetterRecipientEmail}
+                letterSenderName={letterSenderName}
+                setLetterSenderName={setLetterSenderName}
+                letterSenderEmail={letterSenderEmail}
+                setLetterSenderEmail={setLetterSenderEmail}
+                newPassword={newPassword}
+                setNewPassword={setNewPassword}
+                letterSending={letterSending}
+                handleSendLetter={handleSendLetter}
+                isInviteRecipientSession={isInviteRecipientSession}
+                invite={invite}
+                user={user}
+                signOut={signOut}
+                setCurrentView={setCurrentView}
+                resumeFilm={resumeFilm}
+              />
 
               </>
               )}
