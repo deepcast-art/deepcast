@@ -121,52 +121,52 @@ export default function MobileLanding({
           </div>
         </div>
 
-        {/* ── LANDSCAPE layout: side-by-side ── */}
+        {/* ── LANDSCAPE layout: fixed corners over the graph ── */}
         <div
-          className="portrait:hidden flex min-h-[100dvh] w-full flex-row items-center px-6 py-4 gap-6"
+          className="portrait:hidden fixed inset-0 z-20 pointer-events-none"
           style={{
             opacity: viewVisible ? 1 : 0,
             transition: 'opacity 1.2s ease-out 0.6s',
           }}
         >
-          {/* Left: gifted-by + invitation text */}
-          <div className="flex flex-1 flex-col items-start justify-center gap-3">
+          {/* Top-left: gifted by, then invitation text below with clear separation */}
+          <div className="absolute left-5 top-4 flex flex-col items-start gap-3">
             <div className="flex items-center gap-2 slow-fade-text reveal-up" style={{ transitionDelay: '1200ms' }}>
-              <div className="h-1.5 w-1.5 rounded-full bg-[#b1a180]/60" />
+              <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#b1a180]/60" />
               <span className="font-display text-[10px] font-light uppercase tracking-[0.25em] text-[#dddddd]/50">
                 Gifted by {sharerWithTeam || 'your host'}
               </span>
             </div>
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1">
               {peopleCount != null ? (
                 <>
-                  <p className="font-display text-[9px] font-light uppercase leading-relaxed tracking-[0.32em] text-[#dddddd]/65">
+                  <p className="font-display text-[9px] font-light uppercase leading-relaxed tracking-[0.32em] text-[#dddddd]/60">
                     You are the {ordinalSuffix(peopleCount)} person to be invited.
                   </p>
-                  <p className="font-display text-[9px] font-light uppercase tracking-[0.32em] text-[#dddddd]/65">
+                  <p className="font-display text-[9px] font-light uppercase tracking-[0.32em] text-[#dddddd]/60">
                     By private invitation only.
                   </p>
                 </>
               ) : (
-                <p className="font-display text-[9px] font-light uppercase tracking-[0.32em] text-[#dddddd]/65">
+                <p className="font-display text-[9px] font-light uppercase tracking-[0.32em] text-[#dddddd]/60">
                   By private invitation only.
                 </p>
               )}
             </div>
           </div>
 
-          {/* Right: logo + CTA */}
-          <div className="flex flex-col items-center justify-center gap-5 flex-shrink-0">
+          {/* Bottom-right: logo + enter + CTA */}
+          <div className="absolute bottom-5 right-5 flex flex-col items-end gap-3">
             <div className="reveal-up" style={{ transitionDelay: '200ms' }}>
               <DeepcastLogo
                 variant="wordmark"
-                className="!text-[2.6rem] w-auto leading-none"
+                className="!text-[2.4rem] w-auto leading-none"
               />
             </div>
             <button
               type="button"
               onClick={handleOpenInvitationClick}
-              className="group pointer-events-auto flex cursor-pointer flex-col items-center gap-2 border-0 bg-transparent p-0 reveal-up"
+              className="group pointer-events-auto flex cursor-pointer flex-col items-end gap-1.5 border-0 bg-transparent p-0 reveal-up"
               style={{ transitionDelay: '500ms' }}
             >
               <span className="font-sans text-[9px] uppercase tracking-[0.3em] text-[#b1a180] transition-colors duration-300 group-hover:text-[#dddddd]">

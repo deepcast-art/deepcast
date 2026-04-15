@@ -196,7 +196,7 @@ export default function DesktopPassItOn({
                       <button type="button" onClick={() => void signOut()} className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#2a2a2a]/50 hover:text-[#2a2a2a]">Sign out</button>
                     </div>
                   )}
-                  {passItOnLayerActive && (
+                  {passItOnLayerActive && user && (
                     <button
                       type="button"
                       onClick={() => setCurrentView('dashboard')}

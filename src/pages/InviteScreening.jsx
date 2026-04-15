@@ -838,10 +838,7 @@ export default function InviteScreening() {
       setLetterError('Please enter your name and a valid email.')
       return
     }
-    if (!isInviteRecipientSession && newPassword && newPassword.length < 8) {
-      setLetterError('Password must be at least 8 characters.')
-      return
-    }
+    // Password length is not a hard blocker — signUp failure is caught silently and the invite still sends.
     if (slotsRemaining <= 0) {
       setLetterError('All invitations have been sent.')
       return

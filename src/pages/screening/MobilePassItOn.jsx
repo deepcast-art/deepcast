@@ -58,6 +58,20 @@ export default function MobilePassItOn({
 
       {/* LANDSCAPE ONLY: Left col — header + graph */}
       <div className="portrait:hidden landscape:flex landscape:flex-col landscape:w-[44%] landscape:shrink-0 landscape:h-full landscape:min-h-0 landscape:max-h-[100dvh] landscape:overflow-hidden landscape:px-3 landscape:py-3 landscape:border-r landscape:border-[#b1a180]/10">
+        {narrowPausePassItOn && (
+          <button
+            type="button"
+            onClick={resumeFilm}
+            className="flex w-full shrink-0 items-center justify-center gap-2.5 py-2.5 mb-2 border border-[#b1a180]/25 rounded-sm bg-[#b1a180]/8 touch-manipulation transition-colors hover:bg-[#b1a180]/15"
+          >
+            <svg className="h-2 w-2 shrink-0 fill-[#b1a180]" viewBox="0 0 24 24" aria-hidden>
+              <path d="M8 5v14l11-7z" />
+            </svg>
+            <span className="font-sans text-[9px] font-medium uppercase tracking-[0.35em] text-[#b1a180]">
+              Resume Film
+            </span>
+          </button>
+        )}
         <div className="w-full shrink-0 mb-2">
           <h2 className="font-serif-v3 text-[1.35rem] leading-tight italic text-[#dddddd] font-light mb-1 text-left">
             Pass it on.
@@ -258,7 +272,7 @@ export default function MobilePassItOn({
                   </div>
                 )}
 
-                {passItOnLayerActive && (
+                {passItOnLayerActive && user && (
                   <button
                     type="button"
                     onClick={() => setCurrentView('dashboard')}
