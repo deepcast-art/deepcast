@@ -1761,7 +1761,7 @@ export default function InviteScreening() {
                 </div>
 
                 {dashboardGraphLayout ? (
-                  <div className="w-full bg-[#121a33] border-[0.5px] border-[#4a5580]/40 overflow-hidden shadow-2xl min-h-[440px] h-[min(104svh,800px)] max-h-[960px] md:h-[680px] md:max-h-none touch-manipulation">
+                  <div className="w-full bg-[#121a33] border-[0.5px] border-[#4a5580]/40 overflow-hidden shadow-2xl h-[820px] touch-manipulation">
                     <NetworkGraph
                       fillHeight
                       pannable
@@ -1783,7 +1783,7 @@ export default function InviteScreening() {
                     />
                   </div>
                 ) : (
-                  <div className="w-full min-h-[440px] h-[min(104svh,800px)] max-h-[960px] md:h-[680px] md:max-h-none bg-[#121a33] border-[0.5px] border-[#4a5580]/40 flex items-center justify-center">
+                  <div className="w-full h-[820px] bg-[#121a33] border-[0.5px] border-[#4a5580]/40 flex items-center justify-center">
                     <span className="font-sans text-[9px] uppercase tracking-widest text-[#dddddd]/20">Network loading…</span>
                   </div>
                 )}
