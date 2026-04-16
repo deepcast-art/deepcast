@@ -1337,10 +1337,11 @@ export default function InviteScreening() {
                     }}
                   />
                 </Suspense>
-                {/* Tap-to-pause overlay: single tap anywhere pauses and shows pass-it-on */}
+                {/* Tap-to-pause overlay: tap anywhere except the bottom control bar pauses and shows pass-it-on.
+                   Bottom 64px is left uncovered so the MuxPlayer progress bar stays interactive. */}
                 {!isScreeningPaused && !screeningNeedsUserGesturePlay && screeningPlaybackEverStarted && (
                   <div
-                    className="absolute inset-0 z-[15] touch-manipulation"
+                    className="absolute inset-0 bottom-16 z-[15] touch-manipulation"
                     onClick={() => {
                       const mux = muxPlayerRef.current
                       if (mux) mux.pause()
