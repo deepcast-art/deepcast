@@ -185,6 +185,29 @@ export default function InviteScreening() {
   const [letterSuccess, setLetterSuccess] = useState('')
   const [newPassword, setNewPassword] = useState('')
 
+  // Seed sentLetters from previously-sent invites so slotsRemaining persists across page loads
+  const sentLettersSeeded = useRef(false)
+  useEffect(() => {
+    if (sentLettersSeeded.current || !invite?.id || !filmInvites.length) return
+    const prior = filmInvites.filter((fi) => fi.parent_invite_id === invite.id)
+    if (prior.length) {
+      sentLettersSeeded.current = true
+      setSentLetters((prev) => {
+        const existingEmails = new Set(prev.map((l) => l.email))
+        const newOnes = prior
+          .filter((fi) => !existingEmails.has(fi.recipient_email))
+          .map((fi) => ({
+            id: fi.id,
+            firstName: (fi.recipient_name || '').split(/\s+/)[0] || '',
+            lastName: (fi.recipient_name || '').split(/\s+/).slice(1).join(' ') || '',
+            email: fi.recipient_email || '',
+            name: fi.recipient_name || fi.recipient_email || '',
+          }))
+        return newOnes.length ? [...prev, ...newOnes] : prev
+      })
+    }
+  }, [invite?.id, filmInvites])
+
   const [preScreeningPrologue, setPreScreeningPrologue] = useState({
     visible: false,
     textVisible: false,
@@ -201,6 +224,7 @@ export default function InviteScreening() {
   /* ---------- DASHBOARD STATE ---------- */
 
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
+  const [dashboardMenuOpen, setDashboardMenuOpen] = useState(false)
   const [modalLetters, setModalLetters] = useState([
     { id: 1, firstName: '', lastName: '', email: '' },
   ])
@@ -1313,6 +1337,16 @@ export default function InviteScreening() {
                     }}
                   />
                 </Suspense>
+                {/* Tap-to-pause overlay: single tap anywhere pauses and shows pass-it-on */}
+                {!isScreeningPaused && !screeningNeedsUserGesturePlay && screeningPlaybackEverStarted && (
+                  <div
+                    className="absolute inset-0 z-[15] touch-manipulation"
+                    onClick={() => {
+                      const mux = muxPlayerRef.current
+                      if (mux) mux.pause()
+                    }}
+                  />
+                )}
                 {screeningNeedsUserGesturePlay && !showPostFilm && (
                   <button
                     type="button"
@@ -1483,12 +1517,95 @@ export default function InviteScreening() {
         {currentView === 'dashboard' && (
           <div className="relative z-10 min-h-screen w-full flex flex-col md:flex-row overflow-hidden">
 
-            {/* ── Left sidebar ── */}
-            <div className="w-full md:w-[22%] md:min-h-screen bg-[#080c18]/80 border-b-[0.5px] md:border-b-0 md:border-r-[0.5px] border-[#4a5580]/30 flex flex-col px-6 py-8 md:py-10 gap-6 overflow-y-auto panel-scroll">
+            {/* ── Mobile hamburger button ── */}
+            <button
+              type="button"
+              onClick={() => setDashboardMenuOpen(true)}
+              className="md:hidden fixed top-4 right-4 z-[60] flex items-center justify-center w-10 h-10 rounded-sm bg-[#080c18]/80 border border-[#4a5580]/40 backdrop-blur-md touch-manipulation"
+              aria-label="Open menu"
+            >
+              <svg className="w-5 h-5 text-[#dddddd]/80" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+              </svg>
+            </button>
+
+            {/* ── Mobile slide-out menu overlay ── */}
+            {dashboardMenuOpen && (
+              <div className="md:hidden fixed inset-0 z-[70]">
+                <div className="absolute inset-0 bg-[#080c18]/80 backdrop-blur-sm" onClick={() => setDashboardMenuOpen(false)} />
+                <div className="absolute top-0 right-0 h-full w-[75%] max-w-[300px] bg-[#080c18] border-l border-[#4a5580]/30 flex flex-col px-6 py-8 gap-6 overflow-y-auto panel-scroll">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h1 className="font-['Phoenix'] font-semibold text-2xl text-[#dddddd] lowercase" style={{ fontVariationSettings: '"SOFT" 100' }}>deepcast</h1>
+                      <h2 className="font-serif-v3 text-base text-[#dddddd]">
+                        {invite?.recipient_name || recipientFirstName}
+                      </h2>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDashboardMenuOpen(false)}
+                      className="flex items-center justify-center w-8 h-8 text-[#dddddd]/60 hover:text-[#dddddd] transition-colors"
+                      aria-label="Close menu"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div className="w-full h-[0.5px] bg-[#b1a180] opacity-20" />
+
+                  <div className="flex flex-col gap-6">
+                    <div className="flex flex-col gap-3">
+                      <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Profile</span>
+                      {(profile?.email || user?.email) && (
+                        <p className="truncate font-sans text-[11px] text-[#dddddd]/50" title={profile?.email || user?.email || ''}>
+                          {profile?.email || user?.email}
+                        </p>
+                      )}
+                      <nav className="flex flex-col gap-2.5">
+                        <Link to="/profile" className="font-sans text-[10px] uppercase tracking-widest text-[#dddddd]/55 transition-colors hover:text-[#dddddd]">Account</Link>
+                        <Link to="/profile#set-password" className="font-sans text-[10px] uppercase tracking-widest text-[#dddddd]/55 transition-colors hover:text-[#dddddd]">Set password</Link>
+                      </nav>
+                    </div>
+
+                    {token && (
+                      <div className="flex flex-col gap-2">
+                        <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Screening</span>
+                        {dashboardResumeSeconds != null ? (
+                          <Link replace to={`/i/${token}?play=1&t=${dashboardResumeSeconds}`} className="inline-flex w-full items-center justify-center gap-2 border border-[#dddddd]/25 px-4 py-2.5 font-sans text-[10px] uppercase tracking-widest text-[#dddddd]/85 transition-colors hover:border-[#b1a180]/50 hover:text-[#dddddd]">
+                            <svg className="h-2.5 w-2.5 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden><path d="M8 5v14l11-7z" /></svg>
+                            Resume
+                          </Link>
+                        ) : (
+                          <button type="button" onClick={handleWatchAgainFromStart} className="inline-flex w-full items-center justify-center gap-2 border border-[#b1a180]/45 px-4 py-2.5 font-sans text-[10px] uppercase tracking-widest text-[#b1a180] transition-colors hover:border-[#b1a180] hover:bg-[#b1a180]/10">
+                            <svg className="h-2.5 w-2.5 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden><path d="M8 5v14l11-7z" /></svg>
+                            Watch again
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="w-full h-[0.5px] bg-[#b1a180] opacity-20" />
+
+                  <button
+                    type="button"
+                    onClick={() => void signOut()}
+                    className="text-[#dddddd]/40 uppercase text-[10px] tracking-widest hover:text-[#dddddd] transition-colors text-left"
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ── Left sidebar (desktop only) ── */}
+            <div className="hidden md:flex md:w-[22%] md:min-h-screen bg-[#080c18]/80 md:border-r-[0.5px] border-[#4a5580]/30 flex-col px-6 py-10 gap-6 overflow-y-auto panel-scroll">
 
               <div className="reveal-up">
-                <h1 className="font-['Phoenix'] font-semibold text-3xl md:text-5xl text-[#dddddd] lowercase mb-1" style={{ fontVariationSettings: '"SOFT" 100' }}>deepcast</h1>
-                <h2 className="font-serif-v3 text-lg md:text-xl text-[#dddddd]">
+                <h1 className="font-['Phoenix'] font-semibold text-5xl text-[#dddddd] lowercase mb-1" style={{ fontVariationSettings: '"SOFT" 100' }}>deepcast</h1>
+                <h2 className="font-serif-v3 text-xl text-[#dddddd]">
                   {invite?.recipient_name || recipientFirstName}
                 </h2>
               </div>
@@ -1556,25 +1673,25 @@ export default function InviteScreening() {
               <div className="w-full h-[0.5px] bg-[#b1a180] opacity-20 reveal-up" style={{ transitionDelay: '120ms' }} />
 
               {/* Stats */}
-              <div className="flex flex-row flex-wrap justify-between gap-y-4 gap-x-4 md:flex-col md:justify-start md:gap-6 reveal-up" style={{ transitionDelay: '200ms' }}>
-                <div className="flex min-w-0 flex-1 flex-col gap-1 basis-[28%] md:basis-auto">
+              <div className="flex flex-col gap-6 reveal-up" style={{ transitionDelay: '200ms' }}>
+                <div className="flex flex-col gap-1">
                   <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Invites Sent</span>
-                  <span className="font-serif-v3 text-2xl md:text-3xl text-[#dddddd]">{sentLetters.length}</span>
+                  <span className="font-serif-v3 text-3xl text-[#dddddd]">{sentLetters.length}</span>
                 </div>
-                <div className="flex min-w-0 flex-1 flex-col gap-1 basis-[28%] md:basis-auto">
+                <div className="flex flex-col gap-1">
                   <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Invites Left</span>
-                  <span className="font-serif-v3 text-2xl md:text-3xl text-[#b1a180]">{slotsRemaining}</span>
+                  <span className="font-serif-v3 text-3xl text-[#b1a180]">{slotsRemaining}</span>
                 </div>
-                <div className="flex min-w-0 flex-1 flex-col gap-1 basis-[28%] md:basis-auto">
+                <div className="flex flex-col gap-1">
                   <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">New Viewers</span>
-                  <span className="font-serif-v3 text-2xl md:text-3xl text-[#dddddd]">0</span>
+                  <span className="font-serif-v3 text-3xl text-[#dddddd]">0</span>
                 </div>
               </div>
 
               <div className="w-full h-[0.5px] bg-[#b1a180] opacity-20 reveal-up" style={{ transitionDelay: '300ms' }} />
 
               {/* Actions */}
-              <div className="flex flex-row md:flex-col gap-3 reveal-up" style={{ transitionDelay: '350ms' }}>
+              <div className="flex flex-col gap-3 reveal-up" style={{ transitionDelay: '350ms' }}>
                 {slotsRemaining > 0 && (
                   <button
                     type="button"
@@ -1594,84 +1711,12 @@ export default function InviteScreening() {
               </div>
             </div>
 
-            {/* ── Right main panel ── */}
+            {/* ── Main panel ── */}
             <div className="w-full md:w-[78%] min-h-screen flex flex-col px-4 sm:px-5 md:px-10 py-6 sm:py-8 md:py-12 overflow-y-auto panel-scroll pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
 
-              {/* Film + resume / watch again + share */}
-              {film && (
-                <section className="w-full mb-10 reveal-up" style={{ transitionDelay: '120ms' }}>
-                  <div className="flex w-full flex-row flex-wrap items-center gap-3 border border-[#4a5580]/40 bg-[#121a33]/90 p-4 sm:gap-5 sm:p-5 md:p-6">
-                    {film.thumbnail_url ? (
-                      <img
-                        src={ensureHttpsUrl(film.thumbnail_url) ?? film.thumbnail_url}
-                        alt={film.title || 'Film thumbnail'}
-                        className="h-16 w-28 shrink-0 object-cover sm:h-24 sm:w-40"
-                      />
-                    ) : (
-                      <div className="flex h-16 w-28 shrink-0 items-center justify-center bg-[#4a5580]/15 sm:h-24 sm:w-40">
-                        <svg className="h-7 w-7 text-[#dddddd]/25 fill-current sm:h-8 sm:w-8" viewBox="0 0 24 24" aria-hidden>
-                          <path d="M8 5v14l11-7z" />
-                        </svg>
-                      </div>
-                    )}
-                    <div className="min-w-0 flex-1 basis-[min(100%,12rem)]">
-                      <span className="mb-0.5 block font-sans text-[9px] uppercase tracking-[0.28em] text-[#dddddd]/40">
-                        Your screening
-                      </span>
-                      <p className="font-serif-v3 text-base italic leading-snug text-[#dddddd] sm:text-lg md:text-xl line-clamp-2">
-                        {film.title || 'Film'}
-                      </p>
-                      {inviteSourceLine && (
-                        <p className="mt-1 line-clamp-2 font-sans text-[9px] leading-snug text-[#dddddd]/50 sm:text-[10px]">
-                          {inviteSourceLine}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex shrink-0 flex-row flex-wrap items-center justify-end gap-2 sm:gap-3">
-                      {token &&
-                        (dashboardResumeSeconds != null ? (
-                          <Link
-                            replace
-                            to={`/i/${token}?play=1&t=${dashboardResumeSeconds}`}
-                            className="inline-flex items-center gap-1.5 border border-[#dddddd]/25 bg-transparent px-3 py-2 font-sans text-[9px] font-medium uppercase tracking-[0.22em] text-[#dddddd]/85 transition-colors hover:border-[#b1a180]/50 hover:text-[#dddddd] sm:gap-2 sm:px-5 sm:py-2.5 sm:text-[10px] sm:tracking-[0.28em]"
-                          >
-                            <svg className="h-2.5 w-2.5 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden>
-                              <path d="M8 5v14l11-7z" />
-                            </svg>
-                            Resume
-                          </Link>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={handleWatchAgainFromStart}
-                            className="inline-flex items-center gap-1.5 border border-[#b1a180]/45 bg-transparent px-3 py-2 font-sans text-[9px] font-medium uppercase tracking-[0.22em] text-[#b1a180] transition-colors hover:border-[#b1a180] hover:bg-[#b1a180]/10 sm:gap-2 sm:px-5 sm:py-2.5 sm:text-[10px] sm:tracking-[0.28em]"
-                          >
-                            <svg className="h-2.5 w-2.5 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden>
-                              <path d="M8 5v14l11-7z" />
-                            </svg>
-                            Watch again
-                          </button>
-                        ))}
-                      {slotsRemaining > 0 && (
-                        <button
-                          type="button"
-                          onClick={handleOpenShareModal}
-                          className="inline-flex items-center gap-1.5 border border-[#b1a180]/50 px-3 py-2 font-sans text-[9px] font-medium uppercase tracking-[0.22em] text-[#b1a180]/90 transition-colors hover:border-[#b1a180] hover:bg-[#b1a180]/10 sm:gap-2 sm:px-5 sm:py-2.5 sm:text-[10px] sm:tracking-[0.28em]"
-                        >
-                          <svg className="h-2.5 w-2.5 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden>
-                            <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11A2.99 2.99 0 0 0 18 8a3 3 0 1 0-3-3c0 .24.04.47.09.7L8.04 9.81A2.99 2.99 0 0 0 6 9a3 3 0 1 0 0 6c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65a3 3 0 1 0 3-3z" />
-                          </svg>
-                          Share
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </section>
-              )}
-
-              {/* Network impact section */}
-              <section className="w-full mb-12 reveal-up" style={{ transitionDelay: '200ms' }}>
-                <div className="flex flex-col gap-3 mb-10">
+              {/* "Your shares" text */}
+              <section className="w-full mb-6 md:mb-10 reveal-up" style={{ transitionDelay: '100ms' }}>
+                <div className="flex flex-col gap-3">
                   <p className="font-serif-v3 text-xl md:text-2xl text-[#dddddd] italic leading-snug">
                     Your shares have been sent, {entryRecipientLabel}.
                   </p>
@@ -1679,7 +1724,44 @@ export default function InviteScreening() {
                     {formattedNames} {sentLetters.length === 1 ? 'has' : 'have'} been brought into the fold, growing the network. Come back to watch your impact spread.
                   </p>
                 </div>
+              </section>
 
+              {/* Mobile: Stats row */}
+              <section className="md:hidden w-full mb-6 reveal-up" style={{ transitionDelay: '150ms' }}>
+                <div className="flex flex-row flex-wrap justify-between gap-y-4 gap-x-4">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1 basis-[28%]">
+                    <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Invites Sent</span>
+                    <span className="font-serif-v3 text-2xl text-[#dddddd]">{sentLetters.length}</span>
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-col gap-1 basis-[28%]">
+                    <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Invites Left</span>
+                    <span className="font-serif-v3 text-2xl text-[#b1a180]">{slotsRemaining}</span>
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-col gap-1 basis-[28%]">
+                    <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">New Viewers</span>
+                    <span className="font-serif-v3 text-2xl text-[#dddddd]">0</span>
+                  </div>
+                </div>
+              </section>
+
+              {/* Mobile: Share More button with airplane icon */}
+              {slotsRemaining > 0 && (
+                <section className="md:hidden w-full mb-6 reveal-up" style={{ transitionDelay: '180ms' }}>
+                  <button
+                    type="button"
+                    onClick={handleOpenShareModal}
+                    className="w-full inline-flex items-center justify-center gap-2.5 border border-[#b1a180]/40 bg-[#b1a180]/8 px-4 py-3 font-sans text-[10px] uppercase tracking-[0.28em] text-[#b1a180] transition-colors hover:bg-[#b1a180]/15 touch-manipulation"
+                  >
+                    <svg className="h-4 w-4 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden>
+                      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                    </svg>
+                    Share More
+                  </button>
+                </section>
+              )}
+
+              {/* Network graph */}
+              <section className="w-full mb-12 reveal-up" style={{ transitionDelay: '200ms' }}>
                 <div className="mb-4 border-b border-[#4a5580]/40 pb-4">
                   <h3 className="font-sans text-[10px] uppercase tracking-[0.3em] text-[#dddddd]/50">My Network Impact</h3>
                 </div>
@@ -1712,6 +1794,78 @@ export default function InviteScreening() {
                   </div>
                 )}
               </section>
+
+              {/* Desktop: Film card (hidden on mobile) */}
+              {film && (
+                <section className="hidden md:block w-full mb-10 reveal-up" style={{ transitionDelay: '250ms' }}>
+                  <div className="flex w-full flex-row flex-wrap items-center gap-5 border border-[#4a5580]/40 bg-[#121a33]/90 p-6">
+                    {film.thumbnail_url ? (
+                      <img
+                        src={ensureHttpsUrl(film.thumbnail_url) ?? film.thumbnail_url}
+                        alt={film.title || 'Film thumbnail'}
+                        className="h-24 w-40 shrink-0 object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-24 w-40 shrink-0 items-center justify-center bg-[#4a5580]/15">
+                        <svg className="h-8 w-8 text-[#dddddd]/25 fill-current" viewBox="0 0 24 24" aria-hidden>
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1 basis-[min(100%,12rem)]">
+                      <span className="mb-0.5 block font-sans text-[9px] uppercase tracking-[0.28em] text-[#dddddd]/40">
+                        Your screening
+                      </span>
+                      <p className="font-serif-v3 text-xl italic leading-snug text-[#dddddd] line-clamp-2">
+                        {film.title || 'Film'}
+                      </p>
+                      {inviteSourceLine && (
+                        <p className="mt-1 line-clamp-2 font-sans text-[10px] leading-snug text-[#dddddd]/50">
+                          {inviteSourceLine}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 flex-row flex-wrap items-center justify-end gap-3">
+                      {token &&
+                        (dashboardResumeSeconds != null ? (
+                          <Link
+                            replace
+                            to={`/i/${token}?play=1&t=${dashboardResumeSeconds}`}
+                            className="inline-flex items-center gap-2 border border-[#dddddd]/25 bg-transparent px-5 py-2.5 font-sans text-[10px] font-medium uppercase tracking-[0.28em] text-[#dddddd]/85 transition-colors hover:border-[#b1a180]/50 hover:text-[#dddddd]"
+                          >
+                            <svg className="h-2.5 w-2.5 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden>
+                              <path d="M8 5v14l11-7z" />
+                            </svg>
+                            Resume
+                          </Link>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handleWatchAgainFromStart}
+                            className="inline-flex items-center gap-2 border border-[#b1a180]/45 bg-transparent px-5 py-2.5 font-sans text-[10px] font-medium uppercase tracking-[0.28em] text-[#b1a180] transition-colors hover:border-[#b1a180] hover:bg-[#b1a180]/10"
+                          >
+                            <svg className="h-2.5 w-2.5 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden>
+                              <path d="M8 5v14l11-7z" />
+                            </svg>
+                            Watch again
+                          </button>
+                        ))}
+                      {slotsRemaining > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleOpenShareModal}
+                          className="inline-flex items-center gap-2 border border-[#b1a180]/50 px-5 py-2.5 font-sans text-[10px] font-medium uppercase tracking-[0.28em] text-[#b1a180]/90 transition-colors hover:border-[#b1a180] hover:bg-[#b1a180]/10"
+                        >
+                          <svg className="h-2.5 w-2.5 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden>
+                            <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11A2.99 2.99 0 0 0 18 8a3 3 0 1 0-3-3c0 .24.04.47.09.7L8.04 9.81A2.99 2.99 0 0 0 6 9a3 3 0 1 0 0 6c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65a3 3 0 1 0 3-3z" />
+                          </svg>
+                          Share
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </section>
+              )}
 
               {/* Sent invitations section */}
               <section className="w-full mb-24 reveal-up" style={{ transitionDelay: '300ms' }}>

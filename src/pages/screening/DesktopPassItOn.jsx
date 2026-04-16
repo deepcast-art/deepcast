@@ -156,6 +156,10 @@ export default function DesktopPassItOn({
                       <span>With intention,</span>
                       <input type="text" placeholder="Your Name" value={letterSenderName} onChange={(e) => setLetterSenderName(e.target.value)} className="w-[160px] bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none text-[#2a2a2a] placeholder-[#2a2a2a]/30" />
                     </div>
+                    <div className="flex flex-col gap-1 w-full max-w-[320px] text-center mt-4">
+                      <label className="font-sans text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Deliver To</label>
+                      <input type="email" placeholder="Their Email Address" value={letterRecipientEmail} onChange={(e) => setLetterRecipientEmail(e.target.value)} className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none transition-colors rounded-none" />
+                    </div>
                     {!isInviteRecipientSession && (
                       <div className="flex flex-col gap-1 w-full max-w-[320px] text-center mt-3">
                         <label className="font-sans text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Your Email</label>
@@ -168,10 +172,6 @@ export default function DesktopPassItOn({
                         <input type="password" placeholder="Min. 8 characters" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none transition-colors rounded-none" />
                       </div>
                     )}
-                    <div className="flex flex-col gap-1 w-full max-w-[320px] text-center mt-4">
-                      <label className="font-sans text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Deliver To</label>
-                      <input type="email" placeholder="Their Email Address" value={letterRecipientEmail} onChange={(e) => setLetterRecipientEmail(e.target.value)} className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none transition-colors rounded-none" />
-                    </div>
                   </div>
 
                   <div className="w-[80px] h-[1px] bg-gradient-to-r from-transparent via-[#2a2a2a]/30 to-transparent my-3" />

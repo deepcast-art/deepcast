@@ -54,7 +54,7 @@ export const normAngle = (a) => ((a % TWO_PI) + TWO_PI) % TWO_PI
    generateGraphData — static standalone layout (demo / landing)
    ================================================================ */
 export function generateGraphData(userShares = 0) {
-  const CX = 425, CY = 270
+  let CX = 425, CY = 270
   const MIN_SPACING = 32
   const R1_BASE = 200
   const GAP = 65
@@ -131,20 +131,21 @@ export function generateGraphData(userShares = 0) {
     sectionStart = sectionEnd
   }
 
-  // Rings 3–5
-  const TIER_CONFIG = [null, null, null, { shareRate: 0.30 }, { shareRate: 0.48 }, { shareRate: 0.48 }]
+  // Rings 3+ — generative tiers (spec §Rings 3–5+)
+  // Share rates: tier 3 = 30%, tier 4+ = 48%. Loop continues until no sharers remain.
+  const MAX_TIER = 20  // safety cap
   let prevRingNodes = tier2Nodes
   let prevR = R2
   let nameIdx = t2NameIdx
   const ringRadii = [0, R1, R2]
 
-  for (let tier = 3; tier < TIER_CONFIG.length; tier++) {
-    const cfg = TIER_CONFIG[tier]
-    if (!cfg || !prevRingNodes.length) break
+  for (let tier = 3; tier <= MAX_TIER; tier++) {
+    if (!prevRingNodes.length) break
+    const shareRate = tier === 3 ? 0.30 : 0.48
 
     const sharers = []
     for (let i = 0; i < prevRingNodes.length; i++) {
-      if ((i * 7 + tier * 13) % 100 < cfg.shareRate * 100) {
+      if ((i * 7 + tier * 13) % 100 < shareRate * 100) {
         const roll = (i * 7 + tier * 11) % 100
         const count = roll < 60 ? 1 : roll < 85 ? 2 : roll < 95 ? 3 : roll < 99 ? 4 : 5
         sharers.push({ parent: prevRingNodes[i], count })
@@ -200,7 +201,29 @@ export function generateGraphData(userShares = 0) {
     ringRadii.push(tierR)
   }
 
-  return { nodesData: nodes, linksData: links, sectionLabels, ringRadii }
+  // Auto-expand viewBox to fit all rings (same approach as buildGraphLayout)
+  const maxR = ringRadii[ringRadii.length - 1]
+  const pad = 80
+  const viewBoxW = Math.max(850, Math.ceil(maxR * 2) + pad * 2)
+  const viewBoxH = Math.max(540, Math.ceil(maxR * 2) + pad * 2)
+  const newCX = Math.round(viewBoxW / 2)
+  const newCY = Math.round(viewBoxH / 2)
+
+  // Reposition nodes and section labels if the center shifted
+  if (newCX !== CX || newCY !== CY) {
+    const dx = newCX - CX
+    const dy = newCY - CY
+    for (const n of nodes) { n.x += dx; n.y += dy }
+    for (const sl of sectionLabels) { sl.cx = newCX; sl.cy = newCY }
+  }
+
+  return {
+    nodesData: nodes, linksData: links, sectionLabels, ringRadii,
+    viewBoxW, viewBoxH,
+    rootNode: nodes[0],
+    defaultActiveNodes: new Set(),
+    defaultActiveLinks: new Set(),
+  }
 }
 
 /* ================================================================
@@ -460,28 +483,29 @@ export function buildGraphLayout({
     prevRingNodes = thisRingNodes
   }
 
-  /* --- Default highlight: path from film → viewer --- */
+  /* --- Default highlight: viewer node + outward (children, grandchildren, …) --- */
   const defaultNodes = new Set()
   const defaultLinks = new Set()
   if (viewerRKey && nodeIdSet.has(viewerRKey)) {
-    const reverseLinks = new Map()
+    // Forward links: parent → [children]
+    const forwardLinks = new Map()
     for (const link of linksData) {
-      if (!reverseLinks.has(link.target)) reverseLinks.set(link.target, [])
-      reverseLinks.get(link.target).push(link.source)
+      if (!forwardLinks.has(link.source)) forwardLinks.set(link.source, [])
+      forwardLinks.get(link.source).push(link.target)
     }
-    let cur = viewerRKey
-    defaultNodes.add(cur)
-    const visited = new Set([cur])
-    while (cur !== rootId) {
-      const parents = (reverseLinks.get(cur) || []).filter((p) => !visited.has(p))
-      if (!parents.length) break
-      const parent = parents[0]
-      defaultNodes.add(parent)
-      defaultLinks.add(`${parent}-${cur}`)
-      visited.add(parent)
-      cur = parent
+    // BFS outward from the viewer node
+    defaultNodes.add(viewerRKey)
+    const queue = [viewerRKey]
+    while (queue.length) {
+      const cur = queue.shift()
+      for (const child of forwardLinks.get(cur) || []) {
+        if (!defaultNodes.has(child)) {
+          defaultNodes.add(child)
+          defaultLinks.add(`${cur}-${child}`)
+          queue.push(child)
+        }
+      }
     }
-    defaultNodes.add(rootId)
   }
 
   return {

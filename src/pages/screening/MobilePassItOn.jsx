@@ -56,13 +56,13 @@ export default function MobilePassItOn({
         </div>
       )}
 
-      {/* LANDSCAPE ONLY: Left col — header + graph */}
-      <div className="portrait:hidden landscape:flex landscape:flex-col landscape:w-[44%] landscape:shrink-0 landscape:h-full landscape:min-h-0 landscape:max-h-[100dvh] landscape:overflow-hidden landscape:px-3 landscape:py-3 landscape:border-r landscape:border-[#b1a180]/10">
-        {narrowPausePassItOn && (
+      {/* LANDSCAPE ONLY: Full-width resume bar across the top */}
+      {narrowPausePassItOn && (
+        <div className="portrait:hidden landscape:block shrink-0 border-b border-[#b1a180]/25 bg-[#080c18]/95 backdrop-blur-md">
           <button
             type="button"
             onClick={resumeFilm}
-            className="flex w-full shrink-0 items-center justify-center gap-2.5 py-2.5 mb-2 border border-[#b1a180]/25 rounded-sm bg-[#b1a180]/8 touch-manipulation transition-colors hover:bg-[#b1a180]/15"
+            className="flex w-full items-center justify-center gap-2.5 py-2.5 touch-manipulation transition-colors hover:bg-[#b1a180]/10"
           >
             <svg className="h-2 w-2 shrink-0 fill-[#b1a180]" viewBox="0 0 24 24" aria-hidden>
               <path d="M8 5v14l11-7z" />
@@ -71,7 +71,11 @@ export default function MobilePassItOn({
               Resume Film
             </span>
           </button>
-        )}
+        </div>
+      )}
+
+      {/* LANDSCAPE ONLY: Left col — header + graph */}
+      <div className="portrait:hidden landscape:flex landscape:flex-col landscape:w-[44%] landscape:shrink-0 landscape:h-full landscape:min-h-0 landscape:max-h-[100dvh] landscape:overflow-hidden landscape:px-3 landscape:py-3 landscape:border-r landscape:border-[#b1a180]/10">
         <div className="w-full shrink-0 mb-2">
           <h2 className="font-serif-v3 text-[1.35rem] leading-tight italic text-[#dddddd] font-light mb-1 text-left">
             Pass it on.
@@ -181,24 +185,8 @@ export default function MobilePassItOn({
                     onChange={(e) => setLetterNote(e.target.value)}
                     className="w-full bg-transparent text-center text-[13px] italic leading-snug text-[#2a2a2a] placeholder-[#2a2a2a]/35 focus:outline-none resize-none min-h-[3rem] border-b border-[#6b5d4a]/25 pb-1 landscape:min-h-0 landscape:h-[4.25rem] landscape:py-1 landscape:text-[12px] landscape:leading-snug"
                   />
-                  <input
-                    type="email"
-                    placeholder="Their email"
-                    value={letterRecipientEmail}
-                    onChange={(e) => setLetterRecipientEmail(e.target.value)}
-                    className="w-full bg-transparent border-b border-[#6b5d4a]/45 py-1 text-center font-sans text-[13px] text-[#2a2a2a] placeholder-[#2a2a2a]/35 focus:outline-none landscape:py-0.5 landscape:text-[12px]"
-                    inputMode="email"
-                    autoComplete="email"
-                  />
-                </div>
 
-                {slotsRemaining > 1 && (
-                  <p className="mt-2 text-center font-sans text-[9px] font-medium uppercase tracking-[0.28em] text-[#6b5d4a]/90 landscape:mt-1 landscape:text-[7px] landscape:tracking-[0.22em]">
-                    + Add another ({slotsRemaining - 1} left)
-                  </p>
-                )}
-
-                <div className="mt-3 flex flex-wrap items-end justify-center gap-x-3 gap-y-1 border-t border-[#6b5d4a]/15 pt-2 font-serif-v3 text-[14px] text-[#2a2a2a] landscape:mt-2 landscape:gap-x-2 landscape:gap-y-0 landscape:pt-2 landscape:text-[12px]">
+                  <div className="mt-3 flex flex-wrap items-end justify-center gap-x-3 gap-y-1 border-t border-[#6b5d4a]/15 pt-2 font-serif-v3 text-[14px] text-[#2a2a2a] landscape:mt-2 landscape:gap-x-2 landscape:gap-y-0 landscape:pt-2 landscape:text-[12px]">
                   <span className="italic">With intention,</span>
                   <input
                     type="text"
@@ -208,11 +196,26 @@ export default function MobilePassItOn({
                     className="min-w-[8rem] max-w-[16rem] flex-1 bg-transparent border-b border-[#6b5d4a]/45 py-0.5 text-center italic focus:outline-none focus:border-[#6b5d4a] placeholder-[#2a2a2a]/35 landscape:min-w-0 landscape:max-w-[min(55%,12rem)] landscape:py-0 landscape:text-[12px]"
                     autoComplete="name"
                   />
-                </div>
+                  </div>
+                  </div>i
+                  <label className="flex flex-col gap-1 text-center mt-2 landscape:mt-1">
+                    <span className="font-sans text-[8px] uppercase tracking-[0.25em] text-[#6b5d4a]/80 landscape:text-[7px]">
+                      Deliver to
+                    </span>
+                    <input
+                      type="email"
+                      placeholder="Their email"
+                      value={letterRecipientEmail}
+                      onChange={(e) => setLetterRecipientEmail(e.target.value)}
+                      className="w-full bg-transparent border-b border-[#6b5d4a]/45 py-1 text-center font-sans text-[13px] text-[#2a2a2a] placeholder-[#2a2a2a]/35 focus:outline-none landscape:py-0.5 landscape:text-[12px]"
+                      inputMode="email"
+                      autoComplete="email"
+                    />
+                  </label>
 
                 {!isInviteRecipientSession && (
-                  <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-4 landscape:mt-2 landscape:flex-row landscape:items-end landscape:gap-2 landscape:gap-y-0">
-                    <label className="flex flex-1 flex-col gap-1 text-center landscape:min-w-0 landscape:gap-0.5">
+                  <div className="mt-2 flex flex-col gap-2 landscape:mt-2 landscape:gap-1.5">
+                    <label className="flex flex-col gap-1 text-center landscape:gap-0.5">
                       <span className="font-sans text-[8px] uppercase tracking-[0.25em] text-[#6b5d4a]/80 landscape:text-[7px]">
                         Your email
                       </span>
@@ -225,9 +228,9 @@ export default function MobilePassItOn({
                         autoComplete="email"
                       />
                     </label>
-                    <label className="flex flex-1 flex-col gap-1 text-center landscape:min-w-0 landscape:gap-0.5">
+                    <label className="flex flex-col gap-1 text-center landscape:gap-0.5">
                       <span className="font-sans text-[8px] uppercase tracking-[0.25em] text-[#6b5d4a]/80 landscape:text-[7px]">
-                        Password
+                        Create Password
                       </span>
                       <input
                         type="password"
@@ -239,6 +242,12 @@ export default function MobilePassItOn({
                       />
                     </label>
                   </div>
+                )}
+
+                {slotsRemaining > 1 && (
+                  <p className="mt-2 text-center font-sans text-[9px] font-medium uppercase tracking-[0.28em] text-[#6b5d4a]/90 landscape:mt-1 landscape:text-[7px] landscape:tracking-[0.22em]">
+                    + Add another ({slotsRemaining - 1} left)
+                  </p>
                 )}
 
                 <button

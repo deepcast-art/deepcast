@@ -6,6 +6,7 @@ import { Resend } from 'resend'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { ensureHttpsUrl } from '../src/lib/httpsUrl.js'
+import { buildGraphLayout } from '../src/lib/graphLayout.js'
 
 const app = express()
 app.use(cors())
@@ -87,6 +88,53 @@ app.get('/api/health', (_req, res) => {
     service: 'deepcast-api',
     timestamp: new Date().toISOString(),
   })
+})
+
+// ============ GRAPH LAYOUT (testing) ============
+
+app.get('/api/graph/layout/:filmId', async (req, res) => {
+  try {
+    const { filmId } = req.params
+    const supabase = createClient(supabaseUrl, supabaseKey)
+
+    const { data: invites, error: invErr } = await supabase
+      .from('invites')
+      .select('id, film_id, sender_name, sender_email, sender_id, recipient_name, recipient_email, status, parent_invite_id, created_at')
+      .eq('film_id', filmId)
+      .order('created_at', { ascending: true })
+
+    if (invErr) return res.status(500).json({ error: invErr.message })
+    if (!invites?.length) return res.status(404).json({ error: 'No invites found for this film' })
+
+    const { data: film } = await supabase.from('films').select('title').eq('id', filmId).single()
+
+    const layout = buildGraphLayout({
+      filmInvites: invites,
+      filmTitle: film?.title || 'Film',
+      creatorName: '',
+      viewerRecipientKey: null,
+    })
+
+    if (!layout) return res.status(404).json({ error: 'Could not build graph layout' })
+
+    res.json({
+      filmId,
+      filmTitle: film?.title || null,
+      inviteCount: invites.length,
+      nodeCount: layout.nodesData.length,
+      linkCount: layout.linksData.length,
+      ringCount: layout.ringRadii.length - 1,
+      ringRadii: layout.ringRadii,
+      viewBoxW: layout.viewBoxW,
+      viewBoxH: layout.viewBoxH,
+      nodes: layout.nodesData,
+      links: layout.linksData,
+      sectionLabels: layout.sectionLabels,
+    })
+  } catch (err) {
+    console.error('[graph/layout]', err)
+    res.status(500).json({ error: 'Internal server error' })
+  }
 })
 
 // ============ MUX ROUTES ============
