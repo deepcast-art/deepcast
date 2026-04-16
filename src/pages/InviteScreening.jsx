@@ -218,8 +218,6 @@ export default function InviteScreening() {
   // Names decoded from the encrypted ?ctx= param in the invite URL.
   // Available immediately on mount — no DB round-trip needed for the prologue.
   const [ctxRecipientFirst, setCtxRecipientFirst] = useState(null)
-  /** True after ?ctx= decrypt finishes (or no ctx in URL) — unlocks welcome prologue before API returns. */
-  const [ctxDecryptDone, setCtxDecryptDone] = useState(false)
 
   /* ---------- DASHBOARD STATE ---------- */
 
@@ -276,7 +274,6 @@ export default function InviteScreening() {
     setScreeningNeedsUserGesturePlay(false)
     autoOpenInvitationDoneRef.current = false
     prologueWelcomeStartedRef.current = false
-    setCtxDecryptDone(false)
   }, [token])
 
   useEffect(() => {
@@ -358,19 +355,15 @@ export default function InviteScreening() {
       setLetterSenderEmail(invite.recipient_email)
   }, [invite])
 
-  // Decode sender + recipient names from ?ctx= immediately; then ctxDecryptDone allows welcome prologue before API.
+  // Decode sender + recipient names from ?ctx= immediately so the prologue can show real names.
   useEffect(() => {
     const ctx = searchParams.get('ctx')
-    if (!ctx) {
-      setCtxDecryptDone(true)
-      return
-    }
+    if (!ctx) return
     decryptInviteCtx(ctx).then((names) => {
       if (names) {
         if (names.s) setSharerDisplayName((prev) => prev || names.s)
         if (names.r) setCtxRecipientFirst(names.r)
       }
-      setCtxDecryptDone(true)
     })
   }, [searchParams])
 
@@ -472,7 +465,7 @@ export default function InviteScreening() {
   const shouldStartWelcomePrologue =
     directPlay
       ? false
-      : status === 'valid' || (status === 'loading' && Boolean(ctxInUrl) && ctxDecryptDone)
+      : status !== 'invalid' && status !== 'expired'
 
   useEffect(() => {
     if (directPlay) return undefined
