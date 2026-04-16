@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from './lib/auth'
 
-const Landing = lazy(() => import('./pages/Landing.jsx'))
+// const Landing = lazy(() => import('./pages/Landing.jsx'))
 const InviteScreening = lazy(() => import('./pages/InviteScreening.jsx'))
 const Signup = lazy(() => import('./pages/Signup.jsx'))
 const Login = lazy(() => import('./pages/Login.jsx'))
@@ -76,11 +76,21 @@ export default function App() {
     <>
       <RecoveryRouteSync />
     <Routes>
+      {/* Landing page commented out — Login is now the home page
+      <Route
+        path="/landing"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <Landing />
+          </Suspense>
+        }
+      />
+      */}
       <Route
         path="/"
         element={
           <Suspense fallback={<RouteFallback />}>
-            <Landing />
+            <Login />
           </Suspense>
         }
       />
