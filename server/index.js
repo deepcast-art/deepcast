@@ -430,7 +430,7 @@ app.post('/api/invites/send', async (req, res) => {
         .from('invites')
         .select('id, recipient_email')
         .eq('film_id', filmId)
-        .order('created_at', { ascending: false })
+        .order('created_at', { ascending: true })
         .limit(200)
       const match = (priorInvites || []).find(
         (row) => row.recipient_email && row.recipient_email.trim().toLowerCase() === se
