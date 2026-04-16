@@ -74,18 +74,13 @@ export function generateGraphData(userShares = 0) {
 
   const R2 = Math.max(R1 + GAP, Math.ceil((totalT2 * MIN_SPACING) / TWO_PI))
 
-  // Ring 2 — uniform slot placement (spec §Ring 2)
-  // Each child gets an evenly-spaced slot in team-iteration order.
-  // This keeps ring-2 nodes well-distributed so rings 3+ stay radial with no crossings.
-  const t2SlotAngle = totalT2 > 0 ? TWO_PI / totalT2 : 0
-  const t2StartAngle = -Math.PI / 2
-  let globalT2Idx = 0
-
   const nodes = [{ id: 'film', label: '', x: CX, y: CY, size: 1.0, type: 'film', tier: 0, teamId: null, angle: 0 }]
   const links = []
   const sectionLabels = []
   const tier2Nodes = []
 
+  // --- Ring 1: place recipients in team sections ---
+  const ring1Nodes = []   // { nodeId, angle, teamId, t2Count }
   let t2NameIdx = 0, globalIdx = 0
   let sectionStart = -Math.PI / 2
 
@@ -110,25 +105,68 @@ export function generateGraphData(userShares = 0) {
       })
       links.push({ source: 'film', target: nodeId })
 
-      // Place ring-2 children inline using uniform slots
       const t2Count = isYou ? userShares : (TIER2_SHARERS[name] || 0)
-      for (let k = 0; k < t2Count; k++) {
-        const t2Angle = t2StartAngle + globalT2Idx * t2SlotAngle
-        globalT2Idx++
-        const t2NodeId = `${nodeId}_s${k}`
-        const t2Label = TIER2_NAMES[t2NameIdx++ % TIER2_NAMES.length]
-        nodes.push({
-          id: t2NodeId, label: t2Label,
-          x: CX + R2 * Math.cos(t2Angle), y: CY + R2 * Math.sin(t2Angle),
-          size: 1.0, type: 'human', tier: 2, teamId: team.id, angle: t2Angle,
-        })
-        links.push({ source: nodeId, target: t2NodeId })
-        tier2Nodes.push({ id: t2NodeId, teamId: team.id, angle: t2Angle })
-      }
+      if (t2Count > 0) ring1Nodes.push({ nodeId, angle, teamId: team.id, t2Count })
 
       globalIdx++
     }
     sectionStart = sectionEnd
+  }
+
+  // --- Ring 2: seam-based radial placement centered on parent angles ---
+  const t2MinGap = MIN_SPACING / R2
+
+  // Sort parents by angle, find largest gap for seam
+  ring1Nodes.sort((a, b) => normAngle(a.angle) - normAngle(b.angle))
+
+  let maxGap = 0, seamIdx = 0
+  for (let i = 0; i < ring1Nodes.length; i++) {
+    const cur = normAngle(ring1Nodes[i].angle)
+    const nxt = i < ring1Nodes.length - 1
+      ? normAngle(ring1Nodes[i + 1].angle)
+      : normAngle(ring1Nodes[0].angle) + TWO_PI
+    if (nxt - cur > maxGap) { maxGap = nxt - cur; seamIdx = i }
+  }
+
+  const orderedR1 = ring1Nodes.map((_, i) => ring1Nodes[(seamIdx + 1 + i) % ring1Nodes.length])
+  if (orderedR1.length) {
+    const baseAngle = normAngle(orderedR1[0].angle)
+    for (const s of orderedR1) {
+      let a = normAngle(s.angle)
+      if (a < baseAngle - 0.001) a += TWO_PI
+      s._mono = a
+    }
+  }
+
+  // Build pending list centered on each parent
+  const t2Pending = []
+  for (const s of orderedR1) {
+    for (let k = 0; k < s.t2Count; k++) {
+      const t2NodeId = `${s.nodeId}_s${k}`
+      const t2Label = TIER2_NAMES[t2NameIdx++ % TIER2_NAMES.length]
+      t2Pending.push({
+        nodeId: t2NodeId, label: t2Label,
+        parentId: s.nodeId, teamId: s.teamId,
+        angle: s._mono + (k - (s.t2Count - 1) / 2) * t2MinGap,
+      })
+    }
+  }
+
+  // Forward collision resolution
+  for (let i = 1; i < t2Pending.length; i++) {
+    if (t2Pending[i].angle - t2Pending[i - 1].angle < t2MinGap)
+      t2Pending[i].angle = t2Pending[i - 1].angle + t2MinGap
+  }
+
+  // Place ring-2 nodes
+  for (const p of t2Pending) {
+    nodes.push({
+      id: p.nodeId, label: p.label,
+      x: CX + R2 * Math.cos(p.angle), y: CY + R2 * Math.sin(p.angle),
+      size: 1.0, type: 'human', tier: 2, teamId: p.teamId, angle: p.angle,
+    })
+    links.push({ source: p.parentId, target: p.nodeId })
+    tier2Nodes.push({ id: p.nodeId, teamId: p.teamId, angle: p.angle })
   }
 
   // Rings 3+ — generative tiers (spec §Rings 3–5+)
