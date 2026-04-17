@@ -158,6 +158,8 @@ export default function InviteScreening() {
     overlayVisible: true,
     mounted: true,
   })
+  /** True once the prologue text animation has finished (texts faded out). Overlay stays until API is also ready. */
+  const [prologueTextsDone, setPrologueTextsDone] = useState(false)
   const [currentView, setCurrentView] = useState('landing')
   const [viewVisible, setViewVisible] = useState(false)
   const [isScreeningPaused, setIsScreeningPaused] = useState(true)
@@ -236,6 +238,8 @@ export default function InviteScreening() {
   const autoOpenInvitationDoneRef = useRef(false)
   /** Prevents the welcome prologue timer stack from running twice (early + valid). */
   const prologueWelcomeStartedRef = useRef(false)
+  /** Prevents the overlay-dismiss effect from firing twice. */
+  const prologueDismissedRef = useRef(false)
   const [mobileRotateGateActive, setMobileRotateGateActive] = useState(false)
   /** After media can play, if autoplay still fails (no user gesture), show tap-to-start. */
   const screeningMediaReadyRef = useRef(false)
@@ -274,6 +278,8 @@ export default function InviteScreening() {
     setScreeningNeedsUserGesturePlay(false)
     autoOpenInvitationDoneRef.current = false
     prologueWelcomeStartedRef.current = false
+    prologueDismissedRef.current = false
+    setPrologueTextsDone(false)
   }, [token])
 
   useEffect(() => {
@@ -473,6 +479,7 @@ export default function InviteScreening() {
     if (prologueWelcomeStartedRef.current) return undefined
 
     prologueWelcomeStartedRef.current = true
+    setPrologueTextsDone(false)
     setPrologueState({
       text1: false,
       text2: false,
@@ -482,29 +489,48 @@ export default function InviteScreening() {
     })
     setViewVisible(false)
 
+    // Text animation only — overlay dismissal is handled by a separate effect
+    // that waits for BOTH texts done AND API ready.
     let d = 600
     const t1 = setTimeout(() => setPrologueState((s) => ({ ...s, text1: true })), d)
     d += 1650
     const t2 = setTimeout(() => setPrologueState((s) => ({ ...s, text2: true })), d)
     d += 2400
-    const t3 = setTimeout(() => setPrologueState((s) => ({ ...s, textsVisible: false })), d)
-    const t4 = setTimeout(() => {
-      setPrologueState((s) => ({ ...s, overlayVisible: false }))
-      setViewVisible(true)
-    }, d + 1500)
-    const t5 = setTimeout(() => setPrologueState((s) => ({ ...s, mounted: false })), d + 3750)
+    const t3 = setTimeout(() => {
+      setPrologueState((s) => ({ ...s, textsVisible: false }))
+      setPrologueTextsDone(true)
+    }, d)
     return () => {
       clearTimeout(t1)
       clearTimeout(t2)
       clearTimeout(t3)
-      clearTimeout(t4)
-      clearTimeout(t5)
     }
   }, [shouldStartWelcomePrologue, directPlay, token])
+
+  /** Dismiss prologue overlay once texts are done AND data is loaded (no spinner gap). */
+  useEffect(() => {
+    if (!prologueTextsDone) return
+    if (status === 'loading') return
+    if (prologueDismissedRef.current) return
+    prologueDismissedRef.current = true
+
+    // Small beat after texts fade before overlay dissolves
+    const t1 = setTimeout(() => {
+      setPrologueState((s) => ({ ...s, overlayVisible: false }))
+      setViewVisible(true)
+    }, 1500)
+    const t2 = setTimeout(() => setPrologueState((s) => ({ ...s, mounted: false })), 3750)
+    return () => {
+      clearTimeout(t1)
+      clearTimeout(t2)
+    }
+  }, [prologueTextsDone, status])
 
   useEffect(() => {
     if (status === 'invalid' || status === 'expired') {
       prologueWelcomeStartedRef.current = false
+      prologueDismissedRef.current = false
+      setPrologueTextsDone(false)
       setPrologueState({ text1: false, text2: false, textsVisible: false, overlayVisible: false, mounted: false })
       setViewVisible(true)
     }
