@@ -214,6 +214,8 @@ export default function InviteScreening() {
   // Names decoded from the encrypted ?ctx= param in the invite URL.
   // Available immediately on mount — no DB round-trip needed for the prologue.
   const [ctxRecipientFirst, setCtxRecipientFirst] = useState(null)
+  /** True once the ?ctx= decrypt attempt has resolved (success or failure). */
+  const [ctxDecryptDone, setCtxDecryptDone] = useState(!searchParams.get('ctx'))
 
   /* ---------- DASHBOARD STATE ---------- */
 
@@ -359,12 +361,13 @@ export default function InviteScreening() {
   // Decode sender + recipient names from ?ctx= immediately so the prologue can show real names.
   useEffect(() => {
     const ctx = searchParams.get('ctx')
-    if (!ctx) return
+    if (!ctx) { setCtxDecryptDone(true); return }
     decryptInviteCtx(ctx).then((names) => {
       if (names) {
         if (names.s) setSharerDisplayName((prev) => prev || names.s)
         if (names.r) setCtxRecipientFirst(names.r)
       }
+      setCtxDecryptDone(true)
     })
   }, [searchParams])
 
@@ -468,16 +471,20 @@ export default function InviteScreening() {
       ? false
       : status !== 'invalid' && status !== 'expired'
 
-  /** Names are ready once ?ctx= decrypt or API provides real sender/recipient names, or after a 3s safety timeout. */
+  /** Names are ready once ?ctx= decrypt provides real sender/recipient names, or after a 3s safety timeout.
+   *  When ?ctx= is present, wait for the decrypt to finish before checking names — this ensures
+   *  the prologue never flashes fallback text ("you" / "someone who chose you") when real names are available. */
   useEffect(() => {
     if (prologueNamesReady) return
+    // If ?ctx= is present, don't proceed until decrypt has resolved
+    if (!ctxDecryptDone) return
     const hasRecipient = recipientFirstName && recipientFirstName !== 'you'
     const hasSender = Boolean(sharerDisplayName)
     if (hasRecipient || hasSender) { setPrologueNamesReady(true); return }
     // Safety timeout: don't hold the dark screen forever — proceed with fallbacks after 3s
     const t = setTimeout(() => setPrologueNamesReady(true), 3000)
     return () => clearTimeout(t)
-  }, [prologueNamesReady, recipientFirstName, sharerDisplayName])
+  }, [prologueNamesReady, ctxDecryptDone, recipientFirstName, sharerDisplayName])
 
   /** Mount the prologue overlay immediately; text animation waits for names. */
   useEffect(() => {
@@ -1792,7 +1799,7 @@ export default function InviteScreening() {
                 </div>
 
                 {dashboardGraphLayout ? (
-                  <div className="w-full bg-[#121a33] border-[0.5px] border-[#4a5580]/40 overflow-hidden shadow-2xl h-[820px] touch-manipulation">
+                  <div className="w-full bg-[#121a33] border-[0.5px] border-[#4a5580]/40 overflow-hidden shadow-2xl h-[850px] touch-manipulation">
                     <NetworkGraph
                       fillHeight
                       pannable
@@ -1814,7 +1821,7 @@ export default function InviteScreening() {
                     />
                   </div>
                 ) : (
-                  <div className="w-full h-[820px] bg-[#121a33] border-[0.5px] border-[#4a5580]/40 flex items-center justify-center">
+                  <div className="w-full h-[850px] bg-[#121a33] border-[0.5px] border-[#4a5580]/40 flex items-center justify-center">
                     <span className="font-sans text-[9px] uppercase tracking-widest text-[#dddddd]/20">Network loading…</span>
                   </div>
                 )}

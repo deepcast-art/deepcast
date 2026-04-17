@@ -29,7 +29,7 @@ export default function MobilePassItOn({
   resumeFilm,
 }) {
   return (
-    <div className="lg:hidden flex h-full min-h-0 w-full flex-1 flex-col bg-[#080c18] landscape:flex-row landscape:max-h-[100dvh] landscape:overflow-hidden">
+    <div className="lg:hidden flex h-full min-h-0 w-full flex-1 flex-col bg-[#080c18] portrait:h-auto portrait:flex-none landscape:flex-row landscape:max-h-[100dvh] landscape:overflow-hidden">
 
       {/* ── PORTRAIT: Resume bar ── */}
       {narrowPausePassItOn && (
