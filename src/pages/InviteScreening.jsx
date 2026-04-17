@@ -111,14 +111,6 @@ const MuxPlayer = lazy(() =>
   import('@mux/mux-player-react').then((m) => ({ default: m.default }))
 )
 
-function Spinner({ className = '' }) {
-  return (
-    <div className={`flex items-center justify-center ${className}`} aria-busy="true">
-      <div className="w-6 h-6 border-[0.5px] border-accent border-t-transparent rounded-full animate-spin" />
-    </div>
-  )
-}
-
 /* ================================================================== */
 /*  MAIN COMPONENT                                                    */
 /* ================================================================== */
@@ -507,10 +499,9 @@ export default function InviteScreening() {
     }
   }, [shouldStartWelcomePrologue, directPlay, token])
 
-  /** Dismiss prologue overlay once texts are done AND data is loaded (no spinner gap). */
+  /** Dismiss prologue overlay as soon as texts are done — landing page renders underneath even while API is still loading. */
   useEffect(() => {
     if (!prologueTextsDone) return
-    if (status === 'loading') return
     if (prologueDismissedRef.current) return
     prologueDismissedRef.current = true
 
@@ -524,7 +515,7 @@ export default function InviteScreening() {
       clearTimeout(t1)
       clearTimeout(t2)
     }
-  }, [prologueTextsDone, status])
+  }, [prologueTextsDone])
 
   useEffect(() => {
     if (status === 'invalid' || status === 'expired') {
@@ -1271,27 +1262,9 @@ export default function InviteScreening() {
           viewVisible || status === 'loading' ? 'opacity-100' : 'opacity-0'
         } ${currentView === 'screening' ? 'overflow-hidden' : 'overflow-y-auto'}`}
       >
-        {/* Still loading data after prologue finished */}
-        {status === 'loading' && (
-          <div className="font-display font-normal min-h-screen flex flex-col items-center justify-center gap-6 px-6">
-            {ctxInUrl ? (
-              <>
-                <p className="font-serif-v3 text-center text-lg italic text-[#dddddd]/85 md:text-xl">
-                  Opening your invitation…
-                </p>
-                <Spinner />
-              </>
-            ) : (
-              <>
-                <Spinner />
-                <span className="sr-only">Loading</span>
-              </>
-            )}
-          </div>
-        )}
-
         {/* ========================= LANDING ========================= */}
-        {status === 'valid' && currentView === 'landing' && !isDesktop && (
+        {/* Renders during both 'loading' and 'valid' — landing components handle null graphLayout gracefully */}
+        {(status === 'loading' || status === 'valid') && currentView === 'landing' && !isDesktop && (
           <MobileLanding
             graphLayout={graphLayout}
             filmInvites={filmInvites}
@@ -1302,7 +1275,7 @@ export default function InviteScreening() {
           />
         )}
 
-        {status === 'valid' && currentView === 'landing' && isDesktop && (
+        {(status === 'loading' || status === 'valid') && currentView === 'landing' && isDesktop && (
           <DesktopLanding
             graphLayout={graphLayout}
             filmInvites={filmInvites}

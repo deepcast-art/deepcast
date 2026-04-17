@@ -22,36 +22,46 @@ export default function MobileLanding({
 }) {
   return (
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
-    <section className="relative min-h-[100dvh] w-full">
+    <section className="relative min-h-[100dvh] w-full overflow-hidden bg-[#080c18]">
+      {/* Hero media — graph shifted up and scaled for portrait vignette framing */}
       <div className="fixed inset-0 z-0 h-[100dvh] w-full bg-[#080c18]">
-        {graphLayout ? (
-          <NetworkGraph
-            fillHeight
-            pannable
-            transparentSurface
-            interactiveZoom
-            softTouchInteraction
-            edgeScrollFades
-            edgeFadeColor="#080c18"
-            nodesData={graphLayout.nodesData}
-            linksData={graphLayout.linksData}
-            viewBoxH={graphLayout.viewBoxH}
-            viewBoxW={graphLayout.viewBoxW}
-            ringRadii={graphLayout.ringRadii}
-            sectionLabels={graphLayout.sectionLabels}
-            rootNode={graphLayout.rootNode}
-            defaultActiveNodes={graphLayout.defaultActiveNodes}
-            defaultActiveLinks={graphLayout.defaultActiveLinks}
-            showLegend={false}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center px-6 text-sm text-[#dddddd]/40">
-            {filmInvites.length > 0
-              ? 'Preparing your invitation map…'
-              : 'Your private path to this film begins here.'}
-          </div>
-        )}
+        <div className="absolute inset-0 portrait:scale-125 portrait:-translate-y-[8%] portrait:origin-top">
+          {graphLayout ? (
+            <NetworkGraph
+              fillHeight
+              pannable
+              transparentSurface
+              interactiveZoom
+              softTouchInteraction
+              edgeScrollFades
+              edgeFadeColor="#080c18"
+              nodesData={graphLayout.nodesData}
+              linksData={graphLayout.linksData}
+              viewBoxH={graphLayout.viewBoxH}
+              viewBoxW={graphLayout.viewBoxW}
+              ringRadii={graphLayout.ringRadii}
+              sectionLabels={graphLayout.sectionLabels}
+              rootNode={graphLayout.rootNode}
+              defaultActiveNodes={graphLayout.defaultActiveNodes}
+              defaultActiveLinks={graphLayout.defaultActiveLinks}
+              showLegend={false}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center px-6 text-sm text-[#dddddd]/40">
+              {filmInvites.length > 0
+                ? 'Preparing your invitation map…'
+                : 'Your private path to this film begins here.'}
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Vignette overlay — portrait only */}
+      <div
+        className="fixed inset-0 z-[1] pointer-events-none portrait:block hidden h-[100dvh]"
+        style={{ background: 'radial-gradient(ellipse at 50% 22%, transparent 38%, #080c18 68%)' }}
+        aria-hidden
+      />
 
       <div className="relative z-10 flex min-h-[100dvh] w-full flex-col pointer-events-none">
         {/* "Gifted by" badge — portrait: absolute top; landscape: hidden (shown inline instead) */}
