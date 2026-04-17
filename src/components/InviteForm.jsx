@@ -63,12 +63,6 @@ export default function InviteForm({
     return () => clearTimeout(t)
   }, [successMessage])
 
-  const addEmail = () => {
-    if (unlimited || recipients.length < slotsRemaining) {
-      setRecipients([...recipients, { firstName: '', lastName: '', email: '', note: '' }])
-    }
-  }
-
   const updateRecipient = (index, key, value) => {
     const updated = [...recipients]
     updated[index] = { ...updated[index], [key]: value }
@@ -362,15 +356,7 @@ export default function InviteForm({
         </div>
       </div>
 
-      <div className="flex items-center justify-between mt-4">
-        {(unlimited || recipients.length < slotsRemaining) && (
-          <button
-            onClick={addEmail}
-            className="text-accent text-sm hover:text-accent-hover transition-colors cursor-pointer"
-          >
-            + Add another
-          </button>
-        )}
+      <div className="flex items-center justify-end mt-4">
         {unlimited ? (
           <span className="text-text-muted text-xs">Unlimited shares</span>
         ) : (

@@ -56,14 +56,14 @@ export default function MobileLanding({
         </div>
       </div>
 
-      {/* Vignette overlay — portrait only */}
+      {/* Vignette overlay — portrait only, between graph (z-0) and foreground (z-[5]) */}
       <div
-        className="fixed inset-0 z-[1] pointer-events-none portrait:block hidden h-[100dvh]"
+        className="fixed inset-0 z-[2] pointer-events-none portrait:block hidden h-[100dvh]"
         style={{ background: 'radial-gradient(ellipse at 50% 22%, transparent 38%, #080c18 68%)' }}
         aria-hidden
       />
 
-      <div className="relative z-10 flex min-h-[100dvh] w-full flex-col pointer-events-none">
+      <div className="fixed inset-0 z-[5] flex min-h-[100dvh] w-full flex-col pointer-events-none">
         {/* "Gifted by" badge — portrait: absolute top; landscape: hidden (shown inline instead) */}
         <div
           className="pointer-events-auto portrait:absolute portrait:left-6 portrait:top-8 portrait:z-20 landscape:hidden flex items-center gap-3 slow-fade-text reveal-up"

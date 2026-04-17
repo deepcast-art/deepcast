@@ -150,8 +150,10 @@ export default function InviteScreening() {
     overlayVisible: true,
     mounted: true,
   })
-  /** True once the prologue text animation has finished (texts faded out). Overlay stays until API is also ready. */
+  /** True once the prologue text animation has finished (texts faded out). */
   const [prologueTextsDone, setPrologueTextsDone] = useState(false)
+  /** True once sender/recipient names are available for the prologue (from ?ctx= decrypt or API). */
+  const [prologueNamesReady, setPrologueNamesReady] = useState(false)
   const [currentView, setCurrentView] = useState('landing')
   const [viewVisible, setViewVisible] = useState(false)
   const [isScreeningPaused, setIsScreeningPaused] = useState(true)
@@ -272,6 +274,7 @@ export default function InviteScreening() {
     prologueWelcomeStartedRef.current = false
     prologueDismissedRef.current = false
     setPrologueTextsDone(false)
+    setPrologueNamesReady(false)
   }, [token])
 
   useEffect(() => {
@@ -465,6 +468,18 @@ export default function InviteScreening() {
       ? false
       : status !== 'invalid' && status !== 'expired'
 
+  /** Names are ready once ?ctx= decrypt or API provides real sender/recipient names, or after a 3s safety timeout. */
+  useEffect(() => {
+    if (prologueNamesReady) return
+    const hasRecipient = recipientFirstName && recipientFirstName !== 'you'
+    const hasSender = Boolean(sharerDisplayName)
+    if (hasRecipient || hasSender) { setPrologueNamesReady(true); return }
+    // Safety timeout: don't hold the dark screen forever — proceed with fallbacks after 3s
+    const t = setTimeout(() => setPrologueNamesReady(true), 3000)
+    return () => clearTimeout(t)
+  }, [prologueNamesReady, recipientFirstName, sharerDisplayName])
+
+  /** Mount the prologue overlay immediately; text animation waits for names. */
   useEffect(() => {
     if (directPlay) return undefined
     if (!shouldStartWelcomePrologue) return undefined
@@ -480,9 +495,14 @@ export default function InviteScreening() {
       mounted: true,
     })
     setViewVisible(false)
+  }, [shouldStartWelcomePrologue, directPlay, token])
 
-    // Text animation only — overlay dismissal is handled by a separate effect
-    // that waits for BOTH texts done AND API ready.
+  /** Start text animation once names are available. */
+  useEffect(() => {
+    if (!prologueNamesReady) return
+    if (!prologueWelcomeStartedRef.current) return
+    if (prologueTextsDone) return
+
     let d = 600
     const t1 = setTimeout(() => setPrologueState((s) => ({ ...s, text1: true })), d)
     d += 1650
@@ -497,7 +517,7 @@ export default function InviteScreening() {
       clearTimeout(t2)
       clearTimeout(t3)
     }
-  }, [shouldStartWelcomePrologue, directPlay, token])
+  }, [prologueNamesReady, prologueTextsDone])
 
   /** Dismiss prologue overlay as soon as texts are done — landing page renders underneath even while API is still loading. */
   useEffect(() => {
@@ -983,6 +1003,23 @@ export default function InviteScreening() {
     if (!isLgUp) queueMicrotask(() => tryIOSNativeVideoFullscreen())
   }, [isLgUp, requestScreeningFullscreen, tryIOSNativeVideoFullscreen, tryScreeningPlay])
 
+  /** Mobile landscape = film fullscreen. Auto-resume when user rotates to landscape while pass-it-on is showing. */
+  useEffect(() => {
+    if (isLgUp) return                         // desktop — no orientation gating
+    if (currentView !== 'screening') return     // only during screening
+    if (!passItOnFromUserPause) return          // only when pass-it-on is active
+
+    const handleOrientation = () => {
+      if (isLandscapeOrientation()) resumeFilm()
+    }
+    window.addEventListener('orientationchange', handleOrientation)
+    window.addEventListener('resize', handleOrientation)
+    return () => {
+      window.removeEventListener('orientationchange', handleOrientation)
+      window.removeEventListener('resize', handleOrientation)
+    }
+  }, [isLgUp, currentView, passItOnFromUserPause, resumeFilm])
+
   /** Prologue ends async — player may mount late; retry play until autoplay succeeds or user taps. */
   useEffect(() => {
     if (currentView !== 'screening' || !film?.mux_playback_id) return
@@ -1452,8 +1489,6 @@ export default function InviteScreening() {
                 setLetterNote={setLetterNote}
                 letterRecipientEmail={letterRecipientEmail}
                 setLetterRecipientEmail={setLetterRecipientEmail}
-                letterSenderName={letterSenderName}
-                setLetterSenderName={setLetterSenderName}
                 letterSenderEmail={letterSenderEmail}
                 setLetterSenderEmail={setLetterSenderEmail}
                 newPassword={newPassword}
@@ -1472,7 +1507,6 @@ export default function InviteScreening() {
                 showPostFilm={showPostFilm}
                 passItOnLayerActive={passItOnLayerActive}
                 slotsRemaining={slotsRemaining}
-                sentLetters={sentLetters}
                 letterError={letterError}
                 letterSuccess={letterSuccess}
                 letterRecipientFirst={letterRecipientFirst}
@@ -1483,8 +1517,6 @@ export default function InviteScreening() {
                 setLetterNote={setLetterNote}
                 letterRecipientEmail={letterRecipientEmail}
                 setLetterRecipientEmail={setLetterRecipientEmail}
-                letterSenderName={letterSenderName}
-                setLetterSenderName={setLetterSenderName}
                 letterSenderEmail={letterSenderEmail}
                 setLetterSenderEmail={setLetterSenderEmail}
                 newPassword={newPassword}
