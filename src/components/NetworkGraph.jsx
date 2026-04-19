@@ -791,8 +791,12 @@ export default function NetworkGraph({
       graphColumn
     )
 
+    const panPad = pannable ? '25%' : 0
     const scrollBody = (
-      <div className="flex min-h-full min-w-full shrink-0 items-center justify-center">
+      <div
+        className="flex min-h-full min-w-full shrink-0 items-center justify-center"
+        style={{ padding: panPad }}
+      >
         {zoomedGraph}
       </div>
     )

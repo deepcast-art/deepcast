@@ -362,15 +362,15 @@ export default function NetworkMap() {
                 </div>
               )}
 
-              <div className="mb-6 overflow-hidden border border-faint/40 bg-paper/70">
+              <div className="mb-6 overflow-hidden border border-[#4a5580]/40 bg-[#121a33]">
                 {!graphLayout ? (
-                  <p className="py-12 text-center font-sans text-[10px] uppercase tracking-widest text-warm/35">
+                  <p className="py-12 text-center font-sans text-[10px] uppercase tracking-widest text-[#dddddd]/35">
                     No invites for this film yet.
                   </p>
                 ) : (
                   <>
                     <div
-                      className="flex h-[min(52svh,520px)] w-full min-h-[220px] sm:min-h-[320px] flex-col touch-manipulation"
+                      className="flex h-[400px] w-full flex-col touch-manipulation"
                       role="img"
                       aria-label="Invite network map"
                     >
@@ -389,7 +389,7 @@ export default function NetworkMap() {
                         defaultActiveLinks={graphLayout.defaultActiveLinks}
                       />
                     </div>
-                    <p className="border-t border-faint/30 px-4 py-3 text-center font-sans text-[10px] uppercase tracking-widest text-warm/35">
+                    <p className="border-t border-[#4a5580]/30 px-4 py-3 text-center font-sans text-[10px] uppercase tracking-widest text-[#dddddd]/35">
                       Scroll to zoom, drag to pan. Pinch on mobile. Amber highlights the active path.
                     </p>
                   </>

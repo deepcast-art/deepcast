@@ -471,20 +471,25 @@ export default function InviteScreening() {
       ? false
       : status !== 'invalid' && status !== 'expired'
 
-  /** Names are ready once ?ctx= decrypt provides real sender/recipient names, or after a 3s safety timeout.
-   *  When ?ctx= is present, wait for the decrypt to finish before checking names — this ensures
-   *  the prologue never flashes fallback text ("you" / "someone who chose you") when real names are available. */
+  /** Names are ready once we have real sender/recipient names from ?ctx= decrypt OR the API response.
+   *  When ?ctx= is present, we first try the local decrypt (~1ms). If that fails (e.g. missing env var),
+   *  we wait for the API response to provide names. The 5s safety timeout only fires as a last resort. */
   useEffect(() => {
     if (prologueNamesReady) return
-    // If ?ctx= is present, don't proceed until decrypt has resolved
+    // If ?ctx= decrypt is still pending, wait for it
     if (!ctxDecryptDone) return
     const hasRecipient = recipientFirstName && recipientFirstName !== 'you'
     const hasSender = Boolean(sharerDisplayName)
     if (hasRecipient || hasSender) { setPrologueNamesReady(true); return }
-    // Safety timeout: don't hold the dark screen forever — proceed with fallbacks after 3s
-    const t = setTimeout(() => setPrologueNamesReady(true), 3000)
+    // If API has responded (status is no longer loading), names are as good as they'll get
+    if (status === 'valid' || status === 'invalid' || status === 'expired' || status === 'network') {
+      setPrologueNamesReady(true)
+      return
+    }
+    // Safety timeout: don't hold the dark screen forever
+    const t = setTimeout(() => setPrologueNamesReady(true), 5000)
     return () => clearTimeout(t)
-  }, [prologueNamesReady, ctxDecryptDone, recipientFirstName, sharerDisplayName])
+  }, [prologueNamesReady, ctxDecryptDone, recipientFirstName, sharerDisplayName, status])
 
   /** Mount the prologue overlay immediately; text animation waits for names. */
   useEffect(() => {
@@ -695,7 +700,7 @@ export default function InviteScreening() {
         return
       }
 
-      if (currentTime > 0.01) setScreeningPlaybackEverStarted(true)
+      setScreeningPlaybackEverStarted(true)
 
       if (isLgUp) {
         setPassItOnFromUserPause(false)
@@ -1196,7 +1201,7 @@ export default function InviteScreening() {
       <div className="tactile-grain" aria-hidden />
       <div className="fixed inset-0 z-[-2] bg-[#080c18]" aria-hidden />
 
-      {status === 'loading' && slowConnecting && (
+      {status === 'loading' && slowConnecting && !prologueState.mounted && (
         <div className="fixed inset-0 z-[3000] flex flex-col items-center justify-center pointer-events-none">
           <p className="font-body font-light text-sm text-[#dddddd]/45 tracking-wide">
             Still connecting, one moment…
@@ -1373,17 +1378,21 @@ export default function InviteScreening() {
                     }}
                   />
                 </Suspense>
-                {/* Tap-to-pause overlay: tap anywhere except the bottom control bar pauses and shows pass-it-on.
-                   Bottom 64px is left uncovered so the MuxPlayer progress bar stays interactive. */}
-                {!isScreeningPaused && !screeningNeedsUserGesturePlay && screeningPlaybackEverStarted && (
-                  <div
-                    className="absolute inset-0 bottom-16 z-[15] touch-manipulation"
-                    onClick={() => {
-                      const mux = muxPlayerRef.current
-                      if (mux) mux.pause()
-                    }}
-                  />
-                )}
+                {/* Tap-to-pause overlay: kept mounted so the full pointerdown→pointerup→click
+                   gesture lands on it. Unmounting mid-gesture (when pause flips isScreeningPaused)
+                   lets the click fall through to MuxPlayer, which toggles play back on — that's
+                   what caused the "two taps to pause" behavior. */}
+                <div
+                  className={`absolute top-0 left-0 right-0 bottom-16 z-[35] touch-manipulation ${
+                    isScreeningPaused || screeningNeedsUserGesturePlay ? 'pointer-events-none' : 'cursor-pointer'
+                  }`}
+                  onPointerDown={(e) => {
+                    e.stopPropagation()
+                    const mux = muxPlayerRef.current
+                    if (mux) mux.pause()
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
                 {screeningNeedsUserGesturePlay && !showPostFilm && (
                   <button
                     type="button"
@@ -1746,90 +1755,9 @@ export default function InviteScreening() {
             {/* ── Main panel ── */}
             <div className="w-full md:w-[78%] min-h-screen flex flex-col px-4 sm:px-5 md:px-10 py-6 sm:py-8 md:py-12 overflow-y-auto panel-scroll pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
 
-              {/* "Your shares" text */}
-              <section className="w-full mb-6 md:mb-10 reveal-up" style={{ transitionDelay: '100ms' }}>
-                <div className="flex flex-col gap-3">
-                  <p className="font-serif-v3 text-xl md:text-2xl text-[#dddddd] italic leading-snug">
-                    Your shares have been sent, {entryRecipientLabel}.
-                  </p>
-                  <p className="font-display font-light text-sm md:text-base text-[#dddddd]/70 leading-relaxed">
-                    {formattedNames} {sentLetters.length === 1 ? 'has' : 'have'} been brought into the fold, growing the network. Come back to watch your impact spread.
-                  </p>
-                </div>
-              </section>
-
-              {/* Mobile: Stats row */}
-              <section className="md:hidden w-full mb-6 reveal-up" style={{ transitionDelay: '150ms' }}>
-                <div className="flex flex-row flex-wrap justify-between gap-y-4 gap-x-4">
-                  <div className="flex min-w-0 flex-1 flex-col gap-1 basis-[28%]">
-                    <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Invites Sent</span>
-                    <span className="font-serif-v3 text-2xl text-[#dddddd]">{sentLetters.length}</span>
-                  </div>
-                  <div className="flex min-w-0 flex-1 flex-col gap-1 basis-[28%]">
-                    <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Invites Left</span>
-                    <span className="font-serif-v3 text-2xl text-[#b1a180]">{slotsRemaining}</span>
-                  </div>
-                  <div className="flex min-w-0 flex-1 flex-col gap-1 basis-[28%]">
-                    <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">New Viewers</span>
-                    <span className="font-serif-v3 text-2xl text-[#dddddd]">0</span>
-                  </div>
-                </div>
-              </section>
-
-              {/* Mobile: Share More button with airplane icon */}
-              {slotsRemaining > 0 && (
-                <section className="md:hidden w-full mb-6 reveal-up" style={{ transitionDelay: '180ms' }}>
-                  <button
-                    type="button"
-                    onClick={handleOpenShareModal}
-                    className="w-full inline-flex items-center justify-center gap-2.5 border border-[#b1a180]/40 bg-[#b1a180]/8 px-4 py-3 font-sans text-[10px] uppercase tracking-[0.28em] text-[#b1a180] transition-colors hover:bg-[#b1a180]/15 touch-manipulation"
-                  >
-                    <svg className="h-4 w-4 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden>
-                      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-                    </svg>
-                    Share More
-                  </button>
-                </section>
-              )}
-
-              {/* Network graph */}
-              <section className="w-full mb-12 reveal-up" style={{ transitionDelay: '200ms' }}>
-                <div className="mb-4 border-b border-[#4a5580]/40 pb-4">
-                  <h3 className="font-sans text-[10px] uppercase tracking-[0.3em] text-[#dddddd]/50">My Network Impact</h3>
-                </div>
-
-                {dashboardGraphLayout ? (
-                  <div className="w-full bg-[#121a33] border-[0.5px] border-[#4a5580]/40 overflow-hidden shadow-2xl h-[850px] touch-manipulation">
-                    <NetworkGraph
-                      fillHeight
-                      pannable
-                      transparentSurface
-                      showZoomControls
-                      softTouchInteraction={!isDesktop}
-                      edgeScrollFades={!isDesktop}
-                      edgeFadeColor="#121a33"
-                      nodesData={dashboardGraphLayout.nodesData}
-                      linksData={dashboardGraphLayout.linksData}
-                      viewBoxH={dashboardGraphLayout.viewBoxH}
-                      viewBoxW={dashboardGraphLayout.viewBoxW}
-                      ringRadii={dashboardGraphLayout.ringRadii}
-                      sectionLabels={dashboardGraphLayout.sectionLabels}
-                      rootNode={dashboardGraphLayout.rootNode}
-                      defaultActiveNodes={dashboardGraphLayout.defaultActiveNodes}
-                      defaultActiveLinks={dashboardGraphLayout.defaultActiveLinks}
-                      showLegend={false}
-                    />
-                  </div>
-                ) : (
-                  <div className="w-full h-[850px] bg-[#121a33] border-[0.5px] border-[#4a5580]/40 flex items-center justify-center">
-                    <span className="font-sans text-[9px] uppercase tracking-widest text-[#dddddd]/20">Network loading…</span>
-                  </div>
-                )}
-              </section>
-
-              {/* Desktop: Film card (hidden on mobile) */}
+              {/* Desktop: Film card at top (hidden on mobile) */}
               {film && (
-                <section className="hidden md:block w-full mb-10 reveal-up" style={{ transitionDelay: '250ms' }}>
+                <section className="hidden md:block w-full mb-10 reveal-up" style={{ transitionDelay: '50ms' }}>
                   <div className="flex w-full flex-row flex-wrap items-center gap-5 border border-[#4a5580]/40 bg-[#121a33]/90 p-6">
                     {film.thumbnail_url ? (
                       <img
@@ -1898,6 +1826,86 @@ export default function InviteScreening() {
                   </div>
                 </section>
               )}
+
+              {/* "Your shares" text */}
+              <section className="w-full mb-6 md:mb-10 reveal-up" style={{ transitionDelay: '100ms' }}>
+                <div className="flex flex-col gap-3">
+                  <p className="font-serif-v3 text-xl md:text-2xl text-[#dddddd] italic leading-snug">
+                    Your shares have been sent, {entryRecipientLabel}.
+                  </p>
+                  <p className="font-display font-light text-sm md:text-base text-[#dddddd]/70 leading-relaxed">
+                    {formattedNames} {sentLetters.length === 1 ? 'has' : 'have'} been brought into the fold, growing the network. Come back to watch your impact spread.
+                  </p>
+                </div>
+              </section>
+
+              {/* Mobile: Stats row */}
+              <section className="md:hidden w-full mb-6 reveal-up" style={{ transitionDelay: '150ms' }}>
+                <div className="flex flex-row flex-wrap justify-between gap-y-4 gap-x-4">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1 basis-[28%]">
+                    <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Invites Sent</span>
+                    <span className="font-serif-v3 text-2xl text-[#dddddd]">{sentLetters.length}</span>
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-col gap-1 basis-[28%]">
+                    <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Invites Left</span>
+                    <span className="font-serif-v3 text-2xl text-[#b1a180]">{slotsRemaining}</span>
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-col gap-1 basis-[28%]">
+                    <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">New Viewers</span>
+                    <span className="font-serif-v3 text-2xl text-[#dddddd]">0</span>
+                  </div>
+                </div>
+              </section>
+
+              {/* Mobile: Share More button with airplane icon */}
+              {slotsRemaining > 0 && (
+                <section className="md:hidden w-full mb-6 reveal-up" style={{ transitionDelay: '180ms' }}>
+                  <button
+                    type="button"
+                    onClick={handleOpenShareModal}
+                    className="w-full inline-flex items-center justify-center gap-2.5 border border-[#b1a180]/40 bg-[#b1a180]/8 px-4 py-3 font-sans text-[10px] uppercase tracking-[0.28em] text-[#b1a180] transition-colors hover:bg-[#b1a180]/15 touch-manipulation"
+                  >
+                    <svg className="h-4 w-4 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden>
+                      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                    </svg>
+                    Share More
+                  </button>
+                </section>
+              )}
+
+              {/* Network graph */}
+              <section className="w-full mb-12 reveal-up" style={{ transitionDelay: '200ms' }}>
+                <div className="mb-4 border-b border-[#4a5580]/40 pb-4">
+                  <h3 className="font-sans text-[10px] uppercase tracking-[0.3em] text-[#dddddd]/50">My Network Impact</h3>
+                </div>
+
+                {dashboardGraphLayout ? (
+                  <div className="w-full h-[850px] overflow-hidden touch-manipulation">
+                    <NetworkGraph
+                      fillHeight
+                      pannable
+                      showZoomControls
+                      softTouchInteraction={!isDesktop}
+                      edgeScrollFades={!isDesktop}
+                      edgeFadeColor="#121a33"
+                      nodesData={dashboardGraphLayout.nodesData}
+                      linksData={dashboardGraphLayout.linksData}
+                      viewBoxH={dashboardGraphLayout.viewBoxH}
+                      viewBoxW={dashboardGraphLayout.viewBoxW}
+                      ringRadii={dashboardGraphLayout.ringRadii}
+                      sectionLabels={dashboardGraphLayout.sectionLabels}
+                      rootNode={dashboardGraphLayout.rootNode}
+                      defaultActiveNodes={dashboardGraphLayout.defaultActiveNodes}
+                      defaultActiveLinks={dashboardGraphLayout.defaultActiveLinks}
+                      showLegend={false}
+                    />
+                  </div>
+                ) : (
+                  <div className="w-full h-[850px] bg-[#121a33] border-[0.5px] border-[#4a5580]/40 flex items-center justify-center">
+                    <span className="font-sans text-[9px] uppercase tracking-widest text-[#dddddd]/20">Network loading…</span>
+                  </div>
+                )}
+              </section>
 
               {/* Sent invitations section */}
               <section className="w-full mb-24 reveal-up" style={{ transitionDelay: '300ms' }}>

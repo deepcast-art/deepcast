@@ -298,7 +298,7 @@ export function buildGraphLayout({
   filmTitle = 'Film',
   creatorName: _creatorName = '',
   viewerRecipientKey: viewerRKey = null,
-  focusInviteId: _focusInviteId = null,
+  focusInviteId = null,
   rootId = 'film-root',
   creatorNodeId: _creatorNodeId = 'creator-root',
 }) {
@@ -352,6 +352,15 @@ export function buildGraphLayout({
     }
   }
 
+  /* --- Resolve viewer node ID ---
+     Each invite is its own node (id = inv.id). The viewer is identified by
+     focusInviteId (preferred) or by matching viewerRecipientKey against invites. */
+  let viewerNodeId = focusInviteId || null
+  if (!viewerNodeId && viewerRKey) {
+    const match = filmInvites.find((inv) => recipientKey(inv) === viewerRKey)
+    if (match) viewerNodeId = match.id
+  }
+
   /* --- Spec constants --- */
   const MIN_SPACING = 32
   const R1_BASE = 200
@@ -385,22 +394,17 @@ export function buildGraphLayout({
   const linksData = []
   const sectionLabels = []
   const nodeIdSet = new Set()
-  const addNode = (n) => {
-    if (!nodeIdSet.has(n.id)) {
-      nodeIdSet.add(n.id)
-      nodesData.push(n)
-    }
-  }
 
-  addNode({
+  nodesData.push({
     id: rootId,
     label: toFirstName(filmTitle, 'Film'),
     x: cx, y: cy,
     size: 1.2, type: 'film', tier: 0, angle: 0,
   })
+  nodeIdSet.add(rootId)
 
-  /* --- Ring 1: team-section layout (spec §Ring 1) --- */
-  const r1NodeByInviteId = new Map()
+  /* --- Ring 1: team-section layout (spec §Ring 1) ---
+     Each invite is its own node (node id = invite id). */
   let sectionStart = -Math.PI / 2
 
   for (const team of teams) {
@@ -419,11 +423,10 @@ export function buildGraphLayout({
     for (let j = 0; j < N; j++) {
       const inv = team.invites[j]
       const angle = N === 1 ? sectionMid : sectionStart + ((j + 0.5) / N) * sectionAngle
-      const rk = recipientKey(inv)
-      const isViewer = viewerRKey && rk === viewerRKey
+      const isViewer = inv.id === viewerNodeId
 
-      addNode({
-        id: rk,
+      nodesData.push({
+        id: inv.id,
         label: isViewer ? 'You' : toFirstName(inv.recipient_name || inv.recipient_email),
         x: cx + R1 * Math.cos(angle),
         y: cy + R1 * Math.sin(angle),
@@ -431,20 +434,20 @@ export function buildGraphLayout({
         type: isViewer ? 'viewer' : 'person',
         tier: 1, angle, teamId: team.id,
       })
-      linksData.push({ source: rootId, target: rk })
-      r1NodeByInviteId.set(inv.id, { id: rk, angle, teamId: team.id })
+      nodeIdSet.add(inv.id)
+      linksData.push({ source: rootId, target: inv.id })
     }
 
     sectionStart += sectionAngle
   }
 
-  /* --- Rings 2+: seam-based radial layout (spec §Rings 3-5+) --- */
-  let prevRingNodes = ring1Invites
-    .map((inv) => {
-      const p = r1NodeByInviteId.get(inv.id)
-      return p ? { ...p, inviteId: inv.id } : null
-    })
-    .filter(Boolean)
+  /* --- Rings 2+: seam-based radial layout (spec §Rings 3-5+) ---
+     prevRingNodes tracks each invite by its own id and angle. */
+  const nodeById = new Map(nodesData.map((n) => [n.id, n]))
+  let prevRingNodes = ring1Invites.map((inv) => {
+    const node = nodeById.get(inv.id)
+    return node ? { id: inv.id, angle: node.angle, teamId: node.teamId, inviteId: inv.id } : null
+  }).filter(Boolean)
 
   for (let depth = 2; depth <= maxRealDepth; depth++) {
     const tierR = ringRadii[depth]
@@ -504,10 +507,9 @@ export function buildGraphLayout({
     /* Step 7: place nodes */
     const thisRingNodes = []
     for (const p of pending) {
-      const rk = recipientKey(p.inv)
-      const isViewer = viewerRKey && rk === viewerRKey
-      addNode({
-        id: rk,
+      const isViewer = p.inv.id === viewerNodeId
+      nodesData.push({
+        id: p.inv.id,
         label: isViewer ? 'You' : toFirstName(p.inv.recipient_name || p.inv.recipient_email),
         x: cx + tierR * Math.cos(p.angle),
         y: cy + tierR * Math.sin(p.angle),
@@ -515,35 +517,55 @@ export function buildGraphLayout({
         type: isViewer ? 'viewer' : 'person',
         tier: depth, angle: p.angle, teamId: p.teamId,
       })
-      linksData.push({ source: p.parentId, target: rk })
-      thisRingNodes.push({ id: rk, angle: p.angle, teamId: p.teamId, inviteId: p.inv.id })
+      nodeIdSet.add(p.inv.id)
+      linksData.push({ source: p.parentId, target: p.inv.id })
+      thisRingNodes.push({ id: p.inv.id, angle: p.angle, teamId: p.teamId, inviteId: p.inv.id })
     }
     prevRingNodes = thisRingNodes
   }
 
-  /* --- Default highlight: viewer node + outward (children, grandchildren, …) --- */
+  /* --- Default highlight: full chain from root → … → viewer → … → leaves --- */
   const defaultNodes = new Set()
   const defaultLinks = new Set()
-  if (viewerRKey && nodeIdSet.has(viewerRKey)) {
+  if (viewerNodeId && nodeIdSet.has(viewerNodeId)) {
     // Forward links: parent → [children]
     const forwardLinks = new Map()
+    // Reverse links: child → parent
+    const reverseLinks = new Map()
     for (const link of linksData) {
       if (!forwardLinks.has(link.source)) forwardLinks.set(link.source, [])
       forwardLinks.get(link.source).push(link.target)
+      if (!reverseLinks.has(link.target)) reverseLinks.set(link.target, [])
+      reverseLinks.get(link.target).push(link.source)
     }
-    // BFS outward from the viewer node
-    defaultNodes.add(viewerRKey)
-    const queue = [viewerRKey]
+
+    // Walk backward from viewer to root (creator) — highlights the path that brought the film to the viewer
+    defaultNodes.add(viewerNodeId)
+    let cur = viewerNodeId
+    while (reverseLinks.has(cur)) {
+      const parent = reverseLinks.get(cur)[0]
+      if (defaultNodes.has(parent)) break
+      defaultNodes.add(parent)
+      defaultLinks.add(`${parent}-${cur}`)
+      cur = parent
+    }
+
+    // BFS forward from viewer — highlights everyone the viewer has shared with (and beyond)
+    const queue = [viewerNodeId]
     while (queue.length) {
-      const cur = queue.shift()
-      for (const child of forwardLinks.get(cur) || []) {
+      const node = queue.shift()
+      for (const child of forwardLinks.get(node) || []) {
         if (!defaultNodes.has(child)) {
           defaultNodes.add(child)
-          defaultLinks.add(`${cur}-${child}`)
+          defaultLinks.add(`${node}-${child}`)
           queue.push(child)
         }
       }
     }
+  } else {
+    // No viewer node (e.g. creator/team dashboard) — highlight the entire network
+    for (const node of nodesData) defaultNodes.add(node.id)
+    for (const link of linksData) defaultLinks.add(`${link.source}-${link.target}`)
   }
 
   return {

@@ -347,6 +347,38 @@ describe('buildGraphLayout', () => {
     expect(crossings).toBe(0)
   })
 
+  it('has zero crossings when same recipient is invited by multiple senders', () => {
+    const invites = [
+      // Alice invites Bob, Carol, Dave
+      { id: 'i1', film_id: 'f', sender_name: 'Alice', sender_email: 'a@x.com', sender_id: 'u1', recipient_name: 'Bob', recipient_email: 'bob@x.com', status: 'sent', parent_invite_id: null, created_at: '2025-01-01T00:00Z' },
+      { id: 'i2', film_id: 'f', sender_name: 'Alice', sender_email: 'a@x.com', sender_id: 'u1', recipient_name: 'Carol', recipient_email: 'carol@x.com', status: 'sent', parent_invite_id: null, created_at: '2025-01-01T00:01Z' },
+      { id: 'i3', film_id: 'f', sender_name: 'Alice', sender_email: 'a@x.com', sender_id: 'u1', recipient_name: 'Dave', recipient_email: 'dave@x.com', status: 'sent', parent_invite_id: null, created_at: '2025-01-01T00:02Z' },
+      // Zoe ALSO invites Bob (duplicate recipient — gets its own node), plus Eve, Frank
+      { id: 'i4', film_id: 'f', sender_name: 'Zoe', sender_email: 'z@x.com', sender_id: 'u2', recipient_name: 'Bob', recipient_email: 'bob@x.com', status: 'sent', parent_invite_id: null, created_at: '2025-01-01T00:03Z' },
+      { id: 'i5', film_id: 'f', sender_name: 'Zoe', sender_email: 'z@x.com', sender_id: 'u2', recipient_name: 'Eve', recipient_email: 'eve@x.com', status: 'sent', parent_invite_id: null, created_at: '2025-01-01T00:04Z' },
+      { id: 'i6', film_id: 'f', sender_name: 'Zoe', sender_email: 'z@x.com', sender_id: 'u2', recipient_name: 'Frank', recipient_email: 'frank@x.com', status: 'sent', parent_invite_id: null, created_at: '2025-01-01T00:05Z' },
+      // Bob reshares via Zoe's invite
+      { id: 'i7', film_id: 'f', sender_name: 'Bob', sender_email: 'bob@x.com', sender_id: 'u3', recipient_name: 'Greg', recipient_email: 'greg@x.com', status: 'sent', parent_invite_id: 'i4', created_at: '2025-01-02T00:00Z' },
+      { id: 'i8', film_id: 'f', sender_name: 'Bob', sender_email: 'bob@x.com', sender_id: 'u3', recipient_name: 'Hank', recipient_email: 'hank@x.com', status: 'sent', parent_invite_id: 'i4', created_at: '2025-01-02T00:01Z' },
+      // Carol and Eve also reshare
+      { id: 'i9', film_id: 'f', sender_name: 'Carol', sender_email: 'carol@x.com', sender_id: 'u4', recipient_name: 'Ivy', recipient_email: 'ivy@x.com', status: 'sent', parent_invite_id: 'i2', created_at: '2025-01-02T00:02Z' },
+      { id: 'i10', film_id: 'f', sender_name: 'Eve', sender_email: 'eve@x.com', sender_id: 'u5', recipient_name: 'Kay', recipient_email: 'kay@x.com', status: 'sent', parent_invite_id: 'i5', created_at: '2025-01-02T00:03Z' },
+    ]
+
+    const layout = buildGraphLayout({ filmInvites: invites })
+    expect(layout).not.toBeNull()
+
+    // Both Bob invites (i1 and i4) get their own nodes — no dedup
+    expect(layout.nodesData.filter((n) => n.label === 'Bob').length).toBe(2)
+    // Each Bob node has its own link from root
+    const bobLinks = layout.linksData.filter((l) => l.target === 'i1' || l.target === 'i4')
+    expect(bobLinks.length).toBe(2)
+
+    // Zero crossings
+    const crossings = countCrossings(layout.nodesData, layout.linksData)
+    expect(crossings).toBe(0)
+  })
+
   it('viewBox auto-expands to fit all nodes', () => {
     const invites = makeInvites(50)
     const layout = buildGraphLayout({ filmInvites: invites })
@@ -358,19 +390,30 @@ describe('buildGraphLayout', () => {
     }
   })
 
-  it('highlights viewer node and outward children when viewerRecipientKey is set', () => {
+  it('highlights viewer node and outward children when focusInviteId is set', () => {
     const invites = [
       { id: 'i1', film_id: 'f', sender_name: 'S', sender_email: 's@x.com', sender_id: 'u0', recipient_name: 'A', recipient_email: 'a@x.com', status: 'sent', parent_invite_id: null, created_at: '2025-01-01T00:00:00Z' },
       { id: 'i2', film_id: 'f', sender_name: 'A', sender_email: 'a@x.com', sender_id: 'u1', recipient_name: 'B', recipient_email: 'b@x.com', status: 'sent', parent_invite_id: 'i1', created_at: '2025-01-02T00:00:00Z' },
       { id: 'i3', film_id: 'f', sender_name: 'A', sender_email: 'a@x.com', sender_id: 'u1', recipient_name: 'C', recipient_email: 'c@x.com', status: 'sent', parent_invite_id: 'i1', created_at: '2025-01-02T01:00:00Z' },
     ]
-    // Viewer is A (ring 1), who has children B and C on ring 2
-    const viewerKey = 'a@x.com:a'
-    const layout = buildGraphLayout({ filmInvites: invites, viewerRecipientKey: viewerKey })
+    // Viewer is A (ring 1, invite i1), who has children B and C on ring 2
+    const layout = buildGraphLayout({ filmInvites: invites, focusInviteId: 'i1' })
     expect(layout.defaultActiveNodes.size).toBeGreaterThan(0)
-    expect(layout.defaultActiveNodes.has(viewerKey)).toBe(true)
-    // Should highlight outward links to children
+    expect(layout.defaultActiveNodes.has('i1')).toBe(true)
+    // Should highlight outward links to children i2 and i3
+    expect(layout.defaultActiveNodes.has('i2')).toBe(true)
+    expect(layout.defaultActiveNodes.has('i3')).toBe(true)
     expect(layout.defaultActiveLinks.size).toBeGreaterThan(0)
+  })
+
+  it('highlights viewer node via viewerRecipientKey fallback', () => {
+    const invites = [
+      { id: 'i1', film_id: 'f', sender_name: 'S', sender_email: 's@x.com', sender_id: 'u0', recipient_name: 'A', recipient_email: 'a@x.com', status: 'sent', parent_invite_id: null, created_at: '2025-01-01T00:00:00Z' },
+      { id: 'i2', film_id: 'f', sender_name: 'A', sender_email: 'a@x.com', sender_id: 'u1', recipient_name: 'B', recipient_email: 'b@x.com', status: 'sent', parent_invite_id: 'i1', created_at: '2025-01-02T00:00:00Z' },
+    ]
+    // No focusInviteId — falls back to matching viewerRecipientKey
+    const layout = buildGraphLayout({ filmInvites: invites, viewerRecipientKey: 'a@x.com:a' })
+    expect(layout.defaultActiveNodes.has('i1')).toBe(true)
   })
 
   it('handles single invite gracefully', () => {
