@@ -1327,7 +1327,7 @@ export default function InviteScreening() {
           <div className="fixed inset-0 z-50 flex overflow-hidden bg-[#080c18]">
             {film.mux_playback_id ? (
               <div
-                className={`absolute inset-0 z-[5] transition-opacity duration-[900ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                className={`absolute inset-0 z-[5] transition-opacity duration-[900ms] lg:duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] ${
                   (passItOnLayerActive && !isLgUp) || desktopPassItOnActive || showPostFilm ? 'opacity-0 pointer-events-none' : 'opacity-100'
                 }`}
               >
@@ -1429,7 +1429,7 @@ export default function InviteScreening() {
 
 
             <div
-              className={`absolute inset-0 z-[100] flex min-h-0 flex-col overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] panel-scroll bg-[#080c18] transition-opacity duration-[800ms] ease-[cubic-bezier(0.16,1,0.3,1)] lg:max-h-[100dvh] lg:flex-row lg:overflow-hidden ${
+              className={`absolute inset-0 z-[100] flex min-h-0 flex-col overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] panel-scroll bg-[#080c18] transition-opacity duration-[800ms] lg:duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] lg:max-h-[100dvh] lg:flex-row lg:overflow-hidden ${
                 passItOnLayerActive
                   ? 'opacity-100 pointer-events-auto'
                   : 'opacity-0 pointer-events-none'
