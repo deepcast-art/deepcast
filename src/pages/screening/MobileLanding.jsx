@@ -145,31 +145,31 @@ export default function MobileLanding({
           </span>
         </div>
 
-        {/* Left col 50% — logo + CTA, centered, fluid sizing */}
-        <div className="flex h-[100dvh] w-1/2 shrink-0 flex-col items-center justify-center gap-8 bg-[#080c18] px-6">
+        {/* Left col 50% — logo + CTA, centered, scaled-down desktop proportions */}
+        <div className="flex h-[100dvh] w-1/2 shrink-0 flex-col items-center justify-center gap-6 bg-[#080c18] px-6">
           <div
             style={{
               opacity: viewVisible ? 1 : 0,
               transition: 'opacity 1.2s ease-out 0.6s',
             }}
-            className="flex w-full flex-col items-center gap-8"
+            className="flex w-full flex-col items-center gap-6"
           >
-            <div className="flex w-full justify-center">
+            <div className="flex w-full max-w-[min(80vw,42rem)] justify-center px-1">
               <DeepcastLogo
                 variant="wordmark"
-                className="!text-[clamp(3rem,10vw,6rem)] w-auto max-w-[min(80%,440px)] leading-none"
+                className="!text-[clamp(2.5rem,8vw,4.5rem)] w-auto max-w-[min(80%,330px)] leading-none"
               />
             </div>
 
             <button
               type="button"
               onClick={handleOpenInvitationClick}
-              className="group flex cursor-pointer flex-col items-center gap-2 border-0 bg-transparent p-0 touch-manipulation"
+              className="group flex cursor-pointer flex-col items-center gap-3 border-0 bg-transparent p-0 touch-manipulation"
             >
-              <span className="font-sans text-[10px] uppercase tracking-[0.3em] text-[#b1a180] transition-colors duration-300 group-hover:text-[#dddddd]">
+              <span className="font-sans text-[9px] uppercase tracking-[0.3em] text-[#b1a180] transition-colors duration-300 group-hover:text-[#dddddd]">
                 Enter
               </span>
-              <div className="relative w-fit overflow-hidden py-0.5">
+              <div className="relative w-fit overflow-hidden py-1">
                 <span className="font-serif-v3 text-xl italic text-[#dddddd]">
                   Open your invitation
                 </span>

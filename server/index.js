@@ -401,10 +401,7 @@ app.post('/api/invites/send', async (req, res) => {
 
       if (!unlimitedInvites && sender.invite_allocation <= 0) {
         console.warn('No invites remaining for sender:', senderId, sender)
-        return res.status(400).json({
-          error: 'No invites remaining',
-          details: { senderId, invite_allocation: sender.invite_allocation },
-        })
+        return res.status(400).json({ error: 'No invites remaining' })
       }
 
       if (!unlimitedInvites) {
