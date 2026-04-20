@@ -65,7 +65,7 @@ export default function MobileLanding({
         </div>
 
         {/* Left col — logo + CTA */}
-        <div className="flex w-1/2 shrink-0 flex-col items-center justify-center bg-[#080c18] px-6">
+        <div className="flex w-1/2 shrink-0 flex-col items-center justify-center px-6">
           <div
             style={{
               opacity: viewVisible ? 1 : 0,
@@ -96,13 +96,10 @@ export default function MobileLanding({
           </div>
         </div>
 
-        {/* Divider */}
-        <div className="w-[0.5px] shrink-0 self-stretch bg-[#b1a180]/30" />
-
-        {/* Right col — invitation text + network graph */}
-        <div className="flex flex-1 flex-col bg-[#080c18]">
+        {/* Right col — invitation text + network graph (transparent, edge-to-edge) */}
+        <div className="relative flex flex-1 flex-col">
           <div
-            className="flex shrink-0 justify-center bg-[#121a33] px-4 pb-3 pt-5"
+            className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-4"
             style={{
               opacity: viewVisible ? 1 : 0,
               transition: 'opacity 1.2s ease-out 0.6s',
@@ -122,7 +119,7 @@ export default function MobileLanding({
             </div>
           </div>
 
-          <div className="relative min-h-0 flex-1 overflow-hidden bg-[#121a33]">
+          <div className="relative min-h-0 flex-1 overflow-hidden">
             {graphLayout ? (
               <NetworkGraph
                 fillHeight
@@ -130,6 +127,7 @@ export default function MobileLanding({
                 transparentSurface
                 interactiveZoom
                 softTouchInteraction
+                showZoomControls
                 nodesData={graphLayout.nodesData}
                 linksData={graphLayout.linksData}
                 viewBoxH={graphLayout.viewBoxH}
