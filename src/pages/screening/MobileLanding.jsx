@@ -24,8 +24,9 @@ export default function MobileLanding({
     <section className="relative min-h-[100dvh] w-full overflow-hidden bg-[#080c18]">
 
       {/* ── PORTRAIT ── */}
-      {/* Full-bleed network graph behind the portrait content */}
-      <div className="landscape:hidden fixed inset-0 z-0 h-[100dvh] w-full bg-[#080c18]">
+      {/* Full-bleed network graph behind the portrait content. Uses absolute (not fixed)
+         because iOS Safari drops fixed-positioned children of overflow-auto ancestors. */}
+      <div className="landscape:hidden absolute inset-0 z-0 w-full bg-[#080c18]">
         <div className="absolute inset-0 scale-125 -translate-y-[8%] origin-top">
           {graphLayout ? (
             <NetworkGraph
@@ -57,9 +58,10 @@ export default function MobileLanding({
         </div>
       </div>
 
-      {/* Portrait vignette — focuses attention on center text / bottom CTA */}
+      {/* Portrait vignette — focuses attention on center text / bottom CTA.
+         Absolute to match the graph layer (iOS fixed-in-scroll-container bug). */}
       <div
-        className="landscape:hidden fixed inset-0 z-[1] pointer-events-none h-[100dvh]"
+        className="landscape:hidden absolute inset-0 z-[1] pointer-events-none"
         style={{ background: 'radial-gradient(ellipse at 50% 22%, transparent 38%, #080c18 68%)' }}
         aria-hidden
       />
