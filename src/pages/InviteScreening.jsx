@@ -1365,18 +1365,25 @@ export default function InviteScreening() {
                     }}
                   />
                 </Suspense>
-                {/* Tap-to-pause overlay: kept mounted so the full pointerdown→pointerup→click
-                   gesture lands on it. Unmounting mid-gesture (when pause flips isScreeningPaused)
-                   lets the click fall through to MuxPlayer, which toggles play back on — that's
-                   what caused the "two taps to pause" behavior. */}
+                {/* Tap-to-pause overlay: uses setPointerCapture so the full pointer gesture
+                   (down→up→click) stays locked to this element. Without capture, calling
+                   mux.pause() synchronously mounts the pass-it-on layer on top — the browser
+                   then hit-tests click against the new DOM and fires it on the "Resume Film"
+                   button, instantly reversing the pause. Capturing pins the click to this
+                   overlay regardless of what re-renders beneath. */}
                 <div
                   className={`absolute top-0 left-0 right-0 bottom-16 z-[35] touch-manipulation ${
-                    isScreeningPaused || screeningNeedsUserGesturePlay ? 'pointer-events-none' : 'cursor-pointer'
+                    screeningNeedsUserGesturePlay ? 'pointer-events-none' : 'cursor-pointer'
                   }`}
                   onPointerDown={(e) => {
                     e.stopPropagation()
+                    try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* noop */ }
                     const mux = muxPlayerRef.current
                     if (mux) mux.pause()
+                  }}
+                  onPointerUp={(e) => {
+                    e.stopPropagation()
+                    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* noop */ }
                   }}
                   onClick={(e) => e.stopPropagation()}
                 />
