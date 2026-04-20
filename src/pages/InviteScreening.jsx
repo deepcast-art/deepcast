@@ -1365,28 +1365,6 @@ export default function InviteScreening() {
                     }}
                   />
                 </Suspense>
-                {/* Tap-to-pause overlay: uses setPointerCapture so the full pointer gesture
-                   (down→up→click) stays locked to this element. Without capture, calling
-                   mux.pause() synchronously mounts the pass-it-on layer on top — the browser
-                   then hit-tests click against the new DOM and fires it on the "Resume Film"
-                   button, instantly reversing the pause. Capturing pins the click to this
-                   overlay regardless of what re-renders beneath. */}
-                <div
-                  className={`absolute top-0 left-0 right-0 bottom-16 z-[35] touch-manipulation ${
-                    screeningNeedsUserGesturePlay ? 'pointer-events-none' : 'cursor-pointer'
-                  }`}
-                  onPointerDown={(e) => {
-                    e.stopPropagation()
-                    try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* noop */ }
-                    const mux = muxPlayerRef.current
-                    if (mux) mux.pause()
-                  }}
-                  onPointerUp={(e) => {
-                    e.stopPropagation()
-                    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* noop */ }
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                />
                 {screeningNeedsUserGesturePlay && !showPostFilm && (
                   <button
                     type="button"
@@ -1406,8 +1384,29 @@ export default function InviteScreening() {
               </div>
             )}
 
+            {/* Tap-to-pause overlay — full-bleed sibling of the video wrapper so it wins
+               the pointer-event race against MuxPlayer's shadow DOM controls. onPointerDown
+               fires on the first touch (no 300ms click delay, no dependence on a matching
+               pointerup) and stopPropagation prevents MuxPlayer from also handling it. */}
             <div
-              className={`absolute top-8 left-10 z-20 transition-opacity duration-700 ease-in-out ${
+              className="absolute inset-0 z-[40] cursor-pointer touch-manipulation"
+              style={{
+                pointerEvents:
+                  screeningNeedsUserGesturePlay || passItOnLayerActive ? 'none' : 'auto',
+              }}
+              onPointerDown={(e) => {
+                const mux = muxPlayerRef.current
+                if (!mux) return
+                const media = mux.media
+                const paused = typeof media?.paused === 'boolean' ? media.paused : mux.paused
+                if (paused) return
+                e.stopPropagation()
+                mux.pause()
+              }}
+            />
+
+            <div
+              className={`pointer-events-none absolute top-8 left-10 z-20 transition-opacity duration-700 ease-in-out ${
                 !isScreeningPaused
                   ? 'opacity-100'
                   : 'opacity-0 pointer-events-none'

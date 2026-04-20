@@ -104,8 +104,10 @@ export default function MobilePassItOn({
           )}
         </div>
 
-        {/* Right col — compact letter card */}
-        <div className="w-[62%] h-full min-h-0 overflow-y-auto panel-scroll px-4 py-2 flex items-center justify-center">
+        {/* Right col — compact letter card. Uses justify-start (not items-center) so
+           when the card is taller than the column, it scrolls from the top instead of
+           getting clipped off-screen by flex centering. */}
+        <div className="w-[62%] h-full min-h-0 overflow-y-auto panel-scroll px-4 py-3 flex flex-col items-stretch justify-start">
           <div
             className="relative w-full p-4 overflow-hidden"
             style={{
