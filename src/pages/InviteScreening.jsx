@@ -1015,22 +1015,9 @@ export default function InviteScreening() {
     if (!isLgUp) queueMicrotask(() => tryIOSNativeVideoFullscreen())
   }, [isLgUp, requestScreeningFullscreen, tryIOSNativeVideoFullscreen, tryScreeningPlay])
 
-  /** Mobile landscape = film fullscreen. Auto-resume when user rotates to landscape while pass-it-on is showing. */
-  useEffect(() => {
-    if (isLgUp) return                         // desktop — no orientation gating
-    if (currentView !== 'screening') return     // only during screening
-    if (!passItOnFromUserPause) return          // only when pass-it-on is active
-
-    const handleOrientation = () => {
-      if (isLandscapeOrientation()) resumeFilm()
-    }
-    window.addEventListener('orientationchange', handleOrientation)
-    window.addEventListener('resize', handleOrientation)
-    return () => {
-      window.removeEventListener('orientationchange', handleOrientation)
-      window.removeEventListener('resize', handleOrientation)
-    }
-  }, [isLgUp, currentView, passItOnFromUserPause, resumeFilm])
+  /** When paused mid-film, pass-it-on owns the screen in both orientations.
+   *  Rotating to landscape must NOT auto-resume — landscape has its own diptych
+   *  layout in MobilePassItOn. Users resume explicitly via the Resume Film bar. */
 
   /** Prologue ends async — player may mount late; retry play until autoplay succeeds or user taps. */
   useEffect(() => {

@@ -1553,23 +1553,4 @@ ${descBlock}
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {
   console.log(`Deepcast API server running on port ${PORT}`)
-
-  // Ping our own health endpoint every 14 minutes to keep the Render service
-  // active and the Supabase connection pool warm. Uses APP_URL so it goes
-  // through Render's public routing layer — the same path a real user hits.
-  // Skipped in local dev (APP_URL defaults to localhost).
-  const RENDER_SERVICE_URL = process.env.RENDER_SERVICE_URL
-  const pingTarget = RENDER_SERVICE_URL
-    ? `${RENDER_SERVICE_URL}/api/health`
-    : null
-
-  if (pingTarget) {
-    const PING_INTERVAL_MS = 14 * 60 * 1000 // 14 minutes
-    setInterval(() => {
-      fetch(pingTarget)
-        .then((r) => console.log(`[keepalive] ping ${pingTarget} → ${r.status}`))
-        .catch((err) => console.warn(`[keepalive] ping failed: ${err.message}`))
-    }, PING_INTERVAL_MS)
-    console.log(`[keepalive] pinging ${pingTarget} every 14 min`)
-  }
 })
