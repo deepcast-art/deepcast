@@ -201,7 +201,7 @@ function TeamLegend({ teams, selectedTeamId, onSelect }) {
 
   return (
     <div
-      className="dc-team-legend absolute bottom-3 left-3 z-20 flex flex-col gap-0.5 rounded px-2.5 py-2"
+      className="dc-team-legend absolute bottom-3 left-3 z-20 hidden flex-col gap-0.5 rounded px-2.5 py-2 lg:flex"
       style={{
         background: 'rgba(8,12,24,0.75)',
         backdropFilter: 'blur(8px)',

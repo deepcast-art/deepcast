@@ -691,30 +691,32 @@ export default function Dashboard() {
                             selectViewerFilm(film.id)
                           }
                         }}
-                        className={`flex cursor-pointer items-center gap-5 border bg-[#0a0f1a] p-4 transition-colors ${
+                        className={`flex cursor-pointer flex-col gap-4 border bg-[#0a0f1a] p-4 transition-colors sm:flex-row sm:items-center sm:gap-5 ${
                           isSelected ? 'border-accent/60' : 'border-faint/20 hover:border-faint/40'
                         }`}
                       >
-                        {film.thumbnail_url ? (
-                          <img
-                            src={film.thumbnail_url}
-                            alt={film.title}
-                            className="h-16 w-28 shrink-0 object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-16 w-28 shrink-0 items-center justify-center bg-faint/10">
-                            <svg className="h-5 w-5 text-warm/20 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                          </div>
-                        )}
-                        <div className="flex flex-1 flex-col gap-1 min-w-0">
-                          <p className="font-serif-v3 text-base italic leading-snug text-warm truncate">{film.title}</p>
-                          {isSelected && (
-                            <span className="font-sans text-[9px] uppercase tracking-[0.25em] text-accent/70">
-                              Viewing
-                            </span>
+                        <div className="flex items-center gap-4 min-w-0 sm:gap-5">
+                          {film.thumbnail_url ? (
+                            <img
+                              src={film.thumbnail_url}
+                              alt={film.title}
+                              className="h-16 w-28 shrink-0 object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-16 w-28 shrink-0 items-center justify-center bg-faint/10">
+                              <svg className="h-5 w-5 text-warm/20 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                            </div>
                           )}
+                          <div className="flex flex-1 flex-col gap-1 min-w-0">
+                            <p className="font-serif-v3 text-base italic leading-snug text-warm truncate">{film.title}</p>
+                            {isSelected && (
+                              <span className="font-sans text-[9px] uppercase tracking-[0.25em] text-accent/70">
+                                Viewing
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <div className="shrink-0 flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:ml-auto">
                           {film.token && (() => {
                             const savedPos = localStorage.getItem(`screening_position_${film.token}`)
                             const resume = savedPos && parseInt(savedPos, 10) > 0

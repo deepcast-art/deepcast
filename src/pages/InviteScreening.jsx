@@ -792,6 +792,30 @@ export default function InviteScreening() {
     }
   }, [mobileRotateGateActive, startPreScreeningSequence])
 
+  /** Mobile landing must not scroll or rubber-band — only the network graph is interactive.
+   *  Lock html/body overflow while the mobile landing view is mounted. */
+  useEffect(() => {
+    const mobileLandingActive =
+      currentView === 'landing' && !isDesktop && (status === 'loading' || status === 'valid')
+    if (!mobileLandingActive) return
+    const html = document.documentElement
+    const body = document.body
+    const prevHtmlOverflow = html.style.overflow
+    const prevBodyOverflow = body.style.overflow
+    const prevHtmlOverscroll = html.style.overscrollBehavior
+    const prevBodyOverscroll = body.style.overscrollBehavior
+    html.style.overflow = 'hidden'
+    body.style.overflow = 'hidden'
+    html.style.overscrollBehavior = 'none'
+    body.style.overscrollBehavior = 'none'
+    return () => {
+      html.style.overflow = prevHtmlOverflow
+      body.style.overflow = prevBodyOverflow
+      html.style.overscrollBehavior = prevHtmlOverscroll
+      body.style.overscrollBehavior = prevBodyOverscroll
+    }
+  }, [currentView, isDesktop, status])
+
   /** Rich invite links include ?ctx=; after the welcome prologue, start the pre-screening sequence without a second tap. */
   useEffect(() => {
     if (directPlay) return
@@ -1304,7 +1328,13 @@ export default function InviteScreening() {
       <div
         className={`relative z-10 w-full h-screen transition-opacity duration-[1200ms] ease-in-out ${
           viewVisible || status === 'loading' ? 'opacity-100' : 'opacity-0'
-        } ${currentView === 'screening' ? 'overflow-hidden' : 'overflow-y-auto'}`}
+        } ${
+          currentView === 'screening'
+            ? 'overflow-hidden'
+            : currentView === 'landing' && !isDesktop
+              ? 'overflow-hidden overscroll-none'
+              : 'overflow-y-auto'
+        }`}
       >
         {/* ========================= LANDING ========================= */}
         {/* Renders during both 'loading' and 'valid' — landing components handle null graphLayout gracefully */}
