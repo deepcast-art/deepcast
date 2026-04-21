@@ -655,6 +655,14 @@ export default function Dashboard() {
                             return (
                               <a
                                 href={resume ? `/i/${film.token}?play=1&t=${savedPos}` : `/i/${film.token}?play=1`}
+                                onClick={(e) => {
+                                  const fresh = localStorage.getItem(`screening_position_${film.token}`)
+                                  const n = fresh ? parseInt(fresh, 10) : 0
+                                  if (n > 0) {
+                                    e.preventDefault()
+                                    window.location.href = `/i/${film.token}?play=1&t=${n}`
+                                  }
+                                }}
                                 className="flex items-center gap-1.5 border border-warm/20 px-4 py-2 font-sans text-[10px] uppercase tracking-[0.25em] text-warm/60 transition-colors hover:border-warm/40 hover:text-warm"
                               >
                                 <svg className="h-2.5 w-2.5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
@@ -721,11 +729,13 @@ export default function Dashboard() {
                         {viewerFilmTitle}
                       </span>
                     </div>
-                    <div className="relative flex h-[800vh] w-full overflow-hidden bg-[#121a33]">
+                    <div className="relative flex h-[850px] w-full overflow-hidden bg-[#121a33]">
                       <NetworkGraph
                         fillHeight
                         pannable
+                        showZoomControls
                         transparentSurface
+                        edgeFadeColor="#121a33"
                         nodesData={graphLayout.nodesData}
                         linksData={graphLayout.linksData}
                         viewBoxH={graphLayout.viewBoxH}
@@ -857,31 +867,32 @@ export default function Dashboard() {
               {modalError && (
                 <p className="relative z-10 mb-4 text-center text-sm text-red-700">{modalError}</p>
               )}
-              <div className="relative z-10 flex w-full flex-col items-center gap-8">
-                <div className="w-full text-center font-serif-v3 text-xl italic text-[#2a2a2a]">
+              <div className="relative z-10 flex w-full flex-col items-center gap-4">
+                <div className="flex w-full flex-nowrap items-baseline justify-center gap-1 whitespace-nowrap font-serif-v3 text-xl italic text-[#2a2a2a] sm:gap-2">
                   <span>Dear</span>
                   <input
                     type="text"
                     placeholder="First name"
                     value={modalFirst}
                     onChange={(e) => setModalFirst(e.target.value)}
-                    className="mx-1 w-24 border-b border-[#6b5d4a]/40 bg-transparent text-center text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none sm:mx-2 sm:w-28"
+                    className="min-w-0 flex-1 border-b border-[#6b5d4a]/40 bg-transparent text-center text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none"
                   />
                   <input
                     type="text"
                     placeholder="Last name"
                     value={modalLast}
                     onChange={(e) => setModalLast(e.target.value)}
-                    className="mx-1 w-24 border-b border-[#6b5d4a]/40 bg-transparent text-center text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none sm:mx-2 sm:w-28"
+                    className="min-w-0 flex-1 border-b border-[#6b5d4a]/40 bg-transparent text-center text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none"
                   />
-                  <textarea
-                    rows={3}
-                    placeholder="A note to them…"
-                    value={modalNote}
-                    onChange={(e) => setModalNote(e.target.value)}
-                    className="mt-4 w-full resize-none border-none bg-transparent text-center text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none"
-                  />
+                  <span>,</span>
                 </div>
+                <textarea
+                  rows={3}
+                  placeholder="Write your note here. Tell them why this film made you think of them specifically…"
+                  value={modalNote}
+                  onChange={(e) => setModalNote(e.target.value)}
+                  className="w-full resize-none border-none bg-transparent text-center font-serif-v3 text-xl italic text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none"
+                />
                 <input
                   type="email"
                   placeholder="Deliver to (email)"

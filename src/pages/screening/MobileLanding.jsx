@@ -21,7 +21,7 @@ export default function MobileLanding({
   handleOpenInvitationClick,
 }) {
   return (
-    <section className="relative min-h-[100dvh] w-full overflow-hidden bg-[#080c18]">
+    <section className="relative h-[100dvh] w-full overflow-hidden bg-[#080c18]">
 
       {/* ── PORTRAIT ── */}
       {/* Full-bleed network graph behind the portrait content. Uses absolute (not fixed)
@@ -66,7 +66,7 @@ export default function MobileLanding({
         aria-hidden
       />
 
-      <div className="landscape:hidden relative z-10 flex min-h-[100dvh] w-full flex-col pointer-events-none">
+      <div className="landscape:hidden absolute inset-0 z-10 flex h-[100dvh] w-full flex-col pointer-events-none">
         {/* "Gifted by" badge — top-left */}
         <div
           className="pointer-events-auto absolute left-6 top-8 z-20 flex items-center gap-3 slow-fade-text reveal-up"
@@ -78,7 +78,7 @@ export default function MobileLanding({
           </span>
         </div>
 
-        <div className="flex min-h-[100dvh] flex-1 flex-col px-6 pb-12 pt-28">
+        <div className="flex h-full flex-1 flex-col px-6 pb-12 pt-28">
           <div
             className="mx-auto flex w-full max-w-md flex-1 flex-col items-center text-center"
             style={{

@@ -166,6 +166,8 @@ export default function InviteScreening() {
   const [screeningPlaybackEverStarted, setScreeningPlaybackEverStarted] = useState(false)
   /** Narrow layout: full Pass it on only after the viewer explicitly pauses (not buffering / end / programmatic). */
   const [passItOnFromUserPause, setPassItOnFromUserPause] = useState(false)
+  /** Playback progress — mirrors mux-player state so we can render our own always-visible progress bar. */
+  const [playbackProgress, setPlaybackProgress] = useState(0)
 
   /* ---------- LETTER FORM STATE ---------- */
 
@@ -282,7 +284,7 @@ export default function InviteScreening() {
   useEffect(() => {
     if (currentView !== 'screening' || isScreeningPaused) return
     setFilmTitleHidden(false)
-    const id = window.setTimeout(() => setFilmTitleHidden(true), 5000)
+    const id = window.setTimeout(() => setFilmTitleHidden(true), 2000)
     return () => clearTimeout(id)
   }, [currentView, isScreeningPaused, token])
 
@@ -602,28 +604,12 @@ export default function InviteScreening() {
     }
   }, [isIOSDevice, isLgUp])
 
-  /** Native iOS video fullscreen (webkit); mux-player exposes the underlying mux-video as `.media`. */
+  /** iOS native video fullscreen is intentionally disabled — native fullscreen takes over the UI,
+   *  preventing our tap-to-pause overlay from handling single-click pause. Video plays inline
+   *  via `playsInline` on MuxPlayer so our overlay owns pause on top of the progress bar. */
   const tryIOSNativeVideoFullscreen = useCallback(() => {
-    if (!isIOSDevice || iosVideoFullscreenDoneRef.current) return
-    const mux = muxPlayerRef.current
-    if (!mux) return
-    const media = mux.media
-    const video =
-      media && typeof media.webkitEnterFullscreen === 'function'
-        ? media
-        : mux.shadowRoot?.querySelector?.('video')
-    if (!video || typeof video.webkitEnterFullscreen !== 'function') return
-    if (video.webkitDisplayingFullscreen) {
-      iosVideoFullscreenDoneRef.current = true
-      return
-    }
-    try {
-      video.webkitEnterFullscreen()
-      iosVideoFullscreenDoneRef.current = true
-    } catch {
-      /* ignored — may require a user gesture on some iOS versions */
-    }
-  }, [isIOSDevice])
+    return
+  }, [])
 
   /** Leave browser / native video fullscreen so fixed overlays (resume bar, post-film Pass it on) can use the full viewport. */
   const exitScreeningFullscreen = useCallback(() => {
@@ -702,6 +688,16 @@ export default function InviteScreening() {
 
       setScreeningPlaybackEverStarted(true)
 
+      // Resume-from-dashboard flow: logged-in user arrived via ?play=1. Persist current
+      // position and navigate back to /dashboard instead of showing pass-it-on.
+      if (user?.id && directPlay) {
+        if (token && currentTime > 0) {
+          localStorage.setItem(`screening_position_${token}`, String(Math.floor(currentTime)))
+        }
+        navigate('/dashboard', { replace: true })
+        return
+      }
+
       if (isLgUp) {
         setPassItOnFromUserPause(false)
         return
@@ -709,7 +705,7 @@ export default function InviteScreening() {
 
       setPassItOnFromUserPause(true)
     },
-    [isLgUp, exitScreeningFullscreen]
+    [isLgUp, exitScreeningFullscreen, user?.id, directPlay, token, navigate]
   )
 
   const finalizeEnterScreening = useCallback(() => {
@@ -812,6 +808,9 @@ export default function InviteScreening() {
     if (!p.duration) return
     if (p.currentTime > 0.05) setScreeningPlaybackEverStarted(true)
     const pct = Math.round((p.currentTime / p.duration) * 100)
+
+    // Drive our always-visible progress bar (unrounded for smooth motion)
+    setPlaybackProgress(p.currentTime / p.duration)
 
     // Persist playback position so the user can resume later
     if (token) localStorage.setItem(`screening_position_${token}`, Math.floor(p.currentTime))
@@ -1019,10 +1018,13 @@ export default function InviteScreening() {
    *  Rotating to landscape must NOT auto-resume — landscape has its own diptych
    *  layout in MobilePassItOn. Users resume explicitly via the Resume Film bar. */
 
-  /** Prologue ends async — player may mount late; retry play until autoplay succeeds or user taps. */
+  /** Prologue ends async — player may mount late; retry play until autoplay succeeds or user taps.
+   *  Must re-run when pause state flips so the retry interval is cleared (otherwise it would
+   *  call mux.play() every 200ms and cancel the user's pause). */
   useEffect(() => {
     if (currentView !== 'screening' || !film?.mux_playback_id) return
     if (showPostFilm) return
+    if (isScreeningPaused) return
     if (desktopPassItOnActive) return
     if (passItOnFromUserPause && !isLgUp) return
     let cancelled = false
@@ -1038,7 +1040,7 @@ export default function InviteScreening() {
       cancelled = true
       window.clearInterval(id)
     }
-  }, [currentView, film?.mux_playback_id, token, tryScreeningPlay, showPostFilm, passItOnFromUserPause, isLgUp])
+  }, [currentView, film?.mux_playback_id, token, tryScreeningPlay, showPostFilm, passItOnFromUserPause, isLgUp, isScreeningPaused, desktopPassItOnActive])
 
   /* ---------- DASHBOARD HELPERS ---------- */
 
@@ -1385,25 +1387,85 @@ export default function InviteScreening() {
             )}
 
             {/* Tap-to-pause overlay — full-bleed sibling of the video wrapper so it wins
-               the pointer-event race against MuxPlayer's shadow DOM controls. onPointerDown
-               fires on the first touch (no 300ms click delay, no dependence on a matching
-               pointerup) and stopPropagation prevents MuxPlayer from also handling it. */}
+               the pointer-event race against MuxPlayer's shadow DOM controls (including the
+               progress bar). onPointerDown fires on the first touch (no 300ms click delay).
+               stopPropagation + preventDefault keep MuxPlayer from also handling it. */}
             <div
-              className="absolute inset-0 z-[40] cursor-pointer touch-manipulation"
+              className="absolute inset-0 z-[40] cursor-pointer touch-manipulation select-none"
               style={{
                 pointerEvents:
                   screeningNeedsUserGesturePlay || passItOnLayerActive ? 'none' : 'auto',
               }}
               onPointerDown={(e) => {
+                e.stopPropagation()
+                e.preventDefault()
                 const mux = muxPlayerRef.current
                 if (!mux) return
-                const media = mux.media
-                const paused = typeof media?.paused === 'boolean' ? media.paused : mux.paused
-                if (paused) return
+                try { mux.pause() } catch { /* ignore */ }
+              }}
+              onClick={(e) => {
                 e.stopPropagation()
-                mux.pause()
+                e.preventDefault()
               }}
             />
+
+            {/* Always-visible playback progress bar. Interactive: tap or drag to seek
+               without pausing. Sits above the tap-to-pause overlay (z-[50] > z-[40])
+               and stops propagation so taps on the bar don't reach the pause layer. */}
+            {!passItOnLayerActive && !screeningNeedsUserGesturePlay && (
+              <div
+                className="absolute left-0 right-0 z-[50] flex h-[28px] cursor-pointer items-center px-4 touch-manipulation"
+                style={{ bottom: 'max(12px, env(safe-area-inset-bottom, 0px))' }}
+                onPointerDown={(e) => {
+                  e.stopPropagation()
+                  const mux = muxPlayerRef.current
+                  const media = mux?.media
+                  const duration = media?.duration
+                  if (!duration || !Number.isFinite(duration)) return
+                  const rect = e.currentTarget.getBoundingClientRect()
+                  const innerLeft = rect.left + 16
+                  const innerWidth = Math.max(1, rect.width - 32)
+                  const pct = Math.max(0, Math.min(1, (e.clientX - innerLeft) / innerWidth))
+                  try {
+                    media.currentTime = pct * duration
+                    setPlaybackProgress(pct)
+                  } catch { /* ignore */ }
+                  try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* ignore */ }
+                }}
+                onPointerMove={(e) => {
+                  if (!e.currentTarget.hasPointerCapture?.(e.pointerId)) return
+                  e.stopPropagation()
+                  const mux = muxPlayerRef.current
+                  const media = mux?.media
+                  const duration = media?.duration
+                  if (!duration || !Number.isFinite(duration)) return
+                  const rect = e.currentTarget.getBoundingClientRect()
+                  const innerLeft = rect.left + 16
+                  const innerWidth = Math.max(1, rect.width - 32)
+                  const pct = Math.max(0, Math.min(1, (e.clientX - innerLeft) / innerWidth))
+                  try {
+                    media.currentTime = pct * duration
+                    setPlaybackProgress(pct)
+                  } catch { /* ignore */ }
+                }}
+                onPointerUp={(e) => {
+                  try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* ignore */ }
+                }}
+                onClick={(e) => e.stopPropagation()}
+                role="slider"
+                aria-label="Playback progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(playbackProgress * 100)}
+              >
+                <div className="pointer-events-none relative h-[6px] w-full bg-[#dddddd]/25">
+                  <div
+                    className="h-full bg-[#b1a180] shadow-[0_0_8px_rgba(177,161,128,0.6)] transition-[width] duration-150 ease-linear"
+                    style={{ width: `${Math.min(100, Math.max(0, playbackProgress * 100))}%` }}
+                  />
+                </div>
+              </div>
+            )}
 
             <div
               className={`pointer-events-none absolute top-8 left-10 z-20 transition-opacity duration-700 ease-in-out ${
@@ -1607,10 +1669,19 @@ export default function InviteScreening() {
                       <div className="flex flex-col gap-2">
                         <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Screening</span>
                         {dashboardResumeSeconds != null ? (
-                          <Link replace to={`/i/${token}?play=1&t=${dashboardResumeSeconds}`} className="inline-flex w-full items-center justify-center gap-2 border border-[#dddddd]/25 px-4 py-2.5 font-sans text-[10px] uppercase tracking-widest text-[#dddddd]/85 transition-colors hover:border-[#b1a180]/50 hover:text-[#dddddd]">
+                          <a
+                            href={`/i/${token}?play=1&t=${dashboardResumeSeconds}`}
+                            onClick={(e) => {
+                              e.preventDefault()
+                              const fresh = localStorage.getItem(`screening_position_${token}`)
+                              const n = fresh ? parseInt(fresh, 10) : dashboardResumeSeconds
+                              window.location.href = `/i/${token}?play=1&t=${n || 0}`
+                            }}
+                            className="inline-flex w-full items-center justify-center gap-2 border border-[#dddddd]/25 px-4 py-2.5 font-sans text-[10px] uppercase tracking-widest text-[#dddddd]/85 transition-colors hover:border-[#b1a180]/50 hover:text-[#dddddd]"
+                          >
                             <svg className="h-2.5 w-2.5 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden><path d="M8 5v14l11-7z" /></svg>
                             Resume
-                          </Link>
+                          </a>
                         ) : (
                           <button type="button" onClick={handleWatchAgainFromStart} className="inline-flex w-full items-center justify-center gap-2 border border-[#b1a180]/45 px-4 py-2.5 font-sans text-[10px] uppercase tracking-widest text-[#b1a180] transition-colors hover:border-[#b1a180] hover:bg-[#b1a180]/10">
                             <svg className="h-2.5 w-2.5 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden><path d="M8 5v14l11-7z" /></svg>
@@ -1678,16 +1749,21 @@ export default function InviteScreening() {
                   <div className="flex flex-col gap-2">
                     <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Screening</span>
                     {dashboardResumeSeconds != null ? (
-                      <Link
-                        replace
-                        to={`/i/${token}?play=1&t=${dashboardResumeSeconds}`}
+                      <a
+                        href={`/i/${token}?play=1&t=${dashboardResumeSeconds}`}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          const fresh = localStorage.getItem(`screening_position_${token}`)
+                          const n = fresh ? parseInt(fresh, 10) : dashboardResumeSeconds
+                          window.location.href = `/i/${token}?play=1&t=${n || 0}`
+                        }}
                         className="inline-flex w-full items-center justify-center gap-2 border border-[#dddddd]/25 px-4 py-2.5 font-sans text-[10px] uppercase tracking-widest text-[#dddddd]/85 transition-colors hover:border-[#b1a180]/50 hover:text-[#dddddd]"
                       >
                         <svg className="h-2.5 w-2.5 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden>
                           <path d="M8 5v14l11-7z" />
                         </svg>
                         Resume
-                      </Link>
+                      </a>
                     ) : (
                       <button
                         type="button"
@@ -1781,16 +1857,21 @@ export default function InviteScreening() {
                     <div className="flex shrink-0 flex-row flex-wrap items-center justify-end gap-3">
                       {token &&
                         (dashboardResumeSeconds != null ? (
-                          <Link
-                            replace
-                            to={`/i/${token}?play=1&t=${dashboardResumeSeconds}`}
+                          <a
+                            href={`/i/${token}?play=1&t=${dashboardResumeSeconds}`}
+                            onClick={(e) => {
+                              e.preventDefault()
+                              const fresh = localStorage.getItem(`screening_position_${token}`)
+                              const n = fresh ? parseInt(fresh, 10) : dashboardResumeSeconds
+                              window.location.href = `/i/${token}?play=1&t=${n || 0}`
+                            }}
                             className="inline-flex items-center gap-2 border border-[#dddddd]/25 bg-transparent px-5 py-2.5 font-sans text-[10px] font-medium uppercase tracking-[0.28em] text-[#dddddd]/85 transition-colors hover:border-[#b1a180]/50 hover:text-[#dddddd]"
                           >
                             <svg className="h-2.5 w-2.5 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden>
                               <path d="M8 5v14l11-7z" />
                             </svg>
                             Resume
-                          </Link>
+                          </a>
                         ) : (
                           <button
                             type="button"
@@ -1974,27 +2055,27 @@ export default function InviteScreening() {
                   {modalLetters.map((letter) => (
                     <div key={letter.id} className="w-full flex flex-col items-center gap-6 relative z-10">
                       <div className="font-serif-v3 text-xl text-center italic w-full text-[#2a2a2a]">
-                        <div className="flex flex-wrap justify-center items-end gap-x-3 mb-4">
+                        <div className="flex flex-nowrap justify-center items-end gap-x-2 mb-4 whitespace-nowrap sm:gap-x-3">
                           <span>Dear</span>
                           <input
                             type="text"
                             placeholder="First Name"
                             value={letter.firstName}
                             onChange={(e) => handleUpdateModalLetter(letter.id, 'firstName', e.target.value)}
-                            className="bg-transparent border-b-[0.5px] border-[#6b5d4a]/40 text-center focus:outline-none w-32 text-[#2a2a2a] placeholder-[#2a2a2a]/30"
+                            className="min-w-0 flex-1 bg-transparent border-b-[0.5px] border-[#6b5d4a]/40 text-center focus:outline-none text-[#2a2a2a] placeholder-[#2a2a2a]/30"
                           />
                           <input
                             type="text"
                             placeholder="Last Name"
                             value={letter.lastName}
                             onChange={(e) => handleUpdateModalLetter(letter.id, 'lastName', e.target.value)}
-                            className="bg-transparent border-b-[0.5px] border-[#6b5d4a]/40 text-center focus:outline-none w-32 text-[#2a2a2a] placeholder-[#2a2a2a]/30"
+                            className="min-w-0 flex-1 bg-transparent border-b-[0.5px] border-[#6b5d4a]/40 text-center focus:outline-none text-[#2a2a2a] placeholder-[#2a2a2a]/30"
                           />
                           <span>,</span>
                         </div>
                         <textarea
                           rows={3}
-                          placeholder="A note to them..."
+                          placeholder="Write your note here. Tell them why this film made you think of them specifically…"
                           className="w-full bg-transparent border-none text-center focus:outline-none resize-none text-[#2a2a2a] placeholder-[#2a2a2a]/30 leading-relaxed"
                         />
                       </div>

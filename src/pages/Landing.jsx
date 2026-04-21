@@ -340,6 +340,7 @@ export default function Landing() {
                   rootNode={graphLayout.rootNode}
                   defaultActiveNodes={graphLayout.defaultActiveNodes}
                   defaultActiveLinks={graphLayout.defaultActiveLinks}
+                  showLegend={false}
                 />
               </div>
             </div>

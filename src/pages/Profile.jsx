@@ -71,6 +71,7 @@ function FilmNetworkPreview({ film, invites, creatorName, profileEmail, profileR
           rootNode={graphLayout.rootNode}
           defaultActiveNodes={graphLayout.defaultActiveNodes}
           defaultActiveLinks={graphLayout.defaultActiveLinks}
+          showLegend={false}
         />
       </div>
     </Link>

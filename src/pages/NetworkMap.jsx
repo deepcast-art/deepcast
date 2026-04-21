@@ -387,6 +387,7 @@ export default function NetworkMap() {
                         rootNode={graphLayout.rootNode}
                         defaultActiveNodes={graphLayout.defaultActiveNodes}
                         defaultActiveLinks={graphLayout.defaultActiveLinks}
+                        showLegend={false}
                       />
                     </div>
                     <p className="border-t border-[#4a5580]/30 px-4 py-3 text-center font-sans text-[10px] uppercase tracking-widest text-[#dddddd]/35">
