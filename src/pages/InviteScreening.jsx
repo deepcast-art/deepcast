@@ -1409,8 +1409,10 @@ export default function InviteScreening() {
 
             {/* Always-visible playback progress bar. Interactive: tap or drag to seek
                without pausing. Sits above the tap-to-pause overlay (z-[50] > z-[40])
-               and stops propagation so taps on the bar don't reach the pause layer. */}
-            {!passItOnLayerActive && !screeningNeedsUserGesturePlay && (
+               and stops propagation so taps on the bar don't reach the pause layer.
+               Stays visible during pause so the viewer can always see where they are
+               in the film; only hidden once the film ends or before first gesture. */}
+            {!showPostFilm && !screeningNeedsUserGesturePlay && (
               <div
                 className="absolute left-0 right-0 z-[50] flex h-[28px] cursor-pointer items-center px-4 touch-manipulation"
                 style={{ bottom: 'max(12px, env(safe-area-inset-bottom, 0px))' }}
