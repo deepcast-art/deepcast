@@ -649,13 +649,21 @@ export default function InviteScreening() {
     }
   }, [isIOSDevice])
 
-  /** Start playback; browsers often block autoplay until media is ready or user gestures — see screeningNeedsUserGesturePlay. */
+  /** Start playback; browsers often block autoplay until media is ready or user gestures — see screeningNeedsUserGesturePlay.
+   *  Guards against the pause race: if the user taps pause while play() is in flight,
+   *  the pause fires first but play() resolves after and resumes — we re-pause here. */
   const tryScreeningPlay = useCallback(() => {
+    if (userPauseIntentRef.current) return
     const mux = muxPlayerRef.current || document.querySelector('mux-player')
     if (!mux || typeof mux.play !== 'function') return
     void mux
       .play()
-      .then(() => setScreeningNeedsUserGesturePlay(false))
+      .then(() => {
+        setScreeningNeedsUserGesturePlay(false)
+        if (userPauseIntentRef.current) {
+          try { mux.pause() } catch { /* ignore */ }
+        }
+      })
       .catch(() => {
         if (screeningMediaReadyRef.current) setScreeningNeedsUserGesturePlay(true)
       })
@@ -1410,10 +1418,9 @@ export default function InviteScreening() {
             {/* Always-visible playback progress bar. Interactive: tap or drag to seek
                without pausing. Sits above the tap-to-pause overlay (z-[50] > z-[40])
                and stops propagation so taps on the bar don't reach the pause layer.
-               Stays visible during pause so the viewer can always see where they are
-               in the film; only hidden once the film ends or before first gesture. */}
-            {!showPostFilm && !screeningNeedsUserGesturePlay && (
-              <div
+               Always rendered during screening — pause, post-film, pre-gesture — so
+               the viewer can always see where they are in the film. */}
+            <div
                 className="absolute left-0 right-0 z-[50] flex h-[28px] cursor-pointer items-center px-4 touch-manipulation"
                 style={{ bottom: 'max(12px, env(safe-area-inset-bottom, 0px))' }}
                 onPointerDown={(e) => {
@@ -1464,8 +1471,7 @@ export default function InviteScreening() {
                     style={{ width: `${Math.min(100, Math.max(0, playbackProgress * 100))}%` }}
                   />
                 </div>
-              </div>
-            )}
+            </div>
 
             <div
               className={`pointer-events-none absolute top-8 left-10 z-20 transition-opacity duration-700 ease-in-out ${

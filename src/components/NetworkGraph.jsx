@@ -291,7 +291,8 @@ export default function NetworkGraph({
   fillHeight = false,
   pannable = false,
   transparentSurface = false,
-  showLegend = true,
+  showLegend = false,
+  hideSectionLabels = false,
   showZoomControls = false,
   /** Pinch / ctrl+wheel zoom + single-finger pan (e.g. mobile full-screen background) */
   interactiveZoom = false,
@@ -668,7 +669,7 @@ export default function NetworkGraph({
       )}
 
       {/* Section labels (team names) */}
-      {sectionLabels.map((sl, i) => (
+      {!hideSectionLabels && sectionLabels.map((sl, i) => (
         <SectionLabel key={i} label={sl.label} angle={sl.angle} r={sl.r} cx={sl.cx} cy={sl.cy} />
       ))}
 
