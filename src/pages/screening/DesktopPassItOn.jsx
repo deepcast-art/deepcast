@@ -106,8 +106,8 @@ export default function DesktopPassItOn({
         <div className="w-[0.5px] self-stretch bg-[#b1a180] opacity-20 flex-shrink-0" />
 
         {/* Right column (60%) — letter card */}
-        <div className="w-[60%] h-full overflow-y-auto panel-scroll flex flex-col justify-center items-center px-6 py-8">
-          <div className="relative w-full max-w-3xl p-4 overflow-hidden" style={{
+        <div className="w-[60%] h-full overflow-y-auto panel-scroll flex flex-col items-center px-6 py-8">
+          <div className="relative flex w-full max-w-3xl flex-1 flex-col p-4 overflow-hidden" style={{
             background: 'linear-gradient(168deg, #e8e2d6 0%, #ddd8cc 30%, #d5cfc3 60%, #ddd7cb 100%)',
             borderRadius: '8px',
             boxShadow: '0 2px 30px rgba(0,0,0,0.25), 0 0 0 0.5px rgba(180,170,150,0.4)',
@@ -121,7 +121,7 @@ export default function DesktopPassItOn({
             <div className="absolute inset-0 pointer-events-none"
                  style={{ boxShadow: 'inset 0 0 60px rgba(0,0,0,0.06), inset 0 0 120px rgba(0,0,0,0.03)' }} />
 
-            <div className="relative z-10 flex flex-col items-center text-center px-4">
+            <div className="relative z-10 flex flex-1 flex-col items-center justify-center text-center px-4">
               <div className="flex flex-col items-center gap-2 mb-4 mt-6">
                 <h3 className="font-['DM_Sans',sans-serif] text-[10px] uppercase tracking-[0.4em] text-[#2a2a2a]">
                   A Letter of Invitation
