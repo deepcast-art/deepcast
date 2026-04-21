@@ -335,6 +335,7 @@ app.post('/api/invites/send', async (req, res) => {
       senderEmail,
       personalNote,
       appUrl,
+      parentInviteId: clientParentInviteId,
     } = req.body
 
     if (!filmId || !recipientEmail) {
@@ -421,18 +422,45 @@ app.post('/api/invites/send', async (req, res) => {
 
     /** Chain: this invite continues from the invite where the sender was the recipient (e.g. Vidya → Julia → Super). */
     let parentInviteId = null
-    if (senderEmail && String(senderEmail).trim()) {
-      const se = String(senderEmail).trim().toLowerCase()
-      const { data: priorInvites } = await supabase
+
+    // Prefer explicit parent passed by client (the invite the sender is acting under).
+    if (clientParentInviteId) {
+      const { data: claimed } = await supabase
         .from('invites')
-        .select('id, recipient_email')
-        .eq('film_id', filmId)
-        .order('created_at', { ascending: true })
-        .limit(200)
-      const match = (priorInvites || []).find(
-        (row) => row.recipient_email && row.recipient_email.trim().toLowerCase() === se
-      )
-      if (match) parentInviteId = match.id
+        .select('id, film_id')
+        .eq('id', clientParentInviteId)
+        .maybeSingle()
+      if (claimed && uuidStringEq(claimed.film_id, filmId)) {
+        parentInviteId = claimed.id
+      }
+    }
+
+    // Fallback: find prior invite whose recipient matches any of the sender's known emails.
+    if (!parentInviteId) {
+      const candidates = new Set()
+      if (senderEmail && String(senderEmail).trim()) {
+        candidates.add(normalizeEmail(senderEmail))
+      }
+      if (senderId) {
+        const { data: senderRow } = await supabase
+          .from('users')
+          .select('email')
+          .eq('id', senderId)
+          .maybeSingle()
+        if (senderRow?.email) candidates.add(normalizeEmail(senderRow.email))
+      }
+      if (candidates.size > 0) {
+        const { data: priorInvites } = await supabase
+          .from('invites')
+          .select('id, recipient_email, created_at')
+          .eq('film_id', filmId)
+          .order('created_at', { ascending: true })
+          .limit(200)
+        const match = (priorInvites || []).find(
+          (row) => row.recipient_email && candidates.has(normalizeEmail(row.recipient_email))
+        )
+        if (match) parentInviteId = match.id
+      }
     }
 
     // Create invite

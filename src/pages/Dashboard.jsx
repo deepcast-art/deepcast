@@ -489,7 +489,8 @@ export default function Dashboard() {
         profile.id,
         profile.email,
         modalNote.trim() || null,
-        window.location.origin
+        window.location.origin,
+        viewerFocusInviteId || null
       )
       await fetchProfile(profile.id)
       await loadViewerDashboard()

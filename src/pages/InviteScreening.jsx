@@ -6,6 +6,7 @@ import {
   useRef,
   useCallback,
   useMemo,
+  useSyncExternalStore,
 } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -37,33 +38,31 @@ function isIOS() {
 }
 
 
+function subscribeMedia(query) {
+  return (onChange) => {
+    if (typeof window === 'undefined') return () => {}
+    const mq = window.matchMedia(query)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }
+}
+function getMediaSnapshot(query) {
+  return () => (typeof window !== 'undefined' ? window.matchMedia(query).matches : false)
+}
+function getMediaServerSnapshot() { return false }
+
+const subMdUp = subscribeMedia('(min-width: 768px)')
+const snapMdUp = getMediaSnapshot('(min-width: 768px)')
+const subLgUp = subscribeMedia('(min-width: 1024px)')
+const snapLgUp = getMediaSnapshot('(min-width: 1024px)')
+
 function useMediaQueryMdUp() {
-  const [matches, setMatches] = useState(() =>
-    typeof window !== 'undefined' ? window.matchMedia('(min-width: 768px)').matches : false
-  )
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 768px)')
-    const fn = () => setMatches(mq.matches)
-    mq.addEventListener('change', fn)
-    setMatches(mq.matches)
-    return () => mq.removeEventListener('change', fn)
-  }, [])
-  return matches
+  return useSyncExternalStore(subMdUp, snapMdUp, getMediaServerSnapshot)
 }
 
 /** Matches Tailwind `lg:` — same breakpoint as stacked screening UI (`lg:hidden` column). */
 function useMediaQueryLgUp() {
-  const [matches, setMatches] = useState(() =>
-    typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)').matches : false
-  )
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 1024px)')
-    const fn = () => setMatches(mq.matches)
-    mq.addEventListener('change', fn)
-    setMatches(mq.matches)
-    return () => mq.removeEventListener('change', fn)
-  }, [])
-  return matches
+  return useSyncExternalStore(subLgUp, snapLgUp, getMediaServerSnapshot)
 }
 
 /* ------------------------------------------------------------------ */
@@ -227,9 +226,6 @@ export default function InviteScreening() {
     { id: 1, firstName: '', lastName: '', email: '' },
   ])
 
-  const loadStartedAtRef = useRef(Date.now())
-  const loadDurationMsRef = useRef(1600)
-  const loadDurationCapturedRef = useRef(false)
   const entrySplashTimerRef = useRef(null)
   const entrySplashRunningRef = useRef(false)
   /** After first prologue, auto-start the scripted pre-screening (when URL has ?ctx=). */
@@ -242,6 +238,9 @@ export default function InviteScreening() {
   /** After media can play, if autoplay still fails (no user gesture), show tap-to-start. */
   const screeningMediaReadyRef = useRef(false)
   const [screeningNeedsUserGesturePlay, setScreeningNeedsUserGesturePlay] = useState(false)
+  /** Records that the user pressed pause. Updated synchronously from the tap handler so the
+   *  autoplay retry loop stops immediately, before the async `pause` event flips React state. */
+  const userPauseIntentRef = useRef(false)
 
   /** Narrow viewports: full Pass it on only when user pressed pause mid-film (reference flow). */
   const narrowPausePassItOn = useMemo(
@@ -284,7 +283,7 @@ export default function InviteScreening() {
   useEffect(() => {
     if (currentView !== 'screening' || isScreeningPaused) return
     setFilmTitleHidden(false)
-    const id = window.setTimeout(() => setFilmTitleHidden(true), 2000)
+    const id = window.setTimeout(() => setFilmTitleHidden(true), 1200)
     return () => clearTimeout(id)
   }, [currentView, isScreeningPaused, token])
 
@@ -965,7 +964,8 @@ export default function InviteScreening() {
         senderId,
         letterSenderEmail.trim(),
         letterNote.trim() || null,
-        window.location.origin
+        window.location.origin,
+        invite?.id || null
       )
 
       const {
@@ -1027,10 +1027,17 @@ export default function InviteScreening() {
     if (isScreeningPaused) return
     if (desktopPassItOnActive) return
     if (passItOnFromUserPause && !isLgUp) return
+    userPauseIntentRef.current = false
     let cancelled = false
     let n = 0
     const id = window.setInterval(() => {
       if (cancelled) return
+      // User tapped to pause — abort the autoplay retry so we don't cancel their pause
+      // before React state catches up via the async `pause` event.
+      if (userPauseIntentRef.current) { window.clearInterval(id); return }
+      const mux = muxPlayerRef.current
+      // Once media has advanced past the start, autoplay has succeeded — stop retrying.
+      if (mux?.media?.currentTime > 0.05) { window.clearInterval(id); return }
       n += 1
       tryScreeningPlay()
       if (n >= 28) window.clearInterval(id)
@@ -1116,7 +1123,8 @@ export default function InviteScreening() {
             user?.id || null,
             letterSenderEmail.trim() || invite?.recipient_email || '',
             null,
-            window.location.origin
+            window.location.origin,
+            invite?.id || null
           )
         )
       )
@@ -1135,17 +1143,6 @@ export default function InviteScreening() {
     }
     setIsShareModalOpen(false)
   }, [modalLetters, film?.id, letterSenderName, letterSenderEmail, invite, user?.id])
-
-  const handleNavigation = useCallback(
-    (view) => {
-      setViewVisible(false)
-      setTimeout(() => {
-        setCurrentView(view)
-        setViewVisible(true)
-      }, 400)
-    },
-    []
-  )
 
   /* ================================================================ */
   /*  RENDER                                                          */
@@ -1401,6 +1398,7 @@ export default function InviteScreening() {
                 e.preventDefault()
                 const mux = muxPlayerRef.current
                 if (!mux) return
+                userPauseIntentRef.current = true
                 try { mux.pause() } catch { /* ignore */ }
               }}
               onClick={(e) => {
@@ -1475,7 +1473,7 @@ export default function InviteScreening() {
               }`}
             >
               <div
-                className={`transition-opacity duration-700 ease-in-out ${
+                className={`transition-opacity duration-300 ease-in-out ${
                   filmTitleHidden ? 'opacity-0' : 'opacity-100'
                 }`}
               >

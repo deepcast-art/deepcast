@@ -68,7 +68,8 @@ export const api = {
     senderId = null,
     senderEmail = null,
     personalNote = null,
-    appUrl = null
+    appUrl = null,
+    parentInviteId = null
   ) =>
     request('/invites/send', {
       method: 'POST',
@@ -81,6 +82,7 @@ export const api = {
         senderEmail,
         personalNote,
         appUrl,
+        parentInviteId,
       }),
     }),
 

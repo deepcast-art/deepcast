@@ -403,26 +403,30 @@ export function buildGraphLayout({
   })
   nodeIdSet.add(rootId)
 
-  /* --- Ring 1: team-section layout (spec §Ring 1) ---
-     Each invite is its own node (node id = invite id). */
-  let sectionStart = -Math.PI / 2
+  /* --- Ring 1: uniform global-slot layout.
+     Each invite is its own node (node id = invite id) — no dedupe.
+     Every ring-1 invite gets the same arc slot (2π/totalR1) regardless
+     of how many invites its team contains, so the ring is evenly
+     distributed around the circle. Team sections become implicit
+     contiguous runs of the shared global slot; the section label sits
+     at the mid-angle of the team's node span.
+
+     Rotation: canonical 12 o'clock origin is -π/2. Adding 270° (3π/2 rad)
+     rotates the whole graph clockwise by three-quarters of a turn, so
+     the first slot lands at -π/2 + 3π/2 = π (9 o'clock, left side). */
+  const GRAPH_ROTATION = (3 * Math.PI) / 2
+  const slotAngle = TWO_PI / totalR1
+  const startAngle = -Math.PI / 2 + GRAPH_ROTATION
+  let r1GlobalIdx = 0
 
   for (const team of teams) {
     const N = team.invites.length
-    const sectionAngle = (N / totalR1) * TWO_PI
-    const sectionMid = sectionStart + sectionAngle / 2
-
-    sectionLabels.push({
-      label: team.label,
-      angle: sectionMid,
-      r: R1 - 40,
-      cx, cy,
-      teamId: team.id,
-    })
+    if (!N) continue
+    const teamStartIdx = r1GlobalIdx
 
     for (let j = 0; j < N; j++) {
       const inv = team.invites[j]
-      const angle = N === 1 ? sectionMid : sectionStart + ((j + 0.5) / N) * sectionAngle
+      const angle = startAngle + r1GlobalIdx * slotAngle
       const isViewer = inv.id === viewerNodeId
 
       nodesData.push({
@@ -436,9 +440,18 @@ export function buildGraphLayout({
       })
       nodeIdSet.add(inv.id)
       linksData.push({ source: rootId, target: inv.id })
+      r1GlobalIdx += 1
     }
 
-    sectionStart += sectionAngle
+    const teamEndIdx = r1GlobalIdx - 1
+    const midAngle = startAngle + ((teamStartIdx + teamEndIdx) / 2) * slotAngle
+    sectionLabels.push({
+      label: team.label,
+      angle: midAngle,
+      r: R1 - 40,
+      cx, cy,
+      teamId: team.id,
+    })
   }
 
   /* --- Rings 2+: seam-based radial layout (spec §Rings 3-5+) ---
