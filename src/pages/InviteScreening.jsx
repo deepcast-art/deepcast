@@ -677,9 +677,6 @@ export default function InviteScreening() {
   /** Pass it on on narrow layout when viewer pauses mid-film (mux may emit non-trusted pause events — do not gate on isTrusted). */
   const handleMuxPause = useCallback(
     (e) => {
-      setIsScreeningPaused(true)
-      if (!isLgUp) exitScreeningFullscreen()
-
       const mux = muxPlayerRef.current
       const mediaEl = mux?.media || e?.target
       const duration =
@@ -687,6 +684,15 @@ export default function InviteScreening() {
       const currentTime = typeof mediaEl?.currentTime === 'number' ? mediaEl.currentTime : 0
       const ended = Boolean(mediaEl?.ended)
       const nearEnd = duration > 0 && currentTime >= duration - 0.45
+
+      // Only treat this as a real pause if the user actually requested it (tap overlay)
+      // or the film reached the end. Mux emits pause events during buffering / setup
+      // — those must NOT flip the UI into the pass-it-on screen.
+      const userInitiated = userPauseIntentRef.current
+      if (!userInitiated && !ended && !nearEnd) return
+
+      setIsScreeningPaused(true)
+      if (!isLgUp) exitScreeningFullscreen()
 
       if (ended || nearEnd) {
         setPassItOnFromUserPause(false)

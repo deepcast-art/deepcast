@@ -68,7 +68,7 @@ export default function MobilePassItOn({
       {/* ── LANDSCAPE: Two-column diptych ── */}
       <div className="portrait:hidden landscape:flex landscape:flex-row landscape:flex-1 landscape:min-h-0 landscape:overflow-hidden">
         {/* Left col — heading + cautionary + graph */}
-        <div className="w-[38%] shrink-0 h-full min-h-0 overflow-y-auto panel-scroll px-5 py-3 border-r border-[#b1a180]/15 flex flex-col">
+        <div className="w-[38%] shrink-0 h-full min-h-0 overflow-hidden px-5 py-3 border-r border-[#b1a180]/15 flex flex-col">
           <h2
             className="font-serif-v3 text-xl text-[#dddddd] font-light italic mb-2"
             style={{ textShadow: '0 0 24px rgba(177,161,128,0.35), 0 2px 16px rgba(0,0,0,0.4)' }}
@@ -104,12 +104,10 @@ export default function MobilePassItOn({
           )}
         </div>
 
-        {/* Right col — compact letter card. Uses justify-start (not items-center) so
-           when the card is taller than the column, it scrolls from the top instead of
-           getting clipped off-screen by flex centering. */}
-        <div className="w-[62%] h-full min-h-0 overflow-y-auto panel-scroll px-3 py-2 flex flex-col items-stretch justify-start">
+        {/* Right col — letter card fills the section. No scroll: content is sized to fit. */}
+        <div className="w-[62%] h-full min-h-0 px-2 py-2 flex flex-col items-stretch">
           <div
-            className="relative w-full p-2.5 overflow-hidden"
+            className="relative w-full h-full min-h-0 flex flex-col p-2 overflow-hidden"
             style={{
               background: 'linear-gradient(168deg, #e8e2d6 0%, #ddd8cc 30%, #d5cfc3 60%, #ddd7cb 100%)',
               borderRadius: '6px',
@@ -123,11 +121,11 @@ export default function MobilePassItOn({
             <div className="absolute inset-0 pointer-events-none"
                  style={{ boxShadow: 'inset 0 0 60px rgba(0,0,0,0.06), inset 0 0 120px rgba(0,0,0,0.03)' }} />
 
-            <div className="relative z-10 flex flex-col items-center text-center text-[#2a2a2a]">
+            <div className="relative z-10 flex flex-1 min-h-0 flex-col items-center justify-center text-center text-[#2a2a2a]">
               <h3 className="font-['DM_Sans',sans-serif] text-[8px] uppercase tracking-[0.4em] text-[#2a2a2a] mb-0.5">
                 A Letter of Invitation
               </h3>
-              <div className="h-[8px] w-[1px] bg-[#2a2a2a]/30 mb-1" />
+              <div className="h-[6px] w-[1px] bg-[#2a2a2a]/30 mb-1" />
 
               {letterError && (
                 <p className="mb-1 text-[9px] font-['DM_Sans',sans-serif] text-[#b84233] bg-[#b84233]/10 px-2 py-0.5 w-full">{letterError}</p>
