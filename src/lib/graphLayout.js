@@ -296,7 +296,7 @@ function senderKey(row) {
 export function buildGraphLayout({
   filmInvites,
   filmTitle = 'Film',
-  creatorName: _creatorName = '',
+  creatorName = '',
   viewerRecipientKey: viewerRKey = null,
   focusInviteId = null,
   rootId = 'film-root',
@@ -331,15 +331,19 @@ export function buildGraphLayout({
   if (!ring1Invites.length) return null
 
   /* --- Group ring-1 by sender (= "team") --- */
+  const creatorFirst = toFirstName(creatorName, '').toLowerCase()
   const senderGroupMap = new Map()
   for (const inv of ring1Invites) {
     const sk = senderKey(inv)
-    if (!senderGroupMap.has(sk))
-      senderGroupMap.set(sk, { label: toFirstName(inv.sender_name || inv.sender_email, 'Member'), invites: [] })
+    if (!senderGroupMap.has(sk)) {
+      const senderFirst = toFirstName(inv.sender_name || inv.sender_email, 'Member')
+      const isCreator = !!creatorFirst && senderFirst.toLowerCase() === creatorFirst
+      senderGroupMap.set(sk, { label: senderFirst, invites: [], isCreator })
+    }
     senderGroupMap.get(sk).invites.push(inv)
   }
   const teams = [...senderGroupMap.entries()].map(([id, v]) => ({
-    id, label: v.label, invites: v.invites,
+    id, label: v.label, invites: v.invites, isCreator: v.isCreator,
   }))
 
   /* --- Build parent→children map for deeper tiers --- */
@@ -444,14 +448,16 @@ export function buildGraphLayout({
     }
 
     const teamEndIdx = r1GlobalIdx - 1
-    const midAngle = startAngle + ((teamStartIdx + teamEndIdx) / 2) * slotAngle
-    sectionLabels.push({
-      label: team.label,
-      angle: midAngle,
-      r: R1 - 40,
-      cx, cy,
-      teamId: team.id,
-    })
+    if (!team.isCreator) {
+      const midAngle = startAngle + ((teamStartIdx + teamEndIdx) / 2) * slotAngle
+      sectionLabels.push({
+        label: team.label,
+        angle: midAngle,
+        r: R1 - 40,
+        cx, cy,
+        teamId: team.id,
+      })
+    }
   }
 
   /* --- Rings 2+: seam-based radial layout (spec §Rings 3-5+) ---
