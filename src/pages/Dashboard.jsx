@@ -53,15 +53,36 @@ export default function Dashboard() {
   const [teamRemoveBusyId, setTeamRemoveBusyId] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const [viewerSentInvites, setViewerSentInvites] = useState([])
+  const [allViewerSentInvites, setAllViewerSentInvites] = useState([])
   const [viewerFilmId, setViewerFilmId] = useState(null)
   const [viewerFilmTitle, setViewerFilmTitle] = useState('')
   const [viewerInviteToken, setViewerInviteToken] = useState(null)
   const [viewerFilmInvites, setViewerFilmInvites] = useState([])
   const [viewerAllFilms, setViewerAllFilms] = useState([])
   const [viewerCreatorName, setViewerCreatorName] = useState('')
-  const [viewerNewViewersCount, setViewerNewViewersCount] = useState(0)
-  const [childCountsByParent, setChildCountsByParent] = useState({})
+  const [viewerTokenByFilmId, setViewerTokenByFilmId] = useState({})
+
+  const viewerSentInvites = useMemo(
+    () => allViewerSentInvites.filter((inv) => inv.film_id === viewerFilmId),
+    [allViewerSentInvites, viewerFilmId]
+  )
+
+  const viewerNewViewersCount = useMemo(() => {
+    const myIds = new Set(viewerSentInvites.map((s) => s.id).filter(Boolean))
+    return viewerFilmInvites.filter((i) => i.parent_invite_id && myIds.has(i.parent_invite_id)).length
+  }, [viewerSentInvites, viewerFilmInvites])
+
+  const childCountsByParent = useMemo(() => {
+    const counts = {}
+    for (const inv of viewerSentInvites) {
+      const kids = viewerFilmInvites.filter((i) => i.parent_invite_id === inv.id)
+      counts[inv.id] = {
+        shares: kids.length,
+        viewers: kids.filter((k) => ['watched', 'signed_up'].includes(k.status)).length,
+      }
+    }
+    return counts
+  }, [viewerSentInvites, viewerFilmInvites])
 
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
   const [modalFirst, setModalFirst] = useState('')
@@ -122,73 +143,12 @@ export default function Dashboard() {
     return formatNamesList(names)
   }, [viewerSentInvites])
 
-  const loadViewerDashboard = useCallback(async () => {
-    if (!profile?.id || profile.role !== 'viewer') return
-    const uid = profile.id
-    const email = (profile.email || '').trim()
-
-    const { data: sent, error: sentErr } = await supabase
-      .from('invites')
-      .select('*')
-      .eq('sender_id', uid)
-      .order('created_at', { ascending: false })
-
-    if (sentErr) console.error(sentErr)
-    const sentList = sent || []
-    setViewerSentInvites(sentList)
-
-    let filmId = sentList[0]?.film_id
-
-    // Fetch ALL films the viewer has been invited to watch
-    if (email) {
-      const { data: allRecvd } = await supabase
-        .from('invites')
-        .select('film_id, token')
-        .ilike('recipient_email', email)
-        .order('created_at', { ascending: false })
-
-      if (allRecvd?.length) {
-        // De-duplicate by film_id, preserving most-recent-first order
-        const seen = new Set()
-        const uniqueRecvd = allRecvd.filter(r => {
-          if (seen.has(r.film_id)) return false
-          seen.add(r.film_id)
-          return true
-        })
-
-        // Resolve film details for every received film
-        const { data: filmRows } = await supabase
-          .from('films')
-          .select('id, title, thumbnail_url')
-          .in('id', uniqueRecvd.map(r => r.film_id))
-
-        const filmsMap = new Map((filmRows || []).map(f => [f.id, f]))
-        const allFilms = uniqueRecvd
-          .map(r => ({
-            id: r.film_id,
-            title: filmsMap.get(r.film_id)?.title || '',
-            thumbnail_url: filmsMap.get(r.film_id)?.thumbnail_url || null,
-            token: r.token,
-          }))
-          .filter(f => f.id)
-        setViewerAllFilms(allFilms)
-
-        // Primary film = most recent received
-        if (!filmId) filmId = uniqueRecvd[0]?.film_id
-        setViewerInviteToken(
-          uniqueRecvd[0]?.token || localStorage.getItem('viewer_invite_token') || null
-        )
-      }
-    }
-
+  const selectViewerFilm = useCallback(async (filmId) => {
     if (!filmId) {
       setViewerFilmId(null)
       setViewerFilmTitle('')
-      setViewerAllFilms([])
       setViewerFilmInvites([])
       setViewerCreatorName('')
-      setViewerNewViewersCount(0)
-      setChildCountsByParent({})
       setViewerInviteToken(null)
       return
     }
@@ -215,23 +175,107 @@ export default function Dashboard() {
     setViewerCreatorName(cname)
 
     const { data: allInv } = await supabase.from('invites').select('*').eq('film_id', filmId)
-    const all = allInv || []
-    setViewerFilmInvites(all)
+    setViewerFilmInvites(allInv || [])
 
-    const myIds = sentList.map((s) => s.id).filter(Boolean)
-    const children = all.filter((i) => i.parent_invite_id && myIds.includes(i.parent_invite_id))
-    setViewerNewViewersCount(children.length)
+    const filmToken = viewerTokenByFilmId[filmId]
+    if (filmToken) setViewerInviteToken(filmToken)
+  }, [viewerTokenByFilmId])
 
-    const counts = {}
-    for (const inv of sentList) {
-      const kids = all.filter((i) => i.parent_invite_id === inv.id)
-      counts[inv.id] = {
-        shares: kids.length,
-        viewers: kids.filter((k) => ['watched', 'signed_up'].includes(k.status)).length,
+  const loadViewerDashboard = useCallback(async () => {
+    if (!profile?.id || profile.role !== 'viewer') return
+    const uid = profile.id
+    const email = (profile.email || '').trim()
+
+    const { data: sent, error: sentErr } = await supabase
+      .from('invites')
+      .select('*')
+      .eq('sender_id', uid)
+      .order('created_at', { ascending: false })
+
+    if (sentErr) console.error(sentErr)
+    const sentList = sent || []
+    setAllViewerSentInvites(sentList)
+
+    let filmId = sentList[0]?.film_id
+    const tokenByFilmId = {}
+
+    // Fetch ALL films the viewer has been invited to watch
+    if (email) {
+      const { data: allRecvd } = await supabase
+        .from('invites')
+        .select('film_id, token')
+        .ilike('recipient_email', email)
+        .order('created_at', { ascending: false })
+
+      if (allRecvd?.length) {
+        // De-duplicate by film_id, preserving most-recent-first order
+        const seen = new Set()
+        const uniqueRecvd = allRecvd.filter(r => {
+          if (seen.has(r.film_id)) return false
+          seen.add(r.film_id)
+          return true
+        })
+
+        // Resolve film details for every received film
+        const { data: filmRows } = await supabase
+          .from('films')
+          .select('id, title, thumbnail_url')
+          .in('id', uniqueRecvd.map(r => r.film_id))
+
+        const filmsMap = new Map((filmRows || []).map(f => [f.id, f]))
+        const allFilms = uniqueRecvd
+          .map(r => {
+            if (r.token) tokenByFilmId[r.film_id] = r.token
+            return {
+              id: r.film_id,
+              title: filmsMap.get(r.film_id)?.title || '',
+              thumbnail_url: filmsMap.get(r.film_id)?.thumbnail_url || null,
+              token: r.token,
+            }
+          })
+          .filter(f => f.id)
+        setViewerAllFilms(allFilms)
+        setViewerTokenByFilmId(tokenByFilmId)
+
+        // Primary film = most recent received
+        if (!filmId) filmId = uniqueRecvd[0]?.film_id
+        setViewerInviteToken(
+          uniqueRecvd[0]?.token || localStorage.getItem('viewer_invite_token') || null
+        )
       }
     }
-    setChildCountsByParent(counts)
-  }, [profile?.id, profile?.role, profile?.email])
+
+    if (!filmId) {
+      setViewerAllFilms([])
+      setViewerTokenByFilmId({})
+      await selectViewerFilm(null)
+      return
+    }
+
+    setViewerFilmId(filmId)
+
+    const { data: filmRow } = await supabase
+      .from('films')
+      .select('id, title, thumbnail_url, creator_id')
+      .eq('id', filmId)
+      .single()
+
+    setViewerFilmTitle(filmRow?.title || '')
+
+    let cname = ''
+    if (filmRow?.creator_id) {
+      const { data: cr } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', filmRow.creator_id)
+        .single()
+      cname = cr?.name || ''
+    }
+    setViewerCreatorName(cname)
+
+    const { data: allInv } = await supabase.from('invites').select('*').eq('film_id', filmId)
+    setViewerFilmInvites(allInv || [])
+  }, [profile?.id, profile?.role, profile?.email, selectViewerFilm])
 
   useEffect(() => {
     if (profile) loadDashboard()
@@ -633,8 +677,24 @@ export default function Dashboard() {
                     Your screenings
                   </h3>
                   <div className="flex flex-col gap-3">
-                    {viewerAllFilms.map((film) => (
-                      <div key={film.id} className="flex items-center gap-5 border border-faint/20 bg-[#0a0f1a] p-4">
+                    {viewerAllFilms.map((film) => {
+                      const isSelected = film.id === viewerFilmId
+                      return (
+                      <div
+                        key={film.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => { if (!isSelected) selectViewerFilm(film.id) }}
+                        onKeyDown={(e) => {
+                          if ((e.key === 'Enter' || e.key === ' ') && !isSelected) {
+                            e.preventDefault()
+                            selectViewerFilm(film.id)
+                          }
+                        }}
+                        className={`flex cursor-pointer items-center gap-5 border bg-[#0a0f1a] p-4 transition-colors ${
+                          isSelected ? 'border-accent/60' : 'border-faint/20 hover:border-faint/40'
+                        }`}
+                      >
                         {film.thumbnail_url ? (
                           <img
                             src={film.thumbnail_url}
@@ -648,6 +708,11 @@ export default function Dashboard() {
                         )}
                         <div className="flex flex-1 flex-col gap-1 min-w-0">
                           <p className="font-serif-v3 text-base italic leading-snug text-warm truncate">{film.title}</p>
+                          {isSelected && (
+                            <span className="font-sans text-[9px] uppercase tracking-[0.25em] text-accent/70">
+                              Viewing
+                            </span>
+                          )}
                         </div>
                         <div className="shrink-0 flex items-center gap-2">
                           {film.token && (() => {
@@ -683,7 +748,8 @@ export default function Dashboard() {
                           )}
                         </div>
                       </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </section>
               )}

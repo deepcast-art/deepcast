@@ -1016,6 +1016,7 @@ export default function InviteScreening() {
 
   /** Mid-playback “Resume Film” — restore screening fullscreen on narrow viewports (matches exit-on-pause). */
   const resumeFilm = useCallback(() => {
+    userPauseIntentRef.current = false
     setPassItOnFromUserPause(false)
     if (!isLgUp) requestScreeningFullscreen()
     tryScreeningPlay()
