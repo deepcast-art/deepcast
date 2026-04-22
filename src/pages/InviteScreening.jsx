@@ -1452,14 +1452,44 @@ export default function InviteScreening() {
               }}
             />
 
-            {/* Always-visible playback progress bar. Interactive: tap or drag to seek
-               without pausing. Sits above the tap-to-pause overlay (z-[50] > z-[40])
-               and stops propagation so taps on the bar don't reach the pause layer.
-               Always rendered during screening — pause, post-film, pre-gesture — so
-               the viewer can always see where they are in the film. */}
+            {/* Always-visible playback controls: play/pause toggle + progress bar.
+               Sits at z-[110] — above the tap-to-pause overlay (z-[40]) AND the
+               pass-it-on sheet (z-[100]) — so it stays visible while the film is
+               playing, paused mid-film, and during the pass-it-on letter flow. */}
             <div
-                className="absolute left-0 right-0 z-[50] flex h-[28px] cursor-pointer items-center px-4 touch-manipulation"
-                style={{ bottom: 'max(12px, env(safe-area-inset-bottom, 0px))' }}
+              className="absolute left-0 right-0 z-[110] flex h-[28px] items-center gap-3 px-4"
+              style={{ bottom: 'max(12px, env(safe-area-inset-bottom, 0px))' }}
+            >
+              <button
+                type="button"
+                aria-label={isScreeningPaused ? 'Play film' : 'Pause film'}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  const mux = muxPlayerRef.current
+                  if (!mux) return
+                  if (isScreeningPaused) {
+                    resumeFilm()
+                  } else {
+                    userPauseIntentRef.current = true
+                    try { mux.pause() } catch { /* ignore */ }
+                  }
+                }}
+                className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full bg-[#080c18]/70 backdrop-blur-sm touch-manipulation"
+              >
+                {isScreeningPaused ? (
+                  <svg className="h-3 w-3 fill-[#b1a180]" viewBox="0 0 24 24" aria-hidden>
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                ) : (
+                  <svg className="h-3 w-3 fill-[#b1a180]" viewBox="0 0 24 24" aria-hidden>
+                    <rect x="6" y="5" width="4" height="14" />
+                    <rect x="14" y="5" width="4" height="14" />
+                  </svg>
+                )}
+              </button>
+              <div
+                className="relative h-full flex-1 cursor-pointer touch-manipulation flex items-center"
                 onPointerDown={(e) => {
                   e.stopPropagation()
                   const mux = muxPlayerRef.current
@@ -1467,9 +1497,7 @@ export default function InviteScreening() {
                   const duration = media?.duration
                   if (!duration || !Number.isFinite(duration)) return
                   const rect = e.currentTarget.getBoundingClientRect()
-                  const innerLeft = rect.left + 16
-                  const innerWidth = Math.max(1, rect.width - 32)
-                  const pct = Math.max(0, Math.min(1, (e.clientX - innerLeft) / innerWidth))
+                  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / Math.max(1, rect.width)))
                   try {
                     media.currentTime = pct * duration
                     setPlaybackProgress(pct)
@@ -1484,9 +1512,7 @@ export default function InviteScreening() {
                   const duration = media?.duration
                   if (!duration || !Number.isFinite(duration)) return
                   const rect = e.currentTarget.getBoundingClientRect()
-                  const innerLeft = rect.left + 16
-                  const innerWidth = Math.max(1, rect.width - 32)
-                  const pct = Math.max(0, Math.min(1, (e.clientX - innerLeft) / innerWidth))
+                  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / Math.max(1, rect.width)))
                   try {
                     media.currentTime = pct * duration
                     setPlaybackProgress(pct)
@@ -1508,6 +1534,7 @@ export default function InviteScreening() {
                     style={{ width: `${Math.min(100, Math.max(0, playbackProgress * 100))}%` }}
                   />
                 </div>
+              </div>
             </div>
 
             <div
@@ -1534,6 +1561,7 @@ export default function InviteScreening() {
 
 
             <div
+              style={{ paddingBottom: 'max(56px, calc(env(safe-area-inset-bottom, 0px) + 56px))' }}
               className={`absolute inset-0 z-[100] flex min-h-0 flex-col overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] panel-scroll bg-[#080c18] transition-opacity duration-[800ms] lg:duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] lg:max-h-[100dvh] lg:flex-row lg:overflow-hidden ${
                 passItOnLayerActive
                   ? 'opacity-100 pointer-events-auto'

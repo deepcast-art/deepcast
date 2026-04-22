@@ -127,16 +127,38 @@ export default function Dashboard() {
     })[0]?.id
   }, [viewerRecipientKey, viewerFilmInvites])
 
+  const viewerChainInvites = useMemo(() => {
+    if (!viewerFilmInvites?.length || !viewerFocusInviteId) return viewerFilmInvites
+    const byId = new Map(viewerFilmInvites.map((inv) => [inv.id, inv]))
+    const keep = new Set()
+    let cur = byId.get(viewerFocusInviteId)
+    while (cur) {
+      keep.add(cur.id)
+      cur = cur.parent_invite_id ? byId.get(cur.parent_invite_id) : null
+    }
+    const queue = [viewerFocusInviteId]
+    while (queue.length) {
+      const parentId = queue.shift()
+      for (const inv of viewerFilmInvites) {
+        if (inv.parent_invite_id === parentId && !keep.has(inv.id)) {
+          keep.add(inv.id)
+          queue.push(inv.id)
+        }
+      }
+    }
+    return viewerFilmInvites.filter((inv) => keep.has(inv.id))
+  }, [viewerFilmInvites, viewerFocusInviteId])
+
   const graphLayout = useMemo(() => {
-    if (!viewerFilmInvites?.length) return null
+    if (!viewerChainInvites?.length) return null
     return buildGraphLayout({
-      filmInvites: viewerFilmInvites,
+      filmInvites: viewerChainInvites,
       filmTitle: viewerFilmTitle || 'Film',
       creatorName: viewerCreatorName,
       viewerRecipientKey,
       focusInviteId: viewerFocusInviteId,
     })
-  }, [viewerFilmInvites, viewerFilmTitle, viewerCreatorName, viewerRecipientKey, viewerFocusInviteId])
+  }, [viewerChainInvites, viewerFilmTitle, viewerCreatorName, viewerRecipientKey, viewerFocusInviteId])
 
   const formattedRecipientNames = useMemo(() => {
     const names = viewerSentInvites.map(
