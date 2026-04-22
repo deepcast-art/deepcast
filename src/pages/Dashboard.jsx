@@ -42,6 +42,7 @@ export default function Dashboard() {
   const resendStatusTimeouts = useRef({})
   const [resendStatusByInvite, setResendStatusByInvite] = useState({})
   const resendInviteTimeouts = useRef({})
+  const [filmInvitesRaw, setFilmInvitesRaw] = useState({})
 
   const [leadCreatorName, setLeadCreatorName] = useState('')
   const [teamEmail, setTeamEmail] = useState('')
@@ -101,7 +102,8 @@ export default function Dashboard() {
     ? Math.max(0, profile?.invite_allocation ?? 0)
     : null
   const sentCount = isViewer ? viewerSentInvites.length : 0
-  const canShareMore = isViewer && invitesLeft > 0 && viewerFilmId
+  const canShareMore = isViewer && viewerFilmId
+  const shareDisabled = !invitesLeft || invitesLeft <= 0
 
   const viewerRecipientKey = useMemo(() => {
     if (!profile?.email || !viewerFilmInvites.length) return null
@@ -353,14 +355,17 @@ export default function Dashboard() {
 
       const stats = {}
       const trees = {}
+      const rawInvites = {}
 
       for (const film of creatorFilms || []) {
         const { data: invites } = await supabase
           .from('invites')
           .select('*')
           .eq('film_id', film.id)
+          .order('created_at', { ascending: true })
 
         const all = invites || []
+        rawInvites[film.id] = all
         stats[film.id] = {
           sent: all.length,
           opened: all.filter((i) => ['opened', 'watched', 'signed_up'].includes(i.status))
@@ -393,6 +398,7 @@ export default function Dashboard() {
 
       setFilmStats(stats)
       setInviteTree(trees)
+      setFilmInvitesRaw(rawInvites)
     } finally {
       setLoading(false)
     }
@@ -610,7 +616,8 @@ export default function Dashboard() {
               <button
                 type="button"
                 onClick={openShareModal}
-                className="w-full border border-accent/50 bg-transparent px-4 py-3 text-center font-sans text-[10px] font-medium uppercase tracking-[0.28em] text-accent transition-colors hover:border-accent hover:bg-accent/[0.06]"
+                disabled={shareDisabled}
+                className="w-full border border-accent/50 bg-transparent px-4 py-3 text-center font-sans text-[10px] font-medium uppercase tracking-[0.28em] text-accent transition-colors hover:border-accent hover:bg-accent/[0.06] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-accent/50 disabled:hover:bg-transparent"
               >
                 Share more
               </button>
@@ -742,7 +749,8 @@ export default function Dashboard() {
                             <button
                               type="button"
                               onClick={openShareModal}
-                              className="flex items-center gap-1.5 border border-accent/40 px-4 py-2 font-sans text-[10px] uppercase tracking-[0.25em] text-accent/70 transition-colors hover:border-accent hover:text-accent"
+                              disabled={shareDisabled}
+                              className="flex items-center gap-1.5 border border-accent/40 px-4 py-2 font-sans text-[10px] uppercase tracking-[0.25em] text-accent/70 transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-accent/40 disabled:hover:text-accent/70"
                             >
                               <svg className="h-2.5 w-2.5 fill-current" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11A2.99 2.99 0 0 0 18 8a3 3 0 1 0-3-3c0 .24.04.47.09.7L8.04 9.81A2.99 2.99 0 0 0 6 9a3 3 0 1 0 0 6c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65a3 3 0 1 0 3-3z"/></svg>
                               Share more
@@ -1335,7 +1343,47 @@ export default function Dashboard() {
                     ))}
                   </div>
 
-                  {tree.length > 0 && (
+                  {isTeamMember && filmInvitesRaw[film.id]?.length > 0 && (() => {
+                    const gl = buildGraphLayout({
+                      filmInvites: filmInvitesRaw[film.id],
+                      filmTitle: film.title,
+                      creatorName: leadCreatorName,
+                      viewerRecipientKey: null,
+                      focusInviteId: null,
+                    })
+                    return gl ? (
+                      <div className="mb-2 flex w-full flex-col">
+                        <div className="mb-3 flex flex-row items-baseline justify-between gap-4">
+                          <h3 className="font-sans text-[10px] font-medium uppercase tracking-[0.32em] text-warm/50">
+                            Network impact
+                          </h3>
+                          <span className="font-serif-v3 text-[12px] italic text-warm/65">
+                            {film.title}
+                          </span>
+                        </div>
+                        <div className="relative flex h-[min(52vh,560px)] w-full overflow-hidden bg-[#121a33] sm:h-[min(56vh,620px)]">
+                          <NetworkGraph
+                            fillHeight
+                            pannable
+                            plainShell
+                            fullBleed
+                            transparentSurface
+                            zoomControlsPosition="center-right"
+                            initialZoom={0.8}
+                            nodesData={gl.nodesData}
+                            linksData={gl.linksData}
+                            viewBoxH={gl.viewBoxH}
+                            ringRadii={gl.ringRadii}
+                            rootNode={gl.rootNode}
+                            defaultActiveNodes={gl.defaultActiveNodes}
+                            defaultActiveLinks={gl.defaultActiveLinks}
+                          />
+                        </div>
+                      </div>
+                    ) : null
+                  })()}
+
+                  {!isTeamMember && tree.length > 0 && (
                     <div>
                       <p className="mb-3 text-xs uppercase tracking-wider text-text-muted">
                         Invite chain
