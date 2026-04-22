@@ -27,7 +27,7 @@ export default function MobileLanding({
       {/* Full-bleed network graph behind the portrait content. Uses absolute (not fixed)
          because iOS Safari drops fixed-positioned children of overflow-auto ancestors. */}
       <div className="landscape:hidden absolute inset-0 z-0 w-full bg-[#080c18]">
-        <div className="absolute inset-0 scale-125 -translate-y-[8%] origin-top">
+        <div className="absolute inset-0">
           {graphLayout ? (
             <NetworkGraph
               fillHeight
@@ -35,7 +35,6 @@ export default function MobileLanding({
               transparentSurface
               interactiveZoom
               softTouchInteraction
-              edgeScrollFades
               edgeFadeColor="#080c18"
               nodesData={graphLayout.nodesData}
               linksData={graphLayout.linksData}
