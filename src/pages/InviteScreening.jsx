@@ -165,8 +165,6 @@ export default function InviteScreening() {
   const [screeningPlaybackEverStarted, setScreeningPlaybackEverStarted] = useState(false)
   /** Narrow layout: full Pass it on only after the viewer explicitly pauses (not buffering / end / programmatic). */
   const [passItOnFromUserPause, setPassItOnFromUserPause] = useState(false)
-  /** Playback progress — mirrors mux-player state so we can render our own always-visible progress bar. */
-  const [playbackProgress, setPlaybackProgress] = useState(0)
 
   /* ---------- LETTER FORM STATE ---------- */
 
@@ -603,9 +601,8 @@ export default function InviteScreening() {
     }
   }, [isIOSDevice, isLgUp])
 
-  /** iOS native video fullscreen is intentionally disabled — native fullscreen takes over the UI,
-   *  preventing our tap-to-pause overlay from handling single-click pause. Video plays inline
-   *  via `playsInline` on MuxPlayer so our overlay owns pause on top of the progress bar. */
+  /** iOS native video fullscreen is intentionally disabled — video plays inline via `playsInline`
+   *  on MuxPlayer so the always-visible native control bar stays in place. */
   const tryIOSNativeVideoFullscreen = useCallback(() => {
     return
   }, [])
@@ -674,7 +671,9 @@ export default function InviteScreening() {
     tryScreeningPlay()
   }, [tryScreeningPlay])
 
-  /** Pass it on on narrow layout when viewer pauses mid-film (mux may emit non-trusted pause events — do not gate on isTrusted). */
+  /** Pass it on whenever the viewer pauses mid-film. Mux owns the pause button now, so we
+   *  infer user intent from screeningPlaybackEverStarted — pause events emitted before the
+   *  film has actually started playing (buffering / setup) are ignored. */
   const handleMuxPause = useCallback(
     (e) => {
       const mux = muxPlayerRef.current
@@ -685,11 +684,7 @@ export default function InviteScreening() {
       const ended = Boolean(mediaEl?.ended)
       const nearEnd = duration > 0 && currentTime >= duration - 0.45
 
-      // Only treat this as a real pause if the user actually requested it (tap overlay)
-      // or the film reached the end. Mux emits pause events during buffering / setup
-      // — those must NOT flip the UI into the pass-it-on screen.
-      const userInitiated = userPauseIntentRef.current
-      if (!userInitiated && !ended && !nearEnd) return
+      if (!screeningPlaybackEverStarted && !ended && !nearEnd) return
 
       setIsScreeningPaused(true)
       if (!isLgUp) exitScreeningFullscreen()
@@ -698,8 +693,6 @@ export default function InviteScreening() {
         setPassItOnFromUserPause(false)
         return
       }
-
-      setScreeningPlaybackEverStarted(true)
 
       // Resume-from-dashboard flow: logged-in user arrived via ?play=1. Persist current
       // position and navigate back to /dashboard instead of showing pass-it-on.
@@ -711,14 +704,9 @@ export default function InviteScreening() {
         return
       }
 
-      if (isLgUp) {
-        setPassItOnFromUserPause(false)
-        return
-      }
-
       setPassItOnFromUserPause(true)
     },
-    [isLgUp, exitScreeningFullscreen, user?.id, directPlay, token, navigate]
+    [isLgUp, exitScreeningFullscreen, user?.id, directPlay, token, navigate, screeningPlaybackEverStarted]
   )
 
   const finalizeEnterScreening = useCallback(() => {
@@ -845,9 +833,6 @@ export default function InviteScreening() {
     if (!p.duration) return
     if (p.currentTime > 0.05) setScreeningPlaybackEverStarted(true)
     const pct = Math.round((p.currentTime / p.duration) * 100)
-
-    // Drive our always-visible progress bar (unrounded for smooth motion)
-    setPlaybackProgress(p.currentTime / p.duration)
 
     // Persist playback position so the user can resume later
     if (token) localStorage.setItem(`screening_position_${token}`, Math.floor(p.currentTime))
@@ -1223,7 +1208,7 @@ export default function InviteScreening() {
 
   return (
     <div className="font-body font-light min-h-screen text-[#dddddd] bg-[#080c18] overflow-hidden select-none">
-      <div className="tactile-grain" aria-hidden />
+      {currentView !== 'screening' && <div className="tactile-grain" aria-hidden />}
       <div className="fixed inset-0 z-[-2] bg-[#080c18]" aria-hidden />
 
       {status === 'loading' && slowConnecting && !prologueState.mounted && (
@@ -1385,6 +1370,7 @@ export default function InviteScreening() {
                     metadata={{ video_title: film.title }}
                     accentColor="#b1a180"
                     autoPlay
+                    autohide={-1}
                     startTime={Number(startTimeParam) || Number(localStorage.getItem(`screening_position_${token}`)) || 0}
                     onTimeUpdate={handleTimeUpdate}
                     onEnded={handleEnded}
@@ -1428,115 +1414,6 @@ export default function InviteScreening() {
               </div>
             )}
 
-            {/* Tap-to-pause overlay — full-bleed sibling of the video wrapper so it wins
-               the pointer-event race against MuxPlayer's shadow DOM controls (including the
-               progress bar). onPointerDown fires on the first touch (no 300ms click delay).
-               stopPropagation + preventDefault keep MuxPlayer from also handling it. */}
-            <div
-              className="absolute inset-0 z-[40] cursor-pointer touch-manipulation select-none"
-              style={{
-                pointerEvents:
-                  screeningNeedsUserGesturePlay || passItOnLayerActive ? 'none' : 'auto',
-              }}
-              onPointerDown={(e) => {
-                e.stopPropagation()
-                e.preventDefault()
-                const mux = muxPlayerRef.current
-                if (!mux) return
-                userPauseIntentRef.current = true
-                try { mux.pause() } catch { /* ignore */ }
-              }}
-              onClick={(e) => {
-                e.stopPropagation()
-                e.preventDefault()
-              }}
-            />
-
-            {/* Always-visible playback controls: play/pause toggle + progress bar.
-               Sits at z-[110] — above the tap-to-pause overlay (z-[40]) AND the
-               pass-it-on sheet (z-[100]) — so it stays visible while the film is
-               playing, paused mid-film, and during the pass-it-on letter flow. */}
-            <div
-              className="absolute left-0 right-0 z-[110] flex h-[28px] items-center gap-3 px-4"
-              style={{ bottom: 'max(12px, env(safe-area-inset-bottom, 0px))' }}
-            >
-              <button
-                type="button"
-                aria-label={isScreeningPaused ? 'Play film' : 'Pause film'}
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  const mux = muxPlayerRef.current
-                  if (!mux) return
-                  if (isScreeningPaused) {
-                    resumeFilm()
-                  } else {
-                    userPauseIntentRef.current = true
-                    try { mux.pause() } catch { /* ignore */ }
-                  }
-                }}
-                className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full bg-[#080c18]/70 backdrop-blur-sm touch-manipulation"
-              >
-                {isScreeningPaused ? (
-                  <svg className="h-3 w-3 fill-[#b1a180]" viewBox="0 0 24 24" aria-hidden>
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
-                ) : (
-                  <svg className="h-3 w-3 fill-[#b1a180]" viewBox="0 0 24 24" aria-hidden>
-                    <rect x="6" y="5" width="4" height="14" />
-                    <rect x="14" y="5" width="4" height="14" />
-                  </svg>
-                )}
-              </button>
-              <div
-                className="relative h-full flex-1 cursor-pointer touch-manipulation flex items-center"
-                onPointerDown={(e) => {
-                  e.stopPropagation()
-                  const mux = muxPlayerRef.current
-                  const media = mux?.media
-                  const duration = media?.duration
-                  if (!duration || !Number.isFinite(duration)) return
-                  const rect = e.currentTarget.getBoundingClientRect()
-                  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / Math.max(1, rect.width)))
-                  try {
-                    media.currentTime = pct * duration
-                    setPlaybackProgress(pct)
-                  } catch { /* ignore */ }
-                  try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* ignore */ }
-                }}
-                onPointerMove={(e) => {
-                  if (!e.currentTarget.hasPointerCapture?.(e.pointerId)) return
-                  e.stopPropagation()
-                  const mux = muxPlayerRef.current
-                  const media = mux?.media
-                  const duration = media?.duration
-                  if (!duration || !Number.isFinite(duration)) return
-                  const rect = e.currentTarget.getBoundingClientRect()
-                  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / Math.max(1, rect.width)))
-                  try {
-                    media.currentTime = pct * duration
-                    setPlaybackProgress(pct)
-                  } catch { /* ignore */ }
-                }}
-                onPointerUp={(e) => {
-                  try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* ignore */ }
-                }}
-                onClick={(e) => e.stopPropagation()}
-                role="slider"
-                aria-label="Playback progress"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={Math.round(playbackProgress * 100)}
-              >
-                <div className="pointer-events-none relative h-[6px] w-full bg-[#dddddd]/25">
-                  <div
-                    className="h-full bg-[#b1a180] shadow-[0_0_8px_rgba(177,161,128,0.6)] transition-[width] duration-150 ease-linear"
-                    style={{ width: `${Math.min(100, Math.max(0, playbackProgress * 100))}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-
             <div
               className={`pointer-events-none absolute top-8 left-10 z-20 transition-opacity duration-700 ease-in-out ${
                 !isScreeningPaused
@@ -1561,7 +1438,6 @@ export default function InviteScreening() {
 
 
             <div
-              style={{ paddingBottom: 'max(56px, calc(env(safe-area-inset-bottom, 0px) + 56px))' }}
               className={`absolute inset-0 z-[100] flex min-h-0 flex-col overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] panel-scroll bg-[#080c18] transition-opacity duration-[800ms] lg:duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] lg:max-h-[100dvh] lg:flex-row lg:overflow-hidden ${
                 passItOnLayerActive
                   ? 'opacity-100 pointer-events-auto'
