@@ -106,23 +106,23 @@ export default function DesktopPassItOn({
         <div className="w-[0.5px] self-stretch bg-[#b1a180] opacity-20 flex-shrink-0" />
 
         {/* Right column (60%) — letter card */}
-        <div className="w-[60%] h-full overflow-y-auto panel-scroll flex flex-col items-center px-6 py-8">
-          <div className="relative flex w-full max-w-3xl flex-1 flex-col p-4 overflow-hidden" style={{
+        <div className="flex w-[60%] min-h-0 h-full flex-col items-center px-6 py-6 overflow-hidden">
+          <div className="relative flex w-full max-w-3xl min-h-0 flex-1 flex-col" style={{
             background: 'linear-gradient(168deg, #e8e2d6 0%, #ddd8cc 30%, #d5cfc3 60%, #ddd7cb 100%)',
             borderRadius: '8px',
             boxShadow: '0 2px 30px rgba(0,0,0,0.25), 0 0 0 0.5px rgba(180,170,150,0.4)',
           }}>
             {/* Paper-noise texture */}
-            <div className="absolute inset-0 pointer-events-none" style={{
+            <div className="absolute inset-0 pointer-events-none rounded-[8px] overflow-hidden" style={{
               backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 300 300' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='paper'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23paper)'/%3E%3C/svg%3E")`,
               opacity: 0.08, mixBlendMode: 'multiply',
             }} />
             {/* Inner vignette */}
-            <div className="absolute inset-0 pointer-events-none"
+            <div className="absolute inset-0 pointer-events-none rounded-[8px]"
                  style={{ boxShadow: 'inset 0 0 60px rgba(0,0,0,0.06), inset 0 0 120px rgba(0,0,0,0.03)' }} />
 
-            <div className="relative z-10 flex flex-1 flex-col items-center justify-center text-center px-4">
-              <div className="flex flex-col items-center gap-2 mb-4 mt-6">
+            <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center gap-4 overflow-y-auto panel-scroll px-6 py-6 text-center">
+              <div className="flex flex-col items-center gap-2">
                 <h3 className="font-['DM_Sans',sans-serif] text-[10px] uppercase tracking-[0.4em] text-[#2a2a2a]">
                   A Letter of Invitation
                 </h3>
@@ -130,36 +130,34 @@ export default function DesktopPassItOn({
               </div>
 
               {letterError && (
-                <p className="mb-4 w-full text-[12px] font-['DM_Sans',sans-serif] text-[#b84233] bg-[#b84233]/10 border border-[#b84233]/25 px-4 py-2">{letterError}</p>
+                <p className="w-full max-w-xl text-[12px] font-['DM_Sans',sans-serif] text-[#b84233] bg-[#b84233]/10 border border-[#b84233]/25 px-4 py-2">{letterError}</p>
               )}
               {letterSuccess && (
-                <p className="mb-4 w-full text-[12px] font-['DM_Sans',sans-serif] text-[#5b8a5e] bg-[#5b8a5e]/10 border border-[#5b8a5e]/25 px-4 py-2">{letterSuccess}</p>
+                <p className="w-full max-w-xl text-[12px] font-['DM_Sans',sans-serif] text-[#5b8a5e] bg-[#5b8a5e]/10 border border-[#5b8a5e]/25 px-4 py-2">{letterSuccess}</p>
               )}
 
               {slotsRemaining > 0 ? (
-                <>
-                  <div className="flex flex-col items-center w-full relative bg-[#2a2a2a]/8 border-[0.5px] border-[#2a2a2a]/15 p-6">
-                    <div className="font-['Fraunces',serif] text-lg leading-snug w-full max-w-xl text-[#2a2a2a]">
-                      <div className="flex flex-wrap justify-center items-end gap-x-4 gap-y-1 mb-3">
+                <div className="flex w-full flex-1 flex-col items-center gap-4">
+                  <div className="flex flex-col items-center w-full max-w-xl gap-3 relative bg-[#2a2a2a]/8 border-[0.5px] border-[#2a2a2a]/15 px-5 py-5">
+                    <div className="font-['Fraunces',serif] text-base lg:text-lg leading-snug w-full text-[#2a2a2a]">
+                      <div className="flex flex-wrap justify-center items-end gap-x-3 gap-y-1 mb-2">
                         <span className="italic">Dear</span>
-                        <input type="text" placeholder="First Name" value={letterRecipientFirst} onChange={(e) => setLetterRecipientFirst(e.target.value)} className="w-[120px] bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" />
-                        <input type="text" placeholder="Last Name" value={letterRecipientLast} onChange={(e) => setLetterRecipientLast(e.target.value)} className="w-[120px] bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" />
+                        <input type="text" placeholder="First Name" value={letterRecipientFirst} onChange={(e) => setLetterRecipientFirst(e.target.value)} className="min-w-[90px] max-w-[140px] flex-1 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" />
+                        <input type="text" placeholder="Last Name" value={letterRecipientLast} onChange={(e) => setLetterRecipientLast(e.target.value)} className="min-w-[90px] max-w-[140px] flex-1 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" />
                         <span>,</span>
                       </div>
-                      <div className="mb-2">
-                        <textarea rows={2} placeholder="Write your note here. Tell them why this film made you think of them specifically..." value={letterNote} onChange={(e) => setLetterNote(e.target.value)} className="w-full bg-transparent border-none text-center focus:outline-none resize-none placeholder-[#2a2a2a]/30 leading-relaxed text-base text-[#2a2a2a]" />
-                      </div>
+                      <textarea rows={2} placeholder="Write your note here. Tell them why this film made you think of them specifically..." value={letterNote} onChange={(e) => setLetterNote(e.target.value)} className="w-full bg-transparent border-none text-center focus:outline-none resize-none placeholder-[#2a2a2a]/30 leading-relaxed text-sm lg:text-base text-[#2a2a2a]" />
                     </div>
-                    <div className="flex flex-col gap-1 w-full max-w-[320px] text-center mt-2">
+                    <div className="flex flex-col gap-1 w-full max-w-[340px] text-center">
                       <label className="font-['DM_Sans',sans-serif] text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Deliver To</label>
                       <input type="email" placeholder="Their Email Address" value={letterRecipientEmail} onChange={(e) => setLetterRecipientEmail(e.target.value)} className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-[13px] font-['DM_Sans',sans-serif] text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors rounded-none" />
                     </div>
                   </div>
 
-                  <div className="w-[80px] h-[1px] bg-gradient-to-r from-transparent via-[#2a2a2a]/30 to-transparent my-3" />
+                  <div className="w-[80px] h-[1px] bg-gradient-to-r from-transparent via-[#2a2a2a]/30 to-transparent" />
 
                   {!isInviteRecipientSession && (
-                    <div className="flex flex-col items-center gap-2 w-full max-w-[320px]">
+                    <div className="flex flex-col items-center gap-2 w-full max-w-[340px]">
                       <label className="font-['DM_Sans',sans-serif] text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/70">
                         Create your account to seal &amp; send
                       </label>
@@ -168,14 +166,12 @@ export default function DesktopPassItOn({
                     </div>
                   )}
 
-                  <div className="flex flex-col items-center gap-2 w-full max-w-[320px]">
-                    <button type="button" onClick={handleSendLetter} disabled={letterSending} className="mt-6 w-full py-3 bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-['DM_Sans',sans-serif] text-[11px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none mb-6 disabled:opacity-40">
-                      {letterSending ? 'Sending…' : 'Seal & Send'}
-                    </button>
-                  </div>
+                  <button type="button" onClick={handleSendLetter} disabled={letterSending} className="w-full max-w-[340px] py-3 bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-['DM_Sans',sans-serif] text-[11px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none disabled:opacity-40">
+                    {letterSending ? 'Sending…' : 'Seal & Send'}
+                  </button>
 
                   {passItOnLayerActive && !isInviteRecipientSession && user && (
-                    <div className="flex flex-col items-center gap-2 border-t border-[#2a2a2a]/10 pt-4 mt-2 text-center w-full max-w-[320px]">
+                    <div className="flex flex-col items-center gap-2 border-t border-[#2a2a2a]/10 pt-3 text-center w-full max-w-[340px]">
                       <p className="font-['DM_Sans',sans-serif] text-[10px] leading-relaxed text-[#2a2a2a]/50">
                         Signed in as a different email. Sign out to use{' '}
                         <span className="text-[#2a2a2a]/70">{invite?.recipient_email}</span>.
@@ -187,12 +183,12 @@ export default function DesktopPassItOn({
                     <button
                       type="button"
                       onClick={() => setCurrentView('dashboard')}
-                      className="mt-2 w-full max-w-[320px] py-2 font-['DM_Sans',sans-serif] text-[9px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors"
+                      className="w-full max-w-[340px] py-2 font-['DM_Sans',sans-serif] text-[9px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors"
                     >
                       Skip — Go to dashboard
                     </button>
                   )}
-                </>
+                </div>
               ) : (
                 <p className="font-['Fraunces',serif] text-2xl text-[#2a2a2a]/80 my-10">All invitations have been sent.</p>
               )}

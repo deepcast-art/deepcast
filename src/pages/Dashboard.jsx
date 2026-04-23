@@ -115,39 +115,75 @@ export default function Dashboard() {
   }, [profile?.email, viewerFilmInvites])
 
   const viewerFocusInviteId = useMemo(() => {
-    if (!viewerRecipientKey || !viewerFilmInvites.length) return null
-    const matches = viewerFilmInvites.filter(
-      (r) => inviteRecipientKey(r) === viewerRecipientKey
-    )
-    if (!matches.length) return null
-    return [...matches].sort((a, b) => {
-      const tb = b.created_at ? new Date(b.created_at).getTime() : 0
-      const ta = a.created_at ? new Date(a.created_at).getTime() : 0
-      return tb - ta
-    })[0]?.id
-  }, [viewerRecipientKey, viewerFilmInvites])
+    if (!viewerFilmInvites.length) return null
+
+    // Primary: match the viewer's received invite by recipient_email
+    if (viewerRecipientKey) {
+      const matches = viewerFilmInvites.filter(
+        (r) => inviteRecipientKey(r) === viewerRecipientKey
+      )
+      if (matches.length) {
+        return [...matches].sort((a, b) => {
+          const tb = b.created_at ? new Date(b.created_at).getTime() : 0
+          const ta = a.created_at ? new Date(a.created_at).getTime() : 0
+          return tb - ta
+        })[0]?.id
+      }
+    }
+
+    // Fallback: derive viewer's own invite id from invites they sent.
+    // Every invite sent by this user must have parent_invite_id pointing to the
+    // viewer's originating invite. If all outgoing invites share the same
+    // parent_invite_id, treat that as the viewer's focus invite.
+    if (profile?.id) {
+      const sentByViewer = viewerFilmInvites.filter((r) => r.sender_id === profile.id)
+      const parentIds = new Set(sentByViewer.map((r) => r.parent_invite_id).filter(Boolean))
+      if (parentIds.size === 1) return [...parentIds][0]
+    }
+
+    return null
+  }, [viewerRecipientKey, viewerFilmInvites, profile?.id])
 
   const viewerChainInvites = useMemo(() => {
-    if (!viewerFilmInvites?.length || !viewerFocusInviteId) return viewerFilmInvites
+    if (!viewerFilmInvites?.length) return viewerFilmInvites
     const byId = new Map(viewerFilmInvites.map((inv) => [inv.id, inv]))
     const keep = new Set()
-    let cur = byId.get(viewerFocusInviteId)
-    while (cur) {
-      keep.add(cur.id)
-      cur = cur.parent_invite_id ? byId.get(cur.parent_invite_id) : null
-    }
-    const queue = [viewerFocusInviteId]
-    while (queue.length) {
-      const parentId = queue.shift()
-      for (const inv of viewerFilmInvites) {
-        if (inv.parent_invite_id === parentId && !keep.has(inv.id)) {
-          keep.add(inv.id)
-          queue.push(inv.id)
+
+    if (viewerFocusInviteId) {
+      let cur = byId.get(viewerFocusInviteId)
+      while (cur) {
+        keep.add(cur.id)
+        cur = cur.parent_invite_id ? byId.get(cur.parent_invite_id) : null
+      }
+      const queue = [viewerFocusInviteId]
+      while (queue.length) {
+        const parentId = queue.shift()
+        for (const inv of viewerFilmInvites) {
+          if (inv.parent_invite_id === parentId && !keep.has(inv.id)) {
+            keep.add(inv.id)
+            queue.push(inv.id)
+          }
+        }
+      }
+    } else if (profile?.id) {
+      // No focus invite resolvable — fall back to viewer's outgoing subtree only.
+      const seeds = viewerFilmInvites.filter((r) => r.sender_id === profile.id)
+      const queue = seeds.map((r) => r.id)
+      for (const id of queue) keep.add(id)
+      while (queue.length) {
+        const parentId = queue.shift()
+        for (const inv of viewerFilmInvites) {
+          if (inv.parent_invite_id === parentId && !keep.has(inv.id)) {
+            keep.add(inv.id)
+            queue.push(inv.id)
+          }
         }
       }
     }
+
+    if (!keep.size) return []
     return viewerFilmInvites.filter((inv) => keep.has(inv.id))
-  }, [viewerFilmInvites, viewerFocusInviteId])
+  }, [viewerFilmInvites, viewerFocusInviteId, profile?.id])
 
   const graphLayout = useMemo(() => {
     if (!viewerChainInvites?.length) return null
