@@ -1395,6 +1395,15 @@ export default function InviteScreening() {
                     }}
                   />
                 </Suspense>
+                {!isLgUp && !isScreeningPaused && !passItOnLayerActive && !showPostFilm && !screeningNeedsUserGesturePlay && (
+                  <div
+                    role="button"
+                    tabIndex={-1}
+                    aria-label="Pause film"
+                    onClick={() => { try { muxPlayerRef.current?.pause() } catch { /* ignore */ } }}
+                    className="absolute inset-0 z-[15] touch-manipulation"
+                  />
+                )}
                 {screeningNeedsUserGesturePlay && !showPostFilm && (
                   <button
                     type="button"
@@ -1601,9 +1610,9 @@ export default function InviteScreening() {
                   <div className="flex flex-col gap-6">
                     <div className="flex flex-col gap-3">
                       <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Profile</span>
-                      {(profile?.email || user?.email) && (
-                        <p className="truncate font-sans text-[11px] text-[#dddddd]/50" title={profile?.email || user?.email || ''}>
-                          {profile?.email || user?.email}
+                      {(user?.email || profile?.email) && (
+                        <p className="truncate font-sans text-[11px] text-[#dddddd]/50" title={user?.email || profile?.email || ''}>
+                          {user?.email || profile?.email}
                         </p>
                       )}
                       <nav className="flex flex-col gap-2.5">
@@ -1668,12 +1677,12 @@ export default function InviteScreening() {
               <div className="flex flex-col gap-6 reveal-up" style={{ transitionDelay: '110ms' }}>
                 <div className="flex flex-col gap-3">
                   <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Profile</span>
-                  {(profile?.email || user?.email) && (
+                  {(user?.email || profile?.email) && (
                     <p
                       className="truncate font-sans text-[11px] text-[#dddddd]/50"
-                      title={profile?.email || user?.email || ''}
+                      title={user?.email || profile?.email || ''}
                     >
-                      {profile?.email || user?.email}
+                      {user?.email || profile?.email}
                     </p>
                   )}
                   <nav className="flex flex-col gap-2.5">
