@@ -650,6 +650,7 @@ export default function NetworkGraph({
       viewBox={`0 0 ${vbW} ${viewBoxH}`}
       className="relative z-10 block"
       preserveAspectRatio="xMidYMid meet"
+      style={{ willChange: 'transform', transform: 'translateZ(0)' }}
     >
       {/* Ring circles (dashed) */}
       <g stroke={GRAPH_COLORS.faint} strokeWidth="1" fill="none" opacity="0.18">
