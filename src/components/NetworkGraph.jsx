@@ -824,9 +824,9 @@ export default function NetworkGraph({
             ref={scrollRef}
             role="region"
             aria-label={mapAriaLabel}
-            className={`relative z-10 min-h-0 w-full flex-1 overflow-auto overscroll-contain [scrollbar-width:thin] touch-pan-x touch-pan-y select-none ${
-              isPanning ? 'cursor-grabbing' : 'cursor-grab'
-            } ${interactiveZoom || softTouchInteraction ? 'touch-manipulation' : ''}`}
+            className={`relative z-10 min-h-0 w-full flex-1 overflow-auto overscroll-contain [scrollbar-width:thin] select-none ${
+              interactiveZoom || softTouchInteraction ? 'touch-pan-x touch-pan-y touch-manipulation' : 'touch-none'
+            } ${isPanning ? 'cursor-grabbing' : 'cursor-grab'}`}
             style={{
               WebkitOverflowScrolling: 'touch',
               overscrollBehavior: 'contain',
