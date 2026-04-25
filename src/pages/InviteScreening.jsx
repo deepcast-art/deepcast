@@ -700,7 +700,7 @@ export default function InviteScreening() {
         if (token && currentTime > 0) {
           localStorage.setItem(`screening_position_${token}`, String(Math.floor(currentTime)))
         }
-        navigate('/dashboard', { replace: true })
+        navigate('/dashboard', { replace: true, state: { screeningToken: token } })
         return
       }
 
@@ -893,7 +893,7 @@ export default function InviteScreening() {
     // Signed in → dashboard (thank-you / pass-it-on flow is for guests)
     if (user?.id) {
       if (token) localStorage.setItem('viewer_invite_token', token)
-      navigate('/dashboard', { replace: true })
+      navigate('/dashboard', { replace: true, state: { screeningToken: token } })
       return
     }
 

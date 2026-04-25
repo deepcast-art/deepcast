@@ -299,6 +299,14 @@ export default function Dashboard() {
 
         // Primary film = most recent received
         if (!filmId) filmId = uniqueRecvd[0]?.film_id
+
+        // If returning from a specific screening, restore that film regardless of default order
+        const returnToken = location.state?.screeningToken
+        if (returnToken) {
+          const match = uniqueRecvd.find(r => r.token === returnToken)
+          if (match?.film_id) filmId = match.film_id
+        }
+
         setViewerInviteToken(
           uniqueRecvd[0]?.token || localStorage.getItem('viewer_invite_token') || null
         )
