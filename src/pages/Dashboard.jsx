@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import InviteForm from '../components/InviteForm'
@@ -28,6 +28,7 @@ function formatNamesList(names) {
 export default function Dashboard() {
   const { profile, signOut, fetchProfile } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
   const inviteSentConfirmation = location.state?.inviteSent
     ? location.state.recipientName || 'your invitee'
     : null
@@ -52,7 +53,12 @@ export default function Dashboard() {
   const [teamInvites, setTeamInvites] = useState([])
   const [teamMembers, setTeamMembers] = useState([])
   const [teamRemoveBusyId, setTeamRemoveBusyId] = useState(null)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    try { return sessionStorage.getItem('dash_creator_sidebar') === 'true' } catch { return false }
+  })
+  const [viewerSidebarOpen, setViewerSidebarOpen] = useState(() => {
+    try { return sessionStorage.getItem('dash_viewer_sidebar') === 'true' } catch { return false }
+  })
 
   const [allViewerSentInvites, setAllViewerSentInvites] = useState([])
   const [viewerFilmId, setViewerFilmId] = useState(null)
@@ -308,7 +314,7 @@ export default function Dashboard() {
         }
 
         setViewerInviteToken(
-          uniqueRecvd[0]?.token || localStorage.getItem('viewer_invite_token') || null
+          tokenByFilmId[filmId] || uniqueRecvd[0]?.token || localStorage.getItem('viewer_invite_token') || null
         )
       }
     }
@@ -484,6 +490,14 @@ export default function Dashboard() {
     }
   }, [])
 
+  useEffect(() => {
+    try { sessionStorage.setItem('dash_creator_sidebar', sidebarOpen ? 'true' : 'false') } catch {}
+  }, [sidebarOpen])
+
+  useEffect(() => {
+    try { sessionStorage.setItem('dash_viewer_sidebar', viewerSidebarOpen ? 'true' : 'false') } catch {}
+  }, [viewerSidebarOpen])
+
   if (!profile) return null
 
   const statusBadge = {
@@ -626,12 +640,33 @@ export default function Dashboard() {
 
     return (
       <div className="relative z-10 flex min-h-dvh w-full flex-col overflow-hidden bg-bg-page text-warm lg:flex-row">
-        <aside className="flex w-full min-h-0 shrink-0 flex-col gap-6 overflow-y-auto border-b border-faint/30 bg-ink/80 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] pt-[max(1rem,env(safe-area-inset-top,0px))] sm:px-6 sm:py-10 panel-scroll lg:max-h-[100dvh] lg:w-[22%] lg:min-h-screen lg:border-b-0 lg:border-r lg:px-6 lg:py-10">
+        {/* Mobile top bar — viewer */}
+        <div className="flex items-center justify-between border-b border-faint/30 bg-ink/80 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))] lg:hidden">
+          <Link to="/" className="inline-block opacity-90 hover:opacity-100">
+            <DeepcastLogo variant="wordmark" className="h-5 w-auto text-warm" />
+          </Link>
+          <button
+            type="button"
+            onClick={() => setViewerSidebarOpen((v) => !v)}
+            className="flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center text-warm/70"
+            aria-label="Toggle menu"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+              {viewerSidebarOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h16" />
+              )}
+            </svg>
+          </button>
+        </div>
+
+        <aside className={`${viewerSidebarOpen ? 'flex' : 'hidden'} lg:flex w-full min-h-0 shrink-0 flex-col gap-6 overflow-y-auto border-b border-faint/30 bg-ink/80 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] pt-4 sm:px-6 sm:py-10 panel-scroll lg:max-h-[100dvh] lg:w-[22%] lg:min-h-screen lg:border-b-0 lg:border-r lg:px-6 lg:py-10`}>
           <div className="shrink-0 animate-fade-in">
-            <Link to="/" className="inline-block">
+            <Link to="/" className="hidden lg:inline-block">
               <DeepcastLogo variant="wordmark" className="!text-4xl sm:!text-5xl text-warm" />
             </Link>
-            <h2 className="font-serif-v3 mt-3 text-xl text-warm">{profile.name}</h2>
+            <h2 className="font-serif-v3 lg:mt-3 text-xl text-warm">{profile.name}</h2>
           </div>
 
           <div
@@ -794,21 +829,17 @@ export default function Dashboard() {
                             const savedPos = localStorage.getItem(`screening_position_${film.token}`)
                             const resume = savedPos && parseInt(savedPos, 10) > 0
                             return (
-                              <a
-                                href={resume ? `/i/${film.token}?play=1&t=${savedPos}` : `/i/${film.token}?play=1`}
-                                onClick={(e) => {
-                                  const fresh = localStorage.getItem(`screening_position_${film.token}`)
-                                  const n = fresh ? parseInt(fresh, 10) : 0
-                                  if (n > 0) {
-                                    e.preventDefault()
-                                    window.location.href = `/i/${film.token}?play=1&t=${n}`
-                                  }
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const n = parseInt(localStorage.getItem(`screening_position_${film.token}`) || '0', 10)
+                                  navigate(n > 0 ? `/i/${film.token}?play=1&t=${n}` : `/i/${film.token}?play=1`)
                                 }}
                                 className="flex items-center gap-1.5 border border-warm/20 px-4 py-2 font-sans text-[10px] uppercase tracking-[0.25em] text-warm/60 transition-colors hover:border-warm/40 hover:text-warm"
                               >
                                 <svg className="h-2.5 w-2.5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                                 {resume ? 'Resume' : 'Watch again'}
-                              </a>
+                              </button>
                             )
                           })()}
                           {canShareMore && film.id === viewerFilmId && (
