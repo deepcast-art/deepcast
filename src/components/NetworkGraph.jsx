@@ -302,6 +302,8 @@ export default function NetworkGraph({
   edgeScrollFades = false,
   /** Match the container behind the graph (e.g. #080c18 landing, #121a33 panel) */
   edgeFadeColor = '#121a33',
+  /** When set, smoothly pan the graph to center this node ID in the viewport. */
+  focusNodeId = null,
 }) {
   const [hoveredNode, setHoveredNode] = useState(null)
   const [selectedTeamId, setSelectedTeamId] = useState(null)
@@ -406,6 +408,32 @@ export default function NetworkGraph({
   useEffect(() => {
     zoomRef.current = zoom
   }, [zoom])
+
+  /* --- Scroll to focus node when focusNodeId changes --- */
+  const lastFocusedNodeId = useRef(null)
+  useEffect(() => {
+    if (!focusNodeId || !pannable) return
+    if (focusNodeId === lastFocusedNodeId.current) return
+    lastFocusedNodeId.current = focusNodeId
+
+    const el = scrollRef.current
+    const node = nodesData.find((n) => n.id === focusNodeId)
+    if (!el || !node) return
+
+    const id = requestAnimationFrame(() => {
+      const scale = (graphPx.w * zoomRef.current) / vbW
+      const dxPx = (node.x - vbW / 2) * scale
+      const dyPx = (node.y - viewBoxH / 2) * scale
+      const centerLeft = (el.scrollWidth - el.clientWidth) / 2
+      const centerTop = (el.scrollHeight - el.clientHeight) / 2
+      el.scrollTo({
+        left: Math.max(0, centerLeft + dxPx),
+        top: Math.max(0, centerTop + dyPx),
+        behavior: 'smooth',
+      })
+    })
+    return () => cancelAnimationFrame(id)
+  }, [focusNodeId, nodesData, graphPx.w, vbW, viewBoxH, pannable])
 
   /* --- Pinch zoom (touch) + ctrl/trackpad wheel zoom --- */
   useEffect(() => {

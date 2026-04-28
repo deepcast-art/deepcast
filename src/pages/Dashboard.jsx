@@ -57,9 +57,13 @@ export default function Dashboard() {
     try { return sessionStorage.getItem('dash_creator_sidebar') === 'true' } catch { return false }
   })
   const [viewerSidebarOpen, setViewerSidebarOpen] = useState(() => {
-    try { return sessionStorage.getItem('dash_viewer_sidebar') === 'true' } catch { return false }
+    try {
+      const stored = sessionStorage.getItem('dash_viewer_sidebar')
+      return stored === null ? true : stored === 'true'
+    } catch { return true }
   })
 
+  const [newestInviteId, setNewestInviteId] = useState(null)
   const [allViewerSentInvites, setAllViewerSentInvites] = useState([])
   const [viewerFilmId, setViewerFilmId] = useState(null)
   const [viewerFilmTitle, setViewerFilmTitle] = useState('')
@@ -349,6 +353,8 @@ export default function Dashboard() {
 
     const { data: allInv } = await supabase.from('invites').select('*').eq('film_id', filmId)
     setViewerFilmInvites(allInv || [])
+
+    return sentList[0]?.id ?? null
   }, [profile?.id, profile?.role, profile?.email, selectViewerFilm])
 
   useEffect(() => {
@@ -623,7 +629,8 @@ export default function Dashboard() {
         viewerFocusInviteId || null
       )
       await fetchProfile(profile.id)
-      await loadViewerDashboard()
+      const newId = await loadViewerDashboard()
+      setNewestInviteId(newId)
       setIsShareModalOpen(false)
     } catch (e) {
       setModalError(e.message || 'Could not send invitation.')
@@ -921,6 +928,7 @@ export default function Dashboard() {
                         rootNode={graphLayout.rootNode}
                         defaultActiveNodes={graphLayout.defaultActiveNodes}
                         defaultActiveLinks={graphLayout.defaultActiveLinks}
+                        focusNodeId={newestInviteId}
                       />
                     </div>
                   </div>
