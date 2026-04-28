@@ -923,6 +923,7 @@ export default function Dashboard() {
                         pannable
                         showZoomControls
                         showLegend
+                        hideSectionLabels
                         transparentSurface
                         edgeFadeColor="#121a33"
                         nodesData={graphLayout.nodesData}
