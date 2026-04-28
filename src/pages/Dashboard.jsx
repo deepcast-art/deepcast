@@ -141,6 +141,13 @@ export default function Dashboard() {
       }
     }
 
+    // Secondary: match by invite token — covers the case where the viewer signed up
+    // with a different email than the one the invite was sent to.
+    if (viewerInviteToken) {
+      const row = viewerFilmInvites.find((r) => r.token === viewerInviteToken)
+      if (row?.id) return row.id
+    }
+
     // Fallback: derive viewer's own invite id from invites they sent.
     // Every invite sent by this user must have parent_invite_id pointing to the
     // viewer's originating invite. If all outgoing invites share the same
@@ -152,7 +159,7 @@ export default function Dashboard() {
     }
 
     return null
-  }, [viewerRecipientKey, viewerFilmInvites, profile?.id])
+  }, [viewerRecipientKey, viewerFilmInvites, viewerInviteToken, profile?.id])
 
   const viewerChainInvites = useMemo(() => {
     if (!viewerFilmInvites?.length) return viewerFilmInvites
@@ -196,15 +203,15 @@ export default function Dashboard() {
   }, [viewerFilmInvites, viewerFocusInviteId, profile?.id])
 
   const graphLayout = useMemo(() => {
-    if (!viewerChainInvites?.length) return null
+    if (!viewerFilmInvites?.length) return null
     return buildGraphLayout({
-      filmInvites: viewerChainInvites,
+      filmInvites: viewerFilmInvites,
       filmTitle: viewerFilmTitle || 'Film',
       creatorName: viewerCreatorName,
       viewerRecipientKey,
       focusInviteId: viewerFocusInviteId,
     })
-  }, [viewerChainInvites, viewerFilmTitle, viewerCreatorName, viewerRecipientKey, viewerFocusInviteId])
+  }, [viewerFilmInvites, viewerFilmTitle, viewerCreatorName, viewerRecipientKey, viewerFocusInviteId])
 
   const formattedRecipientNames = useMemo(() => {
     const names = viewerSentInvites.map(
@@ -916,7 +923,6 @@ export default function Dashboard() {
                         pannable
                         showZoomControls
                         showLegend
-                        hideSectionLabels
                         transparentSurface
                         edgeFadeColor="#121a33"
                         nodesData={graphLayout.nodesData}

@@ -82,3 +82,38 @@ npm test                 # Unit + E2E
 - `server/index.js` shares utility code from `src/lib/` (e.g., `httpsUrl.js`, `graphLayout.js`).
 - Supabase migrations are in `supabase/migrations/` — apply in order.
 - Landing page is currently disabled (Login is the home page at `/`).
+
+## Dashboard behaviour (viewer role)
+
+### Resume & return flow
+- The "Resume / Watch again" button on each film card uses React Router `navigate()` — not `window.location.href` — so the SPA stays alive and auth state is preserved.
+- When a logged-in viewer pauses the screening (`?play=1` flow), `InviteScreening` saves the playback position to `localStorage` under the key `screening_position_<token>` and navigates to `/dashboard` with `location.state.screeningToken = token`.
+- `loadViewerDashboard` reads `location.state.screeningToken` on mount and selects the matching film as the active film, so the same film the user clicked Resume on is highlighted when they return.
+- `viewerInviteToken` is set to `tokenByFilmId[filmId]` (the token for the currently selected film), not always `uniqueRecvd[0]?.token`.
+
+### Mobile sidebar (viewer)
+- On mobile (`< lg`), the viewer dashboard has a collapsible sidebar toggled by a hamburger button in the top bar.
+- Sidebar defaults to **open** on first visit (so sign-out and stats are always accessible). The open/closed state persists in `sessionStorage` under `dash_viewer_sidebar` and is restored when the user returns from a screening.
+- On desktop (`lg:`), the sidebar is always visible as a left column.
+
+### Mobile sidebar (creator / team_member)
+- The creator/team_member sidebar open/closed state persists in `sessionStorage` under `dash_creator_sidebar` and is restored across navigation.
+
+### Network graph (viewer)
+- The "My network impact" graph feeds `buildGraphLayout` with **all** invites for the selected film (`viewerFilmInvites`), not just the viewer's ancestor/descendant chain. This matches the Network Map page and produces the full circular graph with the viewer's path highlighted in amber against a faded background.
+- `viewerRecipientKey` and `viewerFocusInviteId` are passed to `buildGraphLayout` so `defaultActiveNodes` / `defaultActiveLinks` correctly highlight the viewer's node and their upstream/downstream chain.
+- After a viewer sends an invite, the graph scrolls to centre the newly created node. `loadViewerDashboard` returns the newest sent invite ID; the Dashboard passes it as `focusNodeId` to `NetworkGraph`, which smoothly pans to that node.
+- Props on the viewer NetworkGraph: `fillHeight pannable showZoomControls showLegend transparentSurface edgeFadeColor="#121a33"`. Section labels (sender names on the inner ring) are **shown** (no `hideSectionLabels`).
+
+## Network graph component (`src/components/NetworkGraph.jsx`)
+
+- `focusNodeId` prop: when changed to a new value, the graph smoothly scrolls to centre that node in the pan container. Uses a `lastFocusedNodeId` ref so it only fires once per new value.
+- Scroll math: `scale = graphPx.w * zoom / vbW`; offset from viewBox centre `(vbW/2, viewBoxH/2)` converted to scroll pixels, added to the centred scroll position.
+
+## Auth — password reset
+
+- `resetPassword(email)` in `src/lib/auth.jsx` resolves the `redirectTo` URL in priority order:
+  1. Caller-supplied `redirectTo` argument
+  2. `VITE_PASSWORD_RESET_REDIRECT_URL` env var (set this in Vercel for production)
+  3. `window.location.origin + /reset-password` (local dev fallback)
+- The production URL must also be added to **Supabase → Auth → URL Configuration → Redirect URLs** or Supabase will reject it.

@@ -463,6 +463,22 @@ app.post('/api/invites/send', async (req, res) => {
       }
     }
 
+    // Last-resort fallback: find the parent from a prior invite this sender already sent for this
+    // film. Handles the case where the sender signed up with a different email than their invite
+    // recipient_email, so the email-based lookup above found nothing.
+    if (!parentInviteId && senderId) {
+      const { data: priorSent } = await supabase
+        .from('invites')
+        .select('parent_invite_id')
+        .eq('film_id', filmId)
+        .eq('sender_id', senderId)
+        .not('parent_invite_id', 'is', null)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      if (priorSent?.parent_invite_id) parentInviteId = priorSent.parent_invite_id
+    }
+
     // Create invite
     const token = generateToken()
     const expiresAt = new Date()
