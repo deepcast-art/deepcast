@@ -396,13 +396,16 @@ export default function InviteScreening() {
     if (!invite) return null
     const viewerSenderEmail = invite.recipient_email || ''
     const viewerSenderName = invite.recipient_name || invite.recipient_email?.split('@')[0] || ''
-    const outgoingRows = sentLetters.map((l, i) => ({
-      id: `sent-${l.id ?? i}`,
-      sender_email: viewerSenderEmail,
-      sender_name: viewerSenderName,
-      recipient_email: l.email || '',
-      recipient_name: l.name || `${l.firstName || ''} ${l.lastName || ''}`.trim() || l.email,
-    }))
+    const realEmails = new Set(filmInvites.map((i) => i.recipient_email?.toLowerCase()).filter(Boolean))
+    const outgoingRows = sentLetters
+      .filter((l) => !realEmails.has(l.email?.toLowerCase()))
+      .map((l, i) => ({
+        id: `sent-${l.id ?? i}`,
+        sender_email: viewerSenderEmail,
+        sender_name: viewerSenderName,
+        recipient_email: l.email || '',
+        recipient_name: l.name || `${l.firstName || ''} ${l.lastName || ''}`.trim() || l.email,
+      }))
     const combined = [...filmInvites, ...outgoingRows]
     if (!combined.length) return null
     return buildGraphLayout({
@@ -700,7 +703,7 @@ export default function InviteScreening() {
         if (token && currentTime > 0) {
           localStorage.setItem(`screening_position_${token}`, String(Math.floor(currentTime)))
         }
-        navigate('/dashboard', { replace: true })
+        navigate('/dashboard', { replace: true, state: { screeningToken: token } })
         return
       }
 
@@ -893,7 +896,14 @@ export default function InviteScreening() {
     // Signed in → dashboard (thank-you / pass-it-on flow is for guests)
     if (user?.id) {
       if (token) localStorage.setItem('viewer_invite_token', token)
-      navigate('/dashboard', { replace: true })
+      if (sessionId) {
+        supabase
+          .from('watch_sessions')
+          .update({ viewer_id: user.id })
+          .eq('id', sessionId)
+          .then(() => {})
+      }
+      navigate('/dashboard', { replace: true, state: { screeningToken: token } })
       return
     }
 
@@ -904,6 +914,16 @@ export default function InviteScreening() {
   /* ---------- LETTER FORM ---------- */
 
   const slotsRemaining = Math.max(0, VIEWER_SHARE_LIMIT - sentLetters.length)
+
+  async function refreshFilmInvites() {
+    if (!film?.id) return
+    const { data: refreshed } = await supabase
+      .from('invites')
+      .select('id, film_id, sender_id, sender_name, sender_email, recipient_name, recipient_email, status, created_at, parent_invite_id')
+      .eq('film_id', film.id)
+      .order('created_at', { ascending: true })
+    if (refreshed) setFilmInvites(refreshed)
+  }
 
   async function handleSendLetter() {
     setLetterError('')
@@ -996,6 +1016,13 @@ export default function InviteScreening() {
       } = await supabase.auth.getSession()
       if (session?.user?.id) {
         await fetchProfile(session.user.id, session.access_token)
+        if (sessionId) {
+          supabase
+            .from('watch_sessions')
+            .update({ viewer_id: session.user.id })
+            .eq('id', sessionId)
+            .then(() => {})
+        }
       }
 
       if (token) localStorage.setItem('viewer_invite_token', token)
@@ -1016,6 +1043,7 @@ export default function InviteScreening() {
           name: recipientName,
         },
       ])
+      await refreshFilmInvites()
       setLetterRecipientFirst('')
       setLetterRecipientLast('')
       setLetterRecipientEmail('')
@@ -1162,6 +1190,7 @@ export default function InviteScreening() {
           email: l.email.trim(),
         })),
       ])
+      await refreshFilmInvites()
     } catch {
       // silent — modal closes regardless
     }
@@ -1395,6 +1424,15 @@ export default function InviteScreening() {
                     }}
                   />
                 </Suspense>
+                {!isLgUp && !isScreeningPaused && !passItOnLayerActive && !showPostFilm && !screeningNeedsUserGesturePlay && (
+                  <div
+                    role="button"
+                    tabIndex={-1}
+                    aria-label="Pause film"
+                    onClick={() => { try { muxPlayerRef.current?.pause() } catch { /* ignore */ } }}
+                    className="absolute inset-0 z-[15] touch-manipulation"
+                  />
+                )}
                 {screeningNeedsUserGesturePlay && !showPostFilm && (
                   <button
                     type="button"
@@ -1601,9 +1639,9 @@ export default function InviteScreening() {
                   <div className="flex flex-col gap-6">
                     <div className="flex flex-col gap-3">
                       <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Profile</span>
-                      {(profile?.email || user?.email) && (
-                        <p className="truncate font-sans text-[11px] text-[#dddddd]/50" title={profile?.email || user?.email || ''}>
-                          {profile?.email || user?.email}
+                      {(user?.email || profile?.email) && (
+                        <p className="truncate font-sans text-[11px] text-[#dddddd]/50" title={user?.email || profile?.email || ''}>
+                          {user?.email || profile?.email}
                         </p>
                       )}
                       <nav className="flex flex-col gap-2.5">
@@ -1668,12 +1706,12 @@ export default function InviteScreening() {
               <div className="flex flex-col gap-6 reveal-up" style={{ transitionDelay: '110ms' }}>
                 <div className="flex flex-col gap-3">
                   <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Profile</span>
-                  {(profile?.email || user?.email) && (
+                  {(user?.email || profile?.email) && (
                     <p
                       className="truncate font-sans text-[11px] text-[#dddddd]/50"
-                      title={profile?.email || user?.email || ''}
+                      title={user?.email || profile?.email || ''}
                     >
-                      {profile?.email || user?.email}
+                      {user?.email || profile?.email}
                     </p>
                   )}
                   <nav className="flex flex-col gap-2.5">

@@ -380,6 +380,11 @@ export function AuthProvider({ children }) {
   }
 
   const resetPassword = async (email, redirectTo) => {
+    // window.location.origin is the live origin of whatever environment the app is served from
+    // (https://your-domain.com in production, http://localhost:5173 in dev).
+    // Supabase will only honour this redirectTo if the URL is in:
+    //   Supabase dashboard → Authentication → URL Configuration → Redirect URLs
+    // Add your production URL there (e.g. https://your-domain.com/reset-password).
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: redirectTo || `${window.location.origin}/reset-password`,
     })
