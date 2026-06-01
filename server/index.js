@@ -479,6 +479,31 @@ app.post('/api/invites/send', async (req, res) => {
       if (priorSent?.parent_invite_id) parentInviteId = priorSent.parent_invite_id
     }
 
+    // watch_sessions fallback: resolve parent via viewer_id on watch session.
+    // Covers viewers whose profile email differs from their invite recipient_email
+    // and who have no prior sent invites with a valid parent to inherit from.
+    if (!parentInviteId && senderId) {
+      const { data: watchSession } = await supabase
+        .from('watch_sessions')
+        .select('invite_token')
+        .eq('viewer_id', senderId)
+        .eq('film_id', filmId)
+        .not('invite_token', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (watchSession?.invite_token) {
+        const { data: invByToken } = await supabase
+          .from('invites')
+          .select('id, film_id')
+          .eq('token', watchSession.invite_token)
+          .maybeSingle()
+        if (invByToken && uuidStringEq(invByToken.film_id, filmId)) {
+          parentInviteId = invByToken.id
+        }
+      }
+    }
+
     // Create invite
     const token = generateToken()
     const expiresAt = new Date()

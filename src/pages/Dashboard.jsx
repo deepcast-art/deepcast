@@ -1477,15 +1477,14 @@ export default function Dashboard() {
                           <NetworkGraph
                             fillHeight
                             pannable
-                            plainShell
-                            fullBleed
+                            showZoomControls
                             transparentSurface
-                            zoomControlsPosition="center-right"
-                            initialZoom={0.8}
                             nodesData={gl.nodesData}
                             linksData={gl.linksData}
                             viewBoxH={gl.viewBoxH}
+                            viewBoxW={gl.viewBoxW}
                             ringRadii={gl.ringRadii}
+                            sectionLabels={gl.sectionLabels}
                             rootNode={gl.rootNode}
                             defaultActiveNodes={gl.defaultActiveNodes}
                             defaultActiveLinks={gl.defaultActiveLinks}
