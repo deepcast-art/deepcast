@@ -533,27 +533,34 @@ app.post(‘/api/invites/send’, async (req, res) => {
     const displaySender = senderName || ‘Someone’
     const displaySenderEmail = senderEmail || null
 
-    sendInviteEmailResend(
-      withFilmInviteMailingHeaders(
-        withReplyTo(
-          {
-            to: recipientEmailNorm,
-            subject: formatInviteEmailSubject(displaySender),
-            html: buildInviteEmailHtml(
-              displaySender, recipientFirstName, film.title, film.description,
-              film.thumbnail_url, inviteUrl, displaySenderEmail, inviteOrdinal, personalNote || null
-            ),
-            text: buildInviteEmailPlainText(
-              displaySender, recipientFirstName, film.title, film.description,
-              film.thumbnail_url, inviteUrl, displaySenderEmail, inviteOrdinal, personalNote || null
-            ),
-          },
-          displaySenderEmail
-        ),
-        inviteUrl
-      )
-    ).catch((emailErr) => {
-      console.error(‘[invite/send] background email failed — token:’, token, ‘to:’, recipientEmailNorm, emailErr?.message || emailErr)
+    const emailPayload = withFilmInviteMailingHeaders(
+      withReplyTo(
+        {
+          to: recipientEmailNorm,
+          subject: formatInviteEmailSubject(displaySender),
+          html: buildInviteEmailHtml(
+            displaySender, recipientFirstName, film.title, film.description,
+            film.thumbnail_url, inviteUrl, displaySenderEmail, inviteOrdinal, personalNote || null
+          ),
+          text: buildInviteEmailPlainText(
+            displaySender, recipientFirstName, film.title, film.description,
+            film.thumbnail_url, inviteUrl, displaySenderEmail, inviteOrdinal, personalNote || null
+          ),
+        },
+        displaySenderEmail
+      ),
+      inviteUrl
+    )
+
+    sendInviteEmailResend(emailPayload).catch(() => {
+      setTimeout(() => {
+        sendInviteEmailResend(emailPayload).catch((retryErr) => {
+          console.error(
+            `[invite/send] email retry failed — manually resend via POST /api/invites/resend {"inviteId":"<id for token ${token}>"}\n` +
+            `  token: ${token}\n  to: ${recipientEmailNorm}\n  error: ${retryErr?.message || retryErr}`
+          )
+        })
+      }, 2000)
     })
 
   } catch (err) {
