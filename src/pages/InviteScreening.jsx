@@ -488,9 +488,9 @@ export default function InviteScreening() {
       setPrologueNamesReady(true)
       return
     }
-    // Safety timeout: don't hold the dark screen forever
-    const t = setTimeout(() => setPrologueNamesReady(true), 5000)
-    return () => clearTimeout(t)
+    // API is still in-flight — wait for a terminal status rather than race a timeout.
+    // The validateInvite retry budget (~15 s) is the real ceiling; firing early here
+    // is what caused the 'you' flash when ?ctx= decrypt failed.
   }, [prologueNamesReady, ctxDecryptDone, recipientFirstName, sharerDisplayName, status])
 
   /** Mount the prologue overlay immediately; text animation waits for names. */
