@@ -1944,6 +1944,7 @@ export default function InviteScreening() {
                       fillHeight
                       pannable
                       showZoomControls
+                      transparentSurface
                       softTouchInteraction={!isDesktop}
                       edgeScrollFades={!isDesktop}
                       edgeFadeColor="#121a33"
