@@ -324,7 +324,7 @@ async function sendInviteEmailResend(payload) {
   return data
 }
 
-app.post(‘/api/invites/send’, async (req, res) => {
+app.post('/api/invites/send', async (req, res) => {
   try {
     const {
       filmId,
@@ -339,12 +339,12 @@ app.post(‘/api/invites/send’, async (req, res) => {
     } = req.body
 
     if (!filmId || !recipientEmail) {
-      return res.status(400).json({ error: ‘Film ID and recipient email are required’ })
+      return res.status(400).json({ error: 'Film ID and recipient email are required' })
     }
 
     const recipientEmailNorm = normalizeEmail(recipientEmail)
     if (!recipientEmailNorm || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmailNorm)) {
-      return res.status(400).json({ error: ‘Invalid recipient email address’ })
+      return res.status(400).json({ error: 'Invalid recipient email address' })
     }
 
     let previousAllocation = null
@@ -360,60 +360,60 @@ app.post(‘/api/invites/send’, async (req, res) => {
       { data: claimedParent },
       { count: preInsertCount, error: inviteCountError },
     ] = await Promise.all([
-      supabase.from(‘films’).select(‘title, description, thumbnail_url, creator_id, mux_playback_id’).eq(‘id’, filmId).single(),
+      supabase.from('films').select('title, description, thumbnail_url, creator_id, mux_playback_id').eq('id', filmId).single(),
       senderId
-        ? supabase.from(‘users’).select(‘invite_allocation, role, team_creator_id, id, email’).eq(‘id’, senderId).single()
+        ? supabase.from('users').select('invite_allocation, role, team_creator_id, id, email').eq('id', senderId).single()
         : Promise.resolve({ data: null, error: null }),
       clientParentInviteId
-        ? supabase.from(‘invites’).select(‘id, film_id’).eq(‘id’, clientParentInviteId).maybeSingle()
+        ? supabase.from('invites').select('id, film_id').eq('id', clientParentInviteId).maybeSingle()
         : Promise.resolve({ data: null, error: null }),
-      supabase.from(‘invites’).select(‘*’, { count: ‘exact’, head: true }).eq(‘film_id’, filmId),
+      supabase.from('invites').select('*', { count: 'exact', head: true }).eq('film_id', filmId),
     ])
 
     if (inviteCountError) {
-      console.error(‘Invite count error:’, inviteCountError.message || inviteCountError)
+      console.error('Invite count error:', inviteCountError.message || inviteCountError)
     }
 
     // ── Phase 2: validation (no DB) ────────────────────────────────────────
     if (filmLookupError || !film) {
-      return res.status(404).json({ error: ‘Film not found’ })
+      return res.status(404).json({ error: 'Film not found' })
     }
 
     let unlimitedInvites = false
 
     if (senderId) {
       if (senderError) {
-        console.error(‘Invite allocation lookup error:’, senderError.message || senderError)
-        return res.status(500).json({ error: ‘Unable to verify invites’ })
+        console.error('Invite allocation lookup error:', senderError.message || senderError)
+        return res.status(500).json({ error: 'Unable to verify invites' })
       }
       if (!sender) {
-        return res.status(404).json({ error: ‘Sender not found’ })
+        return res.status(404).json({ error: 'Sender not found' })
       }
 
-      const role = String(sender.role || ‘’).trim().toLowerCase()
+      const role = String(sender.role || '').trim().toLowerCase()
       const creatorOwnsFilm = uuidStringEq(film.creator_id, sender.id)
       const onCreatorTeam =
         sender.team_creator_id != null && uuidStringEq(film.creator_id, sender.team_creator_id)
 
-      if (role === ‘creator’) {
+      if (role === 'creator') {
         if (!creatorOwnsFilm) {
-          return res.status(403).json({ error: ‘You can only invite people to your own films’ })
+          return res.status(403).json({ error: 'You can only invite people to your own films' })
         }
-      } else if (role === ‘team_member’ || (role === ‘viewer’ && sender.team_creator_id)) {
+      } else if (role === 'team_member' || (role === 'viewer' && sender.team_creator_id)) {
         if (!onCreatorTeam) {
-          return res.status(403).json({ error: ‘You can only invite people to your team\’s films’ })
+          return res.status(403).json({ error: 'You can only invite people to your team\'s films' })
         }
       }
 
       /* Teammates use invite_allocation 0 + unlimited; stale role "viewer" with team_creator_id must not hit "No invites remaining". */
       unlimitedInvites =
-        role === ‘creator’ ||
-        role === ‘team_member’ ||
-        (role === ‘viewer’ && onCreatorTeam)
+        role === 'creator' ||
+        role === 'team_member' ||
+        (role === 'viewer' && onCreatorTeam)
 
       if (!unlimitedInvites && sender.invite_allocation <= 0) {
-        console.warn(‘No invites remaining for sender:’, senderId, sender)
-        return res.status(400).json({ error: ‘No invites remaining’ })
+        console.warn('No invites remaining for sender:', senderId, sender)
+        return res.status(400).json({ error: 'No invites remaining' })
       }
     }
 
@@ -423,8 +423,8 @@ app.post(‘/api/invites/send’, async (req, res) => {
       claimedParent && uuidStringEq(claimedParent.film_id, filmId) ? claimedParent.id : null
 
     // ── Phase 3: decrement + parent fallbacks in parallel ─────────────────
-    // Fallbacks only run when the client claim didn’t resolve a parent.
-    // Decrement runs alongside them — it doesn’t depend on the fallback results.
+    // Fallbacks only run when the client claim didn't resolve a parent.
+    // Decrement runs alongside them — it doesn't depend on the fallback results.
     const needsDecrement = Boolean(senderId && !unlimitedInvites)
     const needsFallbacks = !parentInviteId
 
@@ -445,26 +445,26 @@ app.post(‘/api/invites/send’, async (req, res) => {
         { data: fb3a },
       ] = await Promise.all([
         needsDecrement
-          ? supabase.from(‘users’).update({ invite_allocation: sender.invite_allocation - 1 }).eq(‘id’, senderId)
+          ? supabase.from('users').update({ invite_allocation: sender.invite_allocation - 1 }).eq('id', senderId)
           : Promise.resolve({ error: null }),
         // Fallback 1: push email filter to Postgres (.in) instead of fetching 200 rows and filtering in JS
         needsFallbacks && candidates.size > 0
-          ? supabase.from(‘invites’).select(‘id’).eq(‘film_id’, filmId).in(‘recipient_email’, [...candidates]).order(‘created_at’, { ascending: true }).limit(1).maybeSingle()
+          ? supabase.from('invites').select('id').eq('film_id', filmId).in('recipient_email', [...candidates]).order('created_at', { ascending: true }).limit(1).maybeSingle()
           : Promise.resolve({ data: null }),
         // Fallback 2: prior invite sent by this sender_id (catches email-mismatch sign-ups)
         needsFallbacks && senderId
-          ? supabase.from(‘invites’).select(‘parent_invite_id’).eq(‘film_id’, filmId).eq(‘sender_id’, senderId).not(‘parent_invite_id’, ‘is’, null).order(‘created_at’, { ascending: true }).limit(1).maybeSingle()
+          ? supabase.from('invites').select('parent_invite_id').eq('film_id', filmId).eq('sender_id', senderId).not('parent_invite_id', 'is', null).order('created_at', { ascending: true }).limit(1).maybeSingle()
           : Promise.resolve({ data: null }),
         // Fallback 3a: watch session — if a token is found, one more query follows below
         needsFallbacks && senderId
-          ? supabase.from(‘watch_sessions’).select(‘invite_token’).eq(‘viewer_id’, senderId).eq(‘film_id’, filmId).not(‘invite_token’, ‘is’, null).order(‘created_at’, { ascending: false }).limit(1).maybeSingle()
+          ? supabase.from('watch_sessions').select('invite_token').eq('viewer_id', senderId).eq('film_id', filmId).not('invite_token', 'is', null).order('created_at', { ascending: false }).limit(1).maybeSingle()
           : Promise.resolve({ data: null }),
       ])
 
       if (needsDecrement) {
         if (decrementError) {
-          console.error(‘Invite allocation decrement error:’, decrementError.message || decrementError)
-          return res.status(500).json({ error: ‘Unable to update invites’ })
+          console.error('Invite allocation decrement error:', decrementError.message || decrementError)
+          return res.status(500).json({ error: 'Unable to update invites' })
         }
         allocationDecremented = true
       }
@@ -475,9 +475,9 @@ app.post(‘/api/invites/send’, async (req, res) => {
         // Fallback 3b: resolve watch-session token into an invite id (sequential within this branch)
         if (!parentInviteId && fb3a?.invite_token) {
           const { data: invByToken } = await supabase
-            .from(‘invites’)
-            .select(‘id, film_id’)
-            .eq(‘token’, fb3a.invite_token)
+            .from('invites')
+            .select('id, film_id')
+            .eq('token', fb3a.invite_token)
             .maybeSingle()
           if (invByToken && uuidStringEq(invByToken.film_id, filmId)) {
             parentInviteId = invByToken.id
@@ -492,7 +492,7 @@ app.post(‘/api/invites/send’, async (req, res) => {
     expiresAt.setDate(expiresAt.getDate() + getFilmInviteExpiryDays())
 
     const { error: inviteError } = await supabase
-      .from(‘invites’)
+      .from('invites')
       .insert({
         film_id: filmId,
         sender_id: senderId || null,
@@ -502,7 +502,7 @@ app.post(‘/api/invites/send’, async (req, res) => {
         recipient_name: recipientName || null,
         personal_note: personalNote || null,
         token,
-        status: ‘pending’,
+        status: 'pending',
         expires_at: expiresAt.toISOString(),
         parent_invite_id: parentInviteId,
       })
@@ -510,19 +510,19 @@ app.post(‘/api/invites/send’, async (req, res) => {
     if (inviteError) {
       if (allocationDecremented && previousAllocation !== null && senderId) {
         const { error: rollbackErr } = await supabase
-          .from(‘users’)
+          .from('users')
           .update({ invite_allocation: previousAllocation })
-          .eq(‘id’, senderId)
-        if (rollbackErr) console.error(‘Failed to rollback invite_allocation:’, rollbackErr)
+          .eq('id', senderId)
+        if (rollbackErr) console.error('Failed to rollback invite_allocation:', rollbackErr)
       }
       throw inviteError
     }
 
     // ── Phase 5: respond immediately, then send email in background ────────
-    const baseUrl = resolveBaseUrl(appUrl, req.get(‘origin’))
-    const senderFirst = senderName ? senderName.trim().split(/\s+/)[0] : ‘’
+    const baseUrl = resolveBaseUrl(appUrl, req.get('origin'))
+    const senderFirst = senderName ? senderName.trim().split(/\s+/)[0] : ''
     const recipientFirstName = recipientName ? recipientName.trim().split(/\s+/)[0] : null
-    const ctx = encryptInviteCtx(senderFirst, recipientFirstName || ‘’)
+    const ctx = encryptInviteCtx(senderFirst, recipientFirstName || '')
     const inviteUrl = ctx ? `${baseUrl}/i/${token}?ctx=${ctx}` : `${baseUrl}/i/${token}`
 
     console.log(`Invite created: token=${token}, recipient=${recipientEmailNorm}, inviteUrl=${inviteUrl}`)
@@ -530,7 +530,7 @@ app.post(‘/api/invites/send’, async (req, res) => {
 
     // Count was fetched before insert; +1 accounts for the invite just created
     const inviteOrdinal = preInsertCount != null ? preInsertCount + 1 : null
-    const displaySender = senderName || ‘Someone’
+    const displaySender = senderName || 'Someone'
     const displaySenderEmail = senderEmail || null
 
     const filmGifUrl = film.mux_playback_id
@@ -575,9 +575,9 @@ app.post(‘/api/invites/send’, async (req, res) => {
     })
 
   } catch (err) {
-    console.error(‘Invite send error:’, err)
+    console.error('Invite send error:', err)
     if (!res.headersSent) {
-      res.status(500).json({ error: ‘Failed to send invite’ })
+      res.status(500).json({ error: 'Failed to send invite' })
     }
   }
 })
@@ -928,7 +928,7 @@ app.post('/api/team/send-invite', async (req, res) => {
       }
       if (existingProfile.role === 'team_member' && existingProfile.team_creator_id !== creatorId) {
         return res.status(400).json({
-          error: 'This person is already on another filmmaker’s team.',
+          error: "This person is already on another filmmaker's team.",
         })
       }
       if (existingProfile.role === 'viewer') {
@@ -937,7 +937,7 @@ app.post('/api/team/send-invite', async (req, res) => {
           !uuidStringEq(existingProfile.team_creator_id, creatorId)
         ) {
           return res.status(400).json({
-            error: 'This viewer is already linked to another filmmaker’s team.',
+            error: "This viewer is already linked to another filmmaker's team.",
           })
         }
 
