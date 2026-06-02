@@ -1544,6 +1544,7 @@ export default function InviteScreening() {
                 signOut={signOut}
                 setCurrentView={setCurrentView}
                 resumeFilm={resumeFilm}
+                hasSentInvite={sentLetters.length > 0}
               />
               <DesktopPassItOn
                 graphLayout={graphLayout}
@@ -1572,6 +1573,7 @@ export default function InviteScreening() {
                 signOut={signOut}
                 setCurrentView={setCurrentView}
                 resumeFilm={resumeFilm}
+                hasSentInvite={sentLetters.length > 0}
               />
 
               </>

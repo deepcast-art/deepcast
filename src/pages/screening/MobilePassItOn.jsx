@@ -27,6 +27,7 @@ export default function MobilePassItOn({
   signOut,
   setCurrentView,
   resumeFilm,
+  hasSentInvite,
 }) {
   return (
     <div className="lg:hidden flex h-full min-h-0 w-full flex-1 flex-col bg-[#080c18] portrait:h-auto portrait:flex-none landscape:max-h-[100dvh] landscape:overflow-hidden">
@@ -179,7 +180,7 @@ export default function MobilePassItOn({
                     {letterSending ? 'Sending…' : 'Seal & Send'}
                   </button>
 
-                  {passItOnLayerActive && user && (
+                  {passItOnLayerActive && user && hasSentInvite && (
                     <button type="button" onClick={() => setCurrentView('dashboard')}
                       className="mt-1.5 w-full py-0.5 font-['DM_Sans',sans-serif] text-[7px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors">
                       Skip — Go to dashboard
@@ -294,7 +295,7 @@ export default function MobilePassItOn({
                     </div>
                   )}
 
-                  {passItOnLayerActive && user && (
+                  {passItOnLayerActive && user && hasSentInvite && (
                     <button type="button" onClick={() => setCurrentView('dashboard')}
                       className="mt-4 w-full py-2 font-['DM_Sans',sans-serif] text-[9px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors">
                       Skip — Go to dashboard

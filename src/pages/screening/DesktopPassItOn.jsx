@@ -28,6 +28,7 @@ export default function DesktopPassItOn({
   signOut,
   setCurrentView,
   resumeFilm,
+  hasSentInvite,
 }) {
   return (
     /* ── Desktop (wide): resume bar + two-column diptych ── */
@@ -59,7 +60,7 @@ export default function DesktopPassItOn({
             >
               {showPostFilm ? 'Thank you for watching.' : 'Pass it on.'}
             </h2>
-            {showPostFilm && user && (
+            {showPostFilm && user && hasSentInvite && (
               <Link
                 to="/dashboard"
                 className="font-['DM_Sans',sans-serif] text-[10px] uppercase tracking-[0.25em] text-[#b1a180] transition-opacity hover:opacity-80"
@@ -179,7 +180,7 @@ export default function DesktopPassItOn({
                       <button type="button" onClick={() => void signOut()} className="font-['DM_Sans',sans-serif] text-[10px] uppercase tracking-[0.2em] text-[#2a2a2a]/50 hover:text-[#2a2a2a]">Sign out</button>
                     </div>
                   )}
-                  {passItOnLayerActive && user && (
+                  {passItOnLayerActive && user && hasSentInvite && (
                     <button
                       type="button"
                       onClick={() => setCurrentView('dashboard')}
