@@ -45,11 +45,11 @@ function buildInviteEmailHtml({
   }
 
   const gifBlock = safe.filmGifUrl
-    ? `<tr><td style="padding:16px 0;">
-        <a href="${safe.inviteUrl}" style="display:block;text-decoration:none;">
-          <img src="${safe.filmGifUrl}" width="340" alt="${safe.filmTitle}" style="display:block;width:100%;max-width:600px;border:0;" />
-        </a>
-      </td></tr>`
+    ? `<tr><td align="center" style="padding:16px 0;">
+      <a href="${safe.inviteUrl}" style="display:block;text-decoration:none;width:340px;margin:0 auto;">
+        <img src="${safe.filmGifUrl}" width="340" alt="${safe.filmTitle}" style="display:block;width:340px;border:0;" />
+      </a>
+    </td></tr>`
     : ''
 
   const noteBlock = safe.personalNote
