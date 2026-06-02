@@ -227,7 +227,6 @@ export default function InviteScreening() {
   const entrySplashTimerRef = useRef(null)
   const entrySplashRunningRef = useRef(false)
   /** After first prologue, auto-start the scripted pre-screening (when URL has ?ctx=). */
-  const autoOpenInvitationDoneRef = useRef(false)
   /** Prevents the welcome prologue timer stack from running twice (early + valid). */
   const prologueWelcomeStartedRef = useRef(false)
   /** Prevents the overlay-dismiss effect from firing twice. */
@@ -271,7 +270,6 @@ export default function InviteScreening() {
     setPassItOnFromUserPause(false)
     screeningMediaReadyRef.current = false
     setScreeningNeedsUserGesturePlay(false)
-    autoOpenInvitationDoneRef.current = false
     prologueWelcomeStartedRef.current = false
     prologueDismissedRef.current = false
     setPrologueTextsDone(false)
@@ -813,21 +811,8 @@ export default function InviteScreening() {
     }
   }, [currentView, isDesktop, status])
 
-  /** Rich invite links include ?ctx=; after the welcome prologue, start the pre-screening sequence without a second tap. */
-  useEffect(() => {
-    if (directPlay) return
-    if (status !== 'valid') return
-    if (currentView !== 'landing') return
-    if (!ctxInUrl) return
-    if (!viewVisible) return
-    if (autoOpenInvitationDoneRef.current) return
-
-    autoOpenInvitationDoneRef.current = true
-    const t = window.setTimeout(() => {
-      handleOpenInvitationClick()
-    }, 0)
-    return () => clearTimeout(t)
-  }, [ctxInUrl, currentView, directPlay, handleOpenInvitationClick, status, viewVisible])
+  // Auto-open removed: ?ctx= supplies names to the welcome prologue but the landing
+  // (logo, network graph, accept button) should always be shown so users can tap through.
 
   /* ---------- WATCH PROGRESS ---------- */
 
