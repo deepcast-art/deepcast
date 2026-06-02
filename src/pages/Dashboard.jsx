@@ -738,22 +738,10 @@ export default function Dashboard() {
               </button>
             )}
             <Link
-              to="/profile"
-              className="font-sans text-[10px] uppercase tracking-[0.22em] text-warm/35 transition-colors hover:text-warm/70"
-            >
-              Profile
-            </Link>
-            <Link
               to="/profile#set-password"
               className="font-sans text-[10px] uppercase tracking-[0.22em] text-warm/35 transition-colors hover:text-warm/70"
             >
-              Set password
-            </Link>
-            <Link
-              to="/network"
-              className="font-sans text-[10px] uppercase tracking-[0.22em] text-warm/35 transition-colors hover:text-warm/70"
-            >
-              Network map
+              Change password
             </Link>
             <button
               type="button"
