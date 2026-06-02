@@ -1471,7 +1471,7 @@ function formatInviteEmailSubject(senderName) {
     .split(/\s+/)
     .filter(Boolean)
   const display = parts.length ? parts.join(' ') : 'Someone'
-  return `${display} has shared a film with you`
+  return `${display} Has Gifted You a Film`
 }
 
 function buildInviteEmailPlainText(
@@ -1516,6 +1516,7 @@ function buildInviteEmailHtml({
     senderDisplay: escapeHtml(senderName || 'Someone'),
     senderUpper: escapeHtml((senderName || 'Someone').toUpperCase()),
     recipientName: escapeHtml(recipientName || ''),
+    recipientFirstName: escapeHtml((recipientName || '').split(' ')[0]),
     filmTitle: escapeHtml(filmTitle || ''),
     filmDescription: escapeHtml(filmDescription || ''),
     personalNote: personalNote ? escapeHtml(String(personalNote).trim()) : '',
@@ -1551,6 +1552,7 @@ function buildInviteEmailHtml({
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background-color:#0c1220;">
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${curatorSentence}</div>
 <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#0c1220;">
 <tr><td align="center" style="padding:0;">
 <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%;background-color:#0c1220;">
@@ -1560,7 +1562,7 @@ function buildInviteEmailHtml({
 </td></tr>
 
 <tr><td align="center" style="padding:0 40px 24px;">
-  <p style="margin:0;font-size:10px;letter-spacing:4px;text-transform:uppercase;color:#6b7fa3;font-family:system-ui,-apple-system,sans-serif;">A PRIVATE SCREENING INVITATION</p>
+  <p style="margin:0;font-size:10px;letter-spacing:4px;text-transform:uppercase;color:#6b7fa3;font-family:system-ui,-apple-system,sans-serif;">A PRIVATE FILM SCREENING FOR ${safe.recipientFirstName}</p>
   <p style="margin:8px 0 0;font-size:10px;letter-spacing:3px;color:#6b7fa3;font-family:system-ui,-apple-system,sans-serif;">GIFTED BY ${safe.senderUpper}</p>
 </td></tr>
 
