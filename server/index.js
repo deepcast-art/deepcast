@@ -535,7 +535,7 @@ app.post('/api/invites/send', async (req, res) => {
     const displaySenderEmail = senderEmail || null
 
     const filmGifUrl = film.mux_playback_id
-      ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=600&fps=15${film.gif_start != null ? `&start=${film.gif_start}` : ''}${film.gif_end != null ? `&end=${film.gif_end}` : ''}`
+      ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=480&fps=12${film.gif_start != null ? `&start=${film.gif_start}` : ''}${film.gif_end != null ? `&end=${film.gif_end}` : ''}`
       : null
 
     const emailPayload = withFilmInviteMailingHeaders(
@@ -637,7 +637,7 @@ app.post('/api/invites/resend-last', async (req, res) => {
 
     try {
       const filmGifUrl = film.mux_playback_id
-        ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=600&fps=15${film.gif_start != null ? `&start=${film.gif_start}` : ''}${film.gif_end != null ? `&end=${film.gif_end}` : ''}`
+        ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=480&fps=12${film.gif_start != null ? `&start=${film.gif_start}` : ''}${film.gif_end != null ? `&end=${film.gif_end}` : ''}`
         : null
 
       const htmlBody = buildInviteEmailHtml({
@@ -740,7 +740,7 @@ app.post('/api/invites/resend', async (req, res) => {
 
     try {
       const filmGifUrl = film.mux_playback_id
-        ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=600&fps=15${film.gif_start != null ? `&start=${film.gif_start}` : ''}${film.gif_end != null ? `&end=${film.gif_end}` : ''}`
+        ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=480&fps=12${film.gif_start != null ? `&start=${film.gif_start}` : ''}${film.gif_end != null ? `&end=${film.gif_end}` : ''}`
         : null
 
       const htmlBody = buildInviteEmailHtml({

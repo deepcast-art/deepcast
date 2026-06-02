@@ -127,7 +127,7 @@ const html = buildInviteEmailHtml({
   recipientName: 'Jerry',
   filmTitle: 'A Conversation with Trace & Tina by Ien Chi',
   filmDescription: 'The masses are burning out. The world order is cracking. People are realizing: this system never worked for anyone.',
-  filmGifUrl: 'https://image.mux.com/test123/animated.gif?width=600&fps=15',
+  filmGifUrl: 'https://image.mux.com/test123/animated.gif?width=480&fps=12',
   inviteUrl: 'https://deepcast.art/i/test123',
   inviteOrdinal: 3,
   personalNote: 'This is a personal note!',
