@@ -360,7 +360,7 @@ app.post(‘/api/invites/send’, async (req, res) => {
       { data: claimedParent },
       { count: preInsertCount, error: inviteCountError },
     ] = await Promise.all([
-      supabase.from(‘films’).select(‘title, description, thumbnail_url, creator_id’).eq(‘id’, filmId).single(),
+      supabase.from(‘films’).select(‘title, description, thumbnail_url, creator_id, mux_playback_id’).eq(‘id’, filmId).single(),
       senderId
         ? supabase.from(‘users’).select(‘invite_allocation, role, team_creator_id, id, email’).eq(‘id’, senderId).single()
         : Promise.resolve({ data: null, error: null }),
@@ -533,15 +533,26 @@ app.post(‘/api/invites/send’, async (req, res) => {
     const displaySender = senderName || ‘Someone’
     const displaySenderEmail = senderEmail || null
 
+    const filmGifUrl = film.mux_playback_id
+      ? `https://image.mux.com/${film.mux_playback_id}/animated.gif`
+      : null
+
     const emailPayload = withFilmInviteMailingHeaders(
       withReplyTo(
         {
           to: recipientEmailNorm,
           subject: formatInviteEmailSubject(displaySender),
-          html: buildInviteEmailHtml(
-            displaySender, recipientFirstName, film.title, film.description,
-            film.thumbnail_url, inviteUrl, displaySenderEmail, inviteOrdinal, personalNote || null
-          ),
+          html: buildInviteEmailHtml({
+            senderName: displaySender,
+            recipientName: recipientFirstName,
+            filmTitle: film.title,
+            filmDescription: film.description,
+            filmGifUrl,
+            inviteUrl,
+            senderEmail: displaySenderEmail,
+            inviteOrdinal,
+            personalNote: personalNote || null,
+          }),
           text: buildInviteEmailPlainText(
             displaySender, recipientFirstName, film.title, film.description,
             film.thumbnail_url, inviteUrl, displaySenderEmail, inviteOrdinal, personalNote || null
@@ -594,7 +605,7 @@ app.post('/api/invites/resend-last', async (req, res) => {
 
     const { data: film, error: filmError } = await supabase
       .from('films')
-      .select('title, description, thumbnail_url')
+      .select('title, description, thumbnail_url, mux_playback_id')
       .eq('id', filmId)
       .single()
 
@@ -623,17 +634,21 @@ app.post('/api/invites/resend-last', async (req, res) => {
     const inviteUrl = ctx ? `${baseUrl}/i/${invite.token}?ctx=${ctx}` : `${baseUrl}/i/${invite.token}`
 
     try {
-      const htmlBody = buildInviteEmailHtml(
-        displaySender,
-        recipientFirstName,
-        film.title,
-        film.description,
-        film.thumbnail_url,
+      const filmGifUrl = film.mux_playback_id
+        ? `https://image.mux.com/${film.mux_playback_id}/animated.gif`
+        : null
+
+      const htmlBody = buildInviteEmailHtml({
+        senderName: displaySender,
+        recipientName: recipientFirstName,
+        filmTitle: film.title,
+        filmDescription: film.description,
+        filmGifUrl,
         inviteUrl,
-        displaySenderEmail,
+        senderEmail: displaySenderEmail,
         inviteOrdinal,
-        invite.personal_note || null
-      )
+        personalNote: invite.personal_note || null,
+      })
       const textBody = buildInviteEmailPlainText(
         displaySender,
         recipientFirstName,
@@ -692,7 +707,7 @@ app.post('/api/invites/resend', async (req, res) => {
 
     const { data: film, error: filmError } = await supabase
       .from('films')
-      .select('title, description, thumbnail_url')
+      .select('title, description, thumbnail_url, mux_playback_id')
       .eq('id', invite.film_id)
       .single()
 
@@ -721,17 +736,21 @@ app.post('/api/invites/resend', async (req, res) => {
     const inviteUrl = ctx ? `${baseUrl}/i/${invite.token}?ctx=${ctx}` : `${baseUrl}/i/${invite.token}`
 
     try {
-      const htmlBody = buildInviteEmailHtml(
-        displaySender,
-        recipientFirstName,
-        film.title,
-        film.description,
-        film.thumbnail_url,
+      const filmGifUrl = film.mux_playback_id
+        ? `https://image.mux.com/${film.mux_playback_id}/animated.gif`
+        : null
+
+      const htmlBody = buildInviteEmailHtml({
+        senderName: displaySender,
+        recipientName: recipientFirstName,
+        filmTitle: film.title,
+        filmDescription: film.description,
+        filmGifUrl,
         inviteUrl,
-        displaySenderEmail,
+        senderEmail: displaySenderEmail,
         inviteOrdinal,
-        invite.personal_note || null
-      )
+        personalNote: invite.personal_note || null,
+      })
       const textBody = buildInviteEmailPlainText(
         displaySender,
         recipientFirstName,
@@ -1466,95 +1485,104 @@ function buildInviteEmailPlainText(
   inviteOrdinal,
   personalNote
 ) {
-  const senderFirstName = senderName ? senderName.trim().split(/\s+/)[0] : 'Someone'
-  const receiverFirst = recipientName ? recipientName.trim().split(/\s+/)[0] : ''
-  const greeting = receiverFirst ? `Dear ${receiverFirst},` : 'Hello,'
-  const origin = siteOriginFromInviteUrl(inviteUrl)
-  const unsubUrl = `${origin}/unsubscribe`
-
-  let body = `deepcast\n\nA letter of invitation\n\n`
-  body += `${greeting}\n\n`
-  body += `${senderFirstName} has thoughtfully curated and shared a short film with you.`
-  if (inviteOrdinal) {
-    body += ` You are the ${ordinalSuffix(inviteOrdinal)} person to be invited to this private online screening.`
-  }
-  body += '\n\n'
+  let body = `deepcast — A PRIVATE SCREENING INVITATION\n`
+  body += `Gifted by ${senderName || 'Someone'}\n\n`
   if (personalNote && String(personalNote).trim()) {
     body += `${String(personalNote).trim()}\n\n`
   }
   if (filmTitle) body += `${filmTitle}\n`
   if (filmDescription && String(filmDescription).trim()) body += `${String(filmDescription).trim()}\n`
   if (filmTitle || filmDescription) body += '\n'
-  body += `Open your invitation:\n${inviteUrl}\n\n`
-  body += `— ${senderName || 'Someone'}, via Deepcast\n\n`
-  body += `Unsubscribe from screening invitation emails:\n${unsubUrl}\n`
+  body += `Accept your invitation:\n${inviteUrl}\n\n`
+  if (inviteOrdinal) {
+    body += `You are the ${ordinalSuffix(inviteOrdinal)} person invited to this private screening.\n\n`
+  }
+  body += `© deepcast\n`
   return body
 }
 
-function buildInviteEmailHtml(
+function buildInviteEmailHtml({
   senderName,
   recipientName,
   filmTitle,
   filmDescription,
-  filmThumbnailUrl,
+  filmGifUrl,
   inviteUrl,
   senderEmail,
   inviteOrdinal,
-  personalNote
-) {
-  const senderFirstName = senderName ? senderName.trim().split(/\s+/)[0] : 'Someone'
-  const receiverFirst = recipientName ? recipientName.trim().split(/\s+/)[0] : ''
-  const greeting = receiverFirst ? `Dear ${escapeHtml(receiverFirst)},` : 'Hello,'
+  personalNote,
+}) {
   const safe = {
-    senderFirst: escapeHtml(senderFirstName),
     senderDisplay: escapeHtml(senderName || 'Someone'),
+    senderUpper: escapeHtml((senderName || 'Someone').toUpperCase()),
     filmTitle: escapeHtml(filmTitle || ''),
     filmDescription: escapeHtml(filmDescription || ''),
     personalNote: personalNote ? escapeHtml(String(personalNote).trim()) : '',
     inviteUrl: escapeHtml(inviteUrl),
+    filmGifUrl: filmGifUrl ? escapeHtml(filmGifUrl) : null,
   }
 
-  const intro = `${safe.senderFirst} has thoughtfully curated and shared a short film with you.${
-    inviteOrdinal
-      ? ` You are the ${ordinalSuffix(inviteOrdinal)} person to be invited to this private online screening.`
-      : ''
-  }`
+  const gifBlock = safe.filmGifUrl
+    ? `<tr><td style="padding:0;">
+        <a href="${safe.inviteUrl}" style="display:block;text-decoration:none;">
+          <img src="${safe.filmGifUrl}" width="600" alt="${safe.filmTitle}" style="display:block;width:100%;max-width:600px;border:0;" />
+        </a>
+      </td></tr>`
+    : ''
 
   const noteBlock = safe.personalNote
-    ? `<p style="margin:0 0 16px;color:#333;">${safe.personalNote.replace(/\n/g, '<br/>')}</p>`
-    : ''
-  const titleBlock = safe.filmTitle
-    ? `<p style="margin:0 0 8px;font-weight:500;">${safe.filmTitle}</p>`
-    : ''
-  const descBlock = safe.filmDescription
-    ? `<p style="margin:0 0 16px;color:#666;font-size:14px;">${safe.filmDescription}</p>`
+    ? `<tr><td style="padding:40px 40px;">
+        <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:20px;line-height:1.6;color:#e8e4dc;">${safe.personalNote.replace(/\n/g, '<br/>')}</p>
+      </td></tr>`
     : ''
 
-  const origin = siteOriginFromInviteUrl(inviteUrl)
-  const unsubUrl = `${origin}/unsubscribe`
-  const safeUnsub = escapeHtml(unsubUrl)
+  const ordinalBlock = inviteOrdinal
+    ? `<tr><td align="center" style="padding:0 40px 48px;">
+        <p style="margin:0;font-size:11px;color:#4a5a7a;font-family:system-ui,-apple-system,sans-serif;letter-spacing:1px;">You are the ${ordinalSuffix(inviteOrdinal)} person invited to this private screening.</p>
+      </td></tr>`
+    : ''
 
   return `<!DOCTYPE html>
-<html><head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#222;background-color:#f5f5f0;">
-<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="padding:32px 16px;">
-<tr><td align="center">
-<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:480px;background:#fff;padding:32px 28px;">
-<tr><td>
-<p style="margin:0 0 20px;text-align:center;font-family:Helvetica,Arial,sans-serif;font-size:22px;font-weight:600;letter-spacing:-0.02em;color:#1a1a1a;">deepcast</p>
-<p style="margin:0 0 24px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#666;">A letter of invitation</p>
-<p style="margin:0 0 20px;font-size:15px;">${greeting}</p>
-<p style="margin:0 0 16px;">${intro}</p>
-${noteBlock}
-${titleBlock}
-${descBlock}
-<p style="margin:24px 0;"><a href="${safe.inviteUrl}" style="color:#5C4F3A;font-weight:500;">Open your invitation</a></p>
-<p style="margin:0 0 16px;font-size:13px;color:#888;">If the link above doesn't work, paste this URL into your browser:<br/>${safe.inviteUrl}</p>
-<p style="margin:24px 0 0;font-size:13px;color:#888;">— ${safe.senderDisplay}, via <span style="font-weight:600;">Deepcast</span></p>
-<p style="margin:28px 0 0;padding-top:20px;border-top:1px solid #eee;font-size:12px;color:#999;line-height:1.5;">
-  <a href="${safeUnsub}" style="color:#666;text-decoration:underline;">Unsubscribe</a> from screening invitation emails.
-</p>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background-color:#0c1220;">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#0c1220;">
+<tr><td align="center" style="padding:0;">
+<table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%;background-color:#0c1220;">
+
+${gifBlock}
+
+<tr><td align="center" style="padding:40px 40px;">
+  <p style="margin:0 0 12px;font-family:system-ui,-apple-system,sans-serif;font-weight:700;font-size:22px;color:#ffffff;letter-spacing:1px;">deepcast</p>
+  <p style="margin:0;font-size:10px;letter-spacing:4px;text-transform:uppercase;color:#6b7fa3;font-family:system-ui,-apple-system,sans-serif;">A PRIVATE SCREENING INVITATION</p>
 </td></tr>
+
+<tr><td style="padding:0 40px 24px;">
+  <p style="margin:0;font-size:10px;letter-spacing:3px;color:#6b7fa3;font-family:system-ui,-apple-system,sans-serif;">GIFTED BY ${safe.senderUpper}</p>
+</td></tr>
+
+${noteBlock}
+
+<tr><td style="padding:0 40px 12px;">
+  <p style="margin:0;font-family:system-ui,-apple-system,sans-serif;font-weight:700;font-size:15px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;">${safe.filmTitle}</p>
+</td></tr>
+<tr><td style="padding:0 40px 48px;">
+  <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:15px;line-height:1.7;color:#8a9bb8;">${safe.filmDescription}</p>
+</td></tr>
+
+<tr><td align="center" style="padding:0 40px 48px;">
+  <table cellpadding="0" cellspacing="0" role="presentation">
+    <tr><td style="background-color:#b8a06a;border-radius:2px;">
+      <a href="${safe.inviteUrl}" style="display:inline-block;padding:18px 48px;font-family:system-ui,-apple-system,sans-serif;font-weight:700;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#0c1220;text-decoration:none;">ACCEPT YOUR INVITATION</a>
+    </td></tr>
+  </table>
+</td></tr>
+
+${ordinalBlock}
+
+<tr><td align="center" style="padding:40px 40px;">
+  <p style="margin:0;font-size:10px;color:#2a3a5a;letter-spacing:2px;font-family:system-ui,-apple-system,sans-serif;">© deepcast</p>
+</td></tr>
+
 </table>
 </td></tr>
 </table>
