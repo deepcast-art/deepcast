@@ -535,7 +535,7 @@ app.post('/api/invites/send', async (req, res) => {
     const displaySenderEmail = senderEmail || null
 
     const filmGifUrl = film.mux_playback_id
-      ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=480&fps=12${film.gif_start != null ? `&start=${film.gif_start}` : ''}${film.gif_end != null ? `&end=${film.gif_end}` : ''}`
+      ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=380&fps=10${film.gif_start != null ? `&start=${film.gif_start}` : ''}${film.gif_end != null ? `&end=${film.gif_end}` : ''}`
       : null
 
     const emailPayload = withFilmInviteMailingHeaders(
@@ -637,7 +637,7 @@ app.post('/api/invites/resend-last', async (req, res) => {
 
     try {
       const filmGifUrl = film.mux_playback_id
-        ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=480&fps=12${film.gif_start != null ? `&start=${film.gif_start}` : ''}${film.gif_end != null ? `&end=${film.gif_end}` : ''}`
+        ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=380&fps=10${film.gif_start != null ? `&start=${film.gif_start}` : ''}${film.gif_end != null ? `&end=${film.gif_end}` : ''}`
         : null
 
       const htmlBody = buildInviteEmailHtml({
@@ -740,7 +740,7 @@ app.post('/api/invites/resend', async (req, res) => {
 
     try {
       const filmGifUrl = film.mux_playback_id
-        ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=480&fps=12${film.gif_start != null ? `&start=${film.gif_start}` : ''}${film.gif_end != null ? `&end=${film.gif_end}` : ''}`
+        ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=380&fps=10${film.gif_start != null ? `&start=${film.gif_start}` : ''}${film.gif_end != null ? `&end=${film.gif_end}` : ''}`
         : null
 
       const htmlBody = buildInviteEmailHtml({
@@ -1531,7 +1531,7 @@ function buildInviteEmailHtml({
   const gifBlock = safe.filmGifUrl
     ? `<tr><td style="padding:16px 0;">
         <a href="${safe.inviteUrl}" style="display:block;text-decoration:none;">
-          <img src="${safe.filmGifUrl}" width="600" alt="${safe.filmTitle}" style="display:block;width:100%;max-width:600px;border:0;" />
+          <img src="${safe.filmGifUrl}" width="480" alt="${safe.filmTitle}" style="display:block;width:100%;max-width:600px;border:0;" />
         </a>
       </td></tr>`
     : ''

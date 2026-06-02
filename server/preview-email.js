@@ -47,7 +47,7 @@ function buildInviteEmailHtml({
   const gifBlock = safe.filmGifUrl
     ? `<tr><td style="padding:16px 0;">
         <a href="${safe.inviteUrl}" style="display:block;text-decoration:none;">
-          <img src="${safe.filmGifUrl}" width="600" alt="${safe.filmTitle}" style="display:block;width:100%;max-width:600px;border:0;" />
+          <img src="${safe.filmGifUrl}" width="480" alt="${safe.filmTitle}" style="display:block;width:100%;max-width:600px;border:0;" />
         </a>
       </td></tr>`
     : ''
@@ -127,7 +127,7 @@ const html = buildInviteEmailHtml({
   recipientName: 'Jerry',
   filmTitle: 'A Conversation with Trace & Tina by Ien Chi',
   filmDescription: 'The masses are burning out. The world order is cracking. People are realizing: this system never worked for anyone.',
-  filmGifUrl: 'https://image.mux.com/test123/animated.gif?width=480&fps=12',
+  filmGifUrl: 'https://image.mux.com/test123/animated.gif?width=380&fps=10',
   inviteUrl: 'https://deepcast.art/i/test123',
   inviteOrdinal: 3,
   personalNote: 'This is a personal note!',
