@@ -26,7 +26,7 @@ function formatNamesList(names) {
 }
 
 export default function Dashboard() {
-  const { profile, signOut, fetchProfile } = useAuth()
+  const { profile, signOut, fetchProfile, profileLoaded } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const inviteSentConfirmation = location.state?.inviteSent
@@ -511,7 +511,7 @@ export default function Dashboard() {
     try { sessionStorage.setItem('dash_viewer_sidebar', viewerSidebarOpen ? 'true' : 'false') } catch {}
   }, [viewerSidebarOpen])
 
-  if (!profile) return null
+  if (!profileLoaded || !profile) return null
 
   const statusBadge = {
     processing: 'bg-accent/20 text-accent',
