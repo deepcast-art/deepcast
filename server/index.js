@@ -1531,7 +1531,7 @@ function buildInviteEmailHtml({
   const gifBlock = safe.filmGifUrl
     ? `<tr><td style="padding:16px 0;">
         <a href="${safe.inviteUrl}" style="display:block;text-decoration:none;">
-          <img src="${safe.filmGifUrl}" width="480" alt="${safe.filmTitle}" style="display:block;width:100%;max-width:600px;border:0;" />
+          <img src="${safe.filmGifUrl}" width="340" alt="${safe.filmTitle}" style="display:block;width:100%;max-width:600px;border:0;" />
         </a>
       </td></tr>`
     : ''
