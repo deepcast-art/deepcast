@@ -291,6 +291,7 @@ function withReplyTo(payload, replyEmail) {
 }
 
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'Deepcast <invites@deepcast.art>'
+const FROM_ADDRESS = FROM_EMAIL.match(/<([^>]+)>/)?.[1] || FROM_EMAIL
 
 async function sendInviteEmailResend(payload) {
   if (!resendApiKey) {
@@ -540,6 +541,7 @@ app.post('/api/invites/send', async (req, res) => {
     const emailPayload = withFilmInviteMailingHeaders(
       withReplyTo(
         {
+          from: `${displaySender} <${FROM_ADDRESS}>`,
           to: recipientEmailNorm,
           subject: formatInviteEmailSubject(displaySender),
           html: buildInviteEmailHtml({
@@ -664,6 +666,7 @@ app.post('/api/invites/resend-last', async (req, res) => {
         withFilmInviteMailingHeaders(
           withReplyTo(
             {
+              from: `${displaySender} <${FROM_ADDRESS}>`,
               to: invite.recipient_email,
               subject: formatInviteEmailSubject(displaySender),
               html: htmlBody,
@@ -766,6 +769,7 @@ app.post('/api/invites/resend', async (req, res) => {
         withFilmInviteMailingHeaders(
           withReplyTo(
             {
+              from: `${displaySender} <${FROM_ADDRESS}>`,
               to: invite.recipient_email,
               subject: formatInviteEmailSubject(displaySender),
               html: htmlBody,
@@ -1471,7 +1475,7 @@ function formatInviteEmailSubject(senderName) {
     .split(/\s+/)
     .filter(Boolean)
   const display = parts.length ? parts.join(' ') : 'Someone'
-  return `${display} Has Gifted You a Film`
+  return `${display} has gifted you a film`
 }
 
 function buildInviteEmailPlainText(
