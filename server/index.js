@@ -1543,7 +1543,7 @@ function buildInviteEmailHtml({
   }`
 
   const greetingBlock = safe.recipientName
-    ? `<tr><td style="padding:24px 40px 0;">
+    ? `<tr><td style="padding:0 40px 0;">
         <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:16px;color:#c8d0dc;">Dear ${safe.recipientName},</p>
       </td></tr>`
     : ''
@@ -1555,18 +1555,18 @@ function buildInviteEmailHtml({
 <tr><td align="center" style="padding:0;">
 <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%;background-color:#0c1220;">
 
-<tr><td align="center" style="padding:32px 40px;">
+<tr><td align="center" style="padding:32px 40px 8px;">
   <img src="https://wmtjgpxhjtbocsmutqqc.supabase.co/storage/v1/object/public/film-assets/deepcast-logo.png" width="220" alt="deepcast" style="display:block;border:0;margin:0 auto;" />
 </td></tr>
 
-${greetingBlock}
-
-<tr><td align="center" style="padding:16px 40px 24px;">
+<tr><td align="center" style="padding:0 40px 24px;">
   <p style="margin:0;font-size:10px;letter-spacing:4px;text-transform:uppercase;color:#6b7fa3;font-family:system-ui,-apple-system,sans-serif;">A PRIVATE SCREENING INVITATION</p>
   <p style="margin:8px 0 0;font-size:10px;letter-spacing:3px;color:#6b7fa3;font-family:system-ui,-apple-system,sans-serif;">GIFTED BY ${safe.senderUpper}</p>
 </td></tr>
 
-<tr><td style="padding:0 40px 24px;">
+${greetingBlock}
+
+<tr><td style="padding:16px 40px 24px;">
   <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.7;color:#c8d0dc;">${curatorSentence}</p>
 </td></tr>
 
