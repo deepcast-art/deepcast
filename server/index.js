@@ -361,7 +361,7 @@ app.post('/api/invites/send', async (req, res) => {
       { data: claimedParent },
       { count: preInsertCount, error: inviteCountError },
     ] = await Promise.all([
-      supabase.from('films').select('title, description, thumbnail_url, creator_id, mux_playback_id').eq('id', filmId).single(),
+      supabase.from('films').select('title, description, thumbnail_url, creator_id, mux_playback_id, gif_start, gif_end').eq('id', filmId).single(),
       senderId
         ? supabase.from('users').select('invite_allocation, role, team_creator_id, id, email').eq('id', senderId).single()
         : Promise.resolve({ data: null, error: null }),
@@ -535,7 +535,7 @@ app.post('/api/invites/send', async (req, res) => {
     const displaySenderEmail = senderEmail || null
 
     const filmGifUrl = film.mux_playback_id
-      ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=600&fps=15`
+      ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=600&fps=15${film.gif_start != null ? `&start=${film.gif_start}` : ''}${film.gif_end != null ? `&end=${film.gif_end}` : ''}`
       : null
 
     const emailPayload = withFilmInviteMailingHeaders(
@@ -607,7 +607,7 @@ app.post('/api/invites/resend-last', async (req, res) => {
 
     const { data: film, error: filmError } = await supabase
       .from('films')
-      .select('title, description, thumbnail_url, mux_playback_id')
+      .select('title, description, thumbnail_url, mux_playback_id, gif_start, gif_end')
       .eq('id', filmId)
       .single()
 
@@ -637,7 +637,7 @@ app.post('/api/invites/resend-last', async (req, res) => {
 
     try {
       const filmGifUrl = film.mux_playback_id
-        ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=600&fps=15`
+        ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=600&fps=15${film.gif_start != null ? `&start=${film.gif_start}` : ''}${film.gif_end != null ? `&end=${film.gif_end}` : ''}`
         : null
 
       const htmlBody = buildInviteEmailHtml({
@@ -710,7 +710,7 @@ app.post('/api/invites/resend', async (req, res) => {
 
     const { data: film, error: filmError } = await supabase
       .from('films')
-      .select('title, description, thumbnail_url, mux_playback_id')
+      .select('title, description, thumbnail_url, mux_playback_id, gif_start, gif_end')
       .eq('id', invite.film_id)
       .single()
 
@@ -740,7 +740,7 @@ app.post('/api/invites/resend', async (req, res) => {
 
     try {
       const filmGifUrl = film.mux_playback_id
-        ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=600&fps=15`
+        ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=600&fps=15${film.gif_start != null ? `&start=${film.gif_start}` : ''}${film.gif_end != null ? `&end=${film.gif_end}` : ''}`
         : null
 
       const htmlBody = buildInviteEmailHtml({
