@@ -534,7 +534,7 @@ app.post('/api/invites/send', async (req, res) => {
     const displaySenderEmail = senderEmail || null
 
     const filmGifUrl = film.mux_playback_id
-      ? `https://image.mux.com/${film.mux_playback_id}/animated.gif`
+      ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=600&fps=15`
       : null
 
     const emailPayload = withFilmInviteMailingHeaders(
@@ -635,7 +635,7 @@ app.post('/api/invites/resend-last', async (req, res) => {
 
     try {
       const filmGifUrl = film.mux_playback_id
-        ? `https://image.mux.com/${film.mux_playback_id}/animated.gif`
+        ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=600&fps=15`
         : null
 
       const htmlBody = buildInviteEmailHtml({
@@ -737,7 +737,7 @@ app.post('/api/invites/resend', async (req, res) => {
 
     try {
       const filmGifUrl = film.mux_playback_id
-        ? `https://image.mux.com/${film.mux_playback_id}/animated.gif`
+        ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=600&fps=15`
         : null
 
       const htmlBody = buildInviteEmailHtml({
@@ -1515,6 +1515,7 @@ function buildInviteEmailHtml({
   const safe = {
     senderDisplay: escapeHtml(senderName || 'Someone'),
     senderUpper: escapeHtml((senderName || 'Someone').toUpperCase()),
+    recipientName: escapeHtml(recipientName || ''),
     filmTitle: escapeHtml(filmTitle || ''),
     filmDescription: escapeHtml(filmDescription || ''),
     personalNote: personalNote ? escapeHtml(String(personalNote).trim()) : '',
@@ -1532,6 +1533,7 @@ function buildInviteEmailHtml({
 
   const noteBlock = safe.personalNote
     ? `<tr><td style="padding:40px 40px;">
+        <p style="margin:0 0 16px;font-size:10px;letter-spacing:3px;color:#6b7fa3;font-family:system-ui,-apple-system,sans-serif;">A PERSONAL NOTE FROM ${safe.senderUpper}</p>
         <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-style:normal;font-size:16px;line-height:1.7;color:#e8e4dc;">${safe.personalNote.replace(/\n/g, '<br/>')}</p>
       </td></tr>`
     : ''
@@ -1539,6 +1541,12 @@ function buildInviteEmailHtml({
   const curatorSentence = `${safe.senderDisplay} has thoughtfully curated and shared a short film with you.${
     inviteOrdinal ? ` You are the ${ordinalSuffix(inviteOrdinal)} person to be invited to this private screening.` : ''
   }`
+
+  const greetingBlock = safe.recipientName
+    ? `<tr><td style="padding:0 40px 24px;">
+        <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:16px;color:#c8d0dc;">Dear ${safe.recipientName},</p>
+      </td></tr>`
+    : ''
 
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -1548,15 +1556,14 @@ function buildInviteEmailHtml({
 <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%;background-color:#0c1220;">
 
 <tr><td align="center" style="padding:48px 40px;">
-  <img src="https://wmtjgpxhjtbocsmutqqc.supabase.co/storage/v1/object/public/film-assets/deepcast-logo.png" width="160" alt="deepcast" style="display:block;border:0;margin:0 auto;" />
+  <img src="https://wmtjgpxhjtbocsmutqqc.supabase.co/storage/v1/object/public/film-assets/deepcast-logo.png" width="220" alt="deepcast" style="display:block;border:0;margin:0 auto;" />
 </td></tr>
 
-<tr><td align="center" style="padding:0 40px 20px;">
+${greetingBlock}
+
+<tr><td align="center" style="padding:0 40px 32px;">
   <p style="margin:0;font-size:10px;letter-spacing:4px;text-transform:uppercase;color:#6b7fa3;font-family:system-ui,-apple-system,sans-serif;">A PRIVATE SCREENING INVITATION</p>
-</td></tr>
-
-<tr><td style="padding:0 40px 24px;">
-  <p style="margin:0;font-size:10px;letter-spacing:3px;color:#6b7fa3;font-family:system-ui,-apple-system,sans-serif;">GIFTED BY ${safe.senderUpper}</p>
+  <p style="margin:8px 0 0;font-size:10px;letter-spacing:3px;color:#6b7fa3;font-family:system-ui,-apple-system,sans-serif;">GIFTED BY ${safe.senderUpper}</p>
 </td></tr>
 
 <tr><td style="padding:24px 40px 40px;">
@@ -1568,11 +1575,12 @@ ${noteBlock}
 <tr><td style="padding:0 40px 12px;">
   <p style="margin:0;font-family:system-ui,-apple-system,sans-serif;font-weight:700;font-size:15px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;">${safe.filmTitle}</p>
 </td></tr>
+
+${gifBlock}
+
 <tr><td style="padding:0 40px 48px;">
   <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.7;color:#8a9bb8;">${safe.filmDescription}</p>
 </td></tr>
-
-${gifBlock}
 
 <tr><td align="center" style="padding:0 40px 48px;">
   <table cellpadding="0" cellspacing="0" role="presentation">
