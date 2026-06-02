@@ -713,6 +713,8 @@ export default function InviteScreening() {
   const finalizeEnterScreening = useCallback(() => {
     requestScreeningFullscreen()
     setIsScreeningPaused(false)
+    setShowPostFilm(false)
+    setPassItOnFromUserPause(false)
     setCurrentView('screening')
     setViewVisible(true)
     queueMicrotask(() => {
