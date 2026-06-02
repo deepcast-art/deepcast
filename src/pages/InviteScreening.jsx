@@ -998,9 +998,10 @@ export default function InviteScreening() {
         invite?.id || null
       )
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
+      const [{ data: { session } }] = await Promise.all([
+        supabase.auth.getSession(),
+        refreshFilmInvites(),
+      ])
       if (session?.user?.id) {
         await fetchProfile(session.user.id, session.access_token)
         if (sessionId) {
@@ -1030,7 +1031,6 @@ export default function InviteScreening() {
           name: recipientName,
         },
       ])
-      await refreshFilmInvites()
       setLetterRecipientFirst('')
       setLetterRecipientLast('')
       setLetterRecipientEmail('')

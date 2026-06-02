@@ -170,7 +170,8 @@ export default function InviteForm({
           resolvedSenderId,
           resolvedSenderEmail,
           recipientNote,
-          appUrl
+          appUrl,
+          null
         )
         setSent((prev) => [...prev, recipient])
       }
