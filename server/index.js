@@ -1556,7 +1556,7 @@ function buildInviteEmailHtml({
 <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%;background-color:#0c1220;">
 
 <tr><td align="center" style="padding:32px 40px 8px;">
-  <img src="https://wmtjgpxhjtbocsmutqqc.supabase.co/storage/v1/object/public/film-assets/deepcast-logo.png" width="220" alt="deepcast" style="display:block;border:0;margin:0 auto;" />
+  <img src="https://wmtjgpxhjtbocsmutqqc.supabase.co/storage/v1/object/public/film-assets/deepcast-logo-cropped.png" width="220" alt="deepcast" style="display:block;border:0;margin:0 auto;" />
 </td></tr>
 
 <tr><td align="center" style="padding:0 40px 24px;">
