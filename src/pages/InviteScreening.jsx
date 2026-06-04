@@ -1626,55 +1626,41 @@ export default function InviteScreening() {
                   <div className="w-full h-[0.5px] bg-[#b1a180] opacity-20" />
 
                   <div className="flex flex-col gap-6">
-                    <div className="flex flex-col gap-3">
-                      <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Profile</span>
-                      {(user?.email || profile?.email) && (
-                        <p className="truncate font-sans text-[11px] text-[#dddddd]/50" title={user?.email || profile?.email || ''}>
-                          {user?.email || profile?.email}
-                        </p>
-                      )}
-                      <nav className="flex flex-col gap-2.5">
-                        <Link to="/profile" className="font-sans text-[10px] uppercase tracking-widest text-[#dddddd]/55 transition-colors hover:text-[#dddddd]">Account</Link>
-                        <Link to="/profile#set-password" className="font-sans text-[10px] uppercase tracking-widest text-[#dddddd]/55 transition-colors hover:text-[#dddddd]">Set password</Link>
-                      </nav>
+                    <div className="flex flex-col gap-1">
+                      <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Invites Sent</span>
+                      <span className="font-serif-v3 text-3xl text-[#dddddd]">{sentLetters.length}</span>
                     </div>
-
-                    {token && (
-                      <div className="flex flex-col gap-2">
-                        <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Screening</span>
-                        {dashboardResumeSeconds != null ? (
-                          <a
-                            href={`/i/${token}?play=1&t=${dashboardResumeSeconds}`}
-                            onClick={(e) => {
-                              e.preventDefault()
-                              const fresh = localStorage.getItem(`screening_position_${token}`)
-                              const n = fresh ? parseInt(fresh, 10) : dashboardResumeSeconds
-                              window.location.href = `/i/${token}?play=1&t=${n || 0}`
-                            }}
-                            className="inline-flex w-full items-center justify-center gap-2 border border-[#dddddd]/25 px-4 py-2.5 font-sans text-[10px] uppercase tracking-widest text-[#dddddd]/85 transition-colors hover:border-[#b1a180]/50 hover:text-[#dddddd]"
-                          >
-                            <svg className="h-2.5 w-2.5 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden><path d="M8 5v14l11-7z" /></svg>
-                            Resume
-                          </a>
-                        ) : (
-                          <button type="button" onClick={handleWatchAgainFromStart} className="inline-flex w-full items-center justify-center gap-2 border border-[#b1a180]/45 px-4 py-2.5 font-sans text-[10px] uppercase tracking-widest text-[#b1a180] transition-colors hover:border-[#b1a180] hover:bg-[#b1a180]/10">
-                            <svg className="h-2.5 w-2.5 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden><path d="M8 5v14l11-7z" /></svg>
-                            Watch again
-                          </button>
-                        )}
-                      </div>
-                    )}
+                    <div className="flex flex-col gap-1">
+                      <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Invites Left</span>
+                      <span className="font-serif-v3 text-3xl text-[#b1a180]">{slotsRemaining}</span>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">New Viewers</span>
+                      <span className="font-serif-v3 text-3xl text-[#dddddd]">0</span>
+                    </div>
                   </div>
 
                   <div className="w-full h-[0.5px] bg-[#b1a180] opacity-20" />
 
-                  <button
-                    type="button"
-                    onClick={() => void signOut()}
-                    className="text-[#dddddd]/40 uppercase text-[10px] tracking-widest hover:text-[#dddddd] transition-colors text-left"
-                  >
-                    Sign Out
-                  </button>
+                  <div className="flex flex-col gap-3">
+                    {slotsRemaining > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleOpenShareModal}
+                        className="w-full text-[#b1a180] uppercase text-[10px] tracking-widest border border-[#b1a180]/40 px-4 py-2.5 hover:bg-[#b1a180]/10 transition-colors text-left"
+                      >
+                        Share More
+                      </button>
+                    )}
+                    <Link to="/profile#set-password" className="font-sans text-[10px] uppercase tracking-widest text-[#dddddd]/55 transition-colors hover:text-[#dddddd]">Change password</Link>
+                    <button
+                      type="button"
+                      onClick={() => void signOut()}
+                      className="text-[#dddddd]/40 uppercase text-[10px] tracking-widest hover:text-[#dddddd] transition-colors text-left"
+                    >
+                      Sign Out
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -1691,73 +1677,8 @@ export default function InviteScreening() {
 
               <div className="w-full h-[0.5px] bg-[#b1a180] opacity-20 reveal-up" style={{ transitionDelay: '100ms' }} />
 
-              {/* Profile + screening (left nav) */}
-              <div className="flex flex-col gap-6 reveal-up" style={{ transitionDelay: '110ms' }}>
-                <div className="flex flex-col gap-3">
-                  <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Profile</span>
-                  {(user?.email || profile?.email) && (
-                    <p
-                      className="truncate font-sans text-[11px] text-[#dddddd]/50"
-                      title={user?.email || profile?.email || ''}
-                    >
-                      {user?.email || profile?.email}
-                    </p>
-                  )}
-                  <nav className="flex flex-col gap-2.5">
-                    <Link
-                      to="/profile"
-                      className="font-sans text-[10px] uppercase tracking-widest text-[#dddddd]/55 transition-colors hover:text-[#dddddd]"
-                    >
-                      Account
-                    </Link>
-                    <Link
-                      to="/profile#set-password"
-                      className="font-sans text-[10px] uppercase tracking-widest text-[#dddddd]/55 transition-colors hover:text-[#dddddd]"
-                    >
-                      Set password
-                    </Link>
-                  </nav>
-                </div>
-
-                {token && (
-                  <div className="flex flex-col gap-2">
-                    <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Screening</span>
-                    {dashboardResumeSeconds != null ? (
-                      <a
-                        href={`/i/${token}?play=1&t=${dashboardResumeSeconds}`}
-                        onClick={(e) => {
-                          e.preventDefault()
-                          const fresh = localStorage.getItem(`screening_position_${token}`)
-                          const n = fresh ? parseInt(fresh, 10) : dashboardResumeSeconds
-                          window.location.href = `/i/${token}?play=1&t=${n || 0}`
-                        }}
-                        className="inline-flex w-full items-center justify-center gap-2 border border-[#dddddd]/25 px-4 py-2.5 font-sans text-[10px] uppercase tracking-widest text-[#dddddd]/85 transition-colors hover:border-[#b1a180]/50 hover:text-[#dddddd]"
-                      >
-                        <svg className="h-2.5 w-2.5 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden>
-                          <path d="M8 5v14l11-7z" />
-                        </svg>
-                        Resume
-                      </a>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={handleWatchAgainFromStart}
-                        className="inline-flex w-full items-center justify-center gap-2 border border-[#b1a180]/45 px-4 py-2.5 font-sans text-[10px] uppercase tracking-widest text-[#b1a180] transition-colors hover:border-[#b1a180] hover:bg-[#b1a180]/10"
-                      >
-                        <svg className="h-2.5 w-2.5 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden>
-                          <path d="M8 5v14l11-7z" />
-                        </svg>
-                        Watch again
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="w-full h-[0.5px] bg-[#b1a180] opacity-20 reveal-up" style={{ transitionDelay: '120ms' }} />
-
               {/* Stats */}
-              <div className="flex flex-col gap-6 reveal-up" style={{ transitionDelay: '200ms' }}>
+              <div className="flex flex-col gap-6 reveal-up" style={{ transitionDelay: '110ms' }}>
                 <div className="flex flex-col gap-1">
                   <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Invites Sent</span>
                   <span className="font-serif-v3 text-3xl text-[#dddddd]">{sentLetters.length}</span>
@@ -1772,10 +1693,10 @@ export default function InviteScreening() {
                 </div>
               </div>
 
-              <div className="w-full h-[0.5px] bg-[#b1a180] opacity-20 reveal-up" style={{ transitionDelay: '300ms' }} />
+              <div className="w-full h-[0.5px] bg-[#b1a180] opacity-20 reveal-up" style={{ transitionDelay: '200ms' }} />
 
               {/* Actions */}
-              <div className="flex flex-col gap-3 reveal-up" style={{ transitionDelay: '350ms' }}>
+              <div className="flex flex-col gap-3 reveal-up" style={{ transitionDelay: '250ms' }}>
                 {slotsRemaining > 0 && (
                   <button
                     type="button"
@@ -1785,6 +1706,12 @@ export default function InviteScreening() {
                     Share More
                   </button>
                 )}
+                <Link
+                  to="/profile#set-password"
+                  className="font-sans text-[10px] uppercase tracking-widest text-[#dddddd]/55 transition-colors hover:text-[#dddddd]"
+                >
+                  Change password
+                </Link>
                 <button
                   type="button"
                   onClick={() => void signOut()}
