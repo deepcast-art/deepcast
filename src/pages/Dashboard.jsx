@@ -35,7 +35,7 @@ export default function Dashboard() {
   const [films, setFilms] = useState([])
   const [filmStats, setFilmStats] = useState({})
   const [inviteTree, setInviteTree] = useState({})
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!profileLoaded)
   const [inviteFilmId, setInviteFilmId] = useState(null)
   const [inviteSentByFilm, setInviteSentByFilm] = useState({})
   const inviteSentTimeouts = useRef({})
@@ -65,7 +65,9 @@ export default function Dashboard() {
 
   const [newestInviteId, setNewestInviteId] = useState(null)
   const [allViewerSentInvites, setAllViewerSentInvites] = useState([])
-  const [viewerFilmId, setViewerFilmId] = useState(null)
+  const [viewerFilmId, setViewerFilmId] = useState(() => {
+    try { return sessionStorage.getItem('dash_viewer_film_id') || null } catch { return null }
+  })
   const [viewerFilmTitle, setViewerFilmTitle] = useState('')
   const [viewerInviteToken, setViewerInviteToken] = useState(null)
   const [viewerFilmInvites, setViewerFilmInvites] = useState([])
@@ -223,6 +225,7 @@ export default function Dashboard() {
   const selectViewerFilm = useCallback(async (filmId) => {
     if (!filmId) {
       setViewerFilmId(null)
+      try { sessionStorage.removeItem('dash_viewer_film_id') } catch {}
       setViewerFilmTitle('')
       setViewerFilmInvites([])
       setViewerCreatorName('')
@@ -231,6 +234,7 @@ export default function Dashboard() {
     }
 
     setViewerFilmId(filmId)
+    try { sessionStorage.setItem('dash_viewer_film_id', filmId) } catch {}
 
     const { data: filmRow } = await supabase
       .from('films')
@@ -317,13 +321,6 @@ export default function Dashboard() {
         // Primary film = most recent received
         if (!filmId) filmId = uniqueRecvd[0]?.film_id
 
-        // If returning from a specific screening, restore that film regardless of default order
-        const returnToken = location.state?.screeningToken
-        if (returnToken) {
-          const match = uniqueRecvd.find(r => r.token === returnToken)
-          if (match?.film_id) filmId = match.film_id
-        }
-
         setViewerInviteToken(
           tokenByFilmId[filmId] || uniqueRecvd[0]?.token || localStorage.getItem('viewer_invite_token') || null
         )
@@ -338,6 +335,7 @@ export default function Dashboard() {
     }
 
     setViewerFilmId(filmId)
+    try { sessionStorage.setItem('dash_viewer_film_id', filmId) } catch {}
 
     const { data: filmRow } = await supabase
       .from('films')
@@ -411,7 +409,6 @@ export default function Dashboard() {
   }, [profile?.id, profile?.role])
 
   async function loadDashboard() {
-    setLoading(true)
     try {
       if (profile.role === 'viewer') {
         await loadViewerDashboard()
