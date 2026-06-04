@@ -1270,87 +1270,137 @@ app.post('/api/team/register', async (req, res) => {
   }
 })
 
-/**
- * Viewer self-signup completion when Supabase email confirmation is enabled.
- * supabase.auth.signUp returns a user but no session until the email is confirmed, so the
- * client can't write the profile (RLS needs auth.uid()) or sign in. This endpoint, using the
- * service role, verifies the user, confirms their email, and upserts the profile row so the
- * client can immediately retry signInWithPassword.
- */
-app.post('/api/users/ensure-profile', async (req, res) => {
-  try {
-    const { userId, email, name, role, firstName, lastName } = req.body || {}
-    const id = typeof userId === 'string' ? userId.trim() : ''
-    const emailNorm = normalizeEmail(email)
+/** Find an auth user by email via the admin API (small scale; paginates defensively). */
+async function findAuthUserByEmail(emailNorm) {
+  let page = 1
+  for (;;) {
+    const { data: list, error } = await supabase.auth.admin.listUsers({ page, perPage: 1000 })
+    if (error) {
+      console.error('findAuthUserByEmail listUsers:', error)
+      return null
+    }
+    const found = (list?.users || []).find((u) => normalizeEmail(u.email) === emailNorm)
+    if (found) return found
+    if (!list?.users?.length || list.users.length < 1000) return null
+    page += 1
+  }
+}
 
-    if (!id || !emailNorm) {
-      return res.status(400).json({ error: 'userId and email are required' })
+/**
+ * Invite-gated account creation for the Seal & Send / pass-it-on flow.
+ *
+ * Security invariant: an account can ONLY ever be created for an email that was genuinely
+ * invited. The account email is derived server-side from invite.recipient_email (looked up by
+ * the unguessable token) — the client cannot assert an arbitrary email. Existing accounts are
+ * never modified beyond confirming the email; passwords are never overwritten (no takeover).
+ *
+ * Creates the auth user (email pre-confirmed) and the profile row using the service role, so
+ * the client can immediately signInWithPassword and obtain a persisted session.
+ */
+app.post('/api/invites/claim-account', async (req, res) => {
+  try {
+    const { token, password, name } = req.body || {}
+    const t = typeof token === 'string' ? token.trim() : ''
+    if (!t) return res.status(400).json({ error: 'Invite token is required' })
+    if (!password || String(password).length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' })
     }
 
     if (supabaseKeyRole !== 'service_role') {
       return res.status(503).json({
-        error: 'Profile creation is not fully configured on this server',
+        error: 'Account creation is not fully configured on this server',
         details:
-          'Add SUPABASE_SERVICE_ROLE_KEY to the API environment. The account was created, but confirming the email and writing the profile requires the Supabase service role key.',
+          'Add SUPABASE_SERVICE_ROLE_KEY to the API environment. Creating the account requires the Supabase service role key.',
       })
     }
 
-    // Verify the userId and email match before confirming or writing anything.
-    const { data: authData, error: authErr } = await supabase.auth.admin.getUserById(id)
-    if (authErr || !authData?.user?.id) {
-      return res.status(404).json({ error: 'Auth user not found' })
+    // 1) The token is the capability: look up the invite and derive the email from it.
+    //    The client-supplied email (if any) is intentionally ignored.
+    const { data: invite, error: invErr } = await supabase
+      .from('invites')
+      .select('id, recipient_email, recipient_name')
+      .eq('token', t)
+      .maybeSingle()
+    if (invErr) {
+      console.error('claim-account invite lookup:', invErr)
+      return res.status(500).json({ error: 'Failed to load invitation' })
     }
-    if (normalizeEmail(authData.user.email) !== emailNorm) {
-      return res.status(400).json({ error: 'Email does not match the auth user' })
+    if (!invite) return res.status(404).json({ error: 'Invitation not found' })
+
+    const emailNorm = normalizeEmail(invite.recipient_email)
+    if (!emailNorm || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm)) {
+      return res.status(422).json({ error: 'This invitation has no valid recipient email' })
     }
 
-    // Confirm the email so signInWithPassword will succeed.
-    const { error: confirmErr } = await supabase.auth.admin.updateUserById(id, {
-      email_confirm: true,
-    })
-    if (confirmErr) {
-      console.error('ensure-profile confirm email:', confirmErr)
-      return res.status(500).json({ error: 'Failed to confirm email' })
+    const displayName =
+      typeof name === 'string' && name.trim()
+        ? name.trim()
+        : invite.recipient_name && invite.recipient_name.trim()
+          ? invite.recipient_name.trim()
+          : emailNorm.split('@')[0]
+    const parts = displayName.split(/\s+/)
+    const firstName = parts[0] || displayName
+    const lastName = parts.slice(1).join(' ') || ''
+
+    // 2) Find-or-create the auth user for the invited email.
+    const existingAuthUser = await findAuthUserByEmail(emailNorm)
+    let userId
+    let created = false
+
+    if (existingAuthUser) {
+      userId = existingAuthUser.id
+      // Confirm if needed, but NEVER change an existing account's password.
+      if (!existingAuthUser.email_confirmed_at) {
+        await supabase.auth.admin.updateUserById(userId, { email_confirm: true })
+      }
+    } else {
+      const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
+        email: emailNorm,
+        password: String(password),
+        email_confirm: true,
+        user_metadata: { full_name: displayName },
+      })
+      if (authErr || !authData?.user?.id) {
+        const msg = authErr?.message || 'Could not create account'
+        if (/already|registered|exists/i.test(msg)) {
+          // Raced with another create — return conflict so the client signs in instead.
+          return res.status(409).json({ error: 'An account already exists for this email', email: emailNorm })
+        }
+        console.error('claim-account createUser:', authErr)
+        return res.status(500).json({ error: msg })
+      }
+      userId = authData.user.id
+      created = true
     }
 
-    const safeRole = role === 'creator' || role === 'team_member' ? role : 'viewer'
-    const safeName =
-      typeof name === 'string' && name.trim() ? name.trim() : emailNorm.split('@')[0]
-    const safeFirst =
-      typeof firstName === 'string' && firstName.trim()
-        ? firstName.trim()
-        : safeName.split(/\s+/)[0] || safeName
-    const safeLast =
-      typeof lastName === 'string' && lastName.trim()
-        ? lastName.trim()
-        : safeName.split(/\s+/).slice(1).join(' ') || ''
-
-    const { data: profile, error: profileErr } = await supabase
+    // 3) Ensure a profile row exists — insert only if missing, so we never clobber an
+    //    existing profile's role/allocation.
+    const { data: existingProfile } = await supabase
       .from('users')
-      .upsert(
-        {
-          id,
-          email: emailNorm,
-          name: safeName,
-          first_name: safeFirst,
-          last_name: safeLast,
-          role: safeRole,
-          invite_allocation: safeRole === 'creator' ? 0 : 5,
-        },
-        { onConflict: 'id' }
-      )
-      .select()
-      .single()
+      .select('id')
+      .eq('id', userId)
+      .maybeSingle()
 
-    if (profileErr) {
-      console.error('ensure-profile upsert:', profileErr)
-      return res.status(500).json({ error: 'Failed to create profile' })
+    if (!existingProfile) {
+      const { error: profileErr } = await supabase.from('users').insert({
+        id: userId,
+        email: emailNorm,
+        name: displayName,
+        first_name: firstName,
+        last_name: lastName,
+        role: 'viewer',
+        invite_allocation: 5,
+      })
+      if (profileErr) {
+        console.error('claim-account profile insert:', profileErr)
+        return res.status(500).json({ error: 'Failed to create profile' })
+      }
     }
 
-    res.json({ success: true, profile })
+    res.json({ success: true, userId, email: emailNorm, created })
   } catch (err) {
-    console.error('ensure-profile error:', err)
-    res.status(500).json({ error: 'Failed to ensure profile' })
+    console.error('claim-account error:', err)
+    res.status(500).json({ error: 'Account creation failed' })
   }
 })
 

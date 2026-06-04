@@ -122,7 +122,7 @@ export default function InviteScreening() {
   const directPlay = searchParams.get('play') === '1'
   const startTimeParam = searchParams.get('t')
   const navigate = useNavigate()
-  const { signUp, signOut, fetchProfile, user, profile } = useAuth()
+  const { claimInviteAccount, signOut, fetchProfile, user, profile } = useAuth()
   const isDesktop = useMediaQueryMdUp()
   const isLgUp = useMediaQueryLgUp()
   const isIOSDevice = useMemo(() => isIOS(), [])
@@ -933,7 +933,7 @@ export default function InviteScreening() {
       setLetterError('Please enter your name and a valid email.')
       return
     }
-    // Password length is not a hard blocker — signUp failure is caught silently and the invite still sends.
+    // Password length is not a hard blocker — account creation failure is logged and the invite still sends.
     if (slotsRemaining <= 0) {
       setLetterError('All invitations have been sent.')
       return
@@ -945,23 +945,26 @@ export default function InviteScreening() {
 
       if (user?.id && isInviteRecipientSession) {
         senderId = user.id
-      } else {
-        const accountEmail = letterSenderEmail.trim() || (invite?.recipient_email || '').trim()
+      } else if (token) {
+        // First-time sharer: create their account + profile server-side, gated by the invite
+        // token. The account is for invite.recipient_email (derived server-side), never a
+        // client-supplied address. On success this also signs them in (persisted session), so
+        // `user` becomes non-null for the rest of the flow.
         const accountName = profile?.name?.trim() || letterSenderName.trim()
-        if (accountEmail && accountEmail.includes('@')) {
-          const pwd = newPassword.trim() || Array.from(
-            { length: 24 },
-            () => 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^'[
-              Math.floor(Math.random() * 58)
-            ]
-          ).join('')
-          try {
-            const r = await signUp(accountEmail, pwd, accountName, 'viewer', accountName, '')
-            senderId = r?.user?.id || null
-          } catch {
-            // Existing account — use their current session's id if available
-            senderId = user?.id || null
-          }
+        const pwd = newPassword.trim() || Array.from(
+          { length: 24 },
+          () => 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^'[
+            Math.floor(Math.random() * 58)
+          ]
+        ).join('')
+        try {
+          const r = await claimInviteAccount(token, pwd, accountName)
+          senderId = r?.userId || null
+        } catch (claimErr) {
+          // Don't block passing the film on — the invite still sends. Surface for diagnostics
+          // rather than swallowing silently.
+          console.warn('claimInviteAccount failed:', claimErr?.message || claimErr)
+          senderId = user?.id || null
         }
       }
 

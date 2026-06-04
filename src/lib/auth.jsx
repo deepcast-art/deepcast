@@ -291,24 +291,7 @@ export function AuthProvider({ children }) {
       let activeSession = data.session
 
       if (!activeSession && activeUser) {
-        // Email confirmation is enabled, so signUp returned no session. Confirm the email and
-        // write the profile server-side (service role), then retry sign-in — which now succeeds.
-        try {
-          await fetch('/api/users/ensure-profile', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId: activeUser.id,
-              email,
-              name,
-              role,
-              firstName,
-              lastName,
-            }),
-          })
-        } catch (ensureErr) {
-          console.warn('ensure-profile failed:', ensureErr?.message || ensureErr)
-        }
+        await new Promise(resolve => setTimeout(resolve, 500))
 
         const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
           email,
@@ -316,11 +299,8 @@ export function AuthProvider({ children }) {
         })
 
         if (signInError) {
-          // Email is confirmed and the profile is written server-side; don't block the invite
-          // flow. Return the user without a session so callers see a non-null user.
           isSigningUp.current = false
-          setUser(activeUser)
-          return { ...data, user: activeUser, session: null, profile }
+          throw new Error('Account created but email confirmation may be required. Please check your inbox and then sign in.')
         }
 
         activeUser = signInData?.user || activeUser
@@ -392,6 +372,50 @@ export function AuthProvider({ children }) {
     return { ...data, profile: currentProfile }
   }
 
+  /**
+   * Invite-gated account creation for the Seal & Send / pass-it-on flow.
+   *
+   * The server (service role) creates the auth user + profile for the invite's recipient_email
+   * (derived from the token — never a client-asserted email) with the email pre-confirmed.
+   * We then signInWithPassword to obtain a *persisted* Supabase session, so `user` is non-null
+   * across navigation and component remounts (Resume button, pause → dashboard).
+   */
+  const claimInviteAccount = async (token, password, name) => {
+    setProfileLoaded(false)
+
+    const res = await fetch('/api/invites/claim-account', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, password, name }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      throw new Error(data.error || 'Account creation failed')
+    }
+
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      email: data.email,
+      password,
+    })
+    if (signInError) {
+      // Profile/account exist server-side, but sign-in failed (e.g. a returning viewer whose
+      // existing password differs from the one supplied here). Surface for the caller.
+      throw new Error(signInError.message || 'Account ready — please sign in to continue.')
+    }
+
+    setSession(signInData.session)
+    setUser(signInData.user)
+    const prof = await fetchProfile(signInData.user.id, signInData.session?.access_token)
+
+    return {
+      userId: data.userId,
+      email: data.email,
+      user: signInData.user,
+      session: signInData.session,
+      profile: prof,
+    }
+  }
+
   const signOut = async () => {
     const { error } = await supabase.auth.signOut()
     if (error) throw error
@@ -418,7 +442,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, loading, profileLoaded, isRecovery, signUp, signIn, signOut, fetchProfile, resetPassword, updatePassword }}
+      value={{ session, user, profile, loading, profileLoaded, isRecovery, signUp, signIn, claimInviteAccount, signOut, fetchProfile, resetPassword, updatePassword }}
     >
       {children}
     </AuthContext.Provider>
