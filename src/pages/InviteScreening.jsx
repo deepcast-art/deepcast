@@ -175,33 +175,27 @@ export default function InviteScreening() {
   const [letterRecipientEmail, setLetterRecipientEmail] = useState('')
   const [letterSenderName, setLetterSenderName] = useState('')
   const [letterSenderEmail, setLetterSenderEmail] = useState('')
-  const [sentLetters, setSentLetters] = useState([])
   const [letterSending, setLetterSending] = useState(false)
   const [letterError, setLetterError] = useState('')
   const [letterSuccess, setLetterSuccess] = useState('')
   const [newPassword, setNewPassword] = useState('')
 
-  // Seed sentLetters from previously-sent invites so slotsRemaining persists across page loads
-  const sentLettersSeeded = useRef(false)
-  useEffect(() => {
-    if (sentLettersSeeded.current || !invite?.id || !filmInvites.length) return
-    const prior = filmInvites.filter((fi) => fi.parent_invite_id === invite.id)
-    if (prior.length) {
-      sentLettersSeeded.current = true
-      setSentLetters((prev) => {
-        const existingEmails = new Set(prev.map((l) => l.email))
-        const newOnes = prior
-          .filter((fi) => !existingEmails.has(fi.recipient_email))
-          .map((fi) => ({
-            id: fi.id,
-            firstName: (fi.recipient_name || '').split(/\s+/)[0] || '',
-            lastName: (fi.recipient_name || '').split(/\s+/).slice(1).join(' ') || '',
-            email: fi.recipient_email || '',
-            name: fi.recipient_name || fi.recipient_email || '',
-          }))
-        return newOnes.length ? [...prev, ...newOnes] : prev
-      })
-    }
+  // Sent-invite list derived from the DB (filmInvites) — the single source of truth.
+  // Selects exactly the invites whose parent is the current viewer's own invite, so other
+  // senders' invites for the same film stay excluded. This is the same filter the previous
+  // seed effect used; deriving it (rather than writing setSentLetters separately) prevents the
+  // first send from being added twice and guarantees each letter.id is the real DB invite id.
+  const sentLetters = useMemo(() => {
+    if (!invite?.id || !filmInvites.length) return []
+    return filmInvites
+      .filter((fi) => fi.parent_invite_id === invite.id)
+      .map((fi) => ({
+        id: fi.id,
+        firstName: (fi.recipient_name || '').split(/\s+/)[0] || '',
+        lastName: (fi.recipient_name || '').split(/\s+/).slice(1).join(' ') || '',
+        email: fi.recipient_email || '',
+        name: fi.recipient_name || fi.recipient_email || '',
+      }))
   }, [invite?.id, filmInvites])
 
   const [preScreeningPrologue, setPreScreeningPrologue] = useState({
@@ -1025,16 +1019,8 @@ export default function InviteScreening() {
         localStorage.setItem(`screening_position_${token}`, Math.floor(muxEl.currentTime))
       }
 
-      setSentLetters((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          firstName: letterRecipientFirst.trim(),
-          lastName: letterRecipientLast.trim(),
-          email: letterRecipientEmail.trim(),
-          name: recipientName,
-        },
-      ])
+      // sentLetters is derived from filmInvites; refreshFilmInvites() above already pulled in
+      // the new invite, so the dashboard list updates on its own — no manual append needed.
       setLetterRecipientFirst('')
       setLetterRecipientLast('')
       setLetterRecipientEmail('')
@@ -1197,16 +1183,7 @@ export default function InviteScreening() {
           )
         )
       )
-      setSentLetters((prev) => [
-        ...prev,
-        ...valid.map((l) => ({
-          id: l.id,
-          name: `${l.firstName.trim()} ${l.lastName.trim()}`.trim(),
-          firstName: l.firstName.trim(),
-          lastName: l.lastName.trim(),
-          email: l.email.trim(),
-        })),
-      ])
+      // sentLetters is derived from filmInvites; refreshing pulls the new invites into the list.
       await refreshFilmInvites()
     } catch {
       // silent — modal closes regardless
