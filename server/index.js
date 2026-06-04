@@ -360,6 +360,7 @@ app.post('/api/invites/send', async (req, res) => {
       { data: sender, error: senderError },
       { data: claimedParent },
       { count: preInsertCount, error: inviteCountError },
+      { data: existingInvite },
     ] = await Promise.all([
       supabase.from('films').select('title, description, thumbnail_url, creator_id, mux_playback_id, gif_start, gif_end').eq('id', filmId).single(),
       senderId
@@ -369,6 +370,7 @@ app.post('/api/invites/send', async (req, res) => {
         ? supabase.from('invites').select('id, film_id').eq('id', clientParentInviteId).maybeSingle()
         : Promise.resolve({ data: null, error: null }),
       supabase.from('invites').select('*', { count: 'exact', head: true }).eq('film_id', filmId),
+      supabase.from('invites').select('id').eq('film_id', filmId).ilike('recipient_email', recipientEmailNorm).limit(1).maybeSingle(),
     ])
 
     if (inviteCountError) {
@@ -378,6 +380,10 @@ app.post('/api/invites/send', async (req, res) => {
     // ── Phase 2: validation (no DB) ────────────────────────────────────────
     if (filmLookupError || !film) {
       return res.status(404).json({ error: 'Film not found' })
+    }
+
+    if (existingInvite) {
+      return res.status(409).json({ error: 'This person has already been invited to this film.' })
     }
 
     let unlimitedInvites = false
