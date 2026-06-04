@@ -320,14 +320,7 @@ export default function InviteScreening() {
         setInvite(r.invite)
         setFilm(r.film)
         if (r.sessionId) setSessionId(r.sessionId)
-        const name =
-          (typeof r.senderDisplayName === 'string' &&
-            r.senderDisplayName.trim()) ||
-          r.invite?.sender_name?.trim() ||
-          (r.invite?.sender_email
-            ? r.invite.sender_email.split('@')[0]
-            : '') ||
-          'A friend'
+        const name = (typeof r.senderDisplayName === 'string' && r.senderDisplayName.trim()) || null
         setSharerDisplayName(name)
         if (Array.isArray(r.filmInvites)) setFilmInvites(r.filmInvites)
         if (typeof r.creatorName === 'string') setCreatorName(r.creatorName)
@@ -881,7 +874,6 @@ export default function InviteScreening() {
     // Clear stored position so "watch again" always starts from the beginning
     if (token) localStorage.removeItem(`screening_position_${token}`)
 
-    // Signed in → dashboard (thank-you / pass-it-on flow is for guests)
     if (user?.id) {
       if (token) localStorage.setItem('viewer_invite_token', token)
       if (sessionId) {
@@ -890,6 +882,14 @@ export default function InviteScreening() {
           .update({ viewer_id: user.id })
           .eq('id', sessionId)
           .then(() => {})
+      }
+      // Returning viewer who has already shared: show the thank-you screen with a dashboard link
+      // instead of silently navigating away. First-time viewers still go straight to the dashboard.
+      if (sentLetters.length > 0) {
+        if (!isLgUp) exitScreeningFullscreen()
+        setShowPostFilm(true)
+        setCompletionThankYouVisible(true)
+        return
       }
       navigate('/dashboard', { replace: true, state: { screeningToken: token } })
       return
@@ -1524,10 +1524,17 @@ export default function InviteScreening() {
                     </p>
                     <button
                       type="button"
-                      onClick={() => setCompletionThankYouVisible(false)}
+                      onClick={() => navigate('/dashboard', { replace: true, state: { screeningToken: token } })}
                       className="mt-2 w-full max-w-xs py-3.5 min-h-[52px] bg-[#b1a180]/22 hover:bg-[#b1a180]/34 active:bg-[#b1a180]/42 border border-[#b1a180]/45 text-[#f5f2ec] font-sans text-[11px] tracking-[0.32em] uppercase transition-colors rounded-sm touch-manipulation"
                     >
-                      Continue
+                      Go to dashboard
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCompletionThankYouVisible(false)}
+                      className="w-full max-w-xs py-2 font-sans text-[10px] uppercase tracking-[0.28em] text-[#dddddd]/35 hover:text-[#dddddd]/60 transition-colors touch-manipulation"
+                    >
+                      Share more
                     </button>
                   </div>
                 </div>

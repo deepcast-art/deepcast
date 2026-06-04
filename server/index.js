@@ -364,7 +364,7 @@ app.post('/api/invites/send', async (req, res) => {
     ] = await Promise.all([
       supabase.from('films').select('title, description, thumbnail_url, creator_id, mux_playback_id, gif_start, gif_end').eq('id', filmId).single(),
       senderId
-        ? supabase.from('users').select('invite_allocation, role, team_creator_id, id, email').eq('id', senderId).single()
+        ? supabase.from('users').select('invite_allocation, role, team_creator_id, id, email, name').eq('id', senderId).single()
         : Promise.resolve({ data: null, error: null }),
       clientParentInviteId
         ? supabase.from('invites').select('id, film_id').eq('id', clientParentInviteId).maybeSingle()
@@ -527,7 +527,7 @@ app.post('/api/invites/send', async (req, res) => {
 
     // ── Phase 5: respond immediately, then send email in background ────────
     const baseUrl = resolveBaseUrl(appUrl, req.get('origin'))
-    const senderFirst = senderName ? senderName.trim().split(/\s+/)[0] : ''
+    const senderFirst = sender?.name?.trim().split(/\s+/)[0] || ''
     const recipientFirstName = recipientName ? recipientName.trim().split(/\s+/)[0] : null
     const ctx = encryptInviteCtx(senderFirst, recipientFirstName || '')
     const inviteUrl = ctx ? `${baseUrl}/i/${token}?ctx=${ctx}` : `${baseUrl}/i/${token}`
@@ -637,7 +637,11 @@ app.post('/api/invites/resend-last', async (req, res) => {
     const recipientFirstName = invite.recipient_name
       ? invite.recipient_name.trim().split(/\s+/)[0]
       : null
-    const senderFirst = invite.sender_name ? invite.sender_name.trim().split(/\s+/)[0] : ''
+    let senderFirst = ''
+    if (invite.sender_id) {
+      const { data: senderProfile } = await supabase.from('users').select('name').eq('id', invite.sender_id).single()
+      senderFirst = senderProfile?.name?.trim().split(/\s+/)[0] || ''
+    }
     const ctx = encryptInviteCtx(senderFirst, recipientFirstName || '')
     const inviteUrl = ctx ? `${baseUrl}/i/${invite.token}?ctx=${ctx}` : `${baseUrl}/i/${invite.token}`
 
@@ -740,7 +744,11 @@ app.post('/api/invites/resend', async (req, res) => {
     const recipientFirstName = invite.recipient_name
       ? invite.recipient_name.trim().split(/\s+/)[0]
       : null
-    const senderFirst = invite.sender_name ? invite.sender_name.trim().split(/\s+/)[0] : ''
+    let senderFirst = ''
+    if (invite.sender_id) {
+      const { data: senderProfile } = await supabase.from('users').select('name').eq('id', invite.sender_id).single()
+      senderFirst = senderProfile?.name?.trim().split(/\s+/)[0] || ''
+    }
     const ctx = encryptInviteCtx(senderFirst, recipientFirstName || '')
     const inviteUrl = ctx ? `${baseUrl}/i/${invite.token}?ctx=${ctx}` : `${baseUrl}/i/${invite.token}`
 
@@ -1399,8 +1407,8 @@ app.get('/api/invites/validate/:token', async (req, res) => {
       console.error('Watch session create error:', sessionError.message || sessionError)
     }
 
-    /** Prefer live profile name so the screening intro shows who actually shared (not stale invite.sender_name). */
-    let senderDisplayName = inv.sender_name?.trim() || null
+    /** Sender name must come exclusively from the sender's live profile — never from stale invite fields or email. */
+    let senderDisplayName = null
     if (inv.sender_id) {
       const { data: senderUser } = await supabase
         .from('users')
@@ -1410,9 +1418,6 @@ app.get('/api/invites/validate/:token', async (req, res) => {
       if (senderUser?.name?.trim()) {
         senderDisplayName = senderUser.name.trim()
       }
-    }
-    if (!senderDisplayName && inv.sender_email) {
-      senderDisplayName = inv.sender_email.split('@')[0] || null
     }
 
     /** All invites for this film — used by the viewer's network map. Service role bypasses RLS. */
