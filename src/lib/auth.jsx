@@ -291,7 +291,24 @@ export function AuthProvider({ children }) {
       let activeSession = data.session
 
       if (!activeSession && activeUser) {
-        await new Promise(resolve => setTimeout(resolve, 500))
+        // Email confirmation is enabled, so signUp returned no session. Confirm the email and
+        // write the profile server-side (service role), then retry sign-in — which now succeeds.
+        try {
+          await fetch('/api/users/ensure-profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: activeUser.id,
+              email,
+              name,
+              role,
+              firstName,
+              lastName,
+            }),
+          })
+        } catch (ensureErr) {
+          console.warn('ensure-profile failed:', ensureErr?.message || ensureErr)
+        }
 
         const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
           email,
@@ -299,8 +316,11 @@ export function AuthProvider({ children }) {
         })
 
         if (signInError) {
+          // Email is confirmed and the profile is written server-side; don't block the invite
+          // flow. Return the user without a session so callers see a non-null user.
           isSigningUp.current = false
-          throw new Error('Account created but email confirmation may be required. Please check your inbox and then sign in.')
+          setUser(activeUser)
+          return { ...data, user: activeUser, session: null, profile }
         }
 
         activeUser = signInData?.user || activeUser

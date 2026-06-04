@@ -1270,6 +1270,90 @@ app.post('/api/team/register', async (req, res) => {
   }
 })
 
+/**
+ * Viewer self-signup completion when Supabase email confirmation is enabled.
+ * supabase.auth.signUp returns a user but no session until the email is confirmed, so the
+ * client can't write the profile (RLS needs auth.uid()) or sign in. This endpoint, using the
+ * service role, verifies the user, confirms their email, and upserts the profile row so the
+ * client can immediately retry signInWithPassword.
+ */
+app.post('/api/users/ensure-profile', async (req, res) => {
+  try {
+    const { userId, email, name, role, firstName, lastName } = req.body || {}
+    const id = typeof userId === 'string' ? userId.trim() : ''
+    const emailNorm = normalizeEmail(email)
+
+    if (!id || !emailNorm) {
+      return res.status(400).json({ error: 'userId and email are required' })
+    }
+
+    if (supabaseKeyRole !== 'service_role') {
+      return res.status(503).json({
+        error: 'Profile creation is not fully configured on this server',
+        details:
+          'Add SUPABASE_SERVICE_ROLE_KEY to the API environment. The account was created, but confirming the email and writing the profile requires the Supabase service role key.',
+      })
+    }
+
+    // Verify the userId and email match before confirming or writing anything.
+    const { data: authData, error: authErr } = await supabase.auth.admin.getUserById(id)
+    if (authErr || !authData?.user?.id) {
+      return res.status(404).json({ error: 'Auth user not found' })
+    }
+    if (normalizeEmail(authData.user.email) !== emailNorm) {
+      return res.status(400).json({ error: 'Email does not match the auth user' })
+    }
+
+    // Confirm the email so signInWithPassword will succeed.
+    const { error: confirmErr } = await supabase.auth.admin.updateUserById(id, {
+      email_confirm: true,
+    })
+    if (confirmErr) {
+      console.error('ensure-profile confirm email:', confirmErr)
+      return res.status(500).json({ error: 'Failed to confirm email' })
+    }
+
+    const safeRole = role === 'creator' || role === 'team_member' ? role : 'viewer'
+    const safeName =
+      typeof name === 'string' && name.trim() ? name.trim() : emailNorm.split('@')[0]
+    const safeFirst =
+      typeof firstName === 'string' && firstName.trim()
+        ? firstName.trim()
+        : safeName.split(/\s+/)[0] || safeName
+    const safeLast =
+      typeof lastName === 'string' && lastName.trim()
+        ? lastName.trim()
+        : safeName.split(/\s+/).slice(1).join(' ') || ''
+
+    const { data: profile, error: profileErr } = await supabase
+      .from('users')
+      .upsert(
+        {
+          id,
+          email: emailNorm,
+          name: safeName,
+          first_name: safeFirst,
+          last_name: safeLast,
+          role: safeRole,
+          invite_allocation: safeRole === 'creator' ? 0 : 5,
+        },
+        { onConflict: 'id' }
+      )
+      .select()
+      .single()
+
+    if (profileErr) {
+      console.error('ensure-profile upsert:', profileErr)
+      return res.status(500).json({ error: 'Failed to create profile' })
+    }
+
+    res.json({ success: true, profile })
+  } catch (err) {
+    console.error('ensure-profile error:', err)
+    res.status(500).json({ error: 'Failed to ensure profile' })
+  }
+})
+
 app.post('/api/team/remove-member', async (req, res) => {
   try {
     const { creatorId, memberId } = req.body

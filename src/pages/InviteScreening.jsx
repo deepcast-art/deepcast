@@ -1144,8 +1144,17 @@ export default function InviteScreening() {
   const handleWatchAgainFromStart = useCallback(() => {
     iosVideoFullscreenDoneRef.current = false
     if (token) localStorage.removeItem(`screening_position_${token}`)
-    navigate(`/i/${token}?play=1`, { replace: true })
-  }, [token, navigate])
+    // We're already on /i/:token, so navigating there again is a no-op (no remount) and the
+    // player would stay hidden behind the post-film view. Reset the post-film state, seek to
+    // the start, and re-enter the screening directly.
+    setShowPostFilm(false)
+    setCompletionThankYouVisible(false)
+    const mux = muxPlayerRef.current
+    if (mux) {
+      try { mux.currentTime = 0 } catch { /* ignore */ }
+    }
+    finalizeEnterScreening()
+  }, [token, finalizeEnterScreening])
 
   const inviteSourceLine = useMemo(() => {
     if (!invite) return null
