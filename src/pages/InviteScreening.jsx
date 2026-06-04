@@ -13,6 +13,7 @@ import { supabase } from '../lib/supabase'
 import { api } from '../lib/api'
 import { ensureHttpsUrl } from '../lib/httpsUrl.js'
 import { useAuth } from '../lib/auth'
+import DeepcastLogo from '../components/DeepcastLogo'
 import NetworkGraph, { buildGraphLayout, inviteRecipientKey } from '../components/NetworkGraph'
 import MobileLanding from './screening/MobileLanding'
 import DesktopLanding from './screening/DesktopLanding'
@@ -350,7 +351,7 @@ export default function InviteScreening() {
 
   useEffect(() => {
     if (invite?.recipient_name && !letterSenderName)
-      setLetterSenderName(invite.recipient_name.trim().split(/\s+/)[0] || '')
+      setLetterSenderName(invite.recipient_name.trim() || '')
     if (invite?.recipient_email && !letterSenderEmail)
       setLetterSenderEmail(invite.recipient_email)
   }, [invite])
@@ -946,7 +947,7 @@ export default function InviteScreening() {
         senderId = user.id
       } else {
         const accountEmail = letterSenderEmail.trim() || (invite?.recipient_email || '').trim()
-        const accountName = letterSenderName.trim() || (invite?.recipient_name || '').trim()
+        const accountName = profile?.name?.trim() || letterSenderName.trim()
         if (accountEmail && accountEmail.includes('@')) {
           const pwd = newPassword.trim() || Array.from(
             { length: 24 },
@@ -1100,6 +1101,23 @@ export default function InviteScreening() {
     return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`
   }, [sentLetters])
 
+  const firstNameDisplay = useMemo(
+    () => profile?.name?.trim().split(/\s+/)[0] || profile?.name || entryRecipientLabel,
+    [profile?.name, entryRecipientLabel]
+  )
+
+  const childCountsByParent = useMemo(() => {
+    const counts = {}
+    for (const letter of sentLetters) {
+      const kids = filmInvites.filter((i) => i.parent_invite_id === letter.id)
+      counts[letter.id] = {
+        shares: kids.length,
+        viewers: kids.filter((k) => ['watched', 'signed_up'].includes(k.status)).length,
+      }
+    }
+    return counts
+  }, [sentLetters, filmInvites])
+
   const handleOpenShareModal = useCallback(() => {
     setModalLetters([{ id: Date.now(), firstName: '', lastName: '', email: '' }])
     setIsShareModalOpen(true)
@@ -1137,7 +1155,7 @@ export default function InviteScreening() {
         ? `${sharer} · ${screeningAssociationName}`
         : `Invited by ${sharer}`
     }
-    return `${sharer} passed this screening to you`
+    return `Invited by ${sharer}`
   }, [invite, sharerDisplayName])
 
   const handleUpdateModalLetter = useCallback((id, field, value) => {
@@ -1158,7 +1176,7 @@ export default function InviteScreening() {
             film?.id,
             l.email.trim(),
             `${l.firstName.trim()} ${l.lastName.trim()}`.trim(),
-            letterSenderName.trim() || invite?.recipient_name || '',
+            profile?.name || letterSenderName.trim() || '',
             user?.id || null,
             letterSenderEmail.trim() || invite?.recipient_email || '',
             null,
@@ -1585,7 +1603,7 @@ export default function InviteScreening() {
 
         {/* ========================= DASHBOARD (Page 4: pass-it-on confirmation) ========================= */}
         {currentView === 'dashboard' && (
-          <div className="relative z-10 min-h-screen w-full flex flex-col md:flex-row overflow-hidden">
+          <div className="relative z-10 flex min-h-dvh w-full flex-col overflow-hidden bg-bg-page text-warm md:flex-row">
 
             {/* ── Mobile hamburger button ── */}
             <button
@@ -1607,8 +1625,8 @@ export default function InviteScreening() {
                   <div className="flex items-center justify-between">
                     <div>
                       <h1 className="font-['Phoenix'] font-semibold text-2xl text-[#dddddd] lowercase" style={{ fontVariationSettings: '"SOFT" 100' }}>deepcast</h1>
-                      <h2 className="font-serif-v3 text-base text-[#dddddd]">
-                        {invite?.recipient_name || recipientFirstName}
+                      <h2 className="font-serif-v3 text-base text-warm">
+                        {profile?.name || invite?.recipient_name || recipientFirstName}
                       </h2>
                     </div>
                     <button
@@ -1623,42 +1641,43 @@ export default function InviteScreening() {
                     </button>
                   </div>
 
-                  <div className="w-full h-[0.5px] bg-[#b1a180] opacity-20" />
+                  <div className="h-px w-full bg-warm/[0.08]" />
 
-                  <div className="flex flex-col gap-6">
-                    <div className="flex flex-col gap-1">
-                      <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Invites Sent</span>
-                      <span className="font-serif-v3 text-3xl text-[#dddddd]">{sentLetters.length}</span>
+                  <div className="flex flex-col gap-7">
+                    <div className="flex flex-col gap-1.5">
+                      <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">Invites sent</span>
+                      <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-warm">{sentLetters.length}</span>
                     </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Invites Left</span>
-                      <span className="font-serif-v3 text-3xl text-[#b1a180]">{slotsRemaining}</span>
+                    <div className="flex flex-col gap-1.5">
+                      <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">Invites left</span>
+                      <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-accent">{slotsRemaining}</span>
                     </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">New Viewers</span>
-                      <span className="font-serif-v3 text-3xl text-[#dddddd]">0</span>
+                    <div className="flex flex-col gap-1.5">
+                      <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">New viewers</span>
+                      <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-warm">0</span>
                     </div>
                   </div>
 
-                  <div className="w-full h-[0.5px] bg-[#b1a180] opacity-20" />
+                  <div className="h-[0.5px] w-full bg-accent/20" />
 
                   <div className="flex flex-col gap-3">
                     {slotsRemaining > 0 && (
                       <button
                         type="button"
                         onClick={handleOpenShareModal}
-                        className="w-full text-[#b1a180] uppercase text-[10px] tracking-widest border border-[#b1a180]/40 px-4 py-2.5 hover:bg-[#b1a180]/10 transition-colors text-left"
+                        disabled={slotsRemaining <= 0}
+                        className="w-full border border-accent/50 bg-transparent px-4 py-3 text-center font-sans text-[10px] font-medium uppercase tracking-[0.28em] text-accent transition-colors hover:border-accent hover:bg-accent/[0.06] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-accent/50 disabled:hover:bg-transparent"
                       >
-                        Share More
+                        Share more
                       </button>
                     )}
-                    <Link to="/profile#set-password" className="font-sans text-[10px] uppercase tracking-widest text-[#dddddd]/55 transition-colors hover:text-[#dddddd]">Change password</Link>
+                    <Link to="/profile#set-password" className="font-sans text-[10px] uppercase tracking-[0.22em] text-warm/35 transition-colors hover:text-warm/70">Change password</Link>
                     <button
                       type="button"
                       onClick={() => void signOut()}
-                      className="text-[#dddddd]/40 uppercase text-[10px] tracking-widest hover:text-[#dddddd] transition-colors text-left"
+                      className="text-left font-sans text-[10px] uppercase tracking-[0.28em] text-warm/50 transition-colors hover:text-warm"
                     >
-                      Sign Out
+                      Sign out
                     </button>
                   </div>
                 </div>
@@ -1666,64 +1685,67 @@ export default function InviteScreening() {
             )}
 
             {/* ── Left sidebar (desktop only) ── */}
-            <div className="hidden md:flex md:w-[22%] md:min-h-screen bg-[#080c18]/80 md:border-r-[0.5px] border-[#4a5580]/30 flex-col px-6 py-10 gap-6 overflow-y-auto panel-scroll">
+            <aside className="hidden md:flex w-full min-h-0 shrink-0 flex-col gap-6 overflow-y-auto border-b border-faint/30 bg-ink/80 px-6 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] pt-4 panel-scroll sm:px-6 sm:py-10 md:max-h-[100dvh] md:w-[22%] md:min-h-screen md:border-b-0 md:border-r md:px-6 md:py-10">
 
-              <div className="reveal-up">
-                <h1 className="font-['Phoenix'] font-semibold text-5xl text-[#dddddd] lowercase mb-1" style={{ fontVariationSettings: '"SOFT" 100' }}>deepcast</h1>
-                <h2 className="font-serif-v3 text-xl text-[#dddddd]">
-                  {invite?.recipient_name || recipientFirstName}
+              <div className="shrink-0 animate-fade-in">
+                <Link to="/" className="hidden md:inline-block">
+                  <DeepcastLogo variant="wordmark" className="!text-4xl sm:!text-5xl text-warm" />
+                </Link>
+                <h2 className="font-serif-v3 md:mt-3 text-xl text-warm">
+                  {profile?.name || invite?.recipient_name || recipientFirstName}
                 </h2>
               </div>
 
-              <div className="w-full h-[0.5px] bg-[#b1a180] opacity-20 reveal-up" style={{ transitionDelay: '100ms' }} />
+              <div className="h-px w-full shrink-0 bg-warm/[0.08] animate-fade-in" style={{ animationDelay: '60ms' }} />
 
               {/* Stats */}
-              <div className="flex flex-col gap-6 reveal-up" style={{ transitionDelay: '110ms' }}>
-                <div className="flex flex-col gap-1">
-                  <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Invites Sent</span>
-                  <span className="font-serif-v3 text-3xl text-[#dddddd]">{sentLetters.length}</span>
+              <div className="flex shrink-0 flex-col gap-7 animate-fade-in" style={{ animationDelay: '100ms' }}>
+                <div className="flex flex-col gap-1.5">
+                  <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">Invites sent</span>
+                  <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-warm md:text-[2.5rem]">{sentLetters.length}</span>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Invites Left</span>
-                  <span className="font-serif-v3 text-3xl text-[#b1a180]">{slotsRemaining}</span>
+                <div className="flex flex-col gap-1.5">
+                  <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">Invites left</span>
+                  <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-accent md:text-[2.5rem]">{slotsRemaining}</span>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">New Viewers</span>
-                  <span className="font-serif-v3 text-3xl text-[#dddddd]">0</span>
+                <div className="flex flex-col gap-1.5">
+                  <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">New viewers</span>
+                  <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-warm md:text-[2.5rem]">0</span>
                 </div>
               </div>
 
-              <div className="w-full h-[0.5px] bg-[#b1a180] opacity-20 reveal-up" style={{ transitionDelay: '200ms' }} />
+              <div className="h-[0.5px] w-full shrink-0 bg-accent/20 animate-fade-in" style={{ animationDelay: '140ms' }} />
 
               {/* Actions */}
-              <div className="flex flex-col gap-3 reveal-up" style={{ transitionDelay: '250ms' }}>
+              <div className="flex shrink-0 flex-col gap-3 animate-fade-in" style={{ animationDelay: '160ms' }}>
                 {slotsRemaining > 0 && (
                   <button
                     type="button"
                     onClick={handleOpenShareModal}
-                    className="w-full text-[#b1a180] uppercase text-[10px] tracking-widest border border-[#b1a180]/40 px-4 py-2.5 hover:bg-[#b1a180]/10 transition-colors text-left"
+                    disabled={slotsRemaining <= 0}
+                    className="w-full border border-accent/50 bg-transparent px-4 py-3 text-center font-sans text-[10px] font-medium uppercase tracking-[0.28em] text-accent transition-colors hover:border-accent hover:bg-accent/[0.06] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-accent/50 disabled:hover:bg-transparent"
                   >
-                    Share More
+                    Share more
                   </button>
                 )}
                 <Link
                   to="/profile#set-password"
-                  className="font-sans text-[10px] uppercase tracking-widest text-[#dddddd]/55 transition-colors hover:text-[#dddddd]"
+                  className="font-sans text-[10px] uppercase tracking-[0.22em] text-warm/35 transition-colors hover:text-warm/70"
                 >
                   Change password
                 </Link>
                 <button
                   type="button"
                   onClick={() => void signOut()}
-                  className="text-[#dddddd]/40 uppercase text-[10px] tracking-widest hover:text-[#dddddd] transition-colors text-left"
+                  className="text-left font-sans text-[10px] uppercase tracking-[0.28em] text-warm/50 transition-colors hover:text-warm"
                 >
-                  Sign Out
+                  Sign out
                 </button>
               </div>
-            </div>
+            </aside>
 
             {/* ── Main panel ── */}
-            <div className="w-full md:w-[78%] min-h-screen flex flex-col px-4 sm:px-5 md:px-10 py-6 sm:py-8 md:py-12 overflow-y-auto panel-scroll pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
+            <main className="flex w-full min-h-0 flex-1 flex-col overflow-y-auto bg-[#0c1225] px-4 py-8 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] panel-scroll sm:px-6 sm:py-10 md:px-12 md:flex-1 md:py-14 md:pl-14 md:pr-16">
 
               {/* Desktop: Film card at top (hidden on mobile) */}
               {film && (
@@ -1758,28 +1780,27 @@ export default function InviteScreening() {
                     <div className="flex shrink-0 flex-row flex-wrap items-center justify-end gap-3">
                       {token &&
                         (dashboardResumeSeconds != null ? (
-                          <a
-                            href={`/i/${token}?play=1&t=${dashboardResumeSeconds}`}
-                            onClick={(e) => {
-                              e.preventDefault()
+                          <button
+                            type="button"
+                            onClick={() => {
                               const fresh = localStorage.getItem(`screening_position_${token}`)
                               const n = fresh ? parseInt(fresh, 10) : dashboardResumeSeconds
-                              window.location.href = `/i/${token}?play=1&t=${n || 0}`
+                              navigate(`/i/${token}?play=1&t=${n || 0}`)
                             }}
-                            className="inline-flex items-center gap-2 border border-[#dddddd]/25 bg-transparent px-5 py-2.5 font-sans text-[10px] font-medium uppercase tracking-[0.28em] text-[#dddddd]/85 transition-colors hover:border-[#b1a180]/50 hover:text-[#dddddd]"
+                            className="flex items-center gap-1.5 border border-warm/20 px-4 py-2 font-sans text-[10px] uppercase tracking-[0.25em] text-warm/60 transition-colors hover:border-warm/40 hover:text-warm"
                           >
-                            <svg className="h-2.5 w-2.5 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden>
+                            <svg className="h-2.5 w-2.5 fill-current" viewBox="0 0 24 24" aria-hidden>
                               <path d="M8 5v14l11-7z" />
                             </svg>
                             Resume
-                          </a>
+                          </button>
                         ) : (
                           <button
                             type="button"
                             onClick={handleWatchAgainFromStart}
-                            className="inline-flex items-center gap-2 border border-[#b1a180]/45 bg-transparent px-5 py-2.5 font-sans text-[10px] font-medium uppercase tracking-[0.28em] text-[#b1a180] transition-colors hover:border-[#b1a180] hover:bg-[#b1a180]/10"
+                            className="flex items-center gap-1.5 border border-warm/20 px-4 py-2 font-sans text-[10px] uppercase tracking-[0.25em] text-warm/60 transition-colors hover:border-warm/40 hover:text-warm"
                           >
-                            <svg className="h-2.5 w-2.5 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden>
+                            <svg className="h-2.5 w-2.5 fill-current" viewBox="0 0 24 24" aria-hidden>
                               <path d="M8 5v14l11-7z" />
                             </svg>
                             Watch again
@@ -1789,12 +1810,13 @@ export default function InviteScreening() {
                         <button
                           type="button"
                           onClick={handleOpenShareModal}
-                          className="inline-flex items-center gap-2 border border-[#b1a180]/50 px-5 py-2.5 font-sans text-[10px] font-medium uppercase tracking-[0.28em] text-[#b1a180]/90 transition-colors hover:border-[#b1a180] hover:bg-[#b1a180]/10"
+                          disabled={slotsRemaining <= 0}
+                          className="flex items-center gap-1.5 border border-accent/40 px-4 py-2 font-sans text-[10px] uppercase tracking-[0.25em] text-accent/70 transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-accent/40 disabled:hover:text-accent/70"
                         >
-                          <svg className="h-2.5 w-2.5 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden>
+                          <svg className="h-2.5 w-2.5 fill-current" viewBox="0 0 24 24" aria-hidden>
                             <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11A2.99 2.99 0 0 0 18 8a3 3 0 1 0-3-3c0 .24.04.47.09.7L8.04 9.81A2.99 2.99 0 0 0 6 9a3 3 0 1 0 0 6c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65a3 3 0 1 0 3-3z" />
                           </svg>
-                          Share
+                          Share more
                         </button>
                       )}
                     </div>
@@ -1802,64 +1824,39 @@ export default function InviteScreening() {
                 </section>
               )}
 
-              {/* "Your shares" text */}
-              <section className="w-full mb-6 md:mb-10 reveal-up" style={{ transitionDelay: '100ms' }}>
-                <div className="flex flex-col gap-3">
-                  <p className="font-serif-v3 text-xl md:text-2xl text-[#dddddd] italic leading-snug">
-                    Your shares have been sent, {entryRecipientLabel}.
-                  </p>
-                  <p className="font-display font-light text-sm md:text-base text-[#dddddd]/70 leading-relaxed">
-                    {formattedNames} {sentLetters.length === 1 ? 'has' : 'have'} been brought into the fold, growing the network. Come back to watch your impact spread.
-                  </p>
-                </div>
+              {/* Body text */}
+              <section className="mb-14 w-full max-w-6xl animate-fade-in" style={{ animationDelay: '80ms' }}>
+                <p className="font-serif-v3 mb-5 text-[1.55rem] leading-[1.25] italic text-warm sm:text-[1.85rem] md:text-[2.05rem]">
+                  Your shares have been sent, {firstNameDisplay}.
+                </p>
+                <p className="mb-12 max-w-2xl font-body text-[0.95rem] font-light leading-[1.75] text-warm/65 md:text-base">
+                  {formattedNames}{' '}
+                  {sentLetters.length === 1 ? 'has' : 'have'} been brought into the fold, growing the
+                  network. Come back to watch your impact spread.
+                  <span className="hidden md:inline"> Your full network map is below.</span>
+                  <span className="md:hidden"> Scroll for your impact map.</span>
+                </p>
               </section>
-
-              {/* Mobile: Stats row */}
-              <section className="md:hidden w-full mb-6 reveal-up" style={{ transitionDelay: '150ms' }}>
-                <div className="flex flex-row flex-wrap justify-between gap-y-4 gap-x-4">
-                  <div className="flex min-w-0 flex-1 flex-col gap-1 basis-[28%]">
-                    <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Invites Sent</span>
-                    <span className="font-serif-v3 text-2xl text-[#dddddd]">{sentLetters.length}</span>
-                  </div>
-                  <div className="flex min-w-0 flex-1 flex-col gap-1 basis-[28%]">
-                    <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">Invites Left</span>
-                    <span className="font-serif-v3 text-2xl text-[#b1a180]">{slotsRemaining}</span>
-                  </div>
-                  <div className="flex min-w-0 flex-1 flex-col gap-1 basis-[28%]">
-                    <span className="font-sans text-[9px] uppercase tracking-widest text-[#b1a180]/80">New Viewers</span>
-                    <span className="font-serif-v3 text-2xl text-[#dddddd]">0</span>
-                  </div>
-                </div>
-              </section>
-
-              {/* Mobile: Share More button with airplane icon */}
-              {slotsRemaining > 0 && (
-                <section className="md:hidden w-full mb-6 reveal-up" style={{ transitionDelay: '180ms' }}>
-                  <button
-                    type="button"
-                    onClick={handleOpenShareModal}
-                    className="w-full inline-flex items-center justify-center gap-2.5 border border-[#b1a180]/40 bg-[#b1a180]/8 px-4 py-3 font-sans text-[10px] uppercase tracking-[0.28em] text-[#b1a180] transition-colors hover:bg-[#b1a180]/15 touch-manipulation"
-                  >
-                    <svg className="h-4 w-4 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden>
-                      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-                    </svg>
-                    Share More
-                  </button>
-                </section>
-              )}
 
               {/* Network graph */}
-              <section className="w-full mb-12 reveal-up" style={{ transitionDelay: '200ms' }}>
-                <div className="mb-4 border-b border-[#4a5580]/40 pb-4">
-                  <h3 className="font-sans text-[10px] uppercase tracking-[0.3em] text-[#dddddd]/50">My Network Impact</h3>
+              <section className="mb-12 w-full max-w-6xl animate-fade-in" style={{ animationDelay: '80ms' }}>
+                <div className="mb-5 flex flex-row items-baseline justify-between gap-4">
+                  <h3 className="font-sans text-[10px] font-medium uppercase tracking-[0.32em] text-warm/50">
+                    My network impact
+                  </h3>
+                  <span className="max-w-[min(100%,14rem)] text-right font-serif-v3 text-[12px] italic leading-snug tracking-wide text-warm/65 sm:max-w-[20rem] sm:text-[13px]">
+                    {film?.title}
+                  </span>
                 </div>
 
                 {dashboardGraphLayout ? (
-                  <div className="w-full h-[850px] overflow-hidden touch-manipulation">
+                  <div className="relative flex h-[850px] w-full overflow-hidden bg-[#121a33]">
                     <NetworkGraph
                       fillHeight
                       pannable
                       showZoomControls
+                      showLegend
+                      hideSectionLabels
                       transparentSurface
                       softTouchInteraction={!isDesktop}
                       edgeScrollFades={!isDesktop}
@@ -1873,51 +1870,67 @@ export default function InviteScreening() {
                       rootNode={dashboardGraphLayout.rootNode}
                       defaultActiveNodes={dashboardGraphLayout.defaultActiveNodes}
                       defaultActiveLinks={dashboardGraphLayout.defaultActiveLinks}
-                      showLegend={false}
                     />
                   </div>
                 ) : (
-                  <div className="w-full h-[850px] bg-[#121a33] border-[0.5px] border-[#4a5580]/40 flex items-center justify-center">
-                    <span className="font-sans text-[9px] uppercase tracking-widest text-[#dddddd]/20">Network loading…</span>
-                  </div>
+                  <p className="mb-10 font-sans text-[10px] uppercase tracking-widest text-warm/35">
+                    Your network map will appear here after invitations are sent.
+                  </p>
                 )}
               </section>
 
               {/* Sent invitations section */}
-              <section className="w-full mb-24 reveal-up" style={{ transitionDelay: '300ms' }}>
-                <h3 className="font-sans text-[10px] uppercase tracking-[0.3em] text-[#dddddd]/50 mb-6 border-b border-[#4a5580]/40 pb-4">Sent Invitations</h3>
+              <section className="mb-24 w-full max-w-6xl animate-fade-in" style={{ animationDelay: '120ms' }}>
+                <h3 className="mb-6 border-b border-faint/25 pb-4 font-sans text-[10px] font-medium uppercase tracking-[0.32em] text-warm/50">
+                  Sent invitations
+                </h3>
                 <div className="flex flex-col gap-4">
                   {sentLetters.length === 0 ? (
-                    <div className="p-8 text-center text-[#dddddd]/20 uppercase text-[10px] tracking-widest border-[0.5px] border-dashed border-[#4a5580]/30">
+                    <div className="border border-dashed border-faint/25 bg-[#0a0f1a]/40 p-8 text-center font-sans text-[10px] uppercase tracking-widest text-warm/25">
                       No active invitations
                     </div>
                   ) : (
                     sentLetters.map((letter, index) => {
-                      const name = letter.name ||
+                      const displayName =
+                        letter.name?.trim() ||
                         (`${letter.firstName || ''} ${letter.lastName || ''}`).trim() ||
                         letter.email
+                      const cc = childCountsByParent[letter.id] || { shares: 0, viewers: 0 }
+                      const letterStatus = filmInvites.find((i) => i.id === letter.id)?.status || 'pending'
                       return (
-                        <div key={letter.id ?? index} className="bg-[#121a33]/70 border-[0.5px] border-[#4a5580]/50 p-5 md:p-8 flex flex-col md:flex-row justify-between md:items-center gap-4 hover:bg-[#121a33] transition-colors">
+                        <div
+                          key={letter.id ?? index}
+                          className="flex flex-col items-stretch justify-between gap-4 border border-faint/30 bg-[#0a0f1a]/50 p-6 transition-colors hover:border-faint/45 sm:flex-row sm:items-center md:p-8"
+                        >
                           <div className="flex flex-col gap-4">
                             <div>
-                              <span className="text-[9px] uppercase tracking-[0.4em] text-[#dddddd]/30 block mb-1">Invitation {String(index + 1).padStart(2, '0')}</span>
-                              <h4 className="font-serif-v3 text-2xl italic text-[#dddddd]">{name}</h4>
-                              <p className="font-sans text-[11px] text-[#dddddd]/40 mt-0.5">{letter.email}</p>
+                              <span className="mb-1 block font-sans text-[9px] font-medium uppercase tracking-[0.35em] text-warm/35">
+                                Invitation {String(index + 1).padStart(2, '0')}
+                              </span>
+                              <h4 className="font-serif-v3 text-2xl italic leading-tight text-warm md:text-[1.65rem]">
+                                {displayName}
+                              </h4>
                             </div>
-                            <div className="flex flex-col gap-4 sm:flex-row sm:gap-10">
-                              <div className="flex flex-col">
-                                <span className="text-[9px] uppercase tracking-widest text-[#dddddd]/40">Shares Initiated</span>
-                                <span className="font-serif-v3 text-[#b1a180] text-lg">0</span>
+                            <div className="flex flex-wrap gap-10">
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-sans text-[9px] uppercase tracking-[0.2em] text-warm/40">
+                                  Shares initiated
+                                </span>
+                                <span className="font-display text-xl font-normal text-accent">{cc.shares}</span>
                               </div>
-                              <div className="flex flex-col">
-                                <span className="text-[9px] uppercase tracking-widest text-[#dddddd]/40">Resulting Viewers</span>
-                                <span className="font-serif-v3 text-[#b1a180] text-lg">0</span>
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-sans text-[9px] uppercase tracking-[0.2em] text-warm/40">
+                                  Resulting viewers
+                                </span>
+                                <span className="font-display text-xl font-normal text-accent">{cc.viewers}</span>
                               </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-3 border-[0.5px] border-[#dddddd]/20 px-4 md:px-6 py-2 bg-[#080c18]/50 self-start md:self-auto">
-                            <div className="w-1.5 h-1.5 rounded-full bg-[#b1a180] pulse-dot" />
-                            <span className="font-sans text-[10px] uppercase tracking-widest text-[#dddddd]/70">Active</span>
+                          <div className="flex shrink-0 items-center gap-2.5 self-start border border-warm/15 bg-[#05070a]/80 px-5 py-2 sm:self-center">
+                            <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+                            <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/85">
+                              {letterStatus === 'pending' ? 'Active' : letterStatus}
+                            </span>
                           </div>
                         </div>
                       )
@@ -1926,8 +1939,11 @@ export default function InviteScreening() {
                 </div>
               </section>
 
-              <footer className="w-full py-12 text-center opacity-40 font-sans text-[10px] uppercase tracking-widest">&copy; 2026 Deepcast.</footer>
-            </div>
+              <footer className="w-full py-12 text-center font-sans text-[10px] uppercase tracking-widest text-warm/40">
+                &copy; {new Date().getFullYear()}{' '}
+                <span className="font-sans font-semibold normal-case">Deepcast</span>.
+              </footer>
+            </main>
 
             {/* ── Share More modal ── */}
             {isShareModalOpen && (

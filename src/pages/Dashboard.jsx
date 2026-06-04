@@ -650,7 +650,7 @@ export default function Dashboard() {
     const firstNameDisplay = profile.name?.trim().split(/\s+/)[0] || profile.name || 'there'
 
     return (
-      <div className="relative z-10 flex min-h-dvh w-full flex-col overflow-hidden bg-bg-page text-warm lg:flex-row">
+      <div className="relative z-10 flex min-h-dvh w-full flex-col overflow-hidden bg-bg-page text-warm md:flex-row">
         {/* Mobile top bar — viewer */}
         <div className="flex items-center justify-between border-b border-faint/30 bg-ink/80 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))] lg:hidden">
           <Link to="/" className="inline-block opacity-90 hover:opacity-100">
