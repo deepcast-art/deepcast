@@ -9,6 +9,11 @@ import { buildGraphLayout, inviteRecipientKey } from '../lib/graphLayout'
 import { api } from '../lib/api'
 import { ensureHttpsUrl } from '../lib/httpsUrl.js'
 
+// An invite counts as "opened" once the recipient opened it, watched, or signed
+// up. Pending invites have not been opened yet.
+const OPENED_STATUSES = ['opened', 'watched', 'signed_up']
+const isOpened = (inv) => OPENED_STATUSES.includes(inv?.status)
+
 function recipientKeyForRow(row) {
   if (!row) return null
   if (row.recipient_name) {
@@ -80,22 +85,58 @@ export default function Dashboard() {
     [allViewerSentInvites, viewerFilmId]
   )
 
-  const viewerNewViewersCount = useMemo(() => {
-    const myIds = new Set(viewerSentInvites.map((s) => s.id).filter(Boolean))
-    return viewerFilmInvites.filter((i) => i.parent_invite_id && myIds.has(i.parent_invite_id)).length
-  }, [viewerSentInvites, viewerFilmInvites])
-
-  const childCountsByParent = useMemo(() => {
-    const counts = {}
-    for (const inv of viewerSentInvites) {
-      const kids = viewerFilmInvites.filter((i) => i.parent_invite_id === inv.id)
-      counts[inv.id] = {
-        shares: kids.length,
-        viewers: kids.filter((k) => ['watched', 'signed_up'].includes(k.status)).length,
-      }
+  // parent_invite_id -> child invites, across the film's entire invite tree.
+  const childrenByParentId = useMemo(() => {
+    const map = new Map()
+    for (const inv of viewerFilmInvites) {
+      if (!inv.parent_invite_id) continue
+      if (!map.has(inv.parent_invite_id)) map.set(inv.parent_invite_id, [])
+      map.get(inv.parent_invite_id).push(inv)
     }
+    return map
+  }, [viewerFilmInvites])
+
+  // Shared "reach" helper: how many of an invite's transitive descendants have
+  // opened (all levels deep), NOT counting the invite itself. Walks the
+  // parent_invite_id tree breadth-first; `seen` guards against dupes/cycles.
+  const reachFromInvite = useCallback(
+    (rootId) => {
+      let count = 0
+      const seen = new Set()
+      const queue = [...(childrenByParentId.get(rootId) || [])]
+      while (queue.length) {
+        const inv = queue.shift()
+        if (seen.has(inv.id)) continue
+        seen.add(inv.id)
+        if (isOpened(inv)) count += 1
+        const kids = childrenByParentId.get(inv.id)
+        if (kids) queue.push(...kids)
+      }
+      return count
+    },
+    [childrenByParentId]
+  )
+
+  // "People you've reached": everyone in the viewer's downstream chain whose
+  // invite is opened — their direct invitees plus all deeper descendants.
+  // By construction this equals (direct invitees who opened) + (sum of each
+  // invitee's reach) — the same decomposition the per-invitee rows show.
+  const viewerReachedCount = useMemo(() => {
+    let total = 0
+    for (const inv of viewerSentInvites) {
+      if (isOpened(inv)) total += 1
+      total += reachFromInvite(inv.id)
+    }
+    return total
+  }, [viewerSentInvites, reachFromInvite])
+
+  // Per direct invitee: how many people THEY have reached (their opened
+  // descendants, not counting themselves).
+  const reachByInvite = useMemo(() => {
+    const counts = {}
+    for (const inv of viewerSentInvites) counts[inv.id] = reachFromInvite(inv.id)
     return counts
-  }, [viewerSentInvites, viewerFilmInvites])
+  }, [viewerSentInvites, reachFromInvite])
 
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
   const [modalFirst, setModalFirst] = useState('')
@@ -706,11 +747,17 @@ export default function Dashboard() {
               </span>
             </div>
             <div className="flex flex-col gap-1.5">
-              <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
-                New viewers
+              <span className="group relative inline-flex w-fit cursor-help font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
+                People you&apos;ve reached
+                <span
+                  role="tooltip"
+                  className="pointer-events-none absolute bottom-full left-0 z-20 mb-2 w-60 border border-faint/40 bg-[#05070a] px-3 py-2 text-[10px] font-normal normal-case leading-relaxed tracking-normal text-warm/80 opacity-0 shadow-lg transition-opacity duration-200 group-hover:opacity-100"
+                >
+                  Everyone who&apos;s opened an invite because of you — the people you shared with, plus everyone they passed it on to.
+                </span>
               </span>
               <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-warm md:text-[2.5rem]">
-                {viewerNewViewersCount}
+                {viewerReachedCount}
               </span>
             </div>
           </div>
@@ -949,7 +996,8 @@ export default function Dashboard() {
                         inv.recipient_name?.trim() ||
                         inv.recipient_email?.split('@')[0] ||
                         'Recipient'
-                      const cc = childCountsByParent[inv.id] || { shares: 0, viewers: 0 }
+                      const reached = reachByInvite[inv.id] || 0
+                      const opened = isOpened(inv)
                       return (
                         <div
                           key={inv.id}
@@ -967,24 +1015,16 @@ export default function Dashboard() {
                             <div className="flex flex-wrap gap-10">
                               <div className="flex flex-col gap-0.5">
                                 <span className="font-sans text-[9px] uppercase tracking-[0.2em] text-warm/40">
-                                  Shares initiated
+                                  People they&apos;ve reached
                                 </span>
-                                <span className="font-display text-xl font-normal text-accent">{cc.shares}</span>
-                              </div>
-                              <div className="flex flex-col gap-0.5">
-                                <span className="font-sans text-[9px] uppercase tracking-[0.2em] text-warm/40">
-                                  Resulting viewers
-                                </span>
-                                <span className="font-display text-xl font-normal text-accent">
-                                  {cc.viewers}
-                                </span>
+                                <span className="font-display text-xl font-normal text-accent">{reached}</span>
                               </div>
                             </div>
                           </div>
                           <div className="flex shrink-0 items-center gap-2.5 self-start border border-warm/15 bg-[#05070a]/80 px-5 py-2 sm:self-center">
-                            <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
-                            <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/85">
-                              {inv.status === 'pending' ? 'Active' : inv.status}
+                            <div className={`h-1.5 w-1.5 shrink-0 rounded-full ${opened ? 'bg-accent' : 'bg-warm/25'}`} />
+                            <span className={`font-sans text-[10px] font-medium uppercase tracking-[0.22em] ${opened ? 'text-warm/85' : 'text-warm/45'}`}>
+                              {opened ? 'Invite opened' : 'Invite unopened'}
                             </span>
                           </div>
                         </div>
