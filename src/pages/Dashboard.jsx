@@ -750,6 +750,12 @@ export default function Dashboard() {
               <span className="group relative inline-flex w-fit cursor-help font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
                 People you&apos;ve reached
                 <span
+                  aria-hidden="true"
+                  className="ml-1.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center self-start rounded-full border border-warm/30 text-[8px] font-medium leading-none tracking-normal text-warm/45 transition-colors duration-200 group-hover:border-warm/60 group-hover:text-warm/75"
+                >
+                  ?
+                </span>
+                <span
                   role="tooltip"
                   className="pointer-events-none absolute bottom-full left-0 z-20 mb-2 w-60 border border-faint/40 bg-[#05070a] px-3 py-2 text-[10px] font-normal normal-case leading-relaxed tracking-normal text-warm/80 opacity-0 shadow-lg transition-opacity duration-200 group-hover:opacity-100"
                 >
