@@ -676,7 +676,11 @@ export default function InviteScreening() {
       if (!screeningPlaybackEverStarted && !ended && !nearEnd) return
 
       setIsScreeningPaused(true)
-      if (!isLgUp) exitScreeningFullscreen()
+      // Mux's native fullscreen button fullscreens the <mux-player> element on every
+      // platform (incl. desktop), so the sibling pass-it-on overlay can't paint over it.
+      // exitScreeningFullscreen is a no-op when nothing is fullscreen and self-guards iOS,
+      // so it's safe to call unconditionally.
+      exitScreeningFullscreen()
 
       if (ended || nearEnd) {
         setPassItOnFromUserPause(false)
@@ -695,7 +699,7 @@ export default function InviteScreening() {
 
       setPassItOnFromUserPause(true)
     },
-    [isLgUp, exitScreeningFullscreen, user?.id, directPlay, token, navigate, screeningPlaybackEverStarted]
+    [exitScreeningFullscreen, user?.id, directPlay, token, navigate, screeningPlaybackEverStarted]
   )
 
   const finalizeEnterScreening = useCallback(() => {
@@ -880,7 +884,7 @@ export default function InviteScreening() {
       // Returning viewer who has already shared: show the thank-you screen with a dashboard link
       // instead of silently navigating away. First-time viewers still go straight to the dashboard.
       if (sentLetters.length > 0) {
-        if (!isLgUp) exitScreeningFullscreen()
+        exitScreeningFullscreen()
         setShowPostFilm(true)
         setCompletionThankYouVisible(true)
         return
@@ -889,7 +893,7 @@ export default function InviteScreening() {
       return
     }
 
-    if (!isLgUp) exitScreeningFullscreen()
+    exitScreeningFullscreen()
     setShowPostFilm(true)
   }
 
