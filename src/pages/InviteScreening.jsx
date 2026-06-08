@@ -433,6 +433,16 @@ export default function InviteScreening() {
     return cap || 'Your host'
   }, [sharerDisplayName])
 
+  /** First name only for the welcome prologue's "gifted by" line. The ctx value carries the
+   *  first name ("Bob") while the API carries the full name ("Bob Smith"); rendering only the
+   *  first name makes both identical, so the name never changes after the prologue reveals.
+   *  Empty when there's no sender, so the JSX fallback ('someone who chose you') still applies. */
+  const sharerFirstForGift = useMemo(() => {
+    const s = (sharerDisplayName || '').trim()
+    if (!s) return ''
+    return s.split(/\s+/)[0]
+  }, [sharerDisplayName])
+
   // When the invite came directly from the film crew (no parent invite), append the association name
   const sharerWithTeam = useMemo(() => {
     if (!sharerDisplayName) return null
@@ -468,15 +478,18 @@ export default function InviteScreening() {
     if (!ctxDecryptDone) return
     const hasRecipient = recipientFirstName && recipientFirstName !== 'you'
     const hasSender = Boolean(sharerDisplayName)
-    if (hasRecipient || hasSender) { setPrologueNamesReady(true); return }
-    // If API has responded (status is no longer loading), names are as good as they'll get
-    if (status === 'valid' || status === 'invalid' || status === 'expired' || status === 'network') {
-      setPrologueNamesReady(true)
-      return
-    }
-    // API is still in-flight — wait for a terminal status rather than race a timeout.
-    // The validateInvite retry budget (~15 s) is the real ceiling; firing early here
-    // is what caused the 'you' flash when ?ctx= decrypt failed.
+    // The API settling is the backstop: once it responds (terminal status) the names we
+    // have — real or fallback — are final and won't change, so a legitimately empty name
+    // ('for you' / 'someone who chose you') still lets the prologue appear, never hangs.
+    const apiSettled =
+      status === 'valid' || status === 'invalid' || status === 'expired' || status === 'network'
+    // Reveal only when BOTH displayed names are final. A name is final when it has a real
+    // value OR all its sources (ctx decrypt + API) have resolved. Using AND (not the old
+    // OR) means a ctx that supplies only ONE name no longer reveals the other's fallback
+    // before the API fills it in — that was the 'you' / 'someone who chose you' flash.
+    const recipientFinal = hasRecipient || apiSettled
+    const senderFinal = hasSender || apiSettled
+    if (recipientFinal && senderFinal) { setPrologueNamesReady(true) }
   }, [prologueNamesReady, ctxDecryptDone, recipientFirstName, sharerDisplayName, status])
 
   /** Mount the prologue overlay immediately; text animation waits for names. */
@@ -1271,7 +1284,7 @@ export default function InviteScreening() {
                 opacity: prologueState.textsVisible && prologueState.text2 ? 1 : 0,
               }}
             >
-              gifted by {sharerDisplayName?.trim() || 'someone who chose you'}.
+              gifted by {sharerFirstForGift || 'someone who chose you'}.
             </div>
           </div>
         </div>
