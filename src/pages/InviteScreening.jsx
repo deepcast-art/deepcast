@@ -1658,11 +1658,11 @@ export default function InviteScreening() {
 
                   <div className="flex flex-col gap-7">
                     <div className="flex flex-col gap-1.5">
-                      <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">Invites sent</span>
+                      <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">Shares used</span>
                       <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-warm">{sentLetters.length}</span>
                     </div>
                     <div className="flex flex-col gap-1.5">
-                      <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">Invites left</span>
+                      <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">Shares left</span>
                       <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-accent">{slotsRemaining}</span>
                     </div>
                     <div className="flex flex-col gap-1.5">
@@ -1714,11 +1714,11 @@ export default function InviteScreening() {
               {/* Stats */}
               <div className="flex shrink-0 flex-col gap-7 animate-fade-in" style={{ animationDelay: '100ms' }}>
                 <div className="flex flex-col gap-1.5">
-                  <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">Invites sent</span>
+                  <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">Shares used</span>
                   <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-warm md:text-[2.5rem]">{sentLetters.length}</span>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">Invites left</span>
+                  <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">Shares left</span>
                   <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-accent md:text-[2.5rem]">{slotsRemaining}</span>
                 </div>
                 <div className="flex flex-col gap-1.5">

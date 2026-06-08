@@ -691,7 +691,7 @@ export default function Dashboard() {
           >
             <div className="flex flex-col gap-1.5">
               <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
-                Invites sent
+                Shares used
               </span>
               <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-warm md:text-[2.5rem]">
                 {sentCount}
@@ -699,7 +699,7 @@ export default function Dashboard() {
             </div>
             <div className="flex flex-col gap-1.5">
               <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
-                Invites left
+                Shares left
               </span>
               <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-accent md:text-[2.5rem]">
                 {invitesLeft}
