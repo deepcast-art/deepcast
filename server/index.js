@@ -1682,7 +1682,7 @@ function buildInviteEmailHtml({
     : ''
 
   const noteBlock = safe.personalNote
-    ? `<tr><td style="padding:8px 40px 32px;">
+    ? `<tr><td style="padding:16px 40px 32px;">
         <p style="margin:0 0 10px;font-size:10px;letter-spacing:3px;color:#6b7fa3;font-family:system-ui,-apple-system,sans-serif;">A PERSONAL NOTE FROM ${safe.senderUpper}</p>
         <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-style:normal;font-size:16px;line-height:1.7;color:#e8e4dc;">${safe.personalNote.replace(/\n/g, '<br/>')}</p>
       </td></tr>`
@@ -1693,7 +1693,7 @@ function buildInviteEmailHtml({
   }`
 
   const greetingBlock = safe.recipientName
-    ? `<tr><td style="padding:12px 40px 0;">
+    ? `<tr><td style="padding:24px 40px 0;">
         <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:16px;color:#c8d0dc;">Dear ${safe.recipientName},</p>
       </td></tr>`
     : ''
@@ -1706,7 +1706,7 @@ function buildInviteEmailHtml({
 <tr><td align="center" style="padding:0;">
 <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%;background-color:#0c1220;">
 
-<tr><td align="center" style="padding:44px 40px 8px;">
+<tr><td align="center" style="padding:56px 40px 8px;">
   <img src="https://wmtjgpxhjtbocsmutqqc.supabase.co/storage/v1/object/public/film-assets/deepcast-logo-cropped.png" width="220" alt="deepcast" style="display:block;border:0;margin:0 auto;" />
 </td></tr>
 
