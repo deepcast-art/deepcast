@@ -26,7 +26,7 @@ export default function DesktopPassItOn({
   invite,
   user,
   signOut,
-  setCurrentView,
+  goToDashboard,
   resumeFilm,
   hasSentInvite,
 }) {
@@ -183,7 +183,7 @@ export default function DesktopPassItOn({
                   {passItOnLayerActive && user && hasSentInvite && (
                     <button
                       type="button"
-                      onClick={() => setCurrentView('dashboard')}
+                      onClick={goToDashboard}
                       className="w-full max-w-[340px] py-2 font-['DM_Sans',sans-serif] text-[9px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors"
                     >
                       Skip — Go to dashboard

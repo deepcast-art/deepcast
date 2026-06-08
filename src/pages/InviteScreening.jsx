@@ -1043,7 +1043,20 @@ export default function InviteScreening() {
       setLetterRecipientEmail('')
       setLetterNote('')
       setNewPassword('')
-      setCurrentView('dashboard')
+      if (senderId) {
+        // Real session (claim succeeded, or an already-signed-in recipient) → the one real
+        // dashboard. recipientName powers Dashboard's "Invitation sent" banner; screeningToken
+        // lets it offer "Resume".
+        navigate('/dashboard', {
+          replace: true,
+          state: { inviteSent: true, recipientName, screeningToken: token },
+        })
+      } else {
+        // Account claim / sign-in failed (the senderId-null branch above): there's no session,
+        // so /dashboard would bounce to /login. Keep them here with a simple confirmation —
+        // the invite was still sent server-side.
+        setLetterSuccess('Your share was sent — sign in to view your dashboard.')
+      }
     } catch (err) {
       setLetterError(err.message || 'Failed to send. Please try again.')
     } finally {
@@ -1573,7 +1586,7 @@ export default function InviteScreening() {
                 invite={invite}
                 user={user}
                 signOut={signOut}
-                setCurrentView={setCurrentView}
+                goToDashboard={() => navigate('/dashboard', { replace: true, state: { screeningToken: token } })}
                 resumeFilm={resumeFilm}
                 hasSentInvite={sentLetters.length > 0}
               />
@@ -1602,7 +1615,7 @@ export default function InviteScreening() {
                 invite={invite}
                 user={user}
                 signOut={signOut}
-                setCurrentView={setCurrentView}
+                goToDashboard={() => navigate('/dashboard', { replace: true, state: { screeningToken: token } })}
                 resumeFilm={resumeFilm}
                 hasSentInvite={sentLetters.length > 0}
               />

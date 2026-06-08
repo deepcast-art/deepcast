@@ -25,7 +25,7 @@ export default function MobilePassItOn({
   invite,
   user,
   signOut,
-  setCurrentView,
+  goToDashboard,
   resumeFilm,
   hasSentInvite,
 }) {
@@ -181,7 +181,7 @@ export default function MobilePassItOn({
                   </button>
 
                   {passItOnLayerActive && user && hasSentInvite && (
-                    <button type="button" onClick={() => setCurrentView('dashboard')}
+                    <button type="button" onClick={goToDashboard}
                       className="mt-1.5 w-full py-0.5 font-['DM_Sans',sans-serif] text-[7px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors">
                       Skip — Go to dashboard
                     </button>
@@ -296,7 +296,7 @@ export default function MobilePassItOn({
                   )}
 
                   {passItOnLayerActive && user && hasSentInvite && (
-                    <button type="button" onClick={() => setCurrentView('dashboard')}
+                    <button type="button" onClick={goToDashboard}
                       className="mt-4 w-full py-2 font-['DM_Sans',sans-serif] text-[9px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors">
                       Skip — Go to dashboard
                     </button>
