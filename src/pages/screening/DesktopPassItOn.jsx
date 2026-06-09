@@ -10,8 +10,6 @@ export default function DesktopPassItOn({
   letterSuccess,
   letterRecipientFirst,
   setLetterRecipientFirst,
-  letterRecipientLast,
-  setLetterRecipientLast,
   letterNote,
   setLetterNote,
   letterRecipientEmail,
@@ -136,8 +134,7 @@ export default function DesktopPassItOn({
                     <div className="font-['Fraunces',serif] text-base lg:text-lg leading-snug w-full text-[#2a2a2a]">
                       <div className="flex flex-wrap justify-center items-end gap-x-3 gap-y-1 mb-2">
                         <span className="italic">Dear</span>
-                        <input type="text" placeholder="First Name" value={letterRecipientFirst} onChange={(e) => setLetterRecipientFirst(e.target.value)} className="min-w-[90px] max-w-[140px] flex-1 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" />
-                        <input type="text" placeholder="Last Name" value={letterRecipientLast} onChange={(e) => setLetterRecipientLast(e.target.value)} className="min-w-[90px] max-w-[140px] flex-1 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" />
+                        <input type="text" placeholder="First Name" value={letterRecipientFirst} onChange={(e) => setLetterRecipientFirst(e.target.value)} className="min-w-[120px] max-w-[200px] flex-1 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" autoComplete="given-name" />
                         <span>,</span>
                       </div>
                       <textarea rows={2} placeholder="Write your note here. Tell them why this film made you think of them specifically..." value={letterNote} onChange={(e) => setLetterNote(e.target.value)} className="w-full bg-transparent border-none text-center focus:outline-none resize-none placeholder-[#2a2a2a]/30 leading-relaxed text-sm lg:text-base text-[#2a2a2a]" />

@@ -30,7 +30,6 @@ export default function InviteForm({
   const [recipients, setRecipients] = useState(() => [
     {
       firstName: initialRecipient?.firstName?.trim() || '',
-      lastName: initialRecipient?.lastName?.trim() || '',
       email: initialRecipient?.email?.trim() || '',
       note: '',
     },
@@ -159,9 +158,8 @@ export default function InviteForm({
         }
 
         const recipientNote = recipient.note.trim()
-        const fromFields = [recipient.firstName, recipient.lastName].filter(Boolean).join(' ').trim()
         const recipientName =
-          fromFields || recipient.email.trim().split('@')[0] || ''
+          recipient.firstName.trim() || recipient.email.trim().split('@')[0] || ''
         await api.sendInvite(
           filmId,
           recipient.email.trim(),
@@ -176,7 +174,7 @@ export default function InviteForm({
         )
         setSent((prev) => [...prev, recipient])
       }
-      setRecipients([{ firstName: '', lastName: '', email: '', note: '' }])
+      setRecipients([{ firstName: '', email: '', note: '' }])
 
       const oneName =
         validRecipients[0].firstName.trim() ||
@@ -318,21 +316,14 @@ export default function InviteForm({
                   value={recipient.firstName}
                   onChange={(e) => updateRecipient(i, 'firstName', e.target.value)}
                   placeholder="First name"
-                  className="w-1/3 bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
-                />
-                <input
-                  type="text"
-                  value={recipient.lastName}
-                  onChange={(e) => updateRecipient(i, 'lastName', e.target.value)}
-                  placeholder="Last name"
-                  className="w-1/3 bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+                  className="w-1/2 bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
                 />
                 <input
                   type="email"
                   value={recipient.email}
                   onChange={(e) => updateRecipient(i, 'email', e.target.value)}
                   placeholder="Email"
-                  className="w-1/3 bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+                  className="w-1/2 bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
                 />
                 {recipients.length > 1 && (
                   <button

@@ -140,7 +140,6 @@ export default function Dashboard() {
 
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
   const [modalFirst, setModalFirst] = useState('')
-  const [modalLast, setModalLast] = useState('')
   const [modalEmail, setModalEmail] = useState('')
   const [modalNote, setModalNote] = useState('')
   const [modalBusy, setModalBusy] = useState(false)
@@ -625,7 +624,6 @@ export default function Dashboard() {
   const openShareModal = () => {
     setModalError('')
     setModalFirst('')
-    setModalLast('')
     setModalEmail('')
     setModalNote('')
     setIsShareModalOpen(true)
@@ -659,9 +657,7 @@ export default function Dashboard() {
       }
 
       const recipientName =
-        [modalFirst.trim(), modalLast.trim()].filter(Boolean).join(' ').trim() ||
-        modalEmail.trim().split('@')[0] ||
-        ''
+        modalFirst.trim() || modalEmail.trim().split('@')[0] || ''
       await api.sendInvite(
         viewerFilmId,
         modalEmail.trim(),
@@ -1098,13 +1094,6 @@ export default function Dashboard() {
                     placeholder="First name"
                     value={modalFirst}
                     onChange={(e) => setModalFirst(e.target.value)}
-                    className="min-w-0 flex-1 border-b border-[#6b5d4a]/40 bg-transparent text-center text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Last name"
-                    value={modalLast}
-                    onChange={(e) => setModalLast(e.target.value)}
                     className="min-w-0 flex-1 border-b border-[#6b5d4a]/40 bg-transparent text-center text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none"
                   />
                   <span>,</span>

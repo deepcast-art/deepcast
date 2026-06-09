@@ -9,8 +9,6 @@ export default function MobilePassItOn({
   letterSuccess,
   letterRecipientFirst,
   setLetterRecipientFirst,
-  letterRecipientLast,
-  setLetterRecipientLast,
   letterNote,
   setLetterNote,
   letterRecipientEmail,
@@ -135,10 +133,8 @@ export default function MobilePassItOn({
                     <div className="font-['Fraunces',serif] text-[11px] leading-snug w-full text-[#2a2a2a]">
                       <div className="flex flex-nowrap justify-center items-end gap-x-2 mb-2 whitespace-nowrap">
                         <span className="italic">Dear</span>
-                        <input type="text" placeholder="First" value={letterRecipientFirst} onChange={(e) => setLetterRecipientFirst(e.target.value)}
+                        <input type="text" placeholder="First name" value={letterRecipientFirst} onChange={(e) => setLetterRecipientFirst(e.target.value)}
                                className="min-w-0 flex-1 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center text-[10px] focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" autoComplete="given-name" />
-                        <input type="text" placeholder="Last" value={letterRecipientLast} onChange={(e) => setLetterRecipientLast(e.target.value)}
-                               className="min-w-0 flex-1 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center text-[10px] focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" autoComplete="family-name" />
                         <span>,</span>
                       </div>
                       <textarea rows={1} placeholder="Write your note here. Tell them why this film made you think of them specifically…" value={letterNote} onChange={(e) => setLetterNote(e.target.value)}
@@ -224,10 +220,8 @@ export default function MobilePassItOn({
                     <div className="font-['Fraunces',serif] text-base leading-snug w-full text-[#2a2a2a]">
                       <div className="flex flex-wrap justify-center items-end gap-x-3 gap-y-1 mb-3">
                         <span className="italic">Dear</span>
-                        <input type="text" placeholder="First Name" value={letterRecipientFirst} onChange={(e) => setLetterRecipientFirst(e.target.value)}
-                               className="w-[100px] bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" autoComplete="given-name" />
-                        <input type="text" placeholder="Last Name" value={letterRecipientLast} onChange={(e) => setLetterRecipientLast(e.target.value)}
-                               className="w-[100px] bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" autoComplete="family-name" />
+                        <input type="text" placeholder="First name" value={letterRecipientFirst} onChange={(e) => setLetterRecipientFirst(e.target.value)}
+                               className="w-[140px] bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" autoComplete="given-name" />
                         <span>,</span>
                       </div>
                       <textarea rows={2} placeholder="Write your note here. Tell them why this film made you think of them specifically..." value={letterNote} onChange={(e) => setLetterNote(e.target.value)}

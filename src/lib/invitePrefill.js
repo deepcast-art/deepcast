@@ -1,22 +1,14 @@
 /**
- * Split invite.recipient_name + email for prefilling the "To" row (film receiver / viewer).
+ * Derive invite.recipient_name + email for prefilling the "To" row (film receiver / viewer).
+ * Invites are first-name-only, so the stored recipient_name is treated as the whole first
+ * name (never split) — multi-word names like "Min Hye" come through intact.
  */
 export function parseInviteRecipientForPrefill(invite) {
-  if (!invite) return { firstName: '', lastName: '', email: '' }
+  if (!invite) return { firstName: '', email: '' }
   const name = invite.recipient_name?.trim() || ''
-  let firstName = ''
-  let lastName = ''
-  if (name) {
-    const parts = name.split(/\s+/)
-    firstName = parts[0] || ''
-    lastName = parts.slice(1).join(' ') || ''
-  } else {
-    const local = invite.recipient_email?.split('@')[0] || ''
-    firstName = local || ''
-  }
+  const firstName = name || invite.recipient_email?.split('@')[0] || ''
   return {
     firstName,
-    lastName,
     email: invite.recipient_email?.trim() || '',
   }
 }

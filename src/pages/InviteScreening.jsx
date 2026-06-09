@@ -179,7 +179,6 @@ export default function InviteScreening() {
   /* ---------- LETTER FORM STATE ---------- */
 
   const [letterRecipientFirst, setLetterRecipientFirst] = useState('')
-  const [letterRecipientLast, setLetterRecipientLast] = useState('')
   const [letterNote, setLetterNote] = useState('')
   const [letterRecipientEmail, setLetterRecipientEmail] = useState('')
   const [letterSenderName, setLetterSenderName] = useState('')
@@ -209,8 +208,7 @@ export default function InviteScreening() {
       .filter((fi) => fi.parent_invite_id === invite.id)
       .map((fi) => ({
         id: fi.id,
-        firstName: (fi.recipient_name || '').split(/\s+/)[0] || '',
-        lastName: (fi.recipient_name || '').split(/\s+/).slice(1).join(' ') || '',
+        firstName: (fi.recipient_name || '').trim() || '',
         email: fi.recipient_email || '',
         name: fi.recipient_name || fi.recipient_email || '',
       }))
@@ -1049,12 +1047,7 @@ export default function InviteScreening() {
         return
       }
 
-      const recipientName = [
-        letterRecipientFirst.trim(),
-        letterRecipientLast.trim(),
-      ]
-        .filter(Boolean)
-        .join(' ')
+      const recipientName = letterRecipientFirst.trim()
 
       await api.sendInvite(
         film.id,
@@ -1095,7 +1088,6 @@ export default function InviteScreening() {
       // sentLetters is derived from filmInvites; refreshFilmInvites() above already pulled in
       // the new invite, so the dashboard list updates on its own — no manual append needed.
       setLetterRecipientFirst('')
-      setLetterRecipientLast('')
       setLetterRecipientEmail('')
       setLetterNote('')
       // Session is guaranteed here → the one real dashboard. recipientName powers Dashboard's
@@ -1553,8 +1545,6 @@ export default function InviteScreening() {
                 letterSuccess={letterSuccess}
                 letterRecipientFirst={letterRecipientFirst}
                 setLetterRecipientFirst={setLetterRecipientFirst}
-                letterRecipientLast={letterRecipientLast}
-                setLetterRecipientLast={setLetterRecipientLast}
                 letterNote={letterNote}
                 setLetterNote={setLetterNote}
                 letterRecipientEmail={letterRecipientEmail}
@@ -1575,8 +1565,6 @@ export default function InviteScreening() {
                 letterSuccess={letterSuccess}
                 letterRecipientFirst={letterRecipientFirst}
                 setLetterRecipientFirst={setLetterRecipientFirst}
-                letterRecipientLast={letterRecipientLast}
-                setLetterRecipientLast={setLetterRecipientLast}
                 letterNote={letterNote}
                 setLetterNote={setLetterNote}
                 letterRecipientEmail={letterRecipientEmail}
