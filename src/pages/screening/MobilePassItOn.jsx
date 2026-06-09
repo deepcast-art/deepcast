@@ -155,7 +155,7 @@ export default function MobilePassItOn({
 
                   <button type="button" onClick={handleSendLetter} disabled={letterSending}
                     className="w-full py-2 min-h-[36px] bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-['DM_Sans',sans-serif] text-[10px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none disabled:opacity-40 touch-manipulation">
-                    {letterSending ? 'Sending…' : 'Seal & Send'}
+                    {letterSending ? 'Sending…' : 'Share invitation'}
                   </button>
 
                   {passItOnLayerActive && user && hasSentInvite && (
@@ -244,7 +244,7 @@ export default function MobilePassItOn({
 
                   <button type="button" onClick={handleSendLetter} disabled={letterSending}
                     className="w-full py-3 min-h-[44px] bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-['DM_Sans',sans-serif] text-[11px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none disabled:opacity-40 touch-manipulation">
-                    {letterSending ? 'Sending…' : 'Seal & Send'}
+                    {letterSending ? 'Sending…' : 'Share invitation'}
                   </button>
 
                   {passItOnLayerActive && user && hasSentInvite && (

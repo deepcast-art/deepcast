@@ -151,7 +151,7 @@ export default function DesktopPassItOn({
                   <div className="w-[80px] h-[1px] bg-gradient-to-r from-transparent via-[#2a2a2a]/30 to-transparent" />
 
                   <button type="button" onClick={handleSendLetter} disabled={letterSending} className="w-full max-w-[340px] py-3 bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-['DM_Sans',sans-serif] text-[11px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none disabled:opacity-40">
-                    {letterSending ? 'Sending…' : 'Seal & Send'}
+                    {letterSending ? 'Sending…' : 'Share invitation'}
                   </button>
 
                   {passItOnLayerActive && user && hasSentInvite && (
