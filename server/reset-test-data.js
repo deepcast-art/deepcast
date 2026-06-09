@@ -41,6 +41,7 @@ const INVITE_EXPIRY_DAYS = 365
 
 const DRY_RUN = process.argv.includes('--dry-run')
 const BASE_URL = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '')
+const PROD_BASE_URL = 'https://deepcast.art'
 
 /* ------------------------------- helpers --------------------------------- */
 
@@ -244,7 +245,8 @@ async function main() {
   for (const email of TARGET_EMAILS) {
     const token = genToken()
     const recipientName = titleCaseLocalPart(email)
-    const inviteUrl = `${BASE_URL}/i/${token}`
+    const localUrl = `${BASE_URL}/i/${token}`
+    const prodUrl = `${PROD_BASE_URL}/i/${token}`
 
     if (DRY_RUN) {
       console.log(`  [dry-run] would create invite → ${email} (fresh token on live run)`)
@@ -262,7 +264,7 @@ async function main() {
         parent_invite_id: null,
       })
       if (error) fail(`invite create failed (${email}): ${error.message}`)
-      urls.push({ email, inviteUrl })
+      urls.push({ email, localUrl, prodUrl })
     }
   }
 
@@ -270,9 +272,13 @@ async function main() {
   if (DRY_RUN) {
     console.log('Dry run only — nothing was changed. Re-run without --dry-run to apply.')
   } else {
-    console.log('Fresh invite URLs to test with:\n')
-    for (const { email, inviteUrl } of urls) console.log(`  ${email}\n    ${inviteUrl}\n`)
-    console.log(`(Base URL: ${BASE_URL} — override with APP_URL if testing a different origin.)`)
+    console.log('Fresh invite URLs to test with (same token works on both origins):\n')
+    for (const { email, localUrl, prodUrl } of urls) {
+      console.log(`  ${email}`)
+      console.log(`    Local:      ${localUrl}`)
+      console.log(`    Production: ${prodUrl}\n`)
+    }
+    console.log(`(Local base: ${BASE_URL} — override with APP_URL. Production base: ${PROD_BASE_URL}.)`)
   }
 }
 
