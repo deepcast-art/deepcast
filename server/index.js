@@ -1238,9 +1238,10 @@ app.post('/api/team/register', async (req, res) => {
         : emailNorm.split('@')[0]
     const displayName =
       typeof fullName === 'string' && fullName.trim() ? fullName.trim() : nameFromInvite
-    const nameParts = displayName.split(/\s+/)
-    const firstName = nameParts[0] || displayName
-    const lastName = nameParts.slice(1).join(' ') || ''
+    // Names are first-name-only now — store the whole name as first_name; don't split off a
+    // last name. (Existing accounts are unaffected; nothing user-facing reads first_name.)
+    const firstName = displayName
+    const lastName = ''
 
     const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
       email: emailNorm,
@@ -1364,9 +1365,10 @@ app.post('/api/invites/claim-account', async (req, res) => {
         : invite.recipient_name && invite.recipient_name.trim()
           ? invite.recipient_name.trim()
           : emailNorm.split('@')[0]
-    const parts = displayName.split(/\s+/)
-    const firstName = parts[0] || displayName
-    const lastName = parts.slice(1).join(' ') || ''
+    // Names are first-name-only now — store the whole name as first_name; don't split off a
+    // last name. (Existing accounts are unaffected; nothing user-facing reads first_name.)
+    const firstName = displayName
+    const lastName = ''
 
     // 2) Find-or-create the auth user for the invited email.
     const existingAuthUser = await findAuthUserByEmail(emailNorm)
@@ -1531,15 +1533,15 @@ async function ensureProfileForUserId(userId) {
 
   const emailNorm = normalizeEmail(authUser.email)
   const displayName = (authUser.user_metadata?.full_name || '').trim() || emailNorm.split('@')[0]
-  const parts = displayName.split(/\s+/)
   const { data: created, error } = await supabase
     .from('users')
     .insert({
       id: userId,
       email: emailNorm,
       name: displayName,
-      first_name: parts[0] || displayName,
-      last_name: parts.slice(1).join(' ') || '',
+      // Names are first-name-only now — store the whole name; don't split off a last name.
+      first_name: displayName,
+      last_name: '',
       role: 'viewer',
       invite_allocation: 5,
     })
@@ -1559,9 +1561,10 @@ async function ensureProfileForUserId(userId) {
  * caller knows whether it's safe to roll the user back on a later failure.
  */
 async function findOrCreatePasswordlessAccount(emailNorm, displayName) {
-  const parts = displayName.split(/\s+/)
-  const firstName = parts[0] || displayName
-  const lastName = parts.slice(1).join(' ') || ''
+  // Names are first-name-only now — store the whole name as first_name; don't split off a
+  // last name. (Existing accounts are unaffected; nothing user-facing reads first_name.)
+  const firstName = displayName
+  const lastName = ''
 
   const existing = await findAuthUserByEmail(emailNorm)
   let userId

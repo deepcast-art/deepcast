@@ -685,7 +685,9 @@ export default function Dashboard() {
 
   /* ===================== VIEWER V3 DIPTYCH ===================== */
   if (isViewer) {
-    const firstNameDisplay = profile.name?.trim().split(/\s+/)[0] || profile.name || 'there'
+    // Show the account holder's name whole (no split). Names are first-name-only now; for
+    // legacy accounts the full stored name shows, which is an acceptable cosmetic effect.
+    const firstNameDisplay = profile.name?.trim() || 'there'
 
     return (
       <div className="relative z-10 flex min-h-dvh w-full flex-col overflow-hidden bg-bg-page text-warm md:flex-row">
