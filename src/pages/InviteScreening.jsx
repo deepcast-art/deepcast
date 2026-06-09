@@ -972,11 +972,9 @@ export default function InviteScreening() {
           .eq('id', sessionId)
           .then(() => {})
       }
-      // Returning viewer who has already shared: show the thank-you screen with a dashboard link.
       if (sentLetters.length > 0) {
         exitScreeningFullscreen()
         setShowPostFilm(true)
-        setCompletionThankYouVisible(true)
         return
       }
       // Never-shared viewer (incl. a first-timer who watched straight to the end): always prompt
@@ -1483,59 +1481,6 @@ export default function InviteScreening() {
                   : 'opacity-0 pointer-events-none'
               }`}
             >
-              {showPostFilm && completionThankYouVisible && (
-                <div className="screening-thank-you-enter relative flex min-h-[100dvh] w-full shrink-0 flex-col items-center justify-center px-6 py-16 pb-[max(2rem,env(safe-area-inset-bottom))] text-center lg:min-h-[min(100dvh,100%)] lg:flex-1 lg:py-24">
-                  <div
-                    className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_55%_at_50%_12%,rgba(177,161,128,0.14),transparent_58%)]"
-                    aria-hidden
-                  />
-                  <div className="relative z-10 flex max-w-md flex-col items-center gap-7 sm:gap-8">
-                    <div className="h-px w-16 bg-[#b1a180]/50" aria-hidden />
-                    <p className="font-sans text-[10px] uppercase tracking-[0.42em] text-[#b1a180]/95">
-                      Deepcast
-                    </p>
-                    <div className="space-y-2">
-                      <h2 className="font-serif-v3 text-[1.9rem] leading-tight italic text-[#dddddd] font-light sm:text-[2.15rem]">
-                        Thank you for watching
-                      </h2>
-                      {film?.title && (
-                        <p className="font-display text-[13px] font-light tracking-[0.06em] text-[#dddddd]/50">
-                          {film.title}
-                          {creatorName ? ` · ${creatorName}` : ''}
-                        </p>
-                      )}
-                    </div>
-                    <p className="font-serif-v3 max-w-sm text-[15px] italic leading-relaxed text-[#dddddd]/75 sm:text-base">
-                      {recipientFirstName && recipientFirstName.toLowerCase() !== 'you' ? (
-                        <>
-                          <span className="text-[#dddddd]">{recipientFirstName}</span>, this screening was held for
-                          you.
-                        </>
-                      ) : (
-                        <>This screening was held for you.</>
-                      )}
-                    </p>
-                    <p className="font-serif-v3 max-w-sm text-[13px] italic leading-relaxed text-[#dddddd]/45">
-                      When you&apos;re ready, invite someone who should see it next.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => navigate('/dashboard', { replace: true, state: { screeningToken: token } })}
-                      className="mt-2 w-full max-w-xs py-3.5 min-h-[52px] bg-[#b1a180]/22 hover:bg-[#b1a180]/34 active:bg-[#b1a180]/42 border border-[#b1a180]/45 text-[#f5f2ec] font-sans text-[11px] tracking-[0.32em] uppercase transition-colors rounded-sm touch-manipulation"
-                    >
-                      Go to dashboard
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCompletionThankYouVisible(false)}
-                      className="w-full max-w-xs py-2 font-sans text-[10px] uppercase tracking-[0.28em] text-[#dddddd]/35 hover:text-[#dddddd]/60 transition-colors touch-manipulation"
-                    >
-                      Share more
-                    </button>
-                  </div>
-                </div>
-              )}
-
               {passItOnContentVisible && (
               <>
               <MobilePassItOn
