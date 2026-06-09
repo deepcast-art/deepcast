@@ -415,7 +415,9 @@ export default function InviteScreening() {
   const recipientFirstName = useMemo(() => {
     if (ctxRecipientFirst) return ctxRecipientFirst
     if (!invite) return 'you'
-    const fromName = invite.recipient_name?.trim().split(/\s+/)[0]
+    // recipient_name is first-name-only now, so use it whole (no split). Legacy rows from
+    // before last-name removal hold a full name — showing it whole here is acceptable.
+    const fromName = invite.recipient_name?.trim()
     if (fromName) return fromName
     return invite.recipient_email?.split('@')[0] || 'you'
   }, [invite, ctxRecipientFirst])

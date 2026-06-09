@@ -654,8 +654,11 @@ app.post('/api/invites/resend-last', async (req, res) => {
     const baseUrl = resolveBaseUrl(appUrl, req.get('origin'))
     const displaySender = invite.sender_name || 'Someone'
     const displaySenderEmail = invite.sender_email || null
+    // recipient_name is first-name-only now, so use it whole (no split) for both the email
+    // greeting and the ctx. Legacy rows from before last-name removal hold a full name —
+    // showing that whole on a resend is an acceptable cosmetic effect on old data.
     const recipientFirstName = invite.recipient_name
-      ? invite.recipient_name.trim().split(/\s+/)[0]
+      ? invite.recipient_name.trim()
       : null
     let senderFirst = ''
     if (invite.sender_id) {
@@ -761,8 +764,11 @@ app.post('/api/invites/resend', async (req, res) => {
     const baseUrl = resolveBaseUrl(appUrl, req.get('origin'))
     const displaySender = invite.sender_name || 'Someone'
     const displaySenderEmail = invite.sender_email || null
+    // recipient_name is first-name-only now, so use it whole (no split) for both the email
+    // greeting and the ctx. Legacy rows from before last-name removal hold a full name —
+    // showing that whole on a resend is an acceptable cosmetic effect on old data.
     const recipientFirstName = invite.recipient_name
-      ? invite.recipient_name.trim().split(/\s+/)[0]
+      ? invite.recipient_name.trim()
       : null
     let senderFirst = ''
     if (invite.sender_id) {
