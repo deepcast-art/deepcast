@@ -3,7 +3,6 @@ import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-
 import { useAuth } from './lib/auth'
 import { supabase } from './lib/supabase'
 
-// const Landing = lazy(() => import('./pages/Landing.jsx'))
 const InviteScreening = lazy(() => import('./pages/InviteScreening.jsx'))
 const Signup = lazy(() => import('./pages/Signup.jsx'))
 const Login = lazy(() => import('./pages/Login.jsx'))
@@ -142,16 +141,6 @@ export default function App() {
     <>
       <RecoveryRouteSync />
     <Routes>
-      {/* Landing page commented out — Login is now the home page
-      <Route
-        path="/landing"
-        element={
-          <Suspense fallback={<RouteFallback />}>
-            <Landing />
-          </Suspense>
-        }
-      />
-      */}
       <Route
         path="/"
         element={
