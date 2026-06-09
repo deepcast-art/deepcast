@@ -49,7 +49,7 @@ export default function DesktopPassItOn({
               className="font-serif-v3 text-5xl lg:text-6xl text-[#dddddd] font-light tracking-tight italic"
               style={{ textShadow: '0 0 24px rgba(177,161,128,0.35), 0 2px 16px rgba(0,0,0,0.4)' }}
             >
-              {showPostFilm ? 'Thank you for watching.' : 'Pass it on.'}
+              Pass it on.
             </h2>
             {showPostFilm && user && hasSentInvite && (
               <Link
