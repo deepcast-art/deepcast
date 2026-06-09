@@ -1,5 +1,6 @@
 import NetworkGraph from '../../components/NetworkGraph'
 import DeepcastLogo from '../../components/DeepcastLogo'
+import InviteEmailEntry from './InviteEmailEntry'
 
 function ordinalSuffix(n) {
   if (n == null || Number.isNaN(Number(n))) return ''
@@ -19,7 +20,24 @@ export default function MobileLanding({
   peopleCount,
   viewVisible,
   handleOpenInvitationClick,
+  showEmailField,
+  emailInput,
+  setEmailInput,
+  emailError,
+  emailSuggestion,
+  onAcceptEmailSuggestion,
+  emailSubmitting,
 }) {
+  const emailEntryProps = {
+    showEmailField,
+    emailInput,
+    setEmailInput,
+    emailError,
+    emailSuggestion,
+    onAcceptEmailSuggestion,
+    emailSubmitting,
+    onSubmit: handleOpenInvitationClick,
+  }
   return (
     <section className="relative h-[100dvh] w-full overflow-hidden bg-[#080c18]">
 
@@ -113,22 +131,9 @@ export default function MobileLanding({
                 className="!text-7xl w-auto max-w-[min(90vw,440px)] leading-none sm:!text-8xl"
               />
             </div>
-            <button
-              type="button"
-              onClick={handleOpenInvitationClick}
-              className="group pointer-events-auto flex cursor-pointer flex-col items-center gap-3 border-0 bg-transparent p-0 reveal-up touch-manipulation"
-              style={{ transitionDelay: '500ms' }}
-            >
-              <span className="font-sans text-[9px] uppercase tracking-[0.3em] text-[#b1a180] transition-colors duration-300 group-hover:text-[#dddddd]">
-                Enter
-              </span>
-              <div className="relative w-fit overflow-hidden py-1">
-                <span className="font-serif-v3 text-2xl italic text-[#dddddd]">
-                  Open your invitation
-                </span>
-                <div className="absolute bottom-0 left-0 h-[0.5px] w-full -translate-x-full bg-[#b1a180] transition-transform duration-[600ms] ease-out group-hover:translate-x-0" />
-              </div>
-            </button>
+            <div className="pointer-events-auto flex w-full justify-center">
+              <InviteEmailEntry {...emailEntryProps} size="lg" revealUp transitionDelay="500ms" />
+            </div>
           </div>
         </div>
       </div>
@@ -160,21 +165,7 @@ export default function MobileLanding({
               />
             </div>
 
-            <button
-              type="button"
-              onClick={handleOpenInvitationClick}
-              className="group flex cursor-pointer flex-col items-center gap-3 border-0 bg-transparent p-0 touch-manipulation"
-            >
-              <span className="font-sans text-[9px] uppercase tracking-[0.3em] text-[#b1a180] transition-colors duration-300 group-hover:text-[#dddddd]">
-                Enter
-              </span>
-              <div className="relative w-fit overflow-hidden py-1">
-                <span className="font-serif-v3 text-xl italic text-[#dddddd]">
-                  Open your invitation
-                </span>
-                <div className="absolute bottom-0 left-0 h-[0.5px] w-full -translate-x-full bg-[#b1a180] transition-transform duration-[600ms] ease-out group-hover:translate-x-0" />
-              </div>
-            </button>
+            <InviteEmailEntry {...emailEntryProps} size="sm" />
           </div>
         </div>
 

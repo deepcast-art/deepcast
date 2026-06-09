@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useRef } from 'react'
 import { supabase } from './supabase'
+import { api } from './api'
 
 const AuthContext = createContext(null)
 
@@ -373,47 +374,84 @@ export function AuthProvider({ children }) {
   }
 
   /**
-   * Invite-gated account creation for the Seal & Send / pass-it-on flow.
+   * Passwordless invite-first sign-in (replaces the old random-password claim flow).
    *
-   * The server (service role) creates the auth user + profile for the invite's recipient_email
-   * (derived from the token — never a client-asserted email) with the email pre-confirmed.
-   * We then signInWithPassword to obtain a *persisted* Supabase session, so `user` is non-null
-   * across navigation and component remounts (Resume button, pause → dashboard).
+   * Calls /api/invites/session with the chosen email:
+   *  - 'created' (no prior account): the server made a passwordless account, relinked the invite,
+   *    and returned a single-use `tokenHash`. We consume it with verifyOtp to set a *persisted*
+   *    session in-band — NO email, NO password. We then await the profile so `user`/`profile` are
+   *    ready before the caller opens the invitation (avoids the /signup race).
+   *  - 'existing': the email already has an account. No session is minted here; the server emailed
+   *    a one-tap sign-in link. We surface that so the UI can show "check your inbox".
+   *
+   * @returns {{ status: 'created'|'existing', email: string, user?, profile? }}
    */
-  const claimInviteAccount = async (token, password, name) => {
+  const establishInviteSession = async (token, email, appUrl = window.location.origin) => {
     setProfileLoaded(false)
 
-    const res = await fetch('/api/invites/claim-account', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, password, name }),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      throw new Error(data.error || 'Account creation failed')
+    const data = await api.inviteSession(token, email, appUrl)
+
+    if (data.status === 'existing') {
+      setProfileLoaded(true)
+      return { status: 'existing', email: data.email }
     }
 
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email: data.email,
-      password,
+    const { data: verified, error: verifyError } = await supabase.auth.verifyOtp({
+      type: 'magiclink',
+      token_hash: data.tokenHash,
     })
-    if (signInError) {
-      // Profile/account exist server-side, but sign-in failed (e.g. a returning viewer whose
-      // existing password differs from the one supplied here). Surface for the caller.
-      throw new Error(signInError.message || 'Account ready — please sign in to continue.')
+    if (verifyError || !verified?.user) {
+      throw new Error(verifyError?.message || 'Could not establish your session. Please try again.')
     }
 
-    setSession(signInData.session)
-    setUser(signInData.user)
-    const prof = await fetchProfile(signInData.user.id, signInData.session?.access_token)
+    setSession(verified.session)
+    setUser(verified.user)
+    // Await the profile so ProtectedRoute never sees a logged-in user without a profile.
+    const prof = await fetchProfile(verified.user.id, verified.session?.access_token)
 
     return {
+      status: 'created',
       userId: data.userId,
       email: data.email,
-      user: signInData.user,
-      session: signInData.session,
+      user: verified.user,
+      session: verified.session,
       profile: prof,
     }
+  }
+
+  /**
+   * Relink the opened invite to the already-signed-in account (case 1), with a small retry so a
+   * transient failure doesn't permanently leave the film disconnected. The server endpoint also
+   * guarantees the profile row exists, so we refresh the local profile afterwards — this is what
+   * makes the dashboard "received" film and Seal & Send reliably work after a magic-link sign-in.
+   */
+  const relinkInvite = async (token, attempts = 3) => {
+    const { data } = await supabase.auth.getSession()
+    const session = data?.session
+    const accessToken = session?.access_token
+    if (!accessToken) return { ok: false }
+
+    for (let i = 0; i < attempts; i++) {
+      try {
+        const result = await api.relinkInvite(token, accessToken)
+        if (session.user?.id) {
+          await fetchProfile(session.user.id, accessToken).catch(() => {})
+        }
+        return { ok: true, ...result }
+      } catch (err) {
+        if (i === attempts - 1) {
+          console.warn('relinkInvite failed:', err?.message || err)
+          return { ok: false }
+        }
+        await new Promise((r) => setTimeout(r, 400 * (i + 1)))
+      }
+    }
+    return { ok: false }
+  }
+
+  /** Email a one-tap sign-in link (passwordless re-auth). Does not reveal whether the account exists. */
+  const sendSignInLink = async (email, redirectPath = '/dashboard') => {
+    await api.sendSignInLink(email, window.location.origin, redirectPath)
   }
 
   const signOut = async () => {
@@ -442,7 +480,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, loading, profileLoaded, isRecovery, signUp, signIn, claimInviteAccount, signOut, fetchProfile, resetPassword, updatePassword }}
+      value={{ session, user, profile, loading, profileLoaded, isRecovery, signUp, signIn, establishInviteSession, relinkInvite, sendSignInLink, signOut, fetchProfile, resetPassword, updatePassword }}
     >
       {children}
     </AuthContext.Provider>

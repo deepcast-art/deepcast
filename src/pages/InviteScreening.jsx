@@ -13,6 +13,7 @@ import { supabase } from '../lib/supabase'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { buildGraphLayout, inviteRecipientKey } from '../components/NetworkGraph'
+import { checkEmail } from '../lib/emailCheck'
 import MobileLanding from './screening/MobileLanding'
 import DesktopLanding from './screening/DesktopLanding'
 import MobilePassItOn from './screening/MobilePassItOn'
@@ -68,6 +69,10 @@ function useMediaQueryLgUp() {
 /*  INVITE CTX — decrypt sender/recipient names embedded in invite URL */
 /* ------------------------------------------------------------------ */
 
+function normalizeLocalEmail(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
 function base64urlToBytes(b64url) {
   const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/')
   const padded = b64.padEnd(b64.length + (4 - (b64.length % 4)) % 4, '=')
@@ -120,7 +125,7 @@ export default function InviteScreening() {
   const directPlay = searchParams.get('play') === '1'
   const startTimeParam = searchParams.get('t')
   const navigate = useNavigate()
-  const { claimInviteAccount, signOut, fetchProfile, user, profile } = useAuth()
+  const { establishInviteSession, relinkInvite, fetchProfile, user, profile } = useAuth()
   const isDesktop = useMediaQueryMdUp()
   const isLgUp = useMediaQueryLgUp()
   const isIOSDevice = useMemo(() => isIOS(), [])
@@ -138,6 +143,8 @@ export default function InviteScreening() {
   const [filmInvites, setFilmInvites] = useState([])
   const [creatorName, setCreatorName] = useState('')
   const hasMarkedWatched = useRef(false)
+  /** Case 1: an already-signed-in user opening this invite relinks it to their account, once. */
+  const hasRelinkedRef = useRef(false)
 
   /* ---------- UI STATE ---------- */
 
@@ -176,7 +183,16 @@ export default function InviteScreening() {
   const [letterSending, setLetterSending] = useState(false)
   const [letterError, setLetterError] = useState('')
   const [letterSuccess, setLetterSuccess] = useState('')
-  const [newPassword, setNewPassword] = useState('')
+
+  /* ---------- LANDING EMAIL (passwordless invite-first sign-in) ---------- */
+
+  const [emailInput, setEmailInput] = useState('')
+  const [emailError, setEmailError] = useState('')
+  /** A suggested correction (e.g. gmial.com → gmail.com); surfaced once before we let them override. */
+  const [emailSuggestion, setEmailSuggestion] = useState(null)
+  const [emailSubmitting, setEmailSubmitting] = useState(false)
+  /** When set, an existing-account email was entered and a sign-in link was emailed. */
+  const [checkInboxEmail, setCheckInboxEmail] = useState(null)
 
   // Sent-invite list derived from the DB (filmInvites) — the single source of truth.
   // Selects exactly the invites whose parent is the current viewer's own invite, so other
@@ -260,6 +276,7 @@ export default function InviteScreening() {
     prologueDismissedRef.current = false
     setPrologueTextsDone(false)
     setPrologueNamesReady(false)
+    hasRelinkedRef.current = false
   }, [token])
 
   useEffect(() => {
@@ -420,13 +437,24 @@ export default function InviteScreening() {
     return name
   }, [sharerDisplayName, invite])
 
-  /** Logged-in user must match this invite’s recipient — otherwise “dashboard” is the wrong account (e.g. sender still signed in). */
-  const isInviteRecipientSession = useMemo(() => {
-    if (!user?.email || !invite?.recipient_email) return false
-    return (
-      user.email.trim().toLowerCase() === invite.recipient_email.trim().toLowerCase()
-    )
-  }, [user?.email, invite?.recipient_email])
+  /** Show the email field only when there is no valid session (case 1 skips it entirely). */
+  const showEmailField = !user
+
+  /**
+   * Case 1: a logged-in user opening this invite link relinks it to their account, so identity
+   * follows the account email. Best-effort + once per token; also reflects the new recipient_email
+   * locally so the account and the invite stay in sync with the server.
+   */
+  useEffect(() => {
+    if (status !== 'valid' || !user?.email || !invite?.id) return
+    if (hasRelinkedRef.current) return
+    hasRelinkedRef.current = true
+    const accountEmail = user.email.trim().toLowerCase()
+    void relinkInvite(token)
+    if (normalizeLocalEmail(invite.recipient_email) !== accountEmail) {
+      setInvite((prev) => (prev ? { ...prev, recipient_email: accountEmail } : prev))
+    }
+  }, [status, user?.email, invite?.id, token, relinkInvite])
 
   /* ---------- PROLOGUE SEQUENCE (with ?ctx=, can start as soon as decrypt finishes — no API wait) ---------- */
 
@@ -721,7 +749,8 @@ export default function InviteScreening() {
     entrySplashTimerRef.current = { clear: () => [t1, t2, t3, t4].forEach(clearTimeout) }
   }, [requestScreeningFullscreen, tryIOSNativeVideoFullscreen, tryScreeningPlay])
 
-  const handleOpenInvitationClick = useCallback(() => {
+  /** The prologue + film entry, run only once a session is guaranteed. */
+  const proceedToScreening = useCallback(() => {
     if (entrySplashRunningRef.current || mobileRotateGateActive) return
 
     // Mobile: require landscape before the scripted prologue + film (matches "cinematic" widescreen).
@@ -741,6 +770,69 @@ export default function InviteScreening() {
     requestScreeningFullscreen,
     startPreScreeningSequence,
   ])
+
+  /**
+   * "Open your invitation" — now also the email submit. When there is no session, this is a HARD
+   * GATE: strict format validation + a one-shot typo suggestion must pass before we establish a
+   * passwordless session (new email) or email a sign-in link (existing account).
+   */
+  const handleOpenInvitationClick = useCallback(async () => {
+    if (entrySplashRunningRef.current || mobileRotateGateActive || emailSubmitting) return
+
+    // Already signed in (case 1) — relink happened on load; go straight in.
+    if (!showEmailField) {
+      proceedToScreening()
+      return
+    }
+
+    const { ok, email, error, suggestion } = checkEmail(emailInput)
+    if (!ok) {
+      setEmailSuggestion(null)
+      setEmailError(error)
+      return
+    }
+    setEmailError('')
+
+    // Surface a likely-typo suggestion once; a second press with the same email overrides it.
+    if (suggestion && suggestion !== email && emailSuggestion !== suggestion) {
+      setEmailSuggestion(suggestion)
+      return
+    }
+    setEmailSuggestion(null)
+
+    setEmailSubmitting(true)
+    try {
+      const result = await establishInviteSession(token, email)
+      if (result.status === 'existing') {
+        // Existing account — never minted in-band. They must complete the inbox round-trip.
+        setCheckInboxEmail(email)
+        return
+      }
+      // New passwordless account + persisted session are ready (profile already awaited).
+      proceedToScreening()
+    } catch (err) {
+      setEmailError(err?.message || 'Something went wrong. Please try again.')
+    } finally {
+      setEmailSubmitting(false)
+    }
+  }, [
+    emailInput,
+    emailSuggestion,
+    emailSubmitting,
+    showEmailField,
+    proceedToScreening,
+    establishInviteSession,
+    token,
+    mobileRotateGateActive,
+  ])
+
+  /** Accept the suggested correction — fills the field and clears the prompt. */
+  const handleAcceptEmailSuggestion = useCallback(() => {
+    if (!emailSuggestion) return
+    setEmailInput(emailSuggestion)
+    setEmailSuggestion(null)
+    setEmailError('')
+  }, [emailSuggestion])
 
   useEffect(() => {
     if (!mobileRotateGateActive) return
@@ -902,49 +994,24 @@ export default function InviteScreening() {
       setLetterError('Please enter a first name and valid email for your recipient.')
       return
     }
-    if (
-      !letterSenderName.trim() ||
-      !letterSenderEmail.trim() ||
-      !letterSenderEmail.includes('@')
-    ) {
-      setLetterError('Please enter your name and a valid email.')
-      return
-    }
-    // Password length is not a hard blocker — account creation failure is logged and the invite still sends.
     if (slotsRemaining <= 0) {
       setLetterError('All invitations have been sent.')
       return
     }
 
+    // Account + session were established on the landing page, so the sender is the current user.
+    // Identity for the outgoing invite ("from" / GIFTED BY) is sourced from the account, not collected.
+    const senderId = user?.id || null
+    const senderName = (profile?.name?.trim() || letterSenderName.trim() || '')
+    const senderEmail = (profile?.email || user?.email || letterSenderEmail.trim() || '')
+    if (!senderId) {
+      // Defensive: in the new flow the share page is only reachable with a session.
+      setLetterError('Your session expired. Reopen your invitation to continue.')
+      return
+    }
+
     setLetterSending(true)
     try {
-      let senderId = null
-
-      if (user?.id && isInviteRecipientSession) {
-        senderId = user.id
-      } else if (token) {
-        // First-time sharer: create their account + profile server-side, gated by the invite
-        // token. The account is for invite.recipient_email (derived server-side), never a
-        // client-supplied address. On success this also signs them in (persisted session), so
-        // `user` becomes non-null for the rest of the flow.
-        const accountName = profile?.name?.trim() || letterSenderName.trim()
-        const pwd = newPassword.trim() || Array.from(
-          { length: 24 },
-          () => 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^'[
-            Math.floor(Math.random() * 58)
-          ]
-        ).join('')
-        try {
-          const r = await claimInviteAccount(token, pwd, accountName)
-          senderId = r?.userId || null
-        } catch (claimErr) {
-          // Don't block passing the film on — the invite still sends. Surface for diagnostics
-          // rather than swallowing silently.
-          console.warn('claimInviteAccount failed:', claimErr?.message || claimErr)
-          senderId = user?.id || null
-        }
-      }
-
       // Check if recipient already has an invite for this film
       const { data: existing } = await supabase
         .from('invites')
@@ -971,9 +1038,9 @@ export default function InviteScreening() {
         film.id,
         letterRecipientEmail.trim(),
         recipientName,
-        letterSenderName.trim(),
+        senderName,
         senderId,
-        letterSenderEmail.trim(),
+        senderEmail,
         letterNote.trim() || null,
         window.location.origin,
         invite?.id || null
@@ -1008,21 +1075,12 @@ export default function InviteScreening() {
       setLetterRecipientLast('')
       setLetterRecipientEmail('')
       setLetterNote('')
-      setNewPassword('')
-      if (senderId) {
-        // Real session (claim succeeded, or an already-signed-in recipient) → the one real
-        // dashboard. recipientName powers Dashboard's "Invitation sent" banner; screeningToken
-        // lets it offer "Resume".
-        navigate('/dashboard', {
-          replace: true,
-          state: { inviteSent: true, recipientName, screeningToken: token },
-        })
-      } else {
-        // Account claim / sign-in failed (the senderId-null branch above): there's no session,
-        // so /dashboard would bounce to /login. Keep them here with a simple confirmation —
-        // the invite was still sent server-side.
-        setLetterSuccess('Your share was sent — sign in to view your dashboard.')
-      }
+      // Session is guaranteed here → the one real dashboard. recipientName powers Dashboard's
+      // "Invitation sent" banner; screeningToken lets it offer "Resume".
+      navigate('/dashboard', {
+        replace: true,
+        state: { inviteSent: true, recipientName, screeningToken: token },
+      })
     } catch (err) {
       setLetterError(err.message || 'Failed to send. Please try again.')
     } finally {
@@ -1157,6 +1215,40 @@ export default function InviteScreening() {
         </div>
       )}
 
+      {checkInboxEmail && (
+        <div
+          className="fixed inset-0 z-[3200] flex flex-col items-center justify-center bg-[#080c18] px-8 text-center pointer-events-auto"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="check-inbox-title"
+        >
+          <div className="flex max-w-md flex-col items-center gap-6">
+            <div className="h-px w-16 bg-[#b1a180]/50" aria-hidden />
+            <p className="font-sans text-[10px] uppercase tracking-[0.42em] text-[#b1a180]/95">
+              Check your inbox
+            </p>
+            <h2
+              id="check-inbox-title"
+              className="font-serif-v3 text-2xl italic font-light leading-tight text-[#dddddd]"
+            >
+              We’ve sent a one-tap sign-in link
+            </h2>
+            <p className="font-serif-v3 max-w-sm text-[15px] italic leading-relaxed text-[#dddddd]/70">
+              This email already has a Deepcast account. We emailed{' '}
+              <span className="text-[#b1a180]">{checkInboxEmail}</span> a secure link — open it on this
+              device to continue to your invitation.
+            </p>
+            <button
+              type="button"
+              onClick={() => { setCheckInboxEmail(null); setEmailInput('') }}
+              className="font-sans text-[10px] uppercase tracking-[0.28em] text-[#dddddd]/40 hover:text-[#dddddd]/70 transition-colors"
+            >
+              Use a different email
+            </button>
+          </div>
+        </div>
+      )}
+
       {mobileRotateGateActive && (
         <div
           className="fixed inset-0 z-[3100] flex flex-col items-center justify-center bg-[#050a12] px-8 text-center pointer-events-auto"
@@ -1244,6 +1336,13 @@ export default function InviteScreening() {
             peopleCount={peopleCount}
             viewVisible={viewVisible}
             handleOpenInvitationClick={handleOpenInvitationClick}
+            showEmailField={showEmailField}
+            emailInput={emailInput}
+            setEmailInput={setEmailInput}
+            emailError={emailError}
+            emailSuggestion={emailSuggestion}
+            onAcceptEmailSuggestion={handleAcceptEmailSuggestion}
+            emailSubmitting={emailSubmitting}
           />
         )}
 
@@ -1255,6 +1354,13 @@ export default function InviteScreening() {
             peopleCount={peopleCount}
             viewVisible={viewVisible}
             handleOpenInvitationClick={handleOpenInvitationClick}
+            showEmailField={showEmailField}
+            emailInput={emailInput}
+            setEmailInput={setEmailInput}
+            emailError={emailError}
+            emailSuggestion={emailSuggestion}
+            onAcceptEmailSuggestion={handleAcceptEmailSuggestion}
+            emailSubmitting={emailSubmitting}
           />
         )}
 
@@ -1430,16 +1536,9 @@ export default function InviteScreening() {
                 setLetterNote={setLetterNote}
                 letterRecipientEmail={letterRecipientEmail}
                 setLetterRecipientEmail={setLetterRecipientEmail}
-                letterSenderEmail={letterSenderEmail}
-                setLetterSenderEmail={setLetterSenderEmail}
-                newPassword={newPassword}
-                setNewPassword={setNewPassword}
                 letterSending={letterSending}
                 handleSendLetter={handleSendLetter}
-                isInviteRecipientSession={isInviteRecipientSession}
-                invite={invite}
                 user={user}
-                signOut={signOut}
                 goToDashboard={() => navigate('/dashboard', { replace: true, state: { screeningToken: token } })}
                 resumeFilm={resumeFilm}
                 hasSentInvite={sentLetters.length > 0}
@@ -1459,16 +1558,9 @@ export default function InviteScreening() {
                 setLetterNote={setLetterNote}
                 letterRecipientEmail={letterRecipientEmail}
                 setLetterRecipientEmail={setLetterRecipientEmail}
-                letterSenderEmail={letterSenderEmail}
-                setLetterSenderEmail={setLetterSenderEmail}
-                newPassword={newPassword}
-                setNewPassword={setNewPassword}
                 letterSending={letterSending}
                 handleSendLetter={handleSendLetter}
-                isInviteRecipientSession={isInviteRecipientSession}
-                invite={invite}
                 user={user}
-                signOut={signOut}
                 goToDashboard={() => navigate('/dashboard', { replace: true, state: { screeningToken: token } })}
                 resumeFilm={resumeFilm}
                 hasSentInvite={sentLetters.length > 0}

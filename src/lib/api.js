@@ -86,6 +86,26 @@ export const api = {
       }),
     }),
 
+  // Passwordless invite-first sign-in
+  inviteSession: (token, email, appUrl = null) =>
+    request('/invites/session', {
+      method: 'POST',
+      body: JSON.stringify({ token, email, appUrl }),
+    }),
+
+  relinkInvite: (token, accessToken) =>
+    request('/invites/relink', {
+      method: 'POST',
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      body: JSON.stringify({ token }),
+    }),
+
+  sendSignInLink: (email, appUrl = null, redirectPath = '/dashboard') =>
+    request('/auth/signin-link', {
+      method: 'POST',
+      body: JSON.stringify({ email, appUrl, redirectPath }),
+    }),
+
   resendLastInvite: (filmId, senderId, appUrl = null) =>
     request('/invites/resend-last', {
       method: 'POST',

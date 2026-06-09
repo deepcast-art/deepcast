@@ -1,5 +1,6 @@
 import NetworkGraph from '../../components/NetworkGraph'
 import DeepcastLogo from '../../components/DeepcastLogo'
+import InviteEmailEntry from './InviteEmailEntry'
 
 function ordinalSuffix(n) {
   if (n == null || Number.isNaN(Number(n))) return ''
@@ -19,6 +20,13 @@ export default function DesktopLanding({
   peopleCount,
   viewVisible,
   handleOpenInvitationClick,
+  showEmailField,
+  emailInput,
+  setEmailInput,
+  emailError,
+  emailSuggestion,
+  onAcceptEmailSuggestion,
+  emailSubmitting,
 }) {
   return (
     <section className="relative flex w-full flex-col overflow-hidden md:flex-row md:items-start">
@@ -43,22 +51,19 @@ export default function DesktopLanding({
             className="!text-8xl w-auto max-w-[min(90vw,440px)] leading-none"
           />
         </div>
-        <button
-          type="button"
-          onClick={handleOpenInvitationClick}
-          className="group flex cursor-pointer flex-col items-center gap-3 border-0 bg-transparent p-0 reveal-up"
-          style={{ transitionDelay: '500ms' }}
-        >
-          <span className="font-sans text-[9px] uppercase tracking-[0.3em] text-[#b1a180] transition-colors duration-300 group-hover:text-[#dddddd]">
-            Enter
-          </span>
-          <div className="relative w-fit overflow-hidden py-1">
-            <span className="font-serif-v3 text-2xl italic text-[#dddddd]">
-              Open your invitation
-            </span>
-            <div className="absolute bottom-0 left-0 h-[0.5px] w-full -translate-x-full bg-[#b1a180] transition-transform duration-[600ms] ease-out group-hover:translate-x-0" />
-          </div>
-        </button>
+        <InviteEmailEntry
+          showEmailField={showEmailField}
+          emailInput={emailInput}
+          setEmailInput={setEmailInput}
+          emailError={emailError}
+          emailSuggestion={emailSuggestion}
+          onAcceptEmailSuggestion={onAcceptEmailSuggestion}
+          emailSubmitting={emailSubmitting}
+          onSubmit={handleOpenInvitationClick}
+          size="lg"
+          revealUp
+          transitionDelay="500ms"
+        />
       </div>
 
       <div className="hidden h-[100dvh] w-[0.5px] flex-shrink-0 self-start bg-[#b1a180] opacity-30 md:block" />

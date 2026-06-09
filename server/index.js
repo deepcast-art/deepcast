@@ -207,7 +207,9 @@ app.get('/api/mux/playback/:playbackId', async (req, res) => {
 // ============ INVITE ROUTES ============
 
 function generateToken() {
-  return crypto.randomBytes(4).toString('hex') // 8 char hex string
+  // 16 bytes → 32-char hex (128-bit). invites.token is `text` (no length cap), so no truncation.
+  // Security of the invite-first sign-in flow leans on tokens being unguessable.
+  return crypto.randomBytes(16).toString('hex')
 }
 
 /**
@@ -357,14 +359,16 @@ app.post('/api/invites/send', async (req, res) => {
     // Count runs here (before insert) and gets +1 applied later for the ordinal.
     const [
       { data: film, error: filmLookupError },
-      { data: sender, error: senderError },
+      { data: senderInitial, error: senderError },
       { data: claimedParent },
       { count: preInsertCount, error: inviteCountError },
       { data: existingInvite },
     ] = await Promise.all([
       supabase.from('films').select('title, description, thumbnail_url, creator_id, mux_playback_id, gif_start, gif_end').eq('id', filmId).single(),
+      // maybeSingle: a missing profile row returns data:null WITHOUT an error, so we can tell a real
+      // DB error apart from "profile not created yet" (the passwordless magic-link race) and self-heal.
       senderId
-        ? supabase.from('users').select('invite_allocation, role, team_creator_id, id, email, name').eq('id', senderId).single()
+        ? supabase.from('users').select('invite_allocation, role, team_creator_id, id, email, name').eq('id', senderId).maybeSingle()
         : Promise.resolve({ data: null, error: null }),
       clientParentInviteId
         ? supabase.from('invites').select('id, film_id').eq('id', clientParentInviteId).maybeSingle()
@@ -387,6 +391,7 @@ app.post('/api/invites/send', async (req, res) => {
     }
 
     let unlimitedInvites = false
+    let sender = senderInitial
 
     if (senderId) {
       if (senderError) {
@@ -394,7 +399,13 @@ app.post('/api/invites/send', async (req, res) => {
         return res.status(500).json({ error: 'Unable to verify invites' })
       }
       if (!sender) {
-        return res.status(404).json({ error: 'Sender not found' })
+        // Self-heal the profile-before-session race: a valid auth user can briefly have no
+        // profile row (passwordless magic-link sign-in). Create it from the auth record rather
+        // than hard-failing with "Unable to verify invites".
+        sender = await ensureProfileForUserId(senderId)
+        if (!sender) {
+          return res.status(404).json({ error: 'Sender not found' })
+        }
       }
 
       const role = String(sender.role || '').trim().toLowerCase()
@@ -1401,6 +1412,409 @@ app.post('/api/invites/claim-account', async (req, res) => {
   } catch (err) {
     console.error('claim-account error:', err)
     res.status(500).json({ error: 'Account creation failed' })
+  }
+})
+
+/* ================================================================== */
+/*  PASSWORDLESS INVITE-FIRST SIGN-IN                                 */
+/* ================================================================== */
+
+/**
+ * RELINK: point the opened invite (looked up by token) at the chosen account email so the
+ * dashboard "received" query and isInviteRecipientSession both match the account going forward.
+ *
+ * R5 guard: never create a duplicate (film_id, recipient_email). If another invite for the same
+ * film already holds this email, we skip the overwrite — the account is still linked to the film
+ * via that pre-existing invite through the email match. Only the opened invite is ever relinked
+ * (siblings to the original email are intentionally left untouched).
+ *
+ * @returns {{ relinked: boolean, openedInvite: object|null }}
+ */
+async function relinkOpenedInvite(token, emailNorm) {
+  const { data: opened, error } = await supabase
+    .from('invites')
+    .select('id, film_id, recipient_email')
+    .eq('token', token)
+    .maybeSingle()
+  if (error || !opened) return { relinked: false, reason: 'invite-not-found', openedInvite: null }
+
+  if (normalizeEmail(opened.recipient_email) === emailNorm) {
+    // Opened invite already points at this account — nothing to do, already linked.
+    return { relinked: false, reason: 'already-current', openedInvite: opened }
+  }
+
+  const { data: clash } = await supabase
+    .from('invites')
+    .select('id')
+    .eq('film_id', opened.film_id)
+    .neq('id', opened.id)
+    .ilike('recipient_email', emailNorm)
+    .limit(1)
+    .maybeSingle()
+  if (clash) {
+    // R5 guard: this account already holds a different invite for the same film, so it is already
+    // linked (the dashboard "received" query matches by email). Skipping avoids a duplicate
+    // (film_id, recipient_email) — this is a benign, explicit no-op, not an unlinked state.
+    console.warn(
+      `relink: ${emailNorm} already linked to film ${opened.film_id} via invite ${clash.id}; leaving opened invite ${opened.id} as-is`
+    )
+    return { relinked: false, reason: 'already-linked-via-sibling', openedInvite: opened }
+  }
+
+  const { error: updErr } = await supabase
+    .from('invites')
+    .update({ recipient_email: emailNorm })
+    .eq('id', opened.id)
+  if (updErr) {
+    console.error('relinkOpenedInvite update:', updErr)
+    return { relinked: false, reason: 'update-failed', openedInvite: opened }
+  }
+  return { relinked: true, reason: 'relinked', openedInvite: { ...opened, recipient_email: emailNorm } }
+}
+
+/**
+ * Replicate the email-keyed linkage that the old password signUp did (auth.jsx:317-327), so
+ * sent/received attribution still works now that the viewer flow no longer calls signUp:
+ *  - invites this person received (recipient_email) that were already watched → signed_up
+ *  - invites this person sent under this email (sender_email) but with no sender_id → stamp it
+ *  - stamp watch_sessions for any tokens opened on this email with the new viewer_id
+ */
+async function replicateInviteLinkage(userId, emailNorm, displayName, openedToken) {
+  await Promise.all([
+    supabase
+      .from('invites')
+      .update({ status: 'signed_up' })
+      .ilike('recipient_email', emailNorm)
+      .eq('status', 'watched'),
+    supabase
+      .from('invites')
+      .update({ sender_id: userId, sender_name: displayName, sender_email: emailNorm })
+      .ilike('sender_email', emailNorm)
+      .is('sender_id', null),
+    openedToken
+      ? supabase
+          .from('watch_sessions')
+          .update({ viewer_id: userId })
+          .eq('invite_token', openedToken)
+          .is('viewer_id', null)
+      : Promise.resolve(),
+  ]).catch((err) => console.warn('replicateInviteLinkage:', err?.message || err))
+}
+
+/**
+ * Find-or-create the public.users profile for an existing auth user id. Used to self-heal the
+ * profile-before-session race (a valid session that briefly has no profile row). Returns the row,
+ * or null if there is no auth user behind the id.
+ */
+async function ensureProfileForUserId(userId) {
+  const { data: existing } = await supabase.from('users').select('*').eq('id', userId).maybeSingle()
+  if (existing) return existing
+
+  const { data: authData } = await supabase.auth.admin.getUserById(userId)
+  const authUser = authData?.user
+  if (!authUser?.email) return null
+
+  const emailNorm = normalizeEmail(authUser.email)
+  const displayName = (authUser.user_metadata?.full_name || '').trim() || emailNorm.split('@')[0]
+  const parts = displayName.split(/\s+/)
+  const { data: created, error } = await supabase
+    .from('users')
+    .insert({
+      id: userId,
+      email: emailNorm,
+      name: displayName,
+      first_name: parts[0] || displayName,
+      last_name: parts.slice(1).join(' ') || '',
+      role: 'viewer',
+      invite_allocation: 5,
+    })
+    .select()
+    .single()
+  if (error) {
+    // Lost a race with a concurrent insert — re-read.
+    const { data: again } = await supabase.from('users').select('*').eq('id', userId).maybeSingle()
+    return again || null
+  }
+  return created
+}
+
+/**
+ * Create (passwordless) or find the auth user + profile for an invited email.
+ * Returns { userId, created } — `created` is true only when THIS call created the auth user, so the
+ * caller knows whether it's safe to roll the user back on a later failure.
+ */
+async function findOrCreatePasswordlessAccount(emailNorm, displayName) {
+  const parts = displayName.split(/\s+/)
+  const firstName = parts[0] || displayName
+  const lastName = parts.slice(1).join(' ') || ''
+
+  const existing = await findAuthUserByEmail(emailNorm)
+  let userId
+  let created = false
+  if (existing) {
+    userId = existing.id
+    if (!existing.email_confirmed_at) {
+      await supabase.auth.admin.updateUserById(userId, { email_confirm: true })
+    }
+  } else {
+    // No password — this is a passwordless account. email_confirm so no Supabase confirm email fires.
+    const { data, error } = await supabase.auth.admin.createUser({
+      email: emailNorm,
+      email_confirm: true,
+      user_metadata: { full_name: displayName },
+    })
+    if (error || !data?.user?.id) {
+      const msg = error?.message || 'Could not create account'
+      const e = new Error(msg)
+      e.alreadyExists = /already|registered|exists/i.test(msg)
+      throw e
+    }
+    userId = data.user.id
+    created = true
+  }
+
+  const { data: profile } = await supabase.from('users').select('id').eq('id', userId).maybeSingle()
+  if (!profile) {
+    const { error: profErr } = await supabase.from('users').insert({
+      id: userId,
+      email: emailNorm,
+      name: displayName,
+      first_name: firstName,
+      last_name: lastName,
+      role: 'viewer',
+      invite_allocation: 5,
+    })
+    if (profErr) {
+      // Don't leave an orphaned auth user (no profile) — it would poison retries by tripping the
+      // existing-account guard. Roll back only the user WE created.
+      if (created) await supabase.auth.admin.deleteUser(userId).catch(() => {})
+      throw new Error('Failed to create profile')
+    }
+  }
+  return { userId, created }
+}
+
+/** Branded one-tap sign-in email (matches the invite email aesthetic — NOT Supabase's default sender). */
+function buildSignInEmailHtml(actionLink, contextLine) {
+  const safe = escapeHtml(actionLink)
+  const intro = escapeHtml(
+    contextLine || 'Tap below to sign in to Deepcast. This link is single-use and expires shortly.'
+  )
+  return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background-color:#0c1220;">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#0c1220;">
+<tr><td align="center" style="padding:0;">
+<table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%;background-color:#0c1220;">
+<tr><td align="center" style="padding:56px 40px 8px;">
+  <img src="https://wmtjgpxhjtbocsmutqqc.supabase.co/storage/v1/object/public/film-assets/deepcast-logo-cropped.png" width="200" alt="deepcast" style="display:block;border:0;margin:0 auto;" />
+</td></tr>
+<tr><td align="center" style="padding:24px 40px 8px;">
+  <p style="margin:0;font-size:10px;letter-spacing:4px;text-transform:uppercase;color:#6b7fa3;font-family:system-ui,-apple-system,sans-serif;">SIGN IN TO DEEPCAST</p>
+</td></tr>
+<tr><td style="padding:16px 40px 28px;">
+  <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.7;color:#c8d0dc;text-align:center;">${intro}</p>
+</td></tr>
+<tr><td align="center" style="padding:0 40px 40px;">
+  <table cellpadding="0" cellspacing="0" role="presentation">
+    <tr><td style="background-color:#b8a06a;border-radius:2px;">
+      <a href="${safe}" style="display:inline-block;padding:18px 48px;font-family:system-ui,-apple-system,sans-serif;font-weight:700;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#0c1220;text-decoration:none;">SIGN IN</a>
+    </td></tr>
+  </table>
+</td></tr>
+<tr><td align="center" style="padding:0 40px 32px;">
+  <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:12px;line-height:1.6;color:#6b7fa3;text-align:center;">If you didn’t request this, you can safely ignore this email.</p>
+</td></tr>
+<tr><td align="center" style="padding:8px 40px 40px;">
+  <p style="margin:0;font-size:10px;color:#2a3a5a;letter-spacing:2px;font-family:system-ui,-apple-system,sans-serif;">© deepcast</p>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body></html>`
+}
+
+/** Generate a Supabase magic link (admin, no email sent) and deliver it via Resend. */
+async function sendSignInLinkEmail(emailNorm, redirectTo, contextLine) {
+  const { data, error } = await supabase.auth.admin.generateLink({
+    type: 'magiclink',
+    email: emailNorm,
+    options: redirectTo ? { redirectTo } : undefined,
+  })
+  if (error || !data?.properties?.action_link) {
+    throw new Error(error?.message || 'Could not generate sign-in link')
+  }
+  await sendInviteEmailResend({
+    to: emailNorm,
+    subject: 'Your Deepcast sign-in link',
+    html: buildSignInEmailHtml(data.properties.action_link, contextLine),
+    text: `Sign in to Deepcast:\n${data.properties.action_link}\n\nThis link is single-use and expires shortly. If you didn't request it, ignore this email.`,
+  })
+}
+
+/**
+ * Invite-first passwordless session.
+ *  - No existing account → create passwordless account, RELINK opened invite, mint session IN-BAND
+ *    (return hashed_token; client calls verifyOtp). No email sent.
+ *  - Existing account → DO NOT mint a session. Email a one-tap sign-in link (Resend) that returns
+ *    to this invitation, and tell the client to show "check your inbox".
+ */
+app.post('/api/invites/session', async (req, res) => {
+  try {
+    const { token, email, appUrl } = req.body || {}
+    const t = typeof token === 'string' ? token.trim() : ''
+    const emailNorm = normalizeEmail(email)
+    if (!t) return res.status(400).json({ error: 'Invite token is required' })
+    if (!emailNorm || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm)) {
+      return res.status(400).json({ error: 'A valid email is required' })
+    }
+    if (supabaseKeyRole !== 'service_role') {
+      return res.status(503).json({
+        error: 'Sign-in is not fully configured on this server',
+        details: 'Add SUPABASE_SERVICE_ROLE_KEY to the API environment.',
+      })
+    }
+
+    const { data: invite, error: invErr } = await supabase
+      .from('invites')
+      .select('id, recipient_name, recipient_email')
+      .eq('token', t)
+      .maybeSingle()
+    if (invErr) return res.status(500).json({ error: 'Failed to load invitation' })
+    if (!invite) return res.status(404).json({ error: 'Invitation not found' })
+
+    // Name follows the invite record, not the typed email.
+    const displayName =
+      (invite.recipient_name && invite.recipient_name.trim()) || emailNorm.split('@')[0]
+
+    // EXISTING-ACCOUNT GUARD: never mint a session without an inbox round-trip.
+    const existingAuthUser = await findAuthUserByEmail(emailNorm)
+    if (existingAuthUser) {
+      const baseUrl = resolveBaseUrl(appUrl, req.get('origin'))
+      const redirectTo = `${baseUrl}/i/${encodeURIComponent(t)}`
+      await sendSignInLinkEmail(
+        emailNorm,
+        redirectTo,
+        'Tap below to sign in and open your invitation. This link is single-use and expires shortly.'
+      )
+      return res.json({ status: 'existing', emailed: true })
+    }
+
+    // NEW ACCOUNT: create passwordless, relink, replicate linkage, mint session in-band.
+    let userId
+    let created
+    try {
+      ({ userId, created } = await findOrCreatePasswordlessAccount(emailNorm, displayName))
+    } catch (err) {
+      if (err.alreadyExists) {
+        // Raced with a create — fall back to the email round-trip rather than minting.
+        const baseUrl = resolveBaseUrl(appUrl, req.get('origin'))
+        await sendSignInLinkEmail(emailNorm, `${baseUrl}/i/${encodeURIComponent(t)}`)
+        return res.json({ status: 'existing', emailed: true })
+      }
+      console.error('invites/session create:', err)
+      return res.status(500).json({ error: err.message || 'Could not create account' })
+    }
+
+    // Finalize atomically: relink + linkage + session. If ANY step fails, roll back the auth user
+    // we just created so the next attempt re-enters cleanly in-band instead of being shunted to the
+    // existing-account email path. (Relinking the invite's recipient_email is idempotent and harmless
+    // to leave; the orphaned auth user is the only thing that poisons retries.)
+    try {
+      await relinkOpenedInvite(t, emailNorm)
+      await replicateInviteLinkage(userId, emailNorm, displayName, t)
+
+      // In-band session: generateLink (no redirectTo needed — client verifies the hash directly).
+      const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
+        type: 'magiclink',
+        email: emailNorm,
+      })
+      if (linkErr || !linkData?.properties?.hashed_token) {
+        throw new Error(linkErr?.message || 'Could not generate session link')
+      }
+
+      return res.json({
+        status: 'created',
+        userId,
+        email: emailNorm,
+        tokenHash: linkData.properties.hashed_token,
+      })
+    } catch (finalizeErr) {
+      if (created) {
+        await supabase.from('users').delete().eq('id', userId).catch(() => {})
+        await supabase.auth.admin.deleteUser(userId).catch(() => {})
+      }
+      console.error('invites/session finalize:', finalizeErr)
+      return res.status(500).json({ error: 'Could not establish session' })
+    }
+  } catch (err) {
+    console.error('invites/session error:', err)
+    return res.status(500).json({ error: 'Sign-in failed' })
+  }
+})
+
+/**
+ * RELINK for an already-signed-in user opening an invite (case 1). Authenticated via the caller's
+ * bearer token — the email is resolved from the verified session, never asserted by the client.
+ */
+app.post('/api/invites/relink', async (req, res) => {
+  try {
+    const { token } = req.body || {}
+    const t = typeof token === 'string' ? token.trim() : ''
+    if (!t) return res.status(400).json({ error: 'Invite token is required' })
+
+    const authHeader = req.get('authorization') || ''
+    const jwt = authHeader.replace(/^Bearer\s+/i, '').trim()
+    if (!jwt) return res.status(401).json({ error: 'Not authenticated' })
+
+    const { data: userData, error: userErr } = await supabase.auth.getUser(jwt)
+    const authUser = userData?.user
+    if (userErr || !authUser?.email) return res.status(401).json({ error: 'Invalid session' })
+
+    const emailNorm = normalizeEmail(authUser.email)
+
+    // Guarantee a profile exists for this session before the user can act (share). This closes the
+    // magic-link profile-before-session race that produced "Unable to verify invites".
+    const profile = await ensureProfileForUserId(authUser.id)
+
+    const { relinked, reason } = await relinkOpenedInvite(t, emailNorm)
+    const displayName = authUser.user_metadata?.full_name || emailNorm.split('@')[0]
+    await replicateInviteLinkage(authUser.id, emailNorm, displayName, t)
+
+    return res.json({ success: true, relinked, reason, profileReady: Boolean(profile) })
+  } catch (err) {
+    console.error('invites/relink error:', err)
+    return res.status(500).json({ error: 'Relink failed' })
+  }
+})
+
+/**
+ * Bare-site / re-auth sign-in link (no invite token). Emails a one-tap link that lands on the
+ * dashboard. Always responds 200 (does not reveal whether an account exists) but only sends when
+ * an account is present.
+ */
+app.post('/api/auth/signin-link', async (req, res) => {
+  try {
+    const { email, appUrl, redirectPath } = req.body || {}
+    const emailNorm = normalizeEmail(email)
+    if (!emailNorm || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm)) {
+      return res.status(400).json({ error: 'A valid email is required' })
+    }
+    if (supabaseKeyRole !== 'service_role') {
+      return res.status(503).json({ error: 'Sign-in is not fully configured on this server' })
+    }
+
+    const existing = await findAuthUserByEmail(emailNorm)
+    if (existing) {
+      const baseUrl = resolveBaseUrl(appUrl, req.get('origin'))
+      const path = typeof redirectPath === 'string' && redirectPath.startsWith('/') ? redirectPath : '/dashboard'
+      await sendSignInLinkEmail(emailNorm, `${baseUrl}${path}`)
+    }
+    // Uniform response regardless of existence.
+    return res.json({ ok: true })
+  } catch (err) {
+    console.error('auth/signin-link error:', err)
+    return res.status(500).json({ error: 'Could not send sign-in link' })
   }
 })
 

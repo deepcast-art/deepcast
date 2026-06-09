@@ -16,16 +16,9 @@ export default function DesktopPassItOn({
   setLetterNote,
   letterRecipientEmail,
   setLetterRecipientEmail,
-  letterSenderEmail,
-  setLetterSenderEmail,
-  newPassword,
-  setNewPassword,
   letterSending,
   handleSendLetter,
-  isInviteRecipientSession,
-  invite,
   user,
-  signOut,
   goToDashboard,
   resumeFilm,
   hasSentInvite,
@@ -157,29 +150,10 @@ export default function DesktopPassItOn({
 
                   <div className="w-[80px] h-[1px] bg-gradient-to-r from-transparent via-[#2a2a2a]/30 to-transparent" />
 
-                  {!isInviteRecipientSession && (
-                    <div className="flex flex-col items-center gap-2 w-full max-w-[340px]">
-                      <label className="font-['DM_Sans',sans-serif] text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/70">
-                        Create your account to seal &amp; send
-                      </label>
-                      <input type="email" placeholder="Your Email Address" value={letterSenderEmail} onChange={(e) => setLetterSenderEmail(e.target.value)} className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-[13px] font-['DM_Sans',sans-serif] text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors rounded-none" />
-                      <input type="password" placeholder="Create Password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-[13px] font-['DM_Sans',sans-serif] text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors rounded-none" />
-                    </div>
-                  )}
-
                   <button type="button" onClick={handleSendLetter} disabled={letterSending} className="w-full max-w-[340px] py-3 bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-['DM_Sans',sans-serif] text-[11px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none disabled:opacity-40">
                     {letterSending ? 'Sending…' : 'Seal & Send'}
                   </button>
 
-                  {passItOnLayerActive && !isInviteRecipientSession && user && (
-                    <div className="flex flex-col items-center gap-2 border-t border-[#2a2a2a]/10 pt-3 text-center w-full max-w-[340px]">
-                      <p className="font-['DM_Sans',sans-serif] text-[10px] leading-relaxed text-[#2a2a2a]/50">
-                        Signed in as a different email. Sign out to use{' '}
-                        <span className="text-[#2a2a2a]/70">{invite?.recipient_email}</span>.
-                      </p>
-                      <button type="button" onClick={() => void signOut()} className="font-['DM_Sans',sans-serif] text-[10px] uppercase tracking-[0.2em] text-[#2a2a2a]/50 hover:text-[#2a2a2a]">Sign out</button>
-                    </div>
-                  )}
                   {passItOnLayerActive && user && hasSentInvite && (
                     <button
                       type="button"
