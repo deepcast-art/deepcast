@@ -1,6 +1,7 @@
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from './lib/auth'
+import { supabase } from './lib/supabase'
 
 // const Landing = lazy(() => import('./pages/Landing.jsx'))
 const InviteScreening = lazy(() => import('./pages/InviteScreening.jsx'))
@@ -68,6 +69,72 @@ function ProtectedRoute({ children, requiredRole, requiredRoles }) {
 
   if (requiredRole && profile.role !== requiredRole) return <Navigate to="/profile" replace />
 
+  return children
+}
+
+/**
+ * Gates viewer-only routes behind "has shared at least once". A viewer who has never sent an
+ * invite is bounced to their screening's share form; everyone else passes through untouched.
+ *
+ * Safety: ONLY viewers are ever gated. Non-viewers (creators / team_members) resolve to
+ * `allowed` synchronously with no spinner and are never redirected. For viewers we wait for the
+ * async "ever shared" check to finish before deciding, so a viewer who HAS shared is never
+ * flashed/bounced. Must wrap a ProtectedRoute (which guarantees `profile` exists).
+ */
+function ViewerShareGate({ children }) {
+  const { profile } = useAuth()
+  const isViewer = profile?.role === 'viewer'
+  // Non-viewers: decided immediately, never gated. Viewers: undecided until the check resolves.
+  const [gate, setGate] = useState(() =>
+    isViewer ? { checked: false, allowed: false, to: null } : { checked: true, allowed: true, to: null }
+  )
+
+  useEffect(() => {
+    // Non-viewers are decided by the initializer; never gated, no setState, no spinner.
+    if (!isViewer) return
+    let cancelled = false
+    ;(async () => {
+      // "Ever shared ≥1" signal: any invite this viewer has sent, across all films.
+      const { count } = await supabase
+        .from('invites')
+        .select('id', { count: 'exact', head: true })
+        .eq('sender_id', profile.id)
+      if (cancelled) return
+      if (count && count > 0) {
+        setGate({ checked: true, allowed: true, to: null })
+        return
+      }
+      // Never shared → send them to their share form. Target = most-recent received invite token.
+      let to = '/profile' // safest minimal fallback when no invite token exists.
+      const email = (profile.email || '').trim()
+      if (email) {
+        const { data } = await supabase
+          .from('invites')
+          .select('token')
+          .ilike('recipient_email', email)
+          .order('created_at', { ascending: false })
+          .limit(1)
+        const token = data?.[0]?.token
+        if (token) to = `/i/${token}`
+      }
+      if (!cancelled) setGate({ checked: true, allowed: false, to })
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isViewer, profile?.id, profile?.email])
+
+  if (!gate.checked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+  if (!gate.allowed) {
+    const state = gate.to?.startsWith('/i/') ? { showShare: true } : undefined
+    return <Navigate to={gate.to} replace state={state} />
+  }
   return children
 }
 
@@ -158,9 +225,11 @@ export default function App() {
           <ProtectedRoute
             requiredRoles={['creator', 'team_member', 'viewer']}
           >
-            <Suspense fallback={<RouteFallback />}>
-              <Dashboard />
-            </Suspense>
+            <ViewerShareGate>
+              <Suspense fallback={<RouteFallback />}>
+                <Dashboard />
+              </Suspense>
+            </ViewerShareGate>
           </ProtectedRoute>
         }
       />
@@ -178,9 +247,11 @@ export default function App() {
         path="/network"
         element={
           <ProtectedRoute>
-            <Suspense fallback={<RouteFallback />}>
-              <NetworkMap />
-            </Suspense>
+            <ViewerShareGate>
+              <Suspense fallback={<RouteFallback />}>
+                <NetworkMap />
+              </Suspense>
+            </ViewerShareGate>
           </ProtectedRoute>
         }
       />
@@ -188,9 +259,11 @@ export default function App() {
         path="/impact"
         element={
           <ProtectedRoute>
-            <Suspense fallback={<RouteFallback />}>
-              <PostShare />
-            </Suspense>
+            <ViewerShareGate>
+              <Suspense fallback={<RouteFallback />}>
+                <PostShare />
+              </Suspense>
+            </ViewerShareGate>
           </ProtectedRoute>
         }
       />

@@ -8,7 +8,7 @@ import {
   useMemo,
   useSyncExternalStore,
 } from 'react'
-import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useParams, Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
@@ -125,6 +125,10 @@ export default function InviteScreening() {
   const directPlay = searchParams.get('play') === '1'
   const startTimeParam = searchParams.get('t')
   const navigate = useNavigate()
+  const location = useLocation()
+  // Arrived from the share gate (a viewer who has never shared was bounced here):
+  // skip the prologue/landing and drop straight onto the pass-it-on share form.
+  const showShareIntent = Boolean(location.state?.showShare)
   const { establishInviteSession, relinkInvite, fetchProfile, user, profile } = useAuth()
   const isDesktop = useMediaQueryMdUp()
   const isLgUp = useMediaQueryLgUp()
@@ -309,6 +313,22 @@ export default function InviteScreening() {
     finalizeEnterScreening()
   }, [directPlay, status])
 
+  // When bounced here by the share gate, skip prologue + landing and show the pass-it-on
+  // share form directly. The player mounts paused (autoPlay is gated on showPostFilm), so no
+  // hidden playback. The user can still rewatch via the "Resume Film" bar.
+  useEffect(() => {
+    if (!showShareIntent || status !== 'valid') return
+    if (entrySplashTimerRef.current?.clear) entrySplashTimerRef.current.clear()
+    entrySplashRunningRef.current = false
+    setMobileRotateGateActive(false)
+    setPrologueState({ text1: false, text2: false, textsVisible: false, overlayVisible: false, mounted: false })
+    setPreScreeningPrologue({ visible: false, textVisible: false, text2Visible: false, fading: false })
+    exitScreeningFullscreen()
+    setViewVisible(true)
+    setCurrentView('screening')
+    setShowPostFilm(true)
+  }, [showShareIntent, status])
+
   async function validateInvite() {
     // Exponential backoff: 0 → 1s → 2s → 4s → 8s (5 attempts, ~15s total budget)
     const DELAYS = [0, 1000, 2000, 4000, 8000]
@@ -459,7 +479,7 @@ export default function InviteScreening() {
   /* ---------- PROLOGUE SEQUENCE (with ?ctx=, can start as soon as decrypt finishes — no API wait) ---------- */
 
   const shouldStartWelcomePrologue =
-    directPlay
+    directPlay || showShareIntent
       ? false
       : status !== 'invalid' && status !== 'expired'
 
@@ -952,15 +972,17 @@ export default function InviteScreening() {
           .eq('id', sessionId)
           .then(() => {})
       }
-      // Returning viewer who has already shared: show the thank-you screen with a dashboard link
-      // instead of silently navigating away. First-time viewers still go straight to the dashboard.
+      // Returning viewer who has already shared: show the thank-you screen with a dashboard link.
       if (sentLetters.length > 0) {
         exitScreeningFullscreen()
         setShowPostFilm(true)
         setCompletionThankYouVisible(true)
         return
       }
-      navigate('/dashboard', { replace: true, state: { screeningToken: token } })
+      // Never-shared viewer (incl. a first-timer who watched straight to the end): always prompt
+      // to share. The pass-it-on form has no dashboard escape until they've sent ≥1 invite.
+      exitScreeningFullscreen()
+      setShowPostFilm(true)
       return
     }
 
@@ -1382,7 +1404,7 @@ export default function InviteScreening() {
                     playbackId={film.mux_playback_id}
                     metadata={{ video_title: film.title }}
                     accentColor="#b1a180"
-                    autoPlay
+                    autoPlay={!showPostFilm}
                     autohide={-1}
                     startTime={Number(startTimeParam) || Number(localStorage.getItem(`screening_position_${token}`)) || 0}
                     onTimeUpdate={handleTimeUpdate}
