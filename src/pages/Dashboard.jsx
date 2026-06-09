@@ -671,7 +671,8 @@ export default function Dashboard() {
         profile.email,
         modalNote.trim() || null,
         window.location.origin,
-        viewerFocusInviteId || null
+        viewerFocusInviteId || null,
+        modalFirst.trim()
       )
       await fetchProfile(profile.id)
       const newId = await loadViewerDashboard()

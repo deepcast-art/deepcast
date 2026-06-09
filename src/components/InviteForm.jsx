@@ -171,7 +171,8 @@ export default function InviteForm({
           resolvedSenderEmail,
           recipientNote,
           appUrl,
-          null
+          null,
+          recipient.firstName.trim()
         )
         setSent((prev) => [...prev, recipient])
       }

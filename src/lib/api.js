@@ -69,7 +69,8 @@ export const api = {
     senderEmail = null,
     personalNote = null,
     appUrl = null,
-    parentInviteId = null
+    parentInviteId = null,
+    recipientFirstName = null
   ) =>
     request('/invites/send', {
       method: 'POST',
@@ -77,6 +78,7 @@ export const api = {
         filmId,
         recipientEmail,
         recipientName,
+        recipientFirstName,
         senderName,
         senderId,
         senderEmail,

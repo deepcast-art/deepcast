@@ -333,6 +333,7 @@ app.post('/api/invites/send', async (req, res) => {
       filmId,
       recipientEmail,
       recipientName,
+      recipientFirstName: recipientFirstNameInput,
       senderName,
       senderId,
       senderEmail,
@@ -539,7 +540,15 @@ app.post('/api/invites/send', async (req, res) => {
     // ── Phase 5: respond immediately, then send email in background ────────
     const baseUrl = resolveBaseUrl(appUrl, req.get('origin'))
     const senderFirst = sender?.name?.trim().split(/\s+/)[0] || ''
-    const recipientFirstName = recipientName ? recipientName.trim().split(/\s+/)[0] : null
+    // Greeting uses the dedicated first-name field exactly as entered (e.g. "Min Hye",
+    // "Mary-Jane") — never split. Fall back to the legacy full-name split only if the
+    // client didn't send a first name.
+    const recipientFirstName =
+      typeof recipientFirstNameInput === 'string' && recipientFirstNameInput.trim()
+        ? recipientFirstNameInput.trim()
+        : recipientName
+          ? recipientName.trim().split(/\s+/)[0]
+          : null
     const ctx = encryptInviteCtx(senderFirst, recipientFirstName || '')
     const inviteUrl = ctx ? `${baseUrl}/i/${token}?ctx=${ctx}` : `${baseUrl}/i/${token}`
 
@@ -2079,7 +2088,9 @@ function buildInviteEmailHtml({
     senderDisplay: escapeHtml(senderName || 'Someone'),
     senderUpper: escapeHtml((senderName || 'Someone').toUpperCase()),
     recipientName: escapeHtml(recipientName || ''),
-    recipientFirstName: escapeHtml((recipientName || '').split(' ')[0]),
+    // `recipientName` is already the first name passed by the caller — don't split it
+    // again, or multi-word first names like "Min Hye" would be truncated to "Min".
+    recipientFirstName: escapeHtml(recipientName || ''),
     filmTitle: escapeHtml(filmTitle || ''),
     filmDescription: escapeHtml(filmDescription || ''),
     personalNote: personalNote ? escapeHtml(String(personalNote).trim()) : '',

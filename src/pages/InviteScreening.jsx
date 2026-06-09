@@ -1065,7 +1065,8 @@ export default function InviteScreening() {
         senderEmail,
         letterNote.trim() || null,
         window.location.origin,
-        invite?.id || null
+        invite?.id || null,
+        letterRecipientFirst.trim()
       )
 
       const [{ data: { session } }] = await Promise.all([
