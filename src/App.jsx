@@ -11,7 +11,6 @@ const Profile = lazy(() => import('./pages/Profile.jsx'))
 const Dashboard = lazy(() => import('./pages/Dashboard.jsx'))
 const Upload = lazy(() => import('./pages/Upload.jsx'))
 const NetworkMap = lazy(() => import('./pages/NetworkMap.jsx'))
-const PostShare = lazy(() => import('./pages/PostShare.jsx'))
 const TeamJoin = lazy(() => import('./pages/TeamJoin.jsx'))
 const Unsubscribe = lazy(() => import('./pages/Unsubscribe.jsx'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword.jsx'))
@@ -250,18 +249,6 @@ export default function App() {
             <ViewerShareGate>
               <Suspense fallback={<RouteFallback />}>
                 <NetworkMap />
-              </Suspense>
-            </ViewerShareGate>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/impact"
-        element={
-          <ProtectedRoute>
-            <ViewerShareGate>
-              <Suspense fallback={<RouteFallback />}>
-                <PostShare />
               </Suspense>
             </ViewerShareGate>
           </ProtectedRoute>
