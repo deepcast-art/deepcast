@@ -75,10 +75,14 @@ npm test                 # Unit + E2E
 
 - **Personal notes are always visible.** Wherever sharing happens — the share prompt, the dashboard invite form, any future surface — every recipient row shows a visible, optional, clearly-labeled personal-note field by default, for normal and unlimited users alike. Never collapse the note behind a link, icon, or toggle; the note is core to the gifting experience.
 
-## Canonical reach stat (`src/lib/reach.js`)
+## Canonical displayed stats — one shared computation per stat
 
-- A user's **reach** = the number of people in their downstream branch who have **OPENED** their invite (status `opened` / `watched` / `signed_up`) — *not* merely received one.
-- Every surface that displays a reach count — now or in the future — must compute it via `src/lib/reach.js` (`computeUserReach`, `reachBelowInvite`, `isInviteOpened`). Never write a second reach computation; two paths for one stat is exactly the bug this module exists to prevent.
+**Standing rule:** every number displayed anywhere in the app must have exactly ONE shared, unit-tested computation in `src/lib/` used by every surface that shows it. Never write an inline calculation in a page component; two paths for one stat is exactly the class of bug these modules exist to prevent.
+
+- **Reach** (`src/lib/reach.js`): a user's reach = the number of people in their downstream branch who have **OPENED** their invite (status `opened` / `watched` / `signed_up`) — *not* merely received one. Use `computeUserReach`, `reachBelowInvite`, `isInviteOpened`. Shown as "People you've reached" / per-invitee "People they've reached" on the dashboard.
+- **Invitations remaining** (`src/lib/shares.js`): the server-enforced `users.invite_allocation` (decremented by one on every successful send), never below zero; **Infinity** for unlimited sharers. `isUnlimitedSharer(profile)` = creator, team member, or team-linked viewer — the exact rule `/api/invites/send` enforces. Use `invitationsRemaining(profile)` everywhere ("Shares left" on the dashboard, the share-prompt label, the Profile invites stat, `InviteForm`'s `maxInvites` prop). Never hardcode a cap (the old `min(5, allocation)` bug). `InviteForm` freezes the quota at mount and subtracts its own session sends, so a parent refetching the profile can't double-count.
+- **Per-film invite stats** (`src/lib/filmStats.js`): `computeFilmStats(invites)` → `sent` (all invites), `opened` (`opened`/`watched`/`signed_up` — shares the status list with reach), `watched` (`watched`/`signed_up`), `signedUp` (`signed_up`). Statuses are cumulative. Used by the creator dashboard's Invited/Opened/Watched/Signed-up panel and the network map's "N watched".
+- **Shares used** (dashboard) = the viewer's sent-invite rows for the selected film (list length — counts the same rows the sent-list shows). **Films / N invites / Show more (N remaining)** are plain lengths of the displayed lists themselves.
 
 ## Code style
 

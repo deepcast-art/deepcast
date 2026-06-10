@@ -6,6 +6,8 @@ import { api } from '../lib/api'
 import DeepcastLogo from '../components/DeepcastLogo'
 import NetworkGraph from '../components/NetworkGraph'
 import { buildGraphLayout, resolveViewerFocus } from '../lib/graphLayout'
+// Canonical "watched" definition (src/lib/filmStats.js) — same one the dashboard stats use.
+import { isInviteWatched } from '../lib/filmStats.js'
 
 export default function NetworkMap() {
   const { profile } = useAuth()
@@ -336,12 +338,7 @@ export default function NetworkMap() {
                 </div>
                 {(profile.role === 'creator' || profile.role === 'team_member') && (
                   <span className="text-text-muted text-xs uppercase tracking-wider">
-                    {
-                      filteredInvites.filter(
-                        (i) => i.status === 'watched' || i.status === 'signed_up'
-                      ).length
-                    }{' '}
-                    watched
+                    {filteredInvites.filter(isInviteWatched).length} watched
                   </span>
                 )}
               </div>

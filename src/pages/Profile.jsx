@@ -7,6 +7,8 @@ import DeepcastLogo from '../components/DeepcastLogo'
 import NetworkGraph from '../components/NetworkGraph'
 import { buildGraphLayout, resolveViewerFocus } from '../lib/graphLayout'
 import { ensureHttpsUrl } from '../lib/httpsUrl.js'
+// Canonical share quota (src/lib/shares.js) — single source for "invitations remaining".
+import { isUnlimitedSharer, invitationsRemaining } from '../lib/shares.js'
 
 function FilmNetworkPreview({ film, invites, creatorName, profileEmail, profileRole }) {
   // Shared focus resolution — identical helper to the dashboard and screening pages.
@@ -225,9 +227,7 @@ export default function Profile() {
           <div className="flex flex-row flex-wrap items-center gap-x-6 gap-y-2 sm:flex-col sm:items-end sm:text-right">
             <div className="flex items-baseline gap-2 sm:flex-col sm:items-end sm:gap-0">
               <p className="text-accent text-2xl font-light">
-                {profile.role === 'creator' || profile.role === 'team_member'
-                  ? 'Unlimited'
-                  : profile.invite_allocation}
+                {isUnlimitedSharer(profile) ? 'Unlimited' : invitationsRemaining(profile)}
               </p>
               <p className="text-text-muted text-xs uppercase tracking-wider">invites</p>
             </div>
@@ -306,7 +306,7 @@ export default function Profile() {
                           </p>
                         )}
                       </div>
-                      {(profile.role === 'team_member' || profile.invite_allocation > 0) && (
+                      {invitationsRemaining(profile) > 0 && (
                         <button
                           onClick={() =>
                             setSelectedFilm(selectedFilm?.id === film.id ? null : film)
@@ -335,12 +335,8 @@ export default function Profile() {
                   senderName={profile.name}
                   senderEmail={profile.email}
                   senderId={profile.id}
-                  unlimited={profile.role === 'team_member'}
-                  maxInvites={
-                    profile.role === 'team_member'
-                      ? 50
-                      : Math.min(5, profile.invite_allocation)
-                  }
+                  unlimited={isUnlimitedSharer(profile)}
+                  maxInvites={invitationsRemaining(profile)}
                   onInviteSent={() => {
                     fetchProfile(user.id)
                     loadData()

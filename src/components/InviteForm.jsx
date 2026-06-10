@@ -12,7 +12,10 @@ export default function InviteForm({
   senderName,
   senderEmail,
   senderId,
-  maxInvites = 3,
+  /** The sender's invitations remaining at mount — callers MUST pass
+   *  `invitationsRemaining(profile)` (src/lib/shares.js), never a hardcoded cap.
+   *  Defaults to 0 (fail closed) so a missing quota can never over-promise. */
+  maxInvites = 0,
   unlimited = false,
   onInviteSent,
   showSenderFields = false,
@@ -27,6 +30,8 @@ export default function InviteForm({
   delayOnInviteSentMs = 2200,
 }) {
   const { signUp, signIn } = useAuth()
+  /** See slotsRemaining: the quota is frozen at mount on purpose. */
+  const [quotaAtMount] = useState(() => Math.max(0, maxInvites))
   const [recipients, setRecipients] = useState(() => [
     {
       firstName: initialRecipient?.firstName?.trim() || '',
@@ -213,10 +218,16 @@ export default function InviteForm({
     }
   }
 
-  /** Invites left to send (do not subtract draft rows — only completed sends count). */
-  const slotsRemaining = unlimited ? Number.MAX_SAFE_INTEGER : Math.max(0, maxInvites - sent.length)
+  /** Invites left to send: the quota at mount minus this session's completed
+   *  sends. The server decrements the allocation once per send, so this always
+   *  equals the live allocation — deliberately ignoring later `maxInvites` prop
+   *  changes (a parent refetching the profile after a send would otherwise make
+   *  us subtract the same send twice). Draft rows don't count. */
+  const slotsRemaining = unlimited
+    ? Number.MAX_SAFE_INTEGER
+    : Math.max(0, quotaAtMount - sent.length)
 
-  if (!unlimited && sent.length >= maxInvites) {
+  if (!unlimited && sent.length >= quotaAtMount) {
     return (
       <div className="text-center">
         <p className="text-text-muted text-sm">All invitations sent.</p>

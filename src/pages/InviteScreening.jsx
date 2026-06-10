@@ -23,11 +23,13 @@ import MobileLanding from './screening/MobileLanding'
 import DesktopLanding from './screening/DesktopLanding'
 import MobilePassItOn from './screening/MobilePassItOn'
 import DesktopPassItOn from './screening/DesktopPassItOn'
+// Canonical share quota (src/lib/shares.js) — single source for "invitations remaining".
+import { isUnlimitedSharer as profileIsUnlimitedSharer, invitationsRemaining } from '../lib/shares'
 import './screening-room.css'
 
 const VIEWER_SHARE_LIMIT = 5
 
-/** Blank share-letter recipient row (per-recipient note collapsed by default). */
+/** Blank share-letter recipient row (always-visible optional note). */
 const EMPTY_RECIPIENT = { first: '', email: '', note: '' }
 
 /** Mobile “Open your invitation” waits until this orientation before the prologue + film (landscape = widescreen cinema). */
@@ -1076,21 +1078,14 @@ export default function InviteScreening() {
 
   /** Unlimited sharers: the filmmaker, team members, and team-linked viewers
    *  (the same rule the server enforces on /api/invites/send). */
-  const isUnlimitedSharer = Boolean(
-    profile &&
-      (profile.role === 'creator' ||
-        profile.role === 'team_member' ||
-        (profile.role === 'viewer' && profile.team_creator_id))
-  )
+  const isUnlimitedSharer = profileIsUnlimitedSharer(profile)
 
-  /** Remaining share quota — the server-enforced allocation for viewers; no cap
-   *  for unlimited sharers. Falls back to the legacy per-invite count only while
-   *  the profile hasn't loaded yet. */
-  const slotsRemaining = isUnlimitedSharer
-    ? Infinity
-    : profile
-      ? Math.max(0, profile.invite_allocation ?? 0)
-      : Math.max(0, VIEWER_SHARE_LIMIT - sentLetters.length)
+  /** Remaining share quota — the canonical computation (src/lib/shares.js).
+   *  Falls back to the legacy per-invite count only while the profile hasn't
+   *  loaded yet. */
+  const slotsRemaining = profile
+    ? invitationsRemaining(profile)
+    : Math.max(0, VIEWER_SHARE_LIMIT - sentLetters.length)
 
   /** "+ add another" is capped at the remaining quota (never capped for unlimited). */
   const canAddRecipient = letterRecipients.length < slotsRemaining

@@ -15,6 +15,9 @@ import {
   reachBelowInvite,
   computeUserReach,
 } from '../lib/reach.js'
+// Canonical share quota + per-film stats — same single-source rule as reach.
+import { invitationsRemaining } from '../lib/shares.js'
+import { computeFilmStats } from '../lib/filmStats.js'
 
 /** Sent-invitations list renders in pages so an unlimited sharer with hundreds of
  *  shares can see them ALL without slowing the dashboard down. Normal users never
@@ -123,15 +126,13 @@ export default function Dashboard() {
   const filmOwnerId =
     profile?.role === 'team_member' ? profile?.team_creator_id : profile?.id
   const isViewer = profile?.role === 'viewer'
-  /** A viewer on a filmmaker's team has unlimited shares (server enforces the same rule). */
-  const isUnlimitedViewer = isViewer && Boolean(profile?.team_creator_id)
 
-  const invitesLeft = isViewer
-    ? Math.max(0, profile?.invite_allocation ?? 0)
-    : null
+  /** Canonical quota (src/lib/shares.js): Infinity for unlimited sharers
+   *  (incl. team-linked viewers), else the server-maintained allocation. */
+  const invitesLeft = isViewer ? invitationsRemaining(profile) : null
   const sentCount = isViewer ? viewerSentInvites.length : 0
   const canShareMore = isViewer && viewerFilmId
-  const shareDisabled = !isUnlimitedViewer && (!invitesLeft || invitesLeft <= 0)
+  const shareDisabled = isViewer && invitationsRemaining(profile) <= 0
 
   // Shared focus resolution (same helper every graph surface uses): email match first,
   // then invite-token match, then the common parent of the viewer's sent invites.
@@ -417,13 +418,7 @@ export default function Dashboard() {
       for (const film of creatorFilms || []) {
         const all = (allFilmInvites || []).filter((i) => i.film_id === film.id)
         rawInvites[film.id] = all
-        stats[film.id] = {
-          sent: all.length,
-          opened: all.filter((i) => ['opened', 'watched', 'signed_up'].includes(i.status))
-            .length,
-          watched: all.filter((i) => ['watched', 'signed_up'].includes(i.status)).length,
-          signedUp: all.filter((i) => i.status === 'signed_up').length,
-        }
+        stats[film.id] = computeFilmStats(all)
 
         trees[film.id] = all.map((inv) => {
           const sender = inv.sender_id ? senderById.get(inv.sender_id) : null
@@ -703,9 +698,15 @@ export default function Dashboard() {
               <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
                 Shares left
               </span>
-              <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-accent md:text-[2.5rem]">
-                {invitesLeft}
-              </span>
+              {invitesLeft === Infinity ? (
+                <span className="font-display text-2xl font-normal leading-none tracking-tight text-accent">
+                  Unlimited
+                </span>
+              ) : (
+                <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-accent md:text-[2.5rem]">
+                  {invitesLeft}
+                </span>
+              )}
             </div>
             <div className="flex flex-col gap-1.5">
               <span className="group relative inline-flex w-fit cursor-help font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
