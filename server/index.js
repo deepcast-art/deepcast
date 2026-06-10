@@ -1953,60 +1953,50 @@ app.get('/api/invites/validate/:token', async (req, res) => {
       return res.status(410).json({ error: 'Invite expired' })
     }
 
-    if (inv.status === 'pending') {
-      await supabase
+    // All five follow-ups depend only on the invite row already loaded, so they run in parallel —
+    // one round-trip to Supabase instead of five sequential ones (the API and DB are in different
+    // regions, so each sequential query costs a full cross-region round trip).
+    const [
+      ,
+      { data: session, error: sessionError },
+      { data: senderUser },
+      { data: filmInvites, error: invitesError },
+      { data: creatorUser },
+    ] = await Promise.all([
+      inv.status === 'pending'
+        ? supabase.from('invites').update({ status: 'opened' }).eq('id', inv.id)
+        : Promise.resolve({}),
+      supabase
+        .from('watch_sessions')
+        .insert({ film_id: inv.film_id, invite_token: token })
+        .select()
+        .single(),
+      /** Sender name must come exclusively from the sender's live profile — never from stale invite fields or email. */
+      inv.sender_id
+        ? supabase.from('users').select('name').eq('id', inv.sender_id).single()
+        : Promise.resolve({ data: null }),
+      /** All invites for this film — used by the viewer's network map. Service role bypasses RLS. */
+      supabase
         .from('invites')
-        .update({ status: 'opened' })
-        .eq('id', inv.id)
-    }
-
-    const { data: session, error: sessionError } = await supabase
-      .from('watch_sessions')
-      .insert({
-        film_id: inv.film_id,
-        invite_token: token,
-      })
-      .select()
-      .single()
+        .select('id, film_id, sender_id, sender_name, sender_email, recipient_name, recipient_email, status, created_at, parent_invite_id')
+        .eq('film_id', inv.film_id)
+        .order('created_at', { ascending: true }),
+      /** Creator name for the network map root label. */
+      inv.films?.creator_id
+        ? supabase.from('users').select('name').eq('id', inv.films.creator_id).single()
+        : Promise.resolve({ data: null }),
+    ])
 
     if (sessionError) {
       console.error('Watch session create error:', sessionError.message || sessionError)
     }
 
-    /** Sender name must come exclusively from the sender's live profile — never from stale invite fields or email. */
-    let senderDisplayName = null
-    if (inv.sender_id) {
-      const { data: senderUser } = await supabase
-        .from('users')
-        .select('name')
-        .eq('id', inv.sender_id)
-        .single()
-      if (senderUser?.name?.trim()) {
-        senderDisplayName = senderUser.name.trim()
-      }
-    }
-
-    /** All invites for this film — used by the viewer's network map. Service role bypasses RLS. */
-    const { data: filmInvites, error: invitesError } = await supabase
-      .from('invites')
-      .select('id, film_id, sender_id, sender_name, sender_email, recipient_name, recipient_email, status, created_at, parent_invite_id')
-      .eq('film_id', inv.film_id)
-      .order('created_at', { ascending: true })
-
     if (invitesError) {
       console.error('validate: filmInvites load error', invitesError.message || invitesError)
     }
 
-    /** Creator name for the network map root label. */
-    let creatorName = ''
-    if (inv.films?.creator_id) {
-      const { data: creatorUser } = await supabase
-        .from('users')
-        .select('name')
-        .eq('id', inv.films.creator_id)
-        .single()
-      creatorName = creatorUser?.name?.trim() || ''
-    }
+    const senderDisplayName = senderUser?.name?.trim() || null
+    const creatorName = creatorUser?.name?.trim() || ''
 
     return res.json({
       invite: inv,
