@@ -44,18 +44,36 @@ npm run test:e2e         # Playwright smoke tests (starts dev server automatical
 npm test                 # Unit + E2E
 ```
 
-## Git workflow
+## Git & deploy workflow
 
-- **`main`** — production. Merges here deploy the live site.
-- **`staging`** — work-in-progress. Push here for Vercel preview deploys.
-- Workflow: branch from `staging` (or commit directly), push to `staging`, then PR/merge `staging` → `main` for release.
+- **Work directly on `main`. COMMIT ONLY — never push.** The owner pushes manually; production auto-deploys from `main` (Vercel frontend, Render API).
+- One commit per phase/feature, with a plain-English commit message.
+- The owner is **non-technical**: final reports, commit summaries, and anything they will read must be plain English, not jargon.
 
 ## Testing
 
 - **Unit tests:** `*.test.js` colocated with modules, uses Vitest. Run with `npm run test:unit`.
 - **E2E tests:** `e2e/*.spec.js`, uses Playwright (Chromium). Run with `npm run test:e2e`.
+  - If the headless-shell download stalls on this machine, use the full-Chromium fallback: `npx playwright test --config playwright.local.config.js` (local-only file, not committed).
 - Build includes unit tests: `npm run build` runs `vitest run && vite build`.
+- Local dev: Vite on port **3000**, Express API on port **3001** (Vite proxies `/api/*` to 3001). `npm run dev` starts both.
+- **Fresh manual-test links:** `node server/reset-test-data.js` (dry-run first with `--dry-run`) deletes ONLY the allowlisted test emails' data and mints five fresh, unopened filmmaker invites — one per allowlisted email. These are the five standard scenarios used to manually walk the invite → watch → pass-it-on → dashboard journey from five separate identities (including the already-signed-in relink case and the R5 no-relink case).
+- **Email rendering:** `node server/preview-email.js` writes `server/email-preview.html` to inspect the invite email without sending anything.
 - Setup for new clone: `npm install && npx playwright install chromium`.
+
+## Standing doctrine (every session)
+
+- **Plan before editing.** Read the relevant files and write a short plan (files per phase, order, risks) before changing anything.
+- **Diagnose root cause before fixing.** Never patch a symptom; explain the cause, then fix it at the source.
+- **One commit per phase.** After each phase run unit tests, `npm run build`, and the e2e suite, and fix any regression *before* committing.
+- **Never trust comments over code.** Verify behaviour in the code itself; comments may be stale.
+- **Destructive-data rule:** any script that writes to or deletes production data must default to dry-run and require an owner-run `--execute` (with typed confirmation) — never execute such an operation yourself. (`server/reset-test-data.js` is the scoped, allowlisted exception used for test links; still dry-run it first.)
+- **Prefer single simple commands** over compound shell chains (`;`, `&&`, `|`) when feasible, so permission prompts stay rare.
+
+## Canonical reach stat (`src/lib/reach.js`)
+
+- A user's **reach** = the number of people in their downstream branch who have **OPENED** their invite (status `opened` / `watched` / `signed_up`) — *not* merely received one.
+- Every surface that displays a reach count — now or in the future — must compute it via `src/lib/reach.js` (`computeUserReach`, `reachBelowInvite`, `isInviteOpened`). Never write a second reach computation; two paths for one stat is exactly the bug this module exists to prevent.
 
 ## Code style
 
@@ -110,6 +128,7 @@ npm test                 # Unit + E2E
 - Everyone else chains to whoever shared with them: `parent_invite_id` first, then an email-match repair (the invite through which the sender's email received the film).
 - Server-side, `/api/invites/send` never records a `parent_invite_id` for unlimited senders (creator/team) — this is what permanently prevents the phantom-intermediate-node bug.
 - `/api/invites/validate` returns `creatorId` + `teamMemberIds` for the screening surfaces; the dashboard/network-map/profile pass `films.creator_id` from their own queries (films are publicly readable; users rows are NOT readable cross-role under RLS — use `maybeSingle()` for creator-name lookups).
+- The central node displays the filmmaker's name with "(filmmaker)" beneath it: `buildGraphLayout` sets `creatorLabel` on the root node (caller-supplied `creatorName`, falling back to the `sender_name` on a creator-sent invite when RLS hides the users row), and `FilmNode` renders it below the camera icon on every surface.
 
 ## Network graph component (`src/components/NetworkGraph.jsx`)
 
