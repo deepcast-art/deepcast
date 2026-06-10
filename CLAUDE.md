@@ -70,6 +70,8 @@ npm test                 # Unit + E2E
 - **Never trust comments over code.** Verify behaviour in the code itself; comments may be stale.
 - **Destructive-data rule:** any script that writes to or deletes production data must default to dry-run and require an owner-run `--execute` (with typed confirmation) — never execute such an operation yourself. (`server/reset-test-data.js` is the scoped, allowlisted exception used for test links; still dry-run it first.)
 - **Prefer single simple commands** over compound shell chains (`;`, `&&`, `|`) when feasible, so permission prompts stay rare.
+- **Prefer allowlisted read-only routes over approval-prompting tools.** For any read-only action use what's already allowed: `node server/db-read.js` for database reads, `grep`/`cat`/`git diff` for code, `npx eslint` for lint, and the allowlisted read-only MCP tools (Supabase/Vercel `list_*`/`get_*`/`search_docs` in `.claude/settings.local.json`) for infra inspection. Never reach for a tool that can write when a read-only route answers the question.
+- **Pre-existing lint never blocks work.** Verify a lint issue pre-dates your changes (e.g. lint the file at HEAD), report it in the final summary, and move on — fix it only if asked.
 
 ## Email-sending doctrine
 
