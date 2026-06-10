@@ -28,7 +28,7 @@ import './screening-room.css'
 const VIEWER_SHARE_LIMIT = 5
 
 /** Blank share-letter recipient row (per-recipient note collapsed by default). */
-const EMPTY_RECIPIENT = { first: '', email: '', note: '', noteOpen: false }
+const EMPTY_RECIPIENT = { first: '', email: '', note: '' }
 
 /** Mobile “Open your invitation” waits until this orientation before the prologue + film (landscape = widescreen cinema). */
 function isLandscapeOrientation() {
@@ -190,10 +190,10 @@ export default function InviteScreening() {
 
   /* ---------- LETTER FORM STATE ---------- */
 
-  /** Multi-recipient: each row is its own invite + email, with an OPTIONAL
-   *  per-recipient personal note (collapsed behind "Add a personal note" so the
-   *  default letter stays clean). The gate to proceed is still exactly ONE
-   *  successful share — extra rows are optional. */
+  /** Multi-recipient: each row is its own invite + email, with an always-visible
+   *  OPTIONAL per-recipient personal note (product rule: the note field is never
+   *  hidden behind a link — it's core to the gifting experience). The gate to
+   *  proceed is still exactly ONE successful share — extra rows are optional. */
   const [letterRecipients, setLetterRecipients] = useState([{ ...EMPTY_RECIPIENT }])
   const [letterSenderName, setLetterSenderName] = useState('')
   const [letterSenderEmail, setLetterSenderEmail] = useState('')
@@ -209,15 +209,6 @@ export default function InviteScreening() {
   }, [])
   const removeLetterRecipient = useCallback((idx) => {
     setLetterRecipients((rows) => (rows.length > 1 ? rows.filter((_, i) => i !== idx) : rows))
-  }, [])
-  /** Open/close a row's personal-note field; closing discards the note so a
-   *  hidden field can never silently ride along on the email. */
-  const toggleLetterNote = useCallback((idx) => {
-    setLetterRecipients((rows) =>
-      rows.map((r, i) =>
-        i === idx ? (r.noteOpen ? { ...r, noteOpen: false, note: '' } : { ...r, noteOpen: true }) : r
-      )
-    )
   }, [])
 
   /* ---------- LANDING EMAIL (passwordless invite-first sign-in) ---------- */
@@ -1239,7 +1230,7 @@ export default function InviteScreening() {
       // report exactly which sends succeeded and which didn't.
       if (failed.length) {
         setLetterRecipients(
-          failed.map((f) => ({ first: f.first, email: f.email, note: f.note || '', noteOpen: Boolean(f.note) }))
+          failed.map((f) => ({ first: f.first, email: f.email, note: f.note || '' }))
         )
         if (succeeded.length) {
           setLetterSuccess(`Sent to ${succeeded.map((s) => s.first).join(', ')}.`)
@@ -1646,7 +1637,6 @@ export default function InviteScreening() {
                 addLetterRecipient={addLetterRecipient}
                 removeLetterRecipient={removeLetterRecipient}
                 canAddRecipient={canAddRecipient}
-                toggleLetterNote={toggleLetterNote}
                 letterSending={letterSending}
                 handleSendLetter={handleSendLetter}
                 user={user}
@@ -1667,7 +1657,6 @@ export default function InviteScreening() {
                 addLetterRecipient={addLetterRecipient}
                 removeLetterRecipient={removeLetterRecipient}
                 canAddRecipient={canAddRecipient}
-                toggleLetterNote={toggleLetterNote}
                 letterSending={letterSending}
                 handleSendLetter={handleSendLetter}
                 user={user}

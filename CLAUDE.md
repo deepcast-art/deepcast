@@ -70,6 +70,10 @@ npm test                 # Unit + E2E
 - **Destructive-data rule:** any script that writes to or deletes production data must default to dry-run and require an owner-run `--execute` (with typed confirmation) — never execute such an operation yourself. (`server/reset-test-data.js` is the scoped, allowlisted exception used for test links; still dry-run it first.)
 - **Prefer single simple commands** over compound shell chains (`;`, `&&`, `|`) when feasible, so permission prompts stay rare.
 
+## Standing product rules
+
+- **Personal notes are always visible.** Wherever sharing happens — the share prompt, the dashboard invite form, any future surface — every recipient row shows a visible, optional, clearly-labeled personal-note field by default, for normal and unlimited users alike. Never collapse the note behind a link, icon, or toggle; the note is core to the gifting experience.
+
 ## Canonical reach stat (`src/lib/reach.js`)
 
 - A user's **reach** = the number of people in their downstream branch who have **OPENED** their invite (status `opened` / `watched` / `signed_up`) — *not* merely received one.

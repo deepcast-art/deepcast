@@ -13,7 +13,6 @@ export default function MobilePassItOn({
   addLetterRecipient,
   removeLetterRecipient,
   canAddRecipient,
-  toggleLetterNote,
   letterSending,
   handleSendLetter,
   user,
@@ -141,19 +140,15 @@ export default function MobilePassItOn({
                                className="min-w-0 flex-1 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center text-[10px] focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" autoComplete="given-name" />
                         <span>,</span>
                       </div>
-                      {letterRecipients[0]?.noteOpen && (
-                        <textarea rows={1} autoFocus placeholder="Write your note here. Tell them why this film made you think of them specifically…" value={letterRecipients[0]?.note || ''} onChange={(e) => updateLetterRecipient(0, 'note', e.target.value)}
-                                  className="w-full bg-transparent border-none text-center text-[10px] focus:outline-none resize-none placeholder-[#2a2a2a]/30 leading-snug text-[#2a2a2a]" />
-                      )}
+                      <textarea rows={1} placeholder="Write your note here. Tell them why this film made you think of them specifically…" aria-label="Personal note (optional)" value={letterRecipients[0]?.note || ''} onChange={(e) => updateLetterRecipient(0, 'note', e.target.value)}
+                                className="w-full bg-transparent border-none text-center text-[10px] focus:outline-none resize-none placeholder-[#2a2a2a]/30 leading-snug text-[#2a2a2a]" />
+                      <span className="block font-sans text-[6px] uppercase tracking-[0.2em] text-[#2a2a2a]/45">Personal note — optional</span>
                     </div>
                     <div className="flex flex-col gap-1 w-full text-center mt-2">
                       <label className="font-sans text-[7px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Deliver To</label>
                       <input type="email" placeholder="Their email" value={letterRecipients[0]?.email || ''} onChange={(e) => updateLetterRecipient(0, 'email', e.target.value)}
                              className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-0 text-[10px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors rounded-none" inputMode="email" autoComplete="email" />
                     </div>
-                    <button type="button" onClick={() => toggleLetterNote(0)} className="mt-1.5 font-sans text-[7px] uppercase tracking-[0.2em] text-[#2a2a2a]/45 hover:text-[#2a2a2a]/75 transition-colors touch-manipulation">
-                      {letterRecipients[0]?.noteOpen ? '− remove personal note' : '+ add a personal note'}
-                    </button>
                     {letterRecipients.slice(1).map((r, i) => (
                       <div key={i + 1} className="mt-2 flex w-full flex-col items-center gap-1">
                         <div className="flex w-full items-end gap-1.5">
@@ -163,13 +158,8 @@ export default function MobilePassItOn({
                                  className="flex-1 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-0 text-center text-[10px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors" inputMode="email" />
                           <button type="button" onClick={() => removeLetterRecipient(i + 1)} aria-label="Remove recipient" className="px-1 text-sm leading-none text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors touch-manipulation">&times;</button>
                         </div>
-                        {r.noteOpen && (
-                          <textarea rows={1} autoFocus placeholder={`A personal note for ${r.first.trim() || 'them'}…`} value={r.note || ''} onChange={(e) => updateLetterRecipient(i + 1, 'note', e.target.value)}
-                                    className="w-full bg-transparent border-none text-center text-[10px] focus:outline-none resize-none placeholder-[#2a2a2a]/30 leading-snug font-serif-v3 text-[#2a2a2a]" />
-                        )}
-                        <button type="button" onClick={() => toggleLetterNote(i + 1)} className="font-sans text-[7px] uppercase tracking-[0.2em] text-[#2a2a2a]/45 hover:text-[#2a2a2a]/75 transition-colors touch-manipulation">
-                          {r.noteOpen ? '− remove personal note' : '+ add a personal note'}
-                        </button>
+                        <textarea rows={1} placeholder={`A personal note for ${r.first.trim() || 'them'}… (optional)`} aria-label={`Recipient ${i + 2} personal note (optional)`} value={r.note || ''} onChange={(e) => updateLetterRecipient(i + 1, 'note', e.target.value)}
+                                  className="w-full bg-transparent border-none text-center text-[10px] focus:outline-none resize-none placeholder-[#2a2a2a]/30 leading-snug font-serif-v3 text-[#2a2a2a]" />
                       </div>
                     ))}
                     {canAddRecipient && (
@@ -261,19 +251,15 @@ export default function MobilePassItOn({
                                className="w-[140px] bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" autoComplete="given-name" />
                         <span>,</span>
                       </div>
-                      {letterRecipients[0]?.noteOpen && (
-                        <textarea rows={2} autoFocus placeholder="Write your note here. Tell them why this film made you think of them specifically..." value={letterRecipients[0]?.note || ''} onChange={(e) => updateLetterRecipient(0, 'note', e.target.value)}
-                                  className="w-full bg-transparent border-none text-center focus:outline-none resize-none placeholder-[#2a2a2a]/30 leading-relaxed text-base text-[#2a2a2a]" />
-                      )}
+                      <textarea rows={2} placeholder="Write your note here. Tell them why this film made you think of them specifically..." aria-label="Personal note (optional)" value={letterRecipients[0]?.note || ''} onChange={(e) => updateLetterRecipient(0, 'note', e.target.value)}
+                                className="w-full bg-transparent border-none text-center focus:outline-none resize-none placeholder-[#2a2a2a]/30 leading-relaxed text-base text-[#2a2a2a]" />
+                      <span className="block font-sans text-[7px] uppercase tracking-[0.2em] text-[#2a2a2a]/45">Personal note — optional</span>
                     </div>
                     <div className="flex flex-col gap-1 w-full max-w-[320px] text-center mt-2">
                       <label className="font-sans text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Deliver To</label>
                       <input type="email" placeholder="Their Email Address" value={letterRecipients[0]?.email || ''} onChange={(e) => updateLetterRecipient(0, 'email', e.target.value)}
                              className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors rounded-none" inputMode="email" autoComplete="email" />
                     </div>
-                    <button type="button" onClick={() => toggleLetterNote(0)} className="mt-2 min-h-[32px] font-sans text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/45 hover:text-[#2a2a2a]/75 transition-colors touch-manipulation">
-                      {letterRecipients[0]?.noteOpen ? '− remove personal note' : '+ add a personal note'}
-                    </button>
                     {letterRecipients.slice(1).map((r, i) => (
                       <div key={i + 1} className="mt-3 flex w-full max-w-[320px] flex-col items-center gap-1.5">
                         <div className="flex w-full items-end gap-2">
@@ -283,13 +269,8 @@ export default function MobilePassItOn({
                                  className="flex-1 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-center text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors" inputMode="email" />
                           <button type="button" onClick={() => removeLetterRecipient(i + 1)} aria-label="Remove recipient" className="min-h-[32px] px-1.5 text-base leading-none text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors touch-manipulation">&times;</button>
                         </div>
-                        {r.noteOpen && (
-                          <textarea rows={2} autoFocus placeholder={`A personal note for ${r.first.trim() || 'them'}…`} value={r.note || ''} onChange={(e) => updateLetterRecipient(i + 1, 'note', e.target.value)}
-                                    className="w-full bg-transparent border-none text-center focus:outline-none resize-none placeholder-[#2a2a2a]/30 leading-relaxed font-serif-v3 text-base text-[#2a2a2a]" />
-                        )}
-                        <button type="button" onClick={() => toggleLetterNote(i + 1)} className="min-h-[32px] font-sans text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/45 hover:text-[#2a2a2a]/75 transition-colors touch-manipulation">
-                          {r.noteOpen ? '− remove personal note' : '+ add a personal note'}
-                        </button>
+                        <textarea rows={2} placeholder={`A personal note for ${r.first.trim() || 'them'}… (optional)`} aria-label={`Recipient ${i + 2} personal note (optional)`} value={r.note || ''} onChange={(e) => updateLetterRecipient(i + 1, 'note', e.target.value)}
+                                  className="w-full bg-transparent border-none text-center focus:outline-none resize-none placeholder-[#2a2a2a]/30 leading-relaxed font-serif-v3 text-base text-[#2a2a2a]" />
                       </div>
                     ))}
                     {canAddRecipient && (
