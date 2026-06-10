@@ -27,6 +27,9 @@ import './screening-room.css'
 
 const VIEWER_SHARE_LIMIT = 5
 
+/** Blank share-letter recipient row (per-recipient note collapsed by default). */
+const EMPTY_RECIPIENT = { first: '', email: '', note: '', noteOpen: false }
+
 /** Mobile “Open your invitation” waits until this orientation before the prologue + film (landscape = widescreen cinema). */
 function isLandscapeOrientation() {
   if (typeof window === 'undefined') return true
@@ -187,10 +190,11 @@ export default function InviteScreening() {
 
   /* ---------- LETTER FORM STATE ---------- */
 
-  /** Multi-recipient: each row is its own invite + email. The gate to proceed is
-   *  still exactly ONE successful share — extra rows are optional. */
-  const [letterRecipients, setLetterRecipients] = useState([{ first: '', email: '' }])
-  const [letterNote, setLetterNote] = useState('')
+  /** Multi-recipient: each row is its own invite + email, with an OPTIONAL
+   *  per-recipient personal note (collapsed behind "Add a personal note" so the
+   *  default letter stays clean). The gate to proceed is still exactly ONE
+   *  successful share — extra rows are optional. */
+  const [letterRecipients, setLetterRecipients] = useState([{ ...EMPTY_RECIPIENT }])
   const [letterSenderName, setLetterSenderName] = useState('')
   const [letterSenderEmail, setLetterSenderEmail] = useState('')
   const [letterSending, setLetterSending] = useState(false)
@@ -201,10 +205,19 @@ export default function InviteScreening() {
     setLetterRecipients((rows) => rows.map((r, i) => (i === idx ? { ...r, [field]: value } : r)))
   }, [])
   const addLetterRecipient = useCallback(() => {
-    setLetterRecipients((rows) => [...rows, { first: '', email: '' }])
+    setLetterRecipients((rows) => [...rows, { ...EMPTY_RECIPIENT }])
   }, [])
   const removeLetterRecipient = useCallback((idx) => {
     setLetterRecipients((rows) => (rows.length > 1 ? rows.filter((_, i) => i !== idx) : rows))
+  }, [])
+  /** Open/close a row's personal-note field; closing discards the note so a
+   *  hidden field can never silently ride along on the email. */
+  const toggleLetterNote = useCallback((idx) => {
+    setLetterRecipients((rows) =>
+      rows.map((r, i) =>
+        i === idx ? (r.noteOpen ? { ...r, noteOpen: false, note: '' } : { ...r, noteOpen: true }) : r
+      )
+    )
   }, [])
 
   /* ---------- LANDING EMAIL (passwordless invite-first sign-in) ---------- */
@@ -1091,6 +1104,14 @@ export default function InviteScreening() {
   /** "+ add another" is capped at the remaining quota (never capped for unlimited). */
   const canAddRecipient = letterRecipients.length < slotsRemaining
 
+  /** The one stat on the share prompt: invitations left, doing the math out loud
+   *  when several recipients are queued in this letter. */
+  const invitationsLabel = isUnlimitedSharer
+    ? 'Unlimited invitations'
+    : letterRecipients.length > 1
+      ? `${slotsRemaining} invitation${slotsRemaining === 1 ? '' : 's'} remaining − ${letterRecipients.length} in this letter = ${Math.max(0, slotsRemaining - letterRecipients.length)} left`
+      : `${slotsRemaining} invitation${slotsRemaining === 1 ? '' : 's'} remaining`
+
   async function refreshFilmInvites() {
     if (!film?.id) return
     const { data: refreshed } = await supabase
@@ -1105,7 +1126,11 @@ export default function InviteScreening() {
     setLetterError('')
     setLetterSuccess('')
 
-    const rows = letterRecipients.map((r) => ({ first: r.first.trim(), email: r.email.trim() }))
+    const rows = letterRecipients.map((r) => ({
+      first: r.first.trim(),
+      email: r.email.trim(),
+      note: (r.note || '').trim(),
+    }))
     if (rows.some((r) => !r.first || !r.email || !r.email.includes('@'))) {
       setLetterError('Please enter a first name and valid email for each recipient.')
       return
@@ -1162,7 +1187,7 @@ export default function InviteScreening() {
             senderName,
             senderId,
             senderEmail,
-            letterNote.trim() || null,
+            r.note || null,
             window.location.origin,
             invite?.id || null,
             r.first
@@ -1201,8 +1226,7 @@ export default function InviteScreening() {
       if (succeeded.length && !failed.length) {
         // Everything sent — the one real dashboard. recipientName powers Dashboard's
         // "Invitation sent" banner; screeningToken lets it offer "Resume".
-        setLetterRecipients([{ first: '', email: '' }])
-        setLetterNote('')
+        setLetterRecipients([{ ...EMPTY_RECIPIENT }])
         const names = succeeded.map((s) => s.first).join(', ')
         navigate('/dashboard', {
           replace: true,
@@ -1214,7 +1238,9 @@ export default function InviteScreening() {
       // Partial (or total) failure: keep the failed rows in the form for retry and
       // report exactly which sends succeeded and which didn't.
       if (failed.length) {
-        setLetterRecipients(failed.map((f) => ({ first: f.first, email: f.email })))
+        setLetterRecipients(
+          failed.map((f) => ({ first: f.first, email: f.email, note: f.note || '', noteOpen: Boolean(f.note) }))
+        )
         if (succeeded.length) {
           setLetterSuccess(`Sent to ${succeeded.map((s) => s.first).join(', ')}.`)
         }
@@ -1612,6 +1638,7 @@ export default function InviteScreening() {
                 narrowPausePassItOn={narrowPausePassItOn}
                 passItOnLayerActive={passItOnLayerActive}
                 slotsRemaining={slotsRemaining}
+                invitationsLabel={invitationsLabel}
                 letterError={letterError}
                 letterSuccess={letterSuccess}
                 letterRecipients={letterRecipients}
@@ -1619,8 +1646,7 @@ export default function InviteScreening() {
                 addLetterRecipient={addLetterRecipient}
                 removeLetterRecipient={removeLetterRecipient}
                 canAddRecipient={canAddRecipient}
-                letterNote={letterNote}
-                setLetterNote={setLetterNote}
+                toggleLetterNote={toggleLetterNote}
                 letterSending={letterSending}
                 handleSendLetter={handleSendLetter}
                 user={user}
@@ -1633,6 +1659,7 @@ export default function InviteScreening() {
                 showPostFilm={showPostFilm}
                 passItOnLayerActive={passItOnLayerActive}
                 slotsRemaining={slotsRemaining}
+                invitationsLabel={invitationsLabel}
                 letterError={letterError}
                 letterSuccess={letterSuccess}
                 letterRecipients={letterRecipients}
@@ -1640,8 +1667,7 @@ export default function InviteScreening() {
                 addLetterRecipient={addLetterRecipient}
                 removeLetterRecipient={removeLetterRecipient}
                 canAddRecipient={canAddRecipient}
-                letterNote={letterNote}
-                setLetterNote={setLetterNote}
+                toggleLetterNote={toggleLetterNote}
                 letterSending={letterSending}
                 handleSendLetter={handleSendLetter}
                 user={user}

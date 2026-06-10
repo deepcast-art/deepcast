@@ -5,6 +5,7 @@ export default function MobilePassItOn({
   narrowPausePassItOn,
   passItOnLayerActive,
   slotsRemaining,
+  invitationsLabel,
   letterError,
   letterSuccess,
   letterRecipients,
@@ -12,8 +13,7 @@ export default function MobilePassItOn({
   addLetterRecipient,
   removeLetterRecipient,
   canAddRecipient,
-  letterNote,
-  setLetterNote,
+  toggleLetterNote,
   letterSending,
   handleSendLetter,
   user,
@@ -115,9 +115,12 @@ export default function MobilePassItOn({
                  style={{ boxShadow: 'inset 0 0 60px rgba(0,0,0,0.06), inset 0 0 120px rgba(0,0,0,0.03)' }} />
 
             <div className="relative z-10 flex flex-1 min-h-0 flex-col items-center justify-center text-center text-[#2a2a2a]">
-              <h3 className="font-sans text-[8px] uppercase tracking-[0.4em] text-[#2a2a2a] mb-1.5">
+              <h3 className="font-sans text-[8px] uppercase tracking-[0.4em] text-[#2a2a2a] mb-1">
                 A Letter of Invitation
               </h3>
+              <p className="font-sans text-[7px] uppercase tracking-[0.2em] text-[#2a2a2a]/55 mb-1">
+                {invitationsLabel}
+              </p>
               <div className="h-[6px] w-[1px] bg-[#2a2a2a]/30 mb-2" />
 
               {letterError && (
@@ -138,21 +141,35 @@ export default function MobilePassItOn({
                                className="min-w-0 flex-1 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center text-[10px] focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" autoComplete="given-name" />
                         <span>,</span>
                       </div>
-                      <textarea rows={1} placeholder="Write your note here. Tell them why this film made you think of them specifically…" value={letterNote} onChange={(e) => setLetterNote(e.target.value)}
-                                className="w-full bg-transparent border-none text-center text-[10px] focus:outline-none resize-none placeholder-[#2a2a2a]/30 leading-snug text-[#2a2a2a]" />
+                      {letterRecipients[0]?.noteOpen && (
+                        <textarea rows={1} autoFocus placeholder="Write your note here. Tell them why this film made you think of them specifically…" value={letterRecipients[0]?.note || ''} onChange={(e) => updateLetterRecipient(0, 'note', e.target.value)}
+                                  className="w-full bg-transparent border-none text-center text-[10px] focus:outline-none resize-none placeholder-[#2a2a2a]/30 leading-snug text-[#2a2a2a]" />
+                      )}
                     </div>
                     <div className="flex flex-col gap-1 w-full text-center mt-2">
                       <label className="font-sans text-[7px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Deliver To</label>
                       <input type="email" placeholder="Their email" value={letterRecipients[0]?.email || ''} onChange={(e) => updateLetterRecipient(0, 'email', e.target.value)}
                              className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-0 text-[10px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors rounded-none" inputMode="email" autoComplete="email" />
                     </div>
+                    <button type="button" onClick={() => toggleLetterNote(0)} className="mt-1.5 font-sans text-[7px] uppercase tracking-[0.2em] text-[#2a2a2a]/45 hover:text-[#2a2a2a]/75 transition-colors touch-manipulation">
+                      {letterRecipients[0]?.noteOpen ? '− remove personal note' : '+ add a personal note'}
+                    </button>
                     {letterRecipients.slice(1).map((r, i) => (
-                      <div key={i + 1} className="mt-2 flex w-full items-end gap-1.5">
-                        <input type="text" placeholder="First name" value={r.first} onChange={(e) => updateLetterRecipient(i + 1, 'first', e.target.value)}
-                               className="w-2/5 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-0 text-center text-[10px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors" />
-                        <input type="email" placeholder="Their email" value={r.email} onChange={(e) => updateLetterRecipient(i + 1, 'email', e.target.value)}
-                               className="flex-1 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-0 text-center text-[10px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors" inputMode="email" />
-                        <button type="button" onClick={() => removeLetterRecipient(i + 1)} aria-label="Remove recipient" className="px-1 text-sm leading-none text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors touch-manipulation">&times;</button>
+                      <div key={i + 1} className="mt-2 flex w-full flex-col items-center gap-1">
+                        <div className="flex w-full items-end gap-1.5">
+                          <input type="text" placeholder="First name" value={r.first} onChange={(e) => updateLetterRecipient(i + 1, 'first', e.target.value)}
+                                 className="w-2/5 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-0 text-center text-[10px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors" />
+                          <input type="email" placeholder="Their email" value={r.email} onChange={(e) => updateLetterRecipient(i + 1, 'email', e.target.value)}
+                                 className="flex-1 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-0 text-center text-[10px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors" inputMode="email" />
+                          <button type="button" onClick={() => removeLetterRecipient(i + 1)} aria-label="Remove recipient" className="px-1 text-sm leading-none text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors touch-manipulation">&times;</button>
+                        </div>
+                        {r.noteOpen && (
+                          <textarea rows={1} autoFocus placeholder={`A personal note for ${r.first.trim() || 'them'}…`} value={r.note || ''} onChange={(e) => updateLetterRecipient(i + 1, 'note', e.target.value)}
+                                    className="w-full bg-transparent border-none text-center text-[10px] focus:outline-none resize-none placeholder-[#2a2a2a]/30 leading-snug font-serif-v3 text-[#2a2a2a]" />
+                        )}
+                        <button type="button" onClick={() => toggleLetterNote(i + 1)} className="font-sans text-[7px] uppercase tracking-[0.2em] text-[#2a2a2a]/45 hover:text-[#2a2a2a]/75 transition-colors touch-manipulation">
+                          {r.noteOpen ? '− remove personal note' : '+ add a personal note'}
+                        </button>
                       </div>
                     ))}
                     {canAddRecipient && (
@@ -218,9 +235,12 @@ export default function MobilePassItOn({
                  style={{ boxShadow: 'inset 0 0 60px rgba(0,0,0,0.06), inset 0 0 120px rgba(0,0,0,0.03)' }} />
 
             <div className="relative z-10 flex flex-col items-center text-center text-[#2a2a2a]">
-              <h3 className="font-sans text-[10px] uppercase tracking-[0.4em] text-[#2a2a2a] mb-2">
+              <h3 className="font-sans text-[10px] uppercase tracking-[0.4em] text-[#2a2a2a] mb-1.5">
                 A Letter of Invitation
               </h3>
+              <p className="font-sans text-[8px] uppercase tracking-[0.2em] text-[#2a2a2a]/55 mb-1.5">
+                {invitationsLabel}
+              </p>
               <div className="h-[12px] w-[1px] bg-[#2a2a2a]/30 mb-3" />
 
               {letterError && (
@@ -241,21 +261,35 @@ export default function MobilePassItOn({
                                className="w-[140px] bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" autoComplete="given-name" />
                         <span>,</span>
                       </div>
-                      <textarea rows={2} placeholder="Write your note here. Tell them why this film made you think of them specifically..." value={letterNote} onChange={(e) => setLetterNote(e.target.value)}
-                                className="w-full bg-transparent border-none text-center focus:outline-none resize-none placeholder-[#2a2a2a]/30 leading-relaxed text-base text-[#2a2a2a]" />
+                      {letterRecipients[0]?.noteOpen && (
+                        <textarea rows={2} autoFocus placeholder="Write your note here. Tell them why this film made you think of them specifically..." value={letterRecipients[0]?.note || ''} onChange={(e) => updateLetterRecipient(0, 'note', e.target.value)}
+                                  className="w-full bg-transparent border-none text-center focus:outline-none resize-none placeholder-[#2a2a2a]/30 leading-relaxed text-base text-[#2a2a2a]" />
+                      )}
                     </div>
                     <div className="flex flex-col gap-1 w-full max-w-[320px] text-center mt-2">
                       <label className="font-sans text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Deliver To</label>
                       <input type="email" placeholder="Their Email Address" value={letterRecipients[0]?.email || ''} onChange={(e) => updateLetterRecipient(0, 'email', e.target.value)}
                              className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors rounded-none" inputMode="email" autoComplete="email" />
                     </div>
+                    <button type="button" onClick={() => toggleLetterNote(0)} className="mt-2 min-h-[32px] font-sans text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/45 hover:text-[#2a2a2a]/75 transition-colors touch-manipulation">
+                      {letterRecipients[0]?.noteOpen ? '− remove personal note' : '+ add a personal note'}
+                    </button>
                     {letterRecipients.slice(1).map((r, i) => (
-                      <div key={i + 1} className="mt-3 flex w-full max-w-[320px] items-end gap-2">
-                        <input type="text" placeholder="First name" value={r.first} onChange={(e) => updateLetterRecipient(i + 1, 'first', e.target.value)}
-                               className="w-2/5 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-center text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors" />
-                        <input type="email" placeholder="Their Email Address" value={r.email} onChange={(e) => updateLetterRecipient(i + 1, 'email', e.target.value)}
-                               className="flex-1 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-center text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors" inputMode="email" />
-                        <button type="button" onClick={() => removeLetterRecipient(i + 1)} aria-label="Remove recipient" className="min-h-[32px] px-1.5 text-base leading-none text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors touch-manipulation">&times;</button>
+                      <div key={i + 1} className="mt-3 flex w-full max-w-[320px] flex-col items-center gap-1.5">
+                        <div className="flex w-full items-end gap-2">
+                          <input type="text" placeholder="First name" value={r.first} onChange={(e) => updateLetterRecipient(i + 1, 'first', e.target.value)}
+                                 className="w-2/5 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-center text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors" />
+                          <input type="email" placeholder="Their Email Address" value={r.email} onChange={(e) => updateLetterRecipient(i + 1, 'email', e.target.value)}
+                                 className="flex-1 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-center text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors" inputMode="email" />
+                          <button type="button" onClick={() => removeLetterRecipient(i + 1)} aria-label="Remove recipient" className="min-h-[32px] px-1.5 text-base leading-none text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors touch-manipulation">&times;</button>
+                        </div>
+                        {r.noteOpen && (
+                          <textarea rows={2} autoFocus placeholder={`A personal note for ${r.first.trim() || 'them'}…`} value={r.note || ''} onChange={(e) => updateLetterRecipient(i + 1, 'note', e.target.value)}
+                                    className="w-full bg-transparent border-none text-center focus:outline-none resize-none placeholder-[#2a2a2a]/30 leading-relaxed font-serif-v3 text-base text-[#2a2a2a]" />
+                        )}
+                        <button type="button" onClick={() => toggleLetterNote(i + 1)} className="min-h-[32px] font-sans text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/45 hover:text-[#2a2a2a]/75 transition-colors touch-manipulation">
+                          {r.noteOpen ? '− remove personal note' : '+ add a personal note'}
+                        </button>
                       </div>
                     ))}
                     {canAddRecipient && (
