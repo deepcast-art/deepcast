@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useRef } from 'react'
 import { supabase } from './supabase'
 import { api } from './api'
+import { clearAllInviteValidateCaches } from './inviteValidateCache'
 
 const AuthContext = createContext(null)
 
@@ -242,6 +243,7 @@ export function AuthProvider({ children }) {
 
         if (event === 'SIGNED_OUT') {
           setIsRecovery(false)
+          clearAllInviteValidateCaches()
         }
 
         if (session?.user && !isSigningUp.current) {
@@ -455,6 +457,7 @@ export function AuthProvider({ children }) {
   }
 
   const signOut = async () => {
+    clearAllInviteValidateCaches()
     const { error } = await supabase.auth.signOut()
     if (error) throw error
     setProfile(null)

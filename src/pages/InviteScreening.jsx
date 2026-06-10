@@ -14,6 +14,11 @@ import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { buildGraphLayout, inviteRecipientKey } from '../components/NetworkGraph'
 import { checkEmail } from '../lib/emailCheck'
+import {
+  readInviteValidateCache,
+  writeInviteValidateCache,
+  clearInviteValidateCache,
+} from '../lib/inviteValidateCache'
 import MobileLanding from './screening/MobileLanding'
 import DesktopLanding from './screening/DesktopLanding'
 import MobilePassItOn from './screening/MobilePassItOn'
@@ -324,6 +329,23 @@ export default function InviteScreening() {
   }, [currentView, isScreeningPaused, token])
 
   useEffect(() => {
+    // Instant Resume: on ?play=1, a validation cached earlier in this tab lets playback start
+    // immediately. The live validation below ALWAYS still runs and has the final word — on
+    // success it refreshes everything (including a fresh watch session id; the cached one is
+    // never reused), on rejection it unmounts the player and routes exactly as without cache.
+    if (directPlay) {
+      const cached = readInviteValidateCache(token)
+      if (cached?.invite && cached?.film) {
+        setInvite(cached.invite)
+        setFilm(cached.film)
+        const name =
+          (typeof cached.senderDisplayName === 'string' && cached.senderDisplayName.trim()) || null
+        setSharerDisplayName(name)
+        if (Array.isArray(cached.filmInvites)) setFilmInvites(cached.filmInvites)
+        if (typeof cached.creatorName === 'string') setCreatorName(cached.creatorName)
+        setStatus('valid')
+      }
+    }
     validateInvite()
   }, [token])
 
@@ -379,18 +401,19 @@ export default function InviteScreening() {
         setSharerDisplayName(name)
         if (Array.isArray(r.filmInvites)) setFilmInvites(r.filmInvites)
         if (typeof r.creatorName === 'string') setCreatorName(r.creatorName)
+        writeInviteValidateCache(token, r)
         setStatus('valid')
         return
       } catch (err) {
         const msg = String(err?.message || '')
-        if (msg === 'expired') { setStatus('expired'); return }
+        if (msg === 'expired') { clearInviteValidateCache(token); setStatus('expired'); return }
         // Retryable: network failures, aborted requests (timeout), and server-side 502/503
         const isRetryable =
           /failed to fetch|networkerror|load failed|network request failed/i.test(msg) ||
           err?.name === 'TypeError' ||
           err?.name === 'AbortError' ||
           msg === 'server_unavailable'
-        if (!isRetryable) { setStatus('invalid'); return }
+        if (!isRetryable) { clearInviteValidateCache(token); setStatus('invalid'); return }
         // All retries exhausted
         if (attempt === DELAYS.length - 1) { setStatus('network'); return }
       }
