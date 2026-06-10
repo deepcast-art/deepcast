@@ -14,6 +14,11 @@ import { ensureHttpsUrl } from '../lib/httpsUrl.js'
 const OPENED_STATUSES = ['opened', 'watched', 'signed_up']
 const isOpened = (inv) => OPENED_STATUSES.includes(inv?.status)
 
+/** Sent-invitations list renders in pages so an unlimited sharer with hundreds of
+ *  shares can see them ALL without slowing the dashboard down. Normal users never
+ *  exceed one page, so their behavior is unchanged. */
+const SENT_LIST_PAGE_SIZE = 25
+
 function formatNamesList(names) {
   const filtered = names.filter(Boolean)
   if (filtered.length === 0) return ''
@@ -138,6 +143,7 @@ export default function Dashboard() {
   const [modalBusy, setModalBusy] = useState(false)
   const [modalError, setModalError] = useState('')
 
+  const [visibleSentCount, setVisibleSentCount] = useState(SENT_LIST_PAGE_SIZE)
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [nameBusy, setNameBusy] = useState(false)
@@ -1079,7 +1085,7 @@ export default function Dashboard() {
                       No active invitations
                     </div>
                   ) : (
-                    viewerSentInvites.map((inv, index) => {
+                    viewerSentInvites.slice(0, visibleSentCount).map((inv, index) => {
                       const displayName =
                         inv.recipient_name?.trim() ||
                         inv.recipient_email?.split('@')[0] ||
@@ -1118,6 +1124,15 @@ export default function Dashboard() {
                         </div>
                       )
                     })
+                  )}
+                  {viewerSentInvites.length > visibleSentCount && (
+                    <button
+                      type="button"
+                      onClick={() => setVisibleSentCount((n) => n + SENT_LIST_PAGE_SIZE)}
+                      className="w-full border border-faint/30 bg-[#0a0f1a]/40 py-4 text-center font-sans text-[10px] uppercase tracking-[0.25em] text-warm/50 transition-colors hover:border-faint/50 hover:text-warm/80"
+                    >
+                      Show more ({viewerSentInvites.length - visibleSentCount} remaining)
+                    </button>
                   )}
                 </div>
               </section>

@@ -7,12 +7,13 @@ export default function MobilePassItOn({
   slotsRemaining,
   letterError,
   letterSuccess,
-  letterRecipientFirst,
-  setLetterRecipientFirst,
+  letterRecipients,
+  updateLetterRecipient,
+  addLetterRecipient,
+  removeLetterRecipient,
+  canAddRecipient,
   letterNote,
   setLetterNote,
-  letterRecipientEmail,
-  setLetterRecipientEmail,
   letterSending,
   handleSendLetter,
   user,
@@ -133,7 +134,7 @@ export default function MobilePassItOn({
                     <div className="font-serif-v3 text-[11px] leading-snug w-full text-[#2a2a2a]">
                       <div className="flex flex-nowrap justify-center items-end gap-x-2 mb-2 whitespace-nowrap">
                         <span className="italic">Dear</span>
-                        <input type="text" placeholder="First name" value={letterRecipientFirst} onChange={(e) => setLetterRecipientFirst(e.target.value)}
+                        <input type="text" placeholder="First name" value={letterRecipients[0]?.first || ''} onChange={(e) => updateLetterRecipient(0, 'first', e.target.value)}
                                className="min-w-0 flex-1 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center text-[10px] focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" autoComplete="given-name" />
                         <span>,</span>
                       </div>
@@ -142,16 +143,30 @@ export default function MobilePassItOn({
                     </div>
                     <div className="flex flex-col gap-1 w-full text-center mt-2">
                       <label className="font-sans text-[7px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Deliver To</label>
-                      <input type="email" placeholder="Their email" value={letterRecipientEmail} onChange={(e) => setLetterRecipientEmail(e.target.value)}
+                      <input type="email" placeholder="Their email" value={letterRecipients[0]?.email || ''} onChange={(e) => updateLetterRecipient(0, 'email', e.target.value)}
                              className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-0 text-[10px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors rounded-none" inputMode="email" autoComplete="email" />
                     </div>
+                    {letterRecipients.slice(1).map((r, i) => (
+                      <div key={i + 1} className="mt-2 flex w-full items-end gap-1.5">
+                        <input type="text" placeholder="First name" value={r.first} onChange={(e) => updateLetterRecipient(i + 1, 'first', e.target.value)}
+                               className="w-2/5 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-0 text-center text-[10px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors" />
+                        <input type="email" placeholder="Their email" value={r.email} onChange={(e) => updateLetterRecipient(i + 1, 'email', e.target.value)}
+                               className="flex-1 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-0 text-center text-[10px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors" inputMode="email" />
+                        <button type="button" onClick={() => removeLetterRecipient(i + 1)} aria-label="Remove recipient" className="px-1 text-sm leading-none text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors touch-manipulation">&times;</button>
+                      </div>
+                    ))}
+                    {canAddRecipient && (
+                      <button type="button" onClick={addLetterRecipient} className="mt-2 font-sans text-[8px] uppercase tracking-[0.2em] text-[#2a2a2a]/45 hover:text-[#2a2a2a]/75 transition-colors touch-manipulation">
+                        + add another
+                      </button>
+                    )}
                   </div>
 
                   <div className="w-[80px] h-[1px] bg-gradient-to-r from-transparent via-[#2a2a2a]/30 to-transparent my-3" />
 
                   <button type="button" onClick={handleSendLetter} disabled={letterSending}
                     className="w-full py-2 min-h-[36px] bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-sans text-[10px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none disabled:opacity-40 touch-manipulation">
-                    {letterSending ? 'Sending…' : 'Share invitation'}
+                    {letterSending ? 'Sending…' : letterRecipients.length > 1 ? 'Share invitations' : 'Share invitation'}
                   </button>
                 </>
               ) : (
@@ -222,7 +237,7 @@ export default function MobilePassItOn({
                     <div className="font-serif-v3 text-base leading-snug w-full text-[#2a2a2a]">
                       <div className="flex flex-wrap justify-center items-end gap-x-3 gap-y-1 mb-3">
                         <span className="italic">Dear</span>
-                        <input type="text" placeholder="First name" value={letterRecipientFirst} onChange={(e) => setLetterRecipientFirst(e.target.value)}
+                        <input type="text" placeholder="First name" value={letterRecipients[0]?.first || ''} onChange={(e) => updateLetterRecipient(0, 'first', e.target.value)}
                                className="w-[140px] bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" autoComplete="given-name" />
                         <span>,</span>
                       </div>
@@ -231,16 +246,30 @@ export default function MobilePassItOn({
                     </div>
                     <div className="flex flex-col gap-1 w-full max-w-[320px] text-center mt-2">
                       <label className="font-sans text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Deliver To</label>
-                      <input type="email" placeholder="Their Email Address" value={letterRecipientEmail} onChange={(e) => setLetterRecipientEmail(e.target.value)}
+                      <input type="email" placeholder="Their Email Address" value={letterRecipients[0]?.email || ''} onChange={(e) => updateLetterRecipient(0, 'email', e.target.value)}
                              className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors rounded-none" inputMode="email" autoComplete="email" />
                     </div>
+                    {letterRecipients.slice(1).map((r, i) => (
+                      <div key={i + 1} className="mt-3 flex w-full max-w-[320px] items-end gap-2">
+                        <input type="text" placeholder="First name" value={r.first} onChange={(e) => updateLetterRecipient(i + 1, 'first', e.target.value)}
+                               className="w-2/5 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-center text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors" />
+                        <input type="email" placeholder="Their Email Address" value={r.email} onChange={(e) => updateLetterRecipient(i + 1, 'email', e.target.value)}
+                               className="flex-1 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-center text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors" inputMode="email" />
+                        <button type="button" onClick={() => removeLetterRecipient(i + 1)} aria-label="Remove recipient" className="min-h-[32px] px-1.5 text-base leading-none text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors touch-manipulation">&times;</button>
+                      </div>
+                    ))}
+                    {canAddRecipient && (
+                      <button type="button" onClick={addLetterRecipient} className="mt-3 min-h-[32px] font-sans text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/45 hover:text-[#2a2a2a]/75 transition-colors touch-manipulation">
+                        + add another
+                      </button>
+                    )}
                   </div>
 
                   <div className="w-[80px] h-[1px] bg-gradient-to-r from-transparent via-[#2a2a2a]/30 to-transparent my-3" />
 
                   <button type="button" onClick={handleSendLetter} disabled={letterSending}
                     className="w-full py-3 min-h-[44px] bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-sans text-[11px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none disabled:opacity-40 touch-manipulation">
-                    {letterSending ? 'Sending…' : 'Share invitation'}
+                    {letterSending ? 'Sending…' : letterRecipients.length > 1 ? 'Share invitations' : 'Share invitation'}
                   </button>
                 </>
               ) : (

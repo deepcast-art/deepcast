@@ -187,14 +187,25 @@ export default function InviteScreening() {
 
   /* ---------- LETTER FORM STATE ---------- */
 
-  const [letterRecipientFirst, setLetterRecipientFirst] = useState('')
+  /** Multi-recipient: each row is its own invite + email. The gate to proceed is
+   *  still exactly ONE successful share — extra rows are optional. */
+  const [letterRecipients, setLetterRecipients] = useState([{ first: '', email: '' }])
   const [letterNote, setLetterNote] = useState('')
-  const [letterRecipientEmail, setLetterRecipientEmail] = useState('')
   const [letterSenderName, setLetterSenderName] = useState('')
   const [letterSenderEmail, setLetterSenderEmail] = useState('')
   const [letterSending, setLetterSending] = useState(false)
   const [letterError, setLetterError] = useState('')
   const [letterSuccess, setLetterSuccess] = useState('')
+
+  const updateLetterRecipient = useCallback((idx, field, value) => {
+    setLetterRecipients((rows) => rows.map((r, i) => (i === idx ? { ...r, [field]: value } : r)))
+  }, [])
+  const addLetterRecipient = useCallback(() => {
+    setLetterRecipients((rows) => [...rows, { first: '', email: '' }])
+  }, [])
+  const removeLetterRecipient = useCallback((idx) => {
+    setLetterRecipients((rows) => (rows.length > 1 ? rows.filter((_, i) => i !== idx) : rows))
+  }, [])
 
   /* ---------- LANDING EMAIL (passwordless invite-first sign-in) ---------- */
 
@@ -1059,7 +1070,26 @@ export default function InviteScreening() {
 
   /* ---------- LETTER FORM ---------- */
 
-  const slotsRemaining = Math.max(0, VIEWER_SHARE_LIMIT - sentLetters.length)
+  /** Unlimited sharers: the filmmaker, team members, and team-linked viewers
+   *  (the same rule the server enforces on /api/invites/send). */
+  const isUnlimitedSharer = Boolean(
+    profile &&
+      (profile.role === 'creator' ||
+        profile.role === 'team_member' ||
+        (profile.role === 'viewer' && profile.team_creator_id))
+  )
+
+  /** Remaining share quota — the server-enforced allocation for viewers; no cap
+   *  for unlimited sharers. Falls back to the legacy per-invite count only while
+   *  the profile hasn't loaded yet. */
+  const slotsRemaining = isUnlimitedSharer
+    ? Infinity
+    : profile
+      ? Math.max(0, profile.invite_allocation ?? 0)
+      : Math.max(0, VIEWER_SHARE_LIMIT - sentLetters.length)
+
+  /** "+ add another" is capped at the remaining quota (never capped for unlimited). */
+  const canAddRecipient = letterRecipients.length < slotsRemaining
 
   async function refreshFilmInvites() {
     if (!film?.id) return
@@ -1075,16 +1105,22 @@ export default function InviteScreening() {
     setLetterError('')
     setLetterSuccess('')
 
-    if (
-      !letterRecipientFirst.trim() ||
-      !letterRecipientEmail.trim() ||
-      !letterRecipientEmail.includes('@')
-    ) {
-      setLetterError('Please enter a first name and valid email for your recipient.')
+    const rows = letterRecipients.map((r) => ({ first: r.first.trim(), email: r.email.trim() }))
+    if (rows.some((r) => !r.first || !r.email || !r.email.includes('@'))) {
+      setLetterError('Please enter a first name and valid email for each recipient.')
+      return
+    }
+    const lowered = rows.map((r) => r.email.toLowerCase())
+    if (new Set(lowered).size !== lowered.length) {
+      setLetterError('Each recipient needs a different email address.')
       return
     }
     if (slotsRemaining <= 0) {
       setLetterError('All invitations have been sent.')
+      return
+    }
+    if (rows.length > slotsRemaining) {
+      setLetterError(`You have ${slotsRemaining} invitation${slotsRemaining === 1 ? '' : 's'} remaining.`)
       return
     }
 
@@ -1100,73 +1136,92 @@ export default function InviteScreening() {
     }
 
     setLetterSending(true)
+    // Each recipient gets their own invite + email. Sends are sequential and
+    // tolerant: one failure never discards another recipient's successful send.
+    const succeeded = []
+    const failed = []
     try {
-      // Check if recipient already has an invite for this film
-      const { data: existing } = await supabase
-        .from('invites')
-        .select('id')
-        .eq('film_id', film.id)
-        .ilike('recipient_email', letterRecipientEmail.trim())
-        .limit(1)
-        .maybeSingle()
+      for (const r of rows) {
+        try {
+          const { data: existing } = await supabase
+            .from('invites')
+            .select('id')
+            .eq('film_id', film.id)
+            .ilike('recipient_email', r.email)
+            .limit(1)
+            .maybeSingle()
+          if (existing) {
+            failed.push({ ...r, reason: 'has already received an invitation to this film' })
+            continue
+          }
 
-      if (existing) {
-        setLetterError(`${letterRecipientFirst.trim() || 'This person'} has already received an invitation to this film. Try passing it on to someone else.`)
-        setLetterSending(false)
-        return
-      }
-
-      const recipientName = letterRecipientFirst.trim()
-
-      await api.sendInvite(
-        film.id,
-        letterRecipientEmail.trim(),
-        recipientName,
-        senderName,
-        senderId,
-        senderEmail,
-        letterNote.trim() || null,
-        window.location.origin,
-        invite?.id || null,
-        letterRecipientFirst.trim()
-      )
-
-      const [{ data: { session } }] = await Promise.all([
-        supabase.auth.getSession(),
-        refreshFilmInvites(),
-      ])
-      if (session?.user?.id) {
-        await fetchProfile(session.user.id, session.access_token)
-        if (sessionId) {
-          supabase
-            .from('watch_sessions')
-            .update({ viewer_id: session.user.id })
-            .eq('id', sessionId)
-            .then(() => {})
+          await api.sendInvite(
+            film.id,
+            r.email,
+            r.first,
+            senderName,
+            senderId,
+            senderEmail,
+            letterNote.trim() || null,
+            window.location.origin,
+            invite?.id || null,
+            r.first
+          )
+          succeeded.push(r)
+        } catch (err) {
+          failed.push({ ...r, reason: err.message || 'could not be sent' })
         }
       }
 
-      if (token) localStorage.setItem('viewer_invite_token', token)
+      if (succeeded.length) {
+        const [{ data: { session } }] = await Promise.all([
+          supabase.auth.getSession(),
+          refreshFilmInvites(),
+        ])
+        if (session?.user?.id) {
+          await fetchProfile(session.user.id, session.access_token)
+          if (sessionId) {
+            supabase
+              .from('watch_sessions')
+              .update({ viewer_id: session.user.id })
+              .eq('id', sessionId)
+              .then(() => {})
+          }
+        }
 
-      // Snapshot current playback position so dashboard can offer "Resume"
-      const muxEl = document.querySelector('mux-player')
-      if (token && muxEl && muxEl.currentTime > 0 && !showPostFilm) {
-        localStorage.setItem(`screening_position_${token}`, Math.floor(muxEl.currentTime))
+        if (token) localStorage.setItem('viewer_invite_token', token)
+
+        // Snapshot current playback position so dashboard can offer "Resume"
+        const muxEl = document.querySelector('mux-player')
+        if (token && muxEl && muxEl.currentTime > 0 && !showPostFilm) {
+          localStorage.setItem(`screening_position_${token}`, Math.floor(muxEl.currentTime))
+        }
       }
 
-      // sentLetters is derived from filmInvites; refreshFilmInvites() above already pulled in
-      // the new invite, so the dashboard list updates on its own — no manual append needed.
-      setLetterRecipientFirst('')
-      setLetterRecipientEmail('')
-      setLetterNote('')
-      // Session is guaranteed here → the one real dashboard. recipientName powers Dashboard's
-      // "Invitation sent" banner; screeningToken lets it offer "Resume".
-      navigate('/dashboard', {
-        replace: true,
-        state: { inviteSent: true, recipientName, screeningToken: token },
-      })
-    } catch (err) {
-      setLetterError(err.message || 'Failed to send. Please try again.')
+      if (succeeded.length && !failed.length) {
+        // Everything sent — the one real dashboard. recipientName powers Dashboard's
+        // "Invitation sent" banner; screeningToken lets it offer "Resume".
+        setLetterRecipients([{ first: '', email: '' }])
+        setLetterNote('')
+        const names = succeeded.map((s) => s.first).join(', ')
+        navigate('/dashboard', {
+          replace: true,
+          state: { inviteSent: true, recipientName: names, screeningToken: token },
+        })
+        return
+      }
+
+      // Partial (or total) failure: keep the failed rows in the form for retry and
+      // report exactly which sends succeeded and which didn't.
+      if (failed.length) {
+        setLetterRecipients(failed.map((f) => ({ first: f.first, email: f.email })))
+        if (succeeded.length) {
+          setLetterSuccess(`Sent to ${succeeded.map((s) => s.first).join(', ')}.`)
+        }
+        setLetterError(
+          failed.map((f) => `${f.first || f.email} ${f.reason}`).join(' — ')
+        )
+      }
     } finally {
       setLetterSending(false)
     }
@@ -1559,12 +1614,13 @@ export default function InviteScreening() {
                 slotsRemaining={slotsRemaining}
                 letterError={letterError}
                 letterSuccess={letterSuccess}
-                letterRecipientFirst={letterRecipientFirst}
-                setLetterRecipientFirst={setLetterRecipientFirst}
+                letterRecipients={letterRecipients}
+                updateLetterRecipient={updateLetterRecipient}
+                addLetterRecipient={addLetterRecipient}
+                removeLetterRecipient={removeLetterRecipient}
+                canAddRecipient={canAddRecipient}
                 letterNote={letterNote}
                 setLetterNote={setLetterNote}
-                letterRecipientEmail={letterRecipientEmail}
-                setLetterRecipientEmail={setLetterRecipientEmail}
                 letterSending={letterSending}
                 handleSendLetter={handleSendLetter}
                 user={user}
@@ -1579,12 +1635,13 @@ export default function InviteScreening() {
                 slotsRemaining={slotsRemaining}
                 letterError={letterError}
                 letterSuccess={letterSuccess}
-                letterRecipientFirst={letterRecipientFirst}
-                setLetterRecipientFirst={setLetterRecipientFirst}
+                letterRecipients={letterRecipients}
+                updateLetterRecipient={updateLetterRecipient}
+                addLetterRecipient={addLetterRecipient}
+                removeLetterRecipient={removeLetterRecipient}
+                canAddRecipient={canAddRecipient}
                 letterNote={letterNote}
                 setLetterNote={setLetterNote}
-                letterRecipientEmail={letterRecipientEmail}
-                setLetterRecipientEmail={setLetterRecipientEmail}
                 letterSending={letterSending}
                 handleSendLetter={handleSendLetter}
                 user={user}
