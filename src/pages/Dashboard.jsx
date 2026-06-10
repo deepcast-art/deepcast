@@ -276,13 +276,19 @@ export default function Dashboard() {
     setViewerFilmId(filmId)
     try { sessionStorage.setItem('dash_viewer_film_id', filmId) } catch {}
 
-    const { data: filmRow } = await supabase
-      .from('films')
-      .select('id, title, thumbnail_url, creator_id')
-      .eq('id', filmId)
-      .single()
+    // Film row and the film's invites are independent — fetch together. Round trips from the
+    // browser to the database are the cost here, not the queries themselves.
+    const [{ data: filmRow }, { data: allInv }] = await Promise.all([
+      supabase
+        .from('films')
+        .select('id, title, thumbnail_url, creator_id')
+        .eq('id', filmId)
+        .single(),
+      supabase.from('invites').select('*').eq('film_id', filmId),
+    ])
 
     setViewerFilmTitle(filmRow?.title || '')
+    setViewerFilmInvites(allInv || [])
 
     let cname = ''
     if (filmRow?.creator_id) {
@@ -295,9 +301,6 @@ export default function Dashboard() {
     }
     setViewerCreatorName(cname)
 
-    const { data: allInv } = await supabase.from('invites').select('*').eq('film_id', filmId)
-    setViewerFilmInvites(allInv || [])
-
     const filmToken = viewerTokenByFilmId[filmId]
     if (filmToken) setViewerInviteToken(filmToken)
   }, [viewerTokenByFilmId])
@@ -307,11 +310,21 @@ export default function Dashboard() {
     const uid = profile.id
     const email = (profile.email || '').trim()
 
-    const { data: sent, error: sentErr } = await supabase
-      .from('invites')
-      .select('*')
-      .eq('sender_id', uid)
-      .order('created_at', { ascending: false })
+    // Sent and received invites depend only on the profile — fetch them together.
+    const [{ data: sent, error: sentErr }, { data: allRecvd }] = await Promise.all([
+      supabase
+        .from('invites')
+        .select('*')
+        .eq('sender_id', uid)
+        .order('created_at', { ascending: false }),
+      email
+        ? supabase
+            .from('invites')
+            .select('film_id, token')
+            .ilike('recipient_email', email)
+            .order('created_at', { ascending: false })
+        : Promise.resolve({ data: null }),
+    ])
 
     if (sentErr) console.error(sentErr)
     const sentList = sent || []
@@ -322,12 +335,6 @@ export default function Dashboard() {
 
     // Fetch ALL films the viewer has been invited to watch
     if (email) {
-      const { data: allRecvd } = await supabase
-        .from('invites')
-        .select('film_id, token')
-        .ilike('recipient_email', email)
-        .order('created_at', { ascending: false })
-
       if (allRecvd?.length) {
         // De-duplicate by film_id, preserving most-recent-first order
         const seen = new Set()
@@ -377,13 +384,18 @@ export default function Dashboard() {
     setViewerFilmId(filmId)
     try { sessionStorage.setItem('dash_viewer_film_id', filmId) } catch {}
 
-    const { data: filmRow } = await supabase
-      .from('films')
-      .select('id, title, thumbnail_url, creator_id')
-      .eq('id', filmId)
-      .single()
+    // Selected film's row and its invites are independent — fetch together.
+    const [{ data: filmRow }, { data: allInv }] = await Promise.all([
+      supabase
+        .from('films')
+        .select('id, title, thumbnail_url, creator_id')
+        .eq('id', filmId)
+        .single(),
+      supabase.from('invites').select('*').eq('film_id', filmId),
+    ])
 
     setViewerFilmTitle(filmRow?.title || '')
+    setViewerFilmInvites(allInv || [])
 
     let cname = ''
     if (filmRow?.creator_id) {
@@ -395,9 +407,6 @@ export default function Dashboard() {
       cname = cr?.name || ''
     }
     setViewerCreatorName(cname)
-
-    const { data: allInv } = await supabase.from('invites').select('*').eq('film_id', filmId)
-    setViewerFilmInvites(allInv || [])
 
     return sentList[0]?.id ?? null
   }, [profile?.id, profile?.role, profile?.email, selectViewerFilm])
