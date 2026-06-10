@@ -284,7 +284,7 @@ export default function Upload() {
             setProcessing(false)
             setStep('ready')
           }
-        } catch (err) {
+        } catch {
           // Keep polling
         }
       }, 5000)
@@ -331,8 +331,6 @@ export default function Upload() {
 
           <InviteForm
             filmId={film.id}
-            filmTitle={title}
-            filmDescription={description}
             senderName={profile.name}
             senderEmail={profile.email}
             senderId={profile.id}

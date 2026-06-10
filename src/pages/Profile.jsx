@@ -323,8 +323,6 @@ export default function Profile() {
                 </h2>
                 <InviteForm
                   filmId={selectedFilm.id}
-                  filmTitle={selectedFilm.title}
-                  filmDescription={selectedFilm.description}
                   senderName={profile.name}
                   senderEmail={profile.email}
                   senderId={profile.id}

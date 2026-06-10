@@ -1,14 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { api } from '../lib/api'
-import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 
-export { parseInviteRecipientForPrefill } from '../lib/invitePrefill'
+/** Keep the success message visible briefly before notifying the parent. */
+const ON_INVITE_SENT_DELAY_MS = 2200
 
 export default function InviteForm({
   filmId,
-  filmTitle,
-  filmDescription,
   senderName,
   senderEmail,
   senderId,
@@ -18,38 +16,13 @@ export default function InviteForm({
   maxInvites = 0,
   unlimited = false,
   onInviteSent,
-  showSenderFields = false,
-  /** Prefill first "To" row (e.g. film invite receiver’s name + email) */
-  initialRecipient = null,
-  /** Labels readable on dark screening surfaces (e.g. paused share column) */
-  embedOnDarkBackground = false,
-  passwordPlaceholder = 'Create password',
-  noteLabel = 'Why did this film make you think of them specifically? Write 2–3 sentences.',
-  notePlaceholder = 'A uniquely personal note from you is what makes this different from everything else in their inbox.',
-  /** Wait before calling `onInviteSent` so the success message stays visible (ms). Use `0` for immediate. */
-  delayOnInviteSentMs = 2200,
 }) {
-  const { signUp, signIn } = useAuth()
   /** See slotsRemaining: the quota is frozen at mount on purpose. */
   const [quotaAtMount] = useState(() => Math.max(0, maxInvites))
-  const [recipients, setRecipients] = useState(() => [
-    {
-      firstName: initialRecipient?.firstName?.trim() || '',
-      email: initialRecipient?.email?.trim() || '',
-      note: '',
-    },
-  ])
+  const [recipients, setRecipients] = useState(() => [{ firstName: '', email: '', note: '' }])
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState([])
   const [error, setError] = useState('')
-  const [senderFirstNameInput, setSenderFirstNameInput] = useState(
-    senderName?.trim().split(/\s+/)[0] || ''
-  )
-  const [senderLastNameInput, setSenderLastNameInput] = useState(
-    senderName?.trim().split(/\s+/).slice(1).join(' ') || ''
-  )
-  const [senderEmailInput, setSenderEmailInput] = useState(senderEmail || '')
-  const [senderPasswordInput, setSenderPasswordInput] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const onInviteSentTimeoutRef = useRef(null)
 
@@ -100,51 +73,11 @@ export default function InviteForm({
       onInviteSentTimeoutRef.current = null
     }
 
-    if (showSenderFields) {
-      if (
-        !senderFirstNameInput.trim() ||
-        !senderLastNameInput.trim() ||
-        !senderEmailInput.trim() ||
-        !senderEmailInput.includes('@') ||
-        !senderPasswordInput.trim()
-      ) {
-        setError('Please enter your name, email, and password.')
-        return
-      }
-    }
-
     setSending(true)
     setError('')
 
     try {
-      const resolvedSenderName =
-        [senderFirstNameInput, senderLastNameInput].filter(Boolean).join(' ').trim() || senderName
-      const resolvedSenderEmail = senderEmailInput.trim() || senderEmail
       const appUrl = window?.location?.origin || null
-      let resolvedSenderId = senderId || null
-
-      if (showSenderFields) {
-        try {
-          const signInResult = await signIn(resolvedSenderEmail, senderPasswordInput)
-          resolvedSenderId = resolvedSenderId || signInResult?.user?.id || signInResult?.profile?.id
-        } catch (signInError) {
-          try {
-            const signUpResult = await signUp(
-              resolvedSenderEmail,
-              senderPasswordInput,
-              resolvedSenderName,
-              'viewer',
-              senderFirstNameInput.trim(),
-              senderLastNameInput.trim()
-            )
-            resolvedSenderId = resolvedSenderId || signUpResult?.user?.id || null
-          } catch (signUpError) {
-            setError(signUpError.message || signInError.message)
-            setSending(false)
-            return
-          }
-        }
-      }
 
       for (const recipient of validRecipients) {
         const { data: existing } = await supabase
@@ -169,9 +102,9 @@ export default function InviteForm({
           filmId,
           recipient.email.trim(),
           recipientName,
-          resolvedSenderName,
-          resolvedSenderId,
-          resolvedSenderEmail,
+          senderName,
+          senderId,
+          senderEmail,
           recipientNote,
           appUrl,
           null,
@@ -191,24 +124,16 @@ export default function InviteForm({
           : `${validRecipients.length} invitations sent. Each person will receive an email with a private screening link.`
       setSuccessMessage(msg)
 
-      const payload = {
-        senderName: resolvedSenderName,
-        senderEmail: resolvedSenderEmail,
-        recipients: validRecipients,
-      }
       if (onInviteSent) {
-        const delay = typeof delayOnInviteSentMs === 'number' ? delayOnInviteSentMs : 2200
-        if (delay <= 0) {
-          onInviteSentTimeoutRef.current = setTimeout(() => {
-            onInviteSent(payload)
-            onInviteSentTimeoutRef.current = null
-          }, 0)
-        } else {
-          onInviteSentTimeoutRef.current = setTimeout(() => {
-            onInviteSent(payload)
-            onInviteSentTimeoutRef.current = null
-          }, delay)
+        const payload = {
+          senderName,
+          senderEmail,
+          recipients: validRecipients,
         }
+        onInviteSentTimeoutRef.current = setTimeout(() => {
+          onInviteSent(payload)
+          onInviteSentTimeoutRef.current = null
+        }, ON_INVITE_SENT_DELAY_MS)
       }
     } catch (err) {
       console.error('Invite send error:', err)
@@ -260,49 +185,6 @@ export default function InviteForm({
         </div>
       )}
 
-      {showSenderFields && (
-        <div className="mb-6">
-          <p
-            className={`dc-label mb-3 ${embedOnDarkBackground ? 'text-warm/75' : ''}`}
-          >
-            From
-          </p>
-          <div className="space-y-3 bg-bg-card/60 border-[0.5px] border-border rounded-none p-4">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={senderFirstNameInput}
-                onChange={(e) => setSenderFirstNameInput(e.target.value)}
-                placeholder="First name"
-                className="w-1/2 bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
-              />
-              <input
-                type="text"
-                value={senderLastNameInput}
-                onChange={(e) => setSenderLastNameInput(e.target.value)}
-                placeholder="Last name"
-                className="w-1/2 bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
-              />
-            </div>
-            <input
-              type="email"
-              value={senderEmailInput}
-              onChange={(e) => setSenderEmailInput(e.target.value)}
-              placeholder="Email"
-              className="w-full bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
-            />
-            <input
-              type="password"
-              value={senderPasswordInput}
-              onChange={(e) => setSenderPasswordInput(e.target.value)}
-              placeholder={passwordPlaceholder}
-              minLength={6}
-              className="w-full bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
-            />
-          </div>
-        </div>
-      )}
-
       {sent.length > 0 && (
         <div className="mb-4 space-y-1">
           {sent.map((entry) => (
@@ -314,7 +196,7 @@ export default function InviteForm({
       )}
 
       <div>
-        <p className={`dc-label mb-3 ${embedOnDarkBackground ? 'text-warm/75' : ''}`}>To</p>
+        <p className="dc-label mb-3">To</p>
         <div className="space-y-3 bg-bg-card/60 border-[0.5px] border-border rounded-none p-4">
           {recipients.map((recipient, i) => (
             <div
@@ -346,12 +228,12 @@ export default function InviteForm({
                 )}
               </div>
               <label className="block text-xs text-text-muted">
-                {noteLabel}
+                Why did this film make you think of them specifically? Write 2–3 sentences.
               </label>
               <textarea
                 value={recipient.note}
                 onChange={(e) => updateRecipient(i, 'note', e.target.value)}
-                placeholder={notePlaceholder}
+                placeholder="A uniquely personal note from you is what makes this different from everything else in their inbox."
                 rows={3}
                 className="w-full bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
               />
@@ -377,13 +259,7 @@ export default function InviteForm({
           sending ||
           recipients.every(
             (r) => !r.email.trim() && !r.firstName.trim()
-          ) ||
-          (showSenderFields &&
-            (!senderFirstNameInput.trim() ||
-              !senderLastNameInput.trim() ||
-              !senderEmailInput.trim() ||
-              !senderEmailInput.includes('@') ||
-              !senderPasswordInput.trim()))
+          )
         }
         className="dc-btn dc-btn-accent w-full mt-4 min-h-[44px] touch-manipulation py-3 text-sm cursor-pointer"
       >

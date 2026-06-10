@@ -29,7 +29,6 @@ function buildInviteEmailHtml({
   filmDescription,
   filmGifUrl,
   inviteUrl,
-  senderEmail,
   inviteOrdinal,
   personalNote,
 }) {

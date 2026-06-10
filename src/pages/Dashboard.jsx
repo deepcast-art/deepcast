@@ -1460,8 +1460,6 @@ export default function Dashboard() {
                     <div className="mb-6">
                       <InviteForm
                         filmId={film.id}
-                        filmTitle={film.title}
-                        filmDescription={film.description}
                         senderName={profile.name}
                         senderEmail={profile.email}
                         senderId={profile.id}

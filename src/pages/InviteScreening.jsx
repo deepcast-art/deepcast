@@ -131,7 +131,6 @@ const MuxPlayer = lazy(() =>
 export default function InviteScreening() {
   const { token } = useParams()
   const [searchParams] = useSearchParams()
-  const ctxInUrl = searchParams.get('ctx')
   const directPlay = searchParams.get('play') === '1'
   const startTimeParam = searchParams.get('t')
   const navigate = useNavigate()

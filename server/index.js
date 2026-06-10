@@ -5,7 +5,6 @@ import Mux from '@mux/mux-node'
 import { Resend } from 'resend'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
-import { ensureHttpsUrl } from '../src/lib/httpsUrl.js'
 import { buildGraphLayout } from '../src/lib/graphLayout.js'
 
 const app = express()
@@ -2106,7 +2105,6 @@ function buildInviteEmailHtml({
   filmDescription,
   filmGifUrl,
   inviteUrl,
-  senderEmail,
   inviteOrdinal,
   personalNote,
 }) {
