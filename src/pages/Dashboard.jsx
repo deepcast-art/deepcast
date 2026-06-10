@@ -561,7 +561,7 @@ export default function Dashboard() {
   const handleSaveName = async () => {
     const newName = nameDraft.trim()
     if (!newName) {
-      setNameError('Name cannot be empty.')
+      setNameError('First name cannot be empty.')
       return
     }
     if (newName.length > 50) {
@@ -773,10 +773,13 @@ export default function Dashboard() {
                 }}
                 className="text-left font-sans text-[10px] uppercase tracking-[0.22em] text-warm/35 transition-colors hover:text-warm/70"
               >
-                Edit your profile name
+                Edit your first name
               </button>
             ) : (
               <div className="flex flex-col gap-2.5">
+                <span className="font-sans text-[9px] uppercase tracking-[0.22em] text-warm/50">
+                  First name
+                </span>
                 <input
                   type="text"
                   value={nameDraft}
@@ -787,10 +790,13 @@ export default function Dashboard() {
                   }}
                   maxLength={50}
                   autoFocus
-                  aria-label="Your name"
+                  aria-label="First name"
                   className="w-full border-b border-warm/20 bg-transparent pb-1 font-serif-v3 text-base text-warm placeholder-warm/30 focus:border-accent/60 focus:outline-none"
-                  placeholder="Your name"
+                  placeholder="First name"
                 />
+                <p className="font-serif-v3 text-xs italic text-warm/45">
+                  This is how your name appears on the network.
+                </p>
                 {nameError && (
                   <p className="font-sans text-[9px] uppercase tracking-[0.18em] text-error/90">{nameError}</p>
                 )}
