@@ -479,14 +479,26 @@ export default function Dashboard() {
       const trees = {}
       const rawInvites = {}
 
-      for (const film of creatorFilms || []) {
-        const { data: invites } = await supabase
-          .from('invites')
-          .select('*')
-          .eq('film_id', film.id)
-          .order('created_at', { ascending: true })
+      // One query for every film's invites and one for every sender's profile, instead of a
+      // query per film plus a query per invite — those ran sequentially from the browser, so a
+      // dashboard with N invites paid N cross-region round trips before it could render.
+      const filmIds = (creatorFilms || []).map((f) => f.id)
+      const { data: allFilmInvites } = filmIds.length
+        ? await supabase
+            .from('invites')
+            .select('*')
+            .in('film_id', filmIds)
+            .order('created_at', { ascending: true })
+        : { data: [] }
 
-        const all = invites || []
+      const senderIds = [...new Set((allFilmInvites || []).map((i) => i.sender_id).filter(Boolean))]
+      const { data: senderRows } = senderIds.length
+        ? await supabase.from('users').select('id, name, email').in('id', senderIds)
+        : { data: [] }
+      const senderById = new Map((senderRows || []).map((u) => [u.id, u]))
+
+      for (const film of creatorFilms || []) {
+        const all = (allFilmInvites || []).filter((i) => i.film_id === film.id)
         rawInvites[film.id] = all
         stats[film.id] = {
           sent: all.length,
@@ -496,26 +508,15 @@ export default function Dashboard() {
           signedUp: all.filter((i) => i.status === 'signed_up').length,
         }
 
-        const tree = []
-        for (const inv of all) {
-          const sender = inv.sender_id
-            ? (
-                await supabase
-                  .from('users')
-                  .select('name, email')
-                  .eq('id', inv.sender_id)
-                  .single()
-              ).data
-            : null
-
-          tree.push({
+        trees[film.id] = all.map((inv) => {
+          const sender = inv.sender_id ? senderById.get(inv.sender_id) : null
+          return {
             id: inv.id,
             sender: sender?.name || sender?.email || 'Anonymous',
             recipient: inv.recipient_email,
             status: inv.status,
-          })
-        }
-        trees[film.id] = tree
+          }
+        })
       }
 
       setFilmStats(stats)
