@@ -35,7 +35,7 @@ export default function DesktopPassItOn({
           <svg className="h-4 w-4 shrink-0 fill-[#b1a180]" viewBox="0 0 24 24" aria-hidden>
             <path d="M8 5v14l11-7z" />
           </svg>
-          <span className="font-['DM_Sans',sans-serif] text-[10px] font-medium uppercase tracking-[0.35em] text-[#dddddd]/70">
+          <span className="font-sans text-[10px] font-medium uppercase tracking-[0.35em] text-[#dddddd]/70">
             Resume Film
           </span>
         </button>
@@ -49,28 +49,28 @@ export default function DesktopPassItOn({
               className="font-serif-v3 text-5xl lg:text-6xl text-[#dddddd] font-light tracking-tight italic"
               style={{ textShadow: '0 0 24px rgba(177,161,128,0.35), 0 2px 16px rgba(0,0,0,0.4)' }}
             >
-              Pass it on.
+              Pass it on. Make an impact.
             </h2>
             {showPostFilm && user && hasSentInvite && (
               <Link
                 to="/dashboard"
-                className="font-['DM_Sans',sans-serif] text-[10px] uppercase tracking-[0.25em] text-[#b1a180] transition-opacity hover:opacity-80"
+                className="font-sans text-[10px] uppercase tracking-[0.25em] text-[#b1a180] transition-opacity hover:opacity-80"
               >
                 Go to dashboard
               </Link>
             )}
-            <p className="font-['Inter',sans-serif] font-light text-[13px] text-[#dddddd]/70 leading-relaxed max-w-md">
+            <p className="font-body font-light text-[13px] text-[#dddddd]/70 leading-relaxed max-w-md">
               Who <span className="italic">needs</span> to see this? Not anyone and everyone. Just the few
               special people you know will resonate deeply.
             </p>
-            <p className="font-['Inter',sans-serif] font-light text-[13px] text-[#dddddd]/70 leading-relaxed max-w-md">
+            <p className="font-body font-light text-[13px] text-[#dddddd]/70 leading-relaxed max-w-md">
               If you choose not to share, the film&apos;s journey ends with you. That&apos;s ok — but know
               that it was carried this far by people who believed in it.
             </p>
           </div>
           {graphLayout && (
             <div className="mt-2 flex w-full flex-1 flex-col min-h-[min(42vh,520px)] max-h-[min(68vh,900px)] lg:max-h-[min(62dvh,820px)]">
-              <span className="mb-3 font-['DM_Sans',sans-serif] text-[9px] uppercase tracking-[0.3em] text-[#dddddd]/40">
+              <span className="mb-3 font-sans text-[9px] uppercase tracking-[0.3em] text-[#dddddd]/40">
                 Your network impact
               </span>
               <div className="flex min-h-0 flex-1 overflow-hidden rounded bg-[#121a33] border border-[#4a5580]/40">
@@ -115,23 +115,23 @@ export default function DesktopPassItOn({
 
             <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center gap-4 overflow-y-auto panel-scroll px-6 py-6 text-center">
               <div className="flex flex-col items-center gap-2">
-                <h3 className="font-['DM_Sans',sans-serif] text-[10px] uppercase tracking-[0.4em] text-[#2a2a2a]">
+                <h3 className="font-sans text-[10px] uppercase tracking-[0.4em] text-[#2a2a2a]">
                   A Letter of Invitation
                 </h3>
                 <div className="h-[12px] w-[1px] bg-[#2a2a2a]/30" />
               </div>
 
               {letterError && (
-                <p className="w-full max-w-xl text-[12px] font-['DM_Sans',sans-serif] text-[#b84233] bg-[#b84233]/10 border border-[#b84233]/25 px-4 py-2">{letterError}</p>
+                <p className="w-full max-w-xl text-[12px] font-sans text-[#b84233] bg-[#b84233]/10 border border-[#b84233]/25 px-4 py-2">{letterError}</p>
               )}
               {letterSuccess && (
-                <p className="w-full max-w-xl text-[12px] font-['DM_Sans',sans-serif] text-[#5b8a5e] bg-[#5b8a5e]/10 border border-[#5b8a5e]/25 px-4 py-2">{letterSuccess}</p>
+                <p className="w-full max-w-xl text-[12px] font-sans text-[#5b8a5e] bg-[#5b8a5e]/10 border border-[#5b8a5e]/25 px-4 py-2">{letterSuccess}</p>
               )}
 
               {slotsRemaining > 0 ? (
                 <div className="flex w-full flex-1 flex-col items-center gap-4">
                   <div className="flex flex-col items-center w-full max-w-xl gap-3 relative bg-[#2a2a2a]/8 border-[0.5px] border-[#2a2a2a]/15 px-5 py-5">
-                    <div className="font-['Fraunces',serif] text-base lg:text-lg leading-snug w-full text-[#2a2a2a]">
+                    <div className="font-serif-v3 text-base lg:text-lg leading-snug w-full text-[#2a2a2a]">
                       <div className="flex flex-wrap justify-center items-end gap-x-3 gap-y-1 mb-2">
                         <span className="italic">Dear</span>
                         <input type="text" placeholder="First Name" value={letterRecipientFirst} onChange={(e) => setLetterRecipientFirst(e.target.value)} className="min-w-[120px] max-w-[200px] flex-1 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" autoComplete="given-name" />
@@ -140,19 +140,19 @@ export default function DesktopPassItOn({
                       <textarea rows={2} placeholder="Write your note here. Tell them why this film made you think of them specifically..." value={letterNote} onChange={(e) => setLetterNote(e.target.value)} className="w-full bg-transparent border-none text-center focus:outline-none resize-none placeholder-[#2a2a2a]/30 leading-relaxed text-sm lg:text-base text-[#2a2a2a]" />
                     </div>
                     <div className="flex flex-col gap-1 w-full max-w-[340px] text-center">
-                      <label className="font-['DM_Sans',sans-serif] text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Deliver To</label>
-                      <input type="email" placeholder="Their Email Address" value={letterRecipientEmail} onChange={(e) => setLetterRecipientEmail(e.target.value)} className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-[13px] font-['DM_Sans',sans-serif] text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors rounded-none" />
+                      <label className="font-sans text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Deliver To</label>
+                      <input type="email" placeholder="Their Email Address" value={letterRecipientEmail} onChange={(e) => setLetterRecipientEmail(e.target.value)} className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors rounded-none" />
                     </div>
                   </div>
 
                   <div className="w-[80px] h-[1px] bg-gradient-to-r from-transparent via-[#2a2a2a]/30 to-transparent" />
 
-                  <button type="button" onClick={handleSendLetter} disabled={letterSending} className="w-full max-w-[340px] py-3 bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-['DM_Sans',sans-serif] text-[11px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none disabled:opacity-40">
+                  <button type="button" onClick={handleSendLetter} disabled={letterSending} className="w-full max-w-[340px] py-3 bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-sans text-[11px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none disabled:opacity-40">
                     {letterSending ? 'Sending…' : 'Share invitation'}
                   </button>
                 </div>
               ) : (
-                <p className="font-['Fraunces',serif] text-2xl text-[#2a2a2a]/80 my-10">All invitations have been sent.</p>
+                <p className="font-serif-v3 text-2xl text-[#2a2a2a]/80 my-10">All invitations have been sent.</p>
               )}
 
               {/* Outside the slots ternary: a viewer who has already shared (incl. all slots used)
@@ -161,7 +161,7 @@ export default function DesktopPassItOn({
                 <button
                   type="button"
                   onClick={goToDashboard}
-                  className="w-full max-w-[340px] py-2 font-['DM_Sans',sans-serif] text-[9px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors"
+                  className="w-full max-w-[340px] py-2 font-sans text-[9px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors"
                 >
                   Skip — Go to dashboard
                 </button>

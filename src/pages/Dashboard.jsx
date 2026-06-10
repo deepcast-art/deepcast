@@ -138,17 +138,41 @@ export default function Dashboard() {
   const [modalBusy, setModalBusy] = useState(false)
   const [modalError, setModalError] = useState('')
 
+  const [editingName, setEditingName] = useState(false)
+  const [nameDraft, setNameDraft] = useState('')
+  const [nameBusy, setNameBusy] = useState(false)
+  const [nameError, setNameError] = useState('')
+  const graphSectionRef = useRef(null)
+
   const isTeamMember = profile?.role === 'team_member'
   const filmOwnerId =
     profile?.role === 'team_member' ? profile?.team_creator_id : profile?.id
   const isViewer = profile?.role === 'viewer'
+  /** A viewer on a filmmaker's team has unlimited shares (server enforces the same rule). */
+  const isUnlimitedViewer = isViewer && Boolean(profile?.team_creator_id)
 
   const invitesLeft = isViewer
     ? Math.max(0, profile?.invite_allocation ?? 0)
     : null
   const sentCount = isViewer ? viewerSentInvites.length : 0
+  const totalInvites = (invitesLeft ?? 0) + sentCount
   const canShareMore = isViewer && viewerFilmId
-  const shareDisabled = !invitesLeft || invitesLeft <= 0
+  const shareDisabled = !isUnlimitedViewer && (!invitesLeft || invitesLeft <= 0)
+
+  // Downstream subtree size: everyone the viewer's shares have reached, at any
+  // depth — the same branch the network graph highlights.
+  const viewerSubtreeSize = useMemo(() => {
+    const seen = new Set()
+    const queue = [...viewerSentInvites]
+    while (queue.length) {
+      const inv = queue.shift()
+      if (seen.has(inv.id)) continue
+      seen.add(inv.id)
+      const kids = childrenByParentId.get(inv.id)
+      if (kids) queue.push(...kids)
+    }
+    return seen.size
+  }, [viewerSentInvites, childrenByParentId])
 
   // Shared focus resolution (same helper every graph surface uses): email match first,
   // then invite-token match, then the common parent of the viewer's sent invites.
@@ -160,47 +184,6 @@ export default function Dashboard() {
       }),
     [viewerFilmInvites, profile?.email, viewerInviteToken, profile?.id]
   )
-
-  const viewerChainInvites = useMemo(() => {
-    if (!viewerFilmInvites?.length) return viewerFilmInvites
-    const byId = new Map(viewerFilmInvites.map((inv) => [inv.id, inv]))
-    const keep = new Set()
-
-    if (viewerFocusInviteId) {
-      let cur = byId.get(viewerFocusInviteId)
-      while (cur) {
-        keep.add(cur.id)
-        cur = cur.parent_invite_id ? byId.get(cur.parent_invite_id) : null
-      }
-      const queue = [viewerFocusInviteId]
-      while (queue.length) {
-        const parentId = queue.shift()
-        for (const inv of viewerFilmInvites) {
-          if (inv.parent_invite_id === parentId && !keep.has(inv.id)) {
-            keep.add(inv.id)
-            queue.push(inv.id)
-          }
-        }
-      }
-    } else if (profile?.id) {
-      // No focus invite resolvable — fall back to viewer's outgoing subtree only.
-      const seeds = viewerFilmInvites.filter((r) => r.sender_id === profile.id)
-      const queue = seeds.map((r) => r.id)
-      for (const id of queue) keep.add(id)
-      while (queue.length) {
-        const parentId = queue.shift()
-        for (const inv of viewerFilmInvites) {
-          if (inv.parent_invite_id === parentId && !keep.has(inv.id)) {
-            keep.add(inv.id)
-            queue.push(inv.id)
-          }
-        }
-      }
-    }
-
-    if (!keep.size) return []
-    return viewerFilmInvites.filter((inv) => keep.has(inv.id))
-  }, [viewerFilmInvites, viewerFocusInviteId, profile?.id])
 
   const graphLayout = useMemo(() => {
     if (!viewerFilmInvites?.length) return null
@@ -605,6 +588,54 @@ export default function Dashboard() {
     setIsShareModalOpen(true)
   }
 
+  const scrollToGraph = () => {
+    graphSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  /**
+   * Edit name (passwordless platform — replaces the old change-password link).
+   * Propagates everywhere the name appears: the profile (future share emails use
+   * profile.name for the sender display + subject), invites this user sent
+   * (sender labels), and invites addressed to them (their node label in every
+   * network graph).
+   */
+  const handleSaveName = async () => {
+    const newName = nameDraft.trim()
+    if (!newName) {
+      setNameError('Name cannot be empty.')
+      return
+    }
+    if (newName.length > 50) {
+      setNameError('Please keep your name under 50 characters.')
+      return
+    }
+    setNameBusy(true)
+    setNameError('')
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ name: newName, first_name: newName })
+        .eq('id', profile.id)
+      if (error) throw error
+
+      const email = (profile.email || '').trim()
+      await Promise.all([
+        supabase.from('invites').update({ sender_name: newName }).eq('sender_id', profile.id),
+        email
+          ? supabase.from('invites').update({ recipient_name: newName }).ilike('recipient_email', email)
+          : Promise.resolve(),
+      ])
+
+      await fetchProfile(profile.id)
+      if (isViewer) await loadViewerDashboard()
+      setEditingName(false)
+    } catch (e) {
+      setNameError(e.message || 'Could not update your name.')
+    } finally {
+      setNameBusy(false)
+    }
+  }
+
   const handleSendModalInvite = async () => {
     setModalError('')
     if (!viewerFilmId) {
@@ -762,12 +793,57 @@ export default function Dashboard() {
                 Share more
               </button>
             )}
-            <Link
-              to="/profile#set-password"
-              className="font-sans text-[10px] uppercase tracking-[0.22em] text-warm/35 transition-colors hover:text-warm/70"
-            >
-              Change password
-            </Link>
+            {!editingName ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setNameDraft(profile.name || '')
+                  setNameError('')
+                  setEditingName(true)
+                }}
+                className="text-left font-sans text-[10px] uppercase tracking-[0.22em] text-warm/35 transition-colors hover:text-warm/70"
+              >
+                Edit name
+              </button>
+            ) : (
+              <div className="flex flex-col gap-2.5">
+                <input
+                  type="text"
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveName()
+                    if (e.key === 'Escape') setEditingName(false)
+                  }}
+                  maxLength={50}
+                  autoFocus
+                  aria-label="Your name"
+                  className="w-full border-b border-warm/20 bg-transparent pb-1 font-serif-v3 text-base text-warm placeholder-warm/30 focus:border-accent/60 focus:outline-none"
+                  placeholder="Your name"
+                />
+                {nameError && (
+                  <p className="font-sans text-[9px] uppercase tracking-[0.18em] text-error/90">{nameError}</p>
+                )}
+                <div className="flex items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={handleSaveName}
+                    disabled={nameBusy}
+                    className="font-sans text-[10px] uppercase tracking-[0.22em] text-accent transition-colors hover:text-accent-hover disabled:opacity-50"
+                  >
+                    {nameBusy ? 'Saving…' : 'Save'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingName(false)}
+                    disabled={nameBusy}
+                    className="font-sans text-[10px] uppercase tracking-[0.22em] text-warm/35 transition-colors hover:text-warm/70 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
             <button
               type="button"
               onClick={() => signOut()}
@@ -805,6 +881,37 @@ export default function Dashboard() {
             </div>
           ) : (
             <>
+              {/* ── Share hero: the primary action ── */}
+              <section className="mb-10 w-full max-w-6xl animate-fade-in">
+                <div className="flex flex-col gap-5 border border-accent/25 bg-ink/40 p-6 sm:flex-row sm:items-center sm:justify-between sm:gap-8 md:p-8">
+                  <div className="flex flex-col gap-2">
+                    <span className="font-sans text-[11px] font-medium uppercase tracking-[0.25em] text-warm/85">
+                      {isUnlimitedViewer
+                        ? 'Unlimited invitations'
+                        : `${invitesLeft} of ${totalInvites} invitation${totalInvites === 1 ? '' : 's'} remaining`}
+                    </span>
+                    {viewerSubtreeSize > 0 && (
+                      <button
+                        type="button"
+                        onClick={scrollToGraph}
+                        className="text-left font-sans text-[10px] uppercase tracking-[0.22em] text-accent/80 underline-offset-4 transition-colors hover:text-accent hover:underline"
+                      >
+                        Your shares have reached {viewerSubtreeSize}{' '}
+                        {viewerSubtreeSize === 1 ? 'person' : 'people'}
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openShareModal}
+                    disabled={shareDisabled || !canShareMore}
+                    className="w-full shrink-0 bg-accent px-12 py-5 text-center font-sans text-[12px] font-semibold uppercase tracking-[0.3em] text-ink transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+                  >
+                    Share this film
+                  </button>
+                </div>
+              </section>
+
               {/* ── Your screenings ── */}
               {viewerAllFilms.length > 0 && (
                 <section className="mb-10 w-full max-w-6xl animate-fade-in" style={{ animationDelay: '40ms' }}>
@@ -921,7 +1028,7 @@ export default function Dashboard() {
                 )}
 
                 {graphLayout ? (
-                  <div className="mb-12 flex w-full flex-col animate-fade-in">
+                  <div ref={graphSectionRef} className="mb-12 flex w-full flex-col animate-fade-in">
                     <div className="mb-5 flex flex-row items-baseline justify-between gap-4">
                       <h3 className="font-sans text-[10px] font-medium uppercase tracking-[0.32em] text-warm/50">
                         My network impact

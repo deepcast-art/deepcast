@@ -33,7 +33,7 @@ export default function MobilePassItOn({
           <svg className="h-4 w-4 shrink-0 fill-[#b1a180]" viewBox="0 0 24 24" aria-hidden>
             <path d="M8 5v14l11-7z" />
           </svg>
-          <span className="font-['DM_Sans',sans-serif] text-[11px] uppercase tracking-[0.3em] text-[#dddddd]/70">
+          <span className="font-sans text-[11px] uppercase tracking-[0.3em] text-[#dddddd]/70">
             Resume Film
           </span>
         </button>
@@ -50,7 +50,7 @@ export default function MobilePassItOn({
             <svg className="h-4 w-4 shrink-0 fill-[#b1a180]" viewBox="0 0 24 24" aria-hidden>
               <path d="M8 5v14l11-7z" />
             </svg>
-            <span className="font-['DM_Sans',sans-serif] text-[10px] uppercase tracking-[0.3em] text-[#dddddd]/70">
+            <span className="font-sans text-[10px] uppercase tracking-[0.3em] text-[#dddddd]/70">
               Resume Film
             </span>
           </button>
@@ -65,7 +65,7 @@ export default function MobilePassItOn({
             className="font-serif-v3 text-xl text-[#dddddd] font-light italic mb-2"
             style={{ textShadow: '0 0 24px rgba(177,161,128,0.35), 0 2px 16px rgba(0,0,0,0.4)' }}
           >
-            Pass it on.
+            Pass it on. Make an impact.
           </h2>
           <p className="font-serif-v3 text-[12px] italic leading-snug text-[#dddddd]/60 mb-3">
             If you choose not to share, the film&apos;s journey ends with you. That&apos;s ok — but know
@@ -114,23 +114,23 @@ export default function MobilePassItOn({
                  style={{ boxShadow: 'inset 0 0 60px rgba(0,0,0,0.06), inset 0 0 120px rgba(0,0,0,0.03)' }} />
 
             <div className="relative z-10 flex flex-1 min-h-0 flex-col items-center justify-center text-center text-[#2a2a2a]">
-              <h3 className="font-['DM_Sans',sans-serif] text-[8px] uppercase tracking-[0.4em] text-[#2a2a2a] mb-1.5">
+              <h3 className="font-sans text-[8px] uppercase tracking-[0.4em] text-[#2a2a2a] mb-1.5">
                 A Letter of Invitation
               </h3>
               <div className="h-[6px] w-[1px] bg-[#2a2a2a]/30 mb-2" />
 
               {letterError && (
-                <p className="mb-1 text-[9px] font-['DM_Sans',sans-serif] text-[#b84233] bg-[#b84233]/10 px-2 py-0.5 w-full">{letterError}</p>
+                <p className="mb-1 text-[9px] font-sans text-[#b84233] bg-[#b84233]/10 px-2 py-0.5 w-full">{letterError}</p>
               )}
               {letterSuccess && (
-                <p className="mb-1 text-[9px] font-['DM_Sans',sans-serif] text-[#5b8a5e] bg-[#5b8a5e]/10 px-2 py-0.5 w-full">{letterSuccess}</p>
+                <p className="mb-1 text-[9px] font-sans text-[#5b8a5e] bg-[#5b8a5e]/10 px-2 py-0.5 w-full">{letterSuccess}</p>
               )}
 
               {slotsRemaining > 0 ? (
                 <>
                   {/* Letter slot */}
                   <div className="flex flex-col items-center w-full bg-[#2a2a2a]/8 border-[0.5px] border-[#2a2a2a]/15 p-3">
-                    <div className="font-['Fraunces',serif] text-[11px] leading-snug w-full text-[#2a2a2a]">
+                    <div className="font-serif-v3 text-[11px] leading-snug w-full text-[#2a2a2a]">
                       <div className="flex flex-nowrap justify-center items-end gap-x-2 mb-2 whitespace-nowrap">
                         <span className="italic">Dear</span>
                         <input type="text" placeholder="First name" value={letterRecipientFirst} onChange={(e) => setLetterRecipientFirst(e.target.value)}
@@ -141,21 +141,21 @@ export default function MobilePassItOn({
                                 className="w-full bg-transparent border-none text-center text-[10px] focus:outline-none resize-none placeholder-[#2a2a2a]/30 leading-snug text-[#2a2a2a]" />
                     </div>
                     <div className="flex flex-col gap-1 w-full text-center mt-2">
-                      <label className="font-['DM_Sans',sans-serif] text-[7px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Deliver To</label>
+                      <label className="font-sans text-[7px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Deliver To</label>
                       <input type="email" placeholder="Their email" value={letterRecipientEmail} onChange={(e) => setLetterRecipientEmail(e.target.value)}
-                             className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-0 text-[10px] font-['DM_Sans',sans-serif] text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors rounded-none" inputMode="email" autoComplete="email" />
+                             className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-0 text-[10px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors rounded-none" inputMode="email" autoComplete="email" />
                     </div>
                   </div>
 
                   <div className="w-[80px] h-[1px] bg-gradient-to-r from-transparent via-[#2a2a2a]/30 to-transparent my-3" />
 
                   <button type="button" onClick={handleSendLetter} disabled={letterSending}
-                    className="w-full py-2 min-h-[36px] bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-['DM_Sans',sans-serif] text-[10px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none disabled:opacity-40 touch-manipulation">
+                    className="w-full py-2 min-h-[36px] bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-sans text-[10px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none disabled:opacity-40 touch-manipulation">
                     {letterSending ? 'Sending…' : 'Share invitation'}
                   </button>
                 </>
               ) : (
-                <p className="font-['Fraunces',serif] text-center text-sm text-[#2a2a2a]/75 py-2">
+                <p className="font-serif-v3 text-center text-sm text-[#2a2a2a]/75 py-2">
                   All invitations have been sent.
                 </p>
               )}
@@ -164,7 +164,7 @@ export default function MobilePassItOn({
                   must always keep a path to the dashboard. */}
               {passItOnLayerActive && user && hasSentInvite && (
                 <button type="button" onClick={goToDashboard}
-                  className="mt-1.5 w-full py-0.5 min-h-[28px] font-['DM_Sans',sans-serif] text-[7px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors touch-manipulation">
+                  className="mt-1.5 w-full py-0.5 min-h-[28px] font-sans text-[7px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors touch-manipulation">
                   Skip — Go to dashboard
                 </button>
               )}
@@ -181,7 +181,7 @@ export default function MobilePassItOn({
             className="font-serif-v3 text-3xl text-[#dddddd] font-light italic mb-1.5"
             style={{ textShadow: '0 0 24px rgba(177,161,128,0.35), 0 2px 16px rgba(0,0,0,0.4)' }}
           >
-            Pass it on.
+            Pass it on. Make an impact.
           </h2>
         </div>
 
@@ -203,23 +203,23 @@ export default function MobilePassItOn({
                  style={{ boxShadow: 'inset 0 0 60px rgba(0,0,0,0.06), inset 0 0 120px rgba(0,0,0,0.03)' }} />
 
             <div className="relative z-10 flex flex-col items-center text-center text-[#2a2a2a]">
-              <h3 className="font-['DM_Sans',sans-serif] text-[10px] uppercase tracking-[0.4em] text-[#2a2a2a] mb-2">
+              <h3 className="font-sans text-[10px] uppercase tracking-[0.4em] text-[#2a2a2a] mb-2">
                 A Letter of Invitation
               </h3>
               <div className="h-[12px] w-[1px] bg-[#2a2a2a]/30 mb-3" />
 
               {letterError && (
-                <p className="mb-3 text-[11px] font-['DM_Sans',sans-serif] text-[#b84233] bg-[#b84233]/10 px-3 py-2 w-full">{letterError}</p>
+                <p className="mb-3 text-[11px] font-sans text-[#b84233] bg-[#b84233]/10 px-3 py-2 w-full">{letterError}</p>
               )}
               {letterSuccess && (
-                <p className="mb-3 text-[11px] font-['DM_Sans',sans-serif] text-[#5b8a5e] bg-[#5b8a5e]/10 px-3 py-2 w-full">{letterSuccess}</p>
+                <p className="mb-3 text-[11px] font-sans text-[#5b8a5e] bg-[#5b8a5e]/10 px-3 py-2 w-full">{letterSuccess}</p>
               )}
 
               {slotsRemaining > 0 ? (
                 <>
                   {/* Letter slot */}
                   <div className="flex flex-col items-center w-full bg-[#2a2a2a]/8 border-[0.5px] border-[#2a2a2a]/15 p-4">
-                    <div className="font-['Fraunces',serif] text-base leading-snug w-full text-[#2a2a2a]">
+                    <div className="font-serif-v3 text-base leading-snug w-full text-[#2a2a2a]">
                       <div className="flex flex-wrap justify-center items-end gap-x-3 gap-y-1 mb-3">
                         <span className="italic">Dear</span>
                         <input type="text" placeholder="First name" value={letterRecipientFirst} onChange={(e) => setLetterRecipientFirst(e.target.value)}
@@ -230,21 +230,21 @@ export default function MobilePassItOn({
                                 className="w-full bg-transparent border-none text-center focus:outline-none resize-none placeholder-[#2a2a2a]/30 leading-relaxed text-base text-[#2a2a2a]" />
                     </div>
                     <div className="flex flex-col gap-1 w-full max-w-[320px] text-center mt-2">
-                      <label className="font-['DM_Sans',sans-serif] text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Deliver To</label>
+                      <label className="font-sans text-[9px] uppercase tracking-[0.2em] text-[#2a2a2a]/60">Deliver To</label>
                       <input type="email" placeholder="Their Email Address" value={letterRecipientEmail} onChange={(e) => setLetterRecipientEmail(e.target.value)}
-                             className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-[13px] font-['DM_Sans',sans-serif] text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors rounded-none" inputMode="email" autoComplete="email" />
+                             className="w-full text-center bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 pb-1 text-[13px] font-sans text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none focus:border-[#2a2a2a] transition-colors rounded-none" inputMode="email" autoComplete="email" />
                     </div>
                   </div>
 
                   <div className="w-[80px] h-[1px] bg-gradient-to-r from-transparent via-[#2a2a2a]/30 to-transparent my-3" />
 
                   <button type="button" onClick={handleSendLetter} disabled={letterSending}
-                    className="w-full py-3 min-h-[44px] bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-['DM_Sans',sans-serif] text-[11px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none disabled:opacity-40 touch-manipulation">
+                    className="w-full py-3 min-h-[44px] bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-sans text-[11px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none disabled:opacity-40 touch-manipulation">
                     {letterSending ? 'Sending…' : 'Share invitation'}
                   </button>
                 </>
               ) : (
-                <p className="font-['Fraunces',serif] text-center text-lg text-[#2a2a2a]/75 py-6">
+                <p className="font-serif-v3 text-center text-lg text-[#2a2a2a]/75 py-6">
                   All invitations have been sent.
                 </p>
               )}
@@ -253,7 +253,7 @@ export default function MobilePassItOn({
                   must always keep a path to the dashboard. */}
               {passItOnLayerActive && user && hasSentInvite && (
                 <button type="button" onClick={goToDashboard}
-                  className="mt-4 w-full py-2 min-h-[44px] font-['DM_Sans',sans-serif] text-[9px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors touch-manipulation">
+                  className="mt-4 w-full py-2 min-h-[44px] font-sans text-[9px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors touch-manipulation">
                   Skip — Go to dashboard
                 </button>
               )}
@@ -272,7 +272,7 @@ export default function MobilePassItOn({
         {/* Network graph — below the fold */}
         {graphLayout && (
           <div className="shrink-0 px-4 pb-10">
-            <span className="mb-3 block font-['DM_Sans',sans-serif] text-[9px] uppercase tracking-[0.3em] text-[#dddddd]/40">
+            <span className="mb-3 block font-sans text-[9px] uppercase tracking-[0.3em] text-[#dddddd]/40">
               Your network impact
             </span>
             <div className="h-[250px] w-full opacity-70 overflow-hidden rounded bg-[#121a33] border-[0.5px] border-[#4a5580]/40 touch-manipulation">
