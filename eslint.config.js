@@ -26,4 +26,11 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  {
+    // Server-side scripts run under Node — give them Node globals (process, Buffer, …).
+    files: ['server/**/*.js', 'scripts/**/*.js', 'verify-flow.js'],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node },
+    },
+  },
 ])

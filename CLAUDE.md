@@ -101,9 +101,15 @@ npm test                 # Unit + E2E
 
 ### Network graph (viewer)
 - The "My network impact" graph feeds `buildGraphLayout` with **all** invites for the selected film (`viewerFilmInvites`), not just the viewer's ancestor/descendant chain. This matches the Network Map page and produces the full circular graph with the viewer's path highlighted in amber against a faded background.
-- `viewerRecipientKey` and `viewerFocusInviteId` are passed to `buildGraphLayout` so `defaultActiveNodes` / `defaultActiveLinks` correctly highlight the viewer's node and their upstream/downstream chain.
+- `viewerRecipientKey` and `viewerFocusInviteId` come from the shared `resolveViewerFocus` helper (graphLayout.js) — every graph surface uses the same resolution (email match → invite token → common parent of sent invites) so highlighting can never drift between pages.
 - After a viewer sends an invite, the graph scrolls to centre the newly created node. `loadViewerDashboard` returns the newest sent invite ID; the Dashboard passes it as `focusNodeId` to `NetworkGraph`, which smoothly pans to that node.
-- Props on the viewer NetworkGraph: `fillHeight pannable showZoomControls showLegend transparentSurface edgeFadeColor="#121a33"`. Section labels (sender names on the inner ring) are **shown** (no `hideSectionLabels`).
+
+### Canonical graph model (`buildGraphLayout` in `src/lib/graphLayout.js`)
+- The filmmaker IS the central film node — there is never a separate filmmaker user node. Any invite **sent by** the film's creator (`creatorId`) attaches its recipient directly to the central node, regardless of the stored `parent_invite_id` (self-healing against historical bad parents).
+- Team members (unlimited-share users) render as their own ring-1 nodes (`type: 'member'`); their invitees attach beneath them. Pass `teamMemberIds` where available; senders that can't be placed are derived structurally.
+- Everyone else chains to whoever shared with them: `parent_invite_id` first, then an email-match repair (the invite through which the sender's email received the film).
+- Server-side, `/api/invites/send` never records a `parent_invite_id` for unlimited senders (creator/team) — this is what permanently prevents the phantom-intermediate-node bug.
+- `/api/invites/validate` returns `creatorId` + `teamMemberIds` for the screening surfaces; the dashboard/network-map/profile pass `films.creator_id` from their own queries (films are publicly readable; users rows are NOT readable cross-role under RLS — use `maybeSingle()` for creator-name lookups).
 
 ## Network graph component (`src/components/NetworkGraph.jsx`)
 
