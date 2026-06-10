@@ -80,7 +80,9 @@ npm test                 # Unit + E2E
 
 ## Standing product rules
 
-- **Personal notes are always visible.** Wherever sharing happens — the share prompt, the dashboard invite form, any future surface — every recipient row shows a visible, optional, clearly-labeled personal-note field by default, for normal and unlimited users alike. Never collapse the note behind a link, icon, or toggle; the note is core to the gifting experience.
+- **Personal notes are MANDATORY and never hidden.** Wherever sharing happens — the share prompt, the dashboard invite form, any future surface — every recipient shows a visible personal-note field by default, for normal and unlimited users alike, and a send is refused (with a gentle inline message) if any recipient's note is empty or whitespace-only. Never label the note "optional", and never collapse it behind a link, icon, or toggle; the note is the gift, not the link.
+- **Every recipient is an identical letter block.** On the share prompt, each recipient renders as the same full letter — "Dear [First Name]," + the note-writing area + "Deliver To [email]" — with a subtle brand divider between consecutive letters. No compact/abbreviated rows for added recipients.
+- **The share prompt shows ONE static invitations line** — "You have N invitations" (or "You have unlimited invitations"), where N comes from `invitationsRemaining(profile)` in `src/lib/shares.js`. It sits beneath the letter block(s), above the share button, and never live-subtracts as recipient rows are added. The cap still applies: the form never allows more recipient letters than the remaining allocation.
 
 ## Canonical displayed stats — one shared computation per stat
 

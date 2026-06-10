@@ -1089,13 +1089,12 @@ export default function InviteScreening() {
   /** "+ add another" is capped at the remaining quota (never capped for unlimited). */
   const canAddRecipient = letterRecipients.length < slotsRemaining
 
-  /** The one stat on the share prompt: invitations left, doing the math out loud
-   *  when several recipients are queued in this letter. */
+  /** The one stat on the share prompt: a STATIC "You have N invitations" from
+   *  the canonical allocation — never live-subtracted as letters are added.
+   *  Sits beneath the letter block(s), above the share button. */
   const invitationsLabel = isUnlimitedSharer
-    ? 'Unlimited invitations'
-    : letterRecipients.length > 1
-      ? `${slotsRemaining} invitation${slotsRemaining === 1 ? '' : 's'} remaining − ${letterRecipients.length} in this letter = ${Math.max(0, slotsRemaining - letterRecipients.length)} left`
-      : `${slotsRemaining} invitation${slotsRemaining === 1 ? '' : 's'} remaining`
+    ? 'You have unlimited invitations'
+    : `You have ${slotsRemaining} invitation${slotsRemaining === 1 ? '' : 's'}`
 
   async function refreshFilmInvites() {
     if (!film?.id) return
@@ -1118,6 +1117,11 @@ export default function InviteScreening() {
     }))
     if (rows.some((r) => !r.first || !r.email || !r.email.includes('@'))) {
       setLetterError('Please enter a first name and valid email for each recipient.')
+      return
+    }
+    // Personal notes are mandatory — the note is the gift, not the link.
+    if (rows.some((r) => !r.note)) {
+      setLetterError('Each letter needs a personal note — even one warm sentence about why this film made you think of them.')
       return
     }
     const lowered = rows.map((r) => r.email.toLowerCase())

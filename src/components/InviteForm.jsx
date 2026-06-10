@@ -60,6 +60,12 @@ export default function InviteForm({
       return
     }
 
+    // Personal notes are mandatory — the note is the gift, not the link.
+    if (validRecipients.some((r) => !r.note.trim())) {
+      setError('Each invitation needs a personal note — even one warm sentence about why this film made you think of them.')
+      return
+    }
+
     if (!unlimited && validRecipients.length > slotsRemaining) {
       setError(
         `You can only send ${slotsRemaining} more invitation${slotsRemaining !== 1 ? 's' : ''} in this batch. Remove a row or send fewer.`

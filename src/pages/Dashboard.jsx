@@ -605,6 +605,11 @@ export default function Dashboard() {
       setModalError('Enter a valid email.')
       return
     }
+    // Personal notes are mandatory — the note is the gift, not the link.
+    if (!modalNote.trim()) {
+      setModalError('Add a personal note — even one warm sentence about why this film made you think of them.')
+      return
+    }
     setModalBusy(true)
     try {
       const { data: existing } = await supabase
