@@ -1560,13 +1560,17 @@ async function ensureProfileForUserId(userId) {
  * Returns { userId, created } — `created` is true only when THIS call created the auth user, so the
  * caller knows whether it's safe to roll the user back on a later failure.
  */
-async function findOrCreatePasswordlessAccount(emailNorm, displayName) {
+async function findOrCreatePasswordlessAccount(emailNorm, displayName, precheckedAuthUser) {
   // Names are first-name-only now — store the whole name as first_name; don't split off a
   // last name. (Existing accounts are unaffected; nothing user-facing reads first_name.)
   const firstName = displayName
   const lastName = ''
 
-  const existing = await findAuthUserByEmail(emailNorm)
+  // `precheckedAuthUser` lets a caller that already ran findAuthUserByEmail (an admin scan of
+  // every auth user) pass its result in — undefined means "not checked, look it up here".
+  // createUser still guards the create race via its own already-exists error.
+  const existing =
+    precheckedAuthUser !== undefined ? precheckedAuthUser : await findAuthUserByEmail(emailNorm)
   let userId
   let created = false
   if (existing) {
@@ -1693,20 +1697,18 @@ app.post('/api/invites/session', async (req, res) => {
       })
     }
 
-    const { data: invite, error: invErr } = await supabase
-      .from('invites')
-      .select('id, recipient_name, recipient_email')
-      .eq('token', t)
-      .maybeSingle()
+    // Invite lookup and the existing-account scan are independent — run them together.
+    const [{ data: invite, error: invErr }, existingAuthUser] = await Promise.all([
+      supabase.from('invites').select('id, recipient_name, recipient_email').eq('token', t).maybeSingle(),
+      // EXISTING-ACCOUNT GUARD: never mint a session without an inbox round-trip.
+      findAuthUserByEmail(emailNorm),
+    ])
     if (invErr) return res.status(500).json({ error: 'Failed to load invitation' })
     if (!invite) return res.status(404).json({ error: 'Invitation not found' })
 
     // Name follows the invite record, not the typed email.
     const displayName =
       (invite.recipient_name && invite.recipient_name.trim()) || emailNorm.split('@')[0]
-
-    // EXISTING-ACCOUNT GUARD: never mint a session without an inbox round-trip.
-    const existingAuthUser = await findAuthUserByEmail(emailNorm)
     if (existingAuthUser) {
       const baseUrl = resolveBaseUrl(appUrl, req.get('origin'))
       const redirectTo = `${baseUrl}/i/${encodeURIComponent(t)}`
@@ -1722,7 +1724,9 @@ app.post('/api/invites/session', async (req, res) => {
     let userId
     let created
     try {
-      ({ userId, created } = await findOrCreatePasswordlessAccount(emailNorm, displayName))
+      // The guard above already scanned for this email and found nothing — pass that result
+      // through (null) so the helper doesn't repeat the full-account-list scan.
+      ({ userId, created } = await findOrCreatePasswordlessAccount(emailNorm, displayName, existingAuthUser))
     } catch (err) {
       if (err.alreadyExists) {
         // Raced with a create — fall back to the email round-trip rather than minting.
@@ -1739,14 +1743,16 @@ app.post('/api/invites/session', async (req, res) => {
     // existing-account email path. (Relinking the invite's recipient_email is idempotent and harmless
     // to leave; the orphaned auth user is the only thing that poisons retries.)
     try {
-      await relinkOpenedInvite(t, emailNorm)
-      await replicateInviteLinkage(userId, emailNorm, displayName, t)
-
-      // In-band session: generateLink (no redirectTo needed — client verifies the hash directly).
-      const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
-        type: 'magiclink',
-        email: emailNorm,
-      })
+      // The three finalize steps are independent (relink + linkage touch different invite
+      // columns; generateLink only needs the auth user), so they run in parallel. Rollback
+      // semantics are unchanged: relink/replicate swallow their own errors, and a generateLink
+      // failure still rejects this block and rolls back the freshly created user below.
+      const [, , { data: linkData, error: linkErr }] = await Promise.all([
+        relinkOpenedInvite(t, emailNorm),
+        replicateInviteLinkage(userId, emailNorm, displayName, t),
+        // In-band session: generateLink (no redirectTo needed — client verifies the hash directly).
+        supabase.auth.admin.generateLink({ type: 'magiclink', email: emailNorm }),
+      ])
       if (linkErr || !linkData?.properties?.hashed_token) {
         throw new Error(linkErr?.message || 'Could not generate session link')
       }
