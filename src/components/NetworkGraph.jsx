@@ -111,15 +111,19 @@ function FilmNode({ x, y, size, creatorLabel, isActive, isFaded, onMouseEnter, o
           >
             {displayName}
           </text>
+          {/* Legible at default zoom on every surface, yet subordinate to the
+              name above (11px uppercase): 10px, lowercase, muted fill. Sits at
+              ~62 units from centre — ring 1 starts at radius ≥ 200, so it can
+              never collide with ring-1 nodes or labels. */}
           <text
-            y={r * 1.6 + 25}
+            y={r * 1.6 + 27}
             textAnchor="middle"
             style={{
               fontFamily: "'Phoenix', system-ui, sans-serif",
-              fontSize: '8px',
+              fontSize: '10px',
               letterSpacing: '0.12em',
               fill: GRAPH_COLORS.muted,
-              opacity: 0.85,
+              opacity: 0.9,
             }}
           >
             (filmmaker)
