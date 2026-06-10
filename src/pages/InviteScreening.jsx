@@ -147,6 +147,9 @@ export default function InviteScreening() {
   const [filmInvites, setFilmInvites] = useState([])
   const [creatorName, setCreatorName] = useState('')
   const hasMarkedWatched = useRef(false)
+  /** Last watch-percentage milestone written to watch_sessions — write each decile once, not on
+   *  every timeupdate tick (those fire ~4×/s, so an unguarded write repeats for many seconds). */
+  const lastSavedPctRef = useRef(-1)
   /** Case 1: an already-signed-in user opening this invite relinks it to their account, once. */
   const hasRelinkedRef = useRef(false)
 
@@ -923,11 +926,13 @@ export default function InviteScreening() {
           .eq('id', sessionId)
       if (invite.sender_id) await checkReplenish(invite.sender_id)
     }
-    if (sessionId && pct % 10 === 0)
+    if (sessionId && pct % 10 === 0 && pct !== lastSavedPctRef.current) {
+      lastSavedPctRef.current = pct
       await supabase
         .from('watch_sessions')
         .update({ watch_percentage: pct })
         .eq('id', sessionId)
+    }
   }
 
   async function checkReplenish(senderId) {
