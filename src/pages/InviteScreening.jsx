@@ -151,6 +151,7 @@ export default function InviteScreening() {
   const [sessionId, setSessionId] = useState(null)
   const [filmInvites, setFilmInvites] = useState([])
   const [creatorName, setCreatorName] = useState('')
+  const [teamMemberIds, setTeamMemberIds] = useState([])
   const hasMarkedWatched = useRef(false)
   /** Last watch-percentage milestone written to watch_sessions — write each decile once, not on
    *  every timeupdate tick (those fire ~4×/s, so an unguarded write repeats for many seconds). */
@@ -343,6 +344,7 @@ export default function InviteScreening() {
         setSharerDisplayName(name)
         if (Array.isArray(cached.filmInvites)) setFilmInvites(cached.filmInvites)
         if (typeof cached.creatorName === 'string') setCreatorName(cached.creatorName)
+        if (Array.isArray(cached.teamMemberIds)) setTeamMemberIds(cached.teamMemberIds)
         setStatus('valid')
       }
     }
@@ -401,6 +403,7 @@ export default function InviteScreening() {
         setSharerDisplayName(name)
         if (Array.isArray(r.filmInvites)) setFilmInvites(r.filmInvites)
         if (typeof r.creatorName === 'string') setCreatorName(r.creatorName)
+        if (Array.isArray(r.teamMemberIds)) setTeamMemberIds(r.teamMemberIds)
         writeInviteValidateCache(token, r)
         setStatus('valid')
         return
@@ -456,16 +459,18 @@ export default function InviteScreening() {
       filmInvites,
       filmTitle: film?.title,
       creatorName,
+      creatorId: film?.creator_id ?? null,
+      teamMemberIds,
       viewerRecipientKey,
       focusInviteId: invite?.id ?? null,
     })
-  }, [creatorName, filmInvites, film?.title, invite?.id, viewerRecipientKey])
+  }, [creatorName, filmInvites, film?.title, film?.creator_id, teamMemberIds, invite?.id, viewerRecipientKey])
 
 
   const peopleCount = useMemo(() => {
     if (graphLayout?.nodesData?.length)
       return graphLayout.nodesData.filter(
-        (n) => n.type !== 'film' && n.type !== 'creator'
+        (n) => n.type === 'person' || n.type === 'viewer'
       ).length
     return filmInvites.length > 0 ? filmInvites.length : null
   }, [graphLayout, filmInvites])
@@ -759,6 +764,10 @@ export default function InviteScreening() {
       const nearEnd = duration > 0 && currentTime >= duration - 0.45
 
       if (!screeningPlaybackEverStarted && !ended && !nearEnd) return
+
+      // Record pause intent so a late canplay/buffer event can't restart playback
+      // underneath the pass-it-on overlay. Cleared by resumeFilm / the retry effect.
+      if (!ended && !nearEnd) userPauseIntentRef.current = true
 
       setIsScreeningPaused(true)
       // Mux's native fullscreen button fullscreens the <mux-player> element on every

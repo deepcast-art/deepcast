@@ -97,21 +97,29 @@ app.get('/api/graph/layout/:filmId', async (req, res) => {
     const { filmId } = req.params
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    const { data: invites, error: invErr } = await supabase
-      .from('invites')
-      .select('id, film_id, sender_name, sender_email, sender_id, recipient_name, recipient_email, status, parent_invite_id, created_at')
-      .eq('film_id', filmId)
-      .order('created_at', { ascending: true })
+    // Invites and the film row are independent — fetch together (cross-region round trips dominate).
+    const [{ data: invites, error: invErr }, { data: film }] = await Promise.all([
+      supabase
+        .from('invites')
+        .select('id, film_id, sender_name, sender_email, sender_id, recipient_name, recipient_email, status, parent_invite_id, created_at')
+        .eq('film_id', filmId)
+        .order('created_at', { ascending: true }),
+      supabase.from('films').select('title, creator_id').eq('id', filmId).single(),
+    ])
 
     if (invErr) return res.status(500).json({ error: invErr.message })
     if (!invites?.length) return res.status(404).json({ error: 'No invites found for this film' })
 
-    const { data: film } = await supabase.from('films').select('title').eq('id', filmId).single()
+    const { data: teamRows } = film?.creator_id
+      ? await supabase.from('users').select('id').eq('team_creator_id', film.creator_id)
+      : { data: null }
 
     const layout = buildGraphLayout({
       filmInvites: invites,
       filmTitle: film?.title || 'Film',
       creatorName: '',
+      creatorId: film?.creator_id || null,
+      teamMemberIds: (teamRows || []).map((u) => u.id),
       viewerRecipientKey: null,
     })
 
@@ -441,11 +449,17 @@ app.post('/api/invites/send', async (req, res) => {
     let parentInviteId =
       claimedParent && uuidStringEq(claimedParent.film_id, filmId) ? claimedParent.id : null
 
+    // CANONICAL GRAPH MODEL: the filmmaker and team members are roots — their invites NEVER
+    // carry a parent. Without this, the watch-session fallback below could attach a stale
+    // parent when e.g. the filmmaker opened someone's invite link while signed in, which made
+    // their direct invitees render under a phantom intermediate node in the network graph.
+    if (unlimitedInvites) parentInviteId = null
+
     // ── Phase 3: decrement + parent fallbacks in parallel ─────────────────
     // Fallbacks only run when the client claim didn't resolve a parent.
     // Decrement runs alongside them — it doesn't depend on the fallback results.
     const needsDecrement = Boolean(senderId && !unlimitedInvites)
-    const needsFallbacks = !parentInviteId
+    const needsFallbacks = !parentInviteId && !unlimitedInvites
 
     if (needsDecrement || needsFallbacks) {
       if (needsDecrement) previousAllocation = sender.invite_allocation
@@ -1968,6 +1982,7 @@ app.get('/api/invites/validate/:token', async (req, res) => {
       { data: senderUser },
       { data: filmInvites, error: invitesError },
       { data: creatorUser },
+      { data: teamMemberRows },
     ] = await Promise.all([
       inv.status === 'pending'
         ? supabase.from('invites').update({ status: 'opened' }).eq('id', inv.id)
@@ -1991,6 +2006,10 @@ app.get('/api/invites/validate/:token', async (req, res) => {
       inv.films?.creator_id
         ? supabase.from('users').select('name').eq('id', inv.films.creator_id).single()
         : Promise.resolve({ data: null }),
+      /** Team members (unlimited-share users) — the graph renders them as their own nodes. */
+      inv.films?.creator_id
+        ? supabase.from('users').select('id').eq('team_creator_id', inv.films.creator_id)
+        : Promise.resolve({ data: null }),
     ])
 
     if (sessionError) {
@@ -2011,6 +2030,8 @@ app.get('/api/invites/validate/:token', async (req, res) => {
       senderDisplayName,
       filmInvites: filmInvites || [],
       creatorName,
+      creatorId: inv.films?.creator_id || null,
+      teamMemberIds: (teamMemberRows || []).map((u) => u.id),
     })
   } catch (err) {
     console.error('Invite validate error:', err)

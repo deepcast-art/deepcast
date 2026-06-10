@@ -10,12 +10,15 @@ function fetchWithTimeout(url, options = {}) {
 }
 
 async function request(path, options = {}) {
+  // headers must merge AFTER the options spread — otherwise a caller passing
+  // custom headers (e.g. relinkInvite's Authorization) silently drops
+  // Content-Type and Express parses an empty JSON body.
   const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
     headers: {
       'Content-Type': 'application/json',
       ...options.headers,
     },
-    ...options,
   })
 
   if (!res.ok) {

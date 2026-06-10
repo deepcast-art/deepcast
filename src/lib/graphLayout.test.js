@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normAngle, inviteRecipientKey, TWO_PI, generateGraphData, buildGraphLayout } from './graphLayout.js'
+import { normAngle, inviteRecipientKey, TWO_PI, generateGraphData, buildGraphLayout, resolveViewerFocus } from './graphLayout.js'
 
 /* ================================================================
    Helpers
@@ -248,7 +248,7 @@ describe('buildGraphLayout', () => {
 
   it('builds a valid layout for a single ring of invites', () => {
     const invites = makeInvites(5)
-    const layout = buildGraphLayout({ filmInvites: invites, filmTitle: 'Test Film' })
+    const layout = buildGraphLayout({ filmInvites: invites, filmTitle: 'Test Film', creatorId: 'user-1' })
 
     expect(layout).not.toBeNull()
     expect(layout.nodesData.length).toBe(6) // 1 film + 5 invitees
@@ -268,7 +268,7 @@ describe('buildGraphLayout', () => {
       { id: 'i5', film_id: 'f', sender_name: 'Dave', sender_email: 'd@x.com', sender_id: 'u4', recipient_name: 'Fay', recipient_email: 'f@x.com', status: 'sent', parent_invite_id: 'i3', created_at: '2025-01-03T00:00:00Z' },
     ]
 
-    const layout = buildGraphLayout({ filmInvites: invites, filmTitle: 'Chain Test' })
+    const layout = buildGraphLayout({ filmInvites: invites, filmTitle: 'Chain Test', creatorId: 'u1' })
 
     expect(layout).not.toBeNull()
     expect(layout.nodesData.length).toBe(6) // film + Bob + Carol + Dave + Eve + Fay
@@ -288,7 +288,7 @@ describe('buildGraphLayout', () => {
 
   it('ring radii increase monotonically with at least 65px gap', () => {
     const invites = makeInvites(10)
-    const layout = buildGraphLayout({ filmInvites: invites })
+    const layout = buildGraphLayout({ filmInvites: invites, creatorId: 'user-1' })
     for (let i = 2; i < layout.ringRadii.length; i++) {
       expect(layout.ringRadii[i]).toBeGreaterThanOrEqual(layout.ringRadii[i - 1] + 65)
     }
@@ -296,14 +296,14 @@ describe('buildGraphLayout', () => {
 
   it('all node IDs are unique', () => {
     const invites = makeInvites(20)
-    const layout = buildGraphLayout({ filmInvites: invites })
+    const layout = buildGraphLayout({ filmInvites: invites, creatorId: 'user-1' })
     const ids = layout.nodesData.map((n) => n.id)
     expect(new Set(ids).size).toBe(ids.length)
   })
 
   it('every link references valid node IDs', () => {
     const invites = makeInvites(10)
-    const layout = buildGraphLayout({ filmInvites: invites })
+    const layout = buildGraphLayout({ filmInvites: invites, creatorId: 'user-1' })
     const ids = new Set(layout.nodesData.map((n) => n.id))
     for (const link of layout.linksData) {
       expect(ids.has(link.source)).toBe(true)
@@ -313,7 +313,7 @@ describe('buildGraphLayout', () => {
 
   it('nodes on the same ring are at the correct radius', () => {
     const invites = makeInvites(8)
-    const layout = buildGraphLayout({ filmInvites: invites })
+    const layout = buildGraphLayout({ filmInvites: invites, creatorId: 'user-1' })
     const root = layout.nodesData.find((n) => n.tier === 0)
     for (const n of layout.nodesData) {
       if (n.tier === 0) continue
@@ -341,7 +341,7 @@ describe('buildGraphLayout', () => {
       { id: 'c2', film_id: 'f', sender_name: 'G', sender_email: 'g@x.com', sender_id: 'u7', recipient_name: 'J', recipient_email: 'j@x.com', status: 'sent', parent_invite_id: 'b3', created_at: '2025-01-03T00:01:00Z' },
     ]
 
-    const layout = buildGraphLayout({ filmInvites: invites })
+    const layout = buildGraphLayout({ filmInvites: invites, creatorId: 'u0' })
     expect(layout).not.toBeNull()
     const crossings = countCrossings(layout.nodesData, layout.linksData)
     expect(crossings).toBe(0)
@@ -365,12 +365,12 @@ describe('buildGraphLayout', () => {
       { id: 'i10', film_id: 'f', sender_name: 'Eve', sender_email: 'eve@x.com', sender_id: 'u5', recipient_name: 'Kay', recipient_email: 'kay@x.com', status: 'sent', parent_invite_id: 'i5', created_at: '2025-01-02T00:03Z' },
     ]
 
-    const layout = buildGraphLayout({ filmInvites: invites })
+    const layout = buildGraphLayout({ filmInvites: invites, creatorId: 'u1' })
     expect(layout).not.toBeNull()
 
     // Both Bob invites (i1 and i4) get their own nodes — no dedup
     expect(layout.nodesData.filter((n) => n.label === 'Bob').length).toBe(2)
-    // Each Bob node has its own link from root
+    // Each Bob node has its own incoming link
     const bobLinks = layout.linksData.filter((l) => l.target === 'i1' || l.target === 'i4')
     expect(bobLinks.length).toBe(2)
 
@@ -381,7 +381,7 @@ describe('buildGraphLayout', () => {
 
   it('viewBox auto-expands to fit all nodes', () => {
     const invites = makeInvites(50)
-    const layout = buildGraphLayout({ filmInvites: invites })
+    const layout = buildGraphLayout({ filmInvites: invites, creatorId: 'user-1' })
     for (const n of layout.nodesData) {
       expect(n.x).toBeGreaterThanOrEqual(0)
       expect(n.x).toBeLessThanOrEqual(layout.viewBoxW)
@@ -418,32 +418,129 @@ describe('buildGraphLayout', () => {
 
   it('handles single invite gracefully', () => {
     const invites = makeInvites(1)
-    const layout = buildGraphLayout({ filmInvites: invites })
+    const layout = buildGraphLayout({ filmInvites: invites, creatorId: 'user-1' })
     expect(layout).not.toBeNull()
     expect(layout.nodesData.length).toBe(2) // film + 1 invitee
     expect(layout.linksData.length).toBe(1)
   })
 
-  it('groups ring-1 by sender into separate team sections', () => {
-    const invites = [
-      { id: 'i1', film_id: 'f', sender_name: 'Alice', sender_email: 'a@x.com', sender_id: 'u1', recipient_name: 'X', recipient_email: 'x@x.com', status: 'sent', parent_invite_id: null, created_at: '2025-01-01T00:00:00Z' },
-      { id: 'i2', film_id: 'f', sender_name: 'Alice', sender_email: 'a@x.com', sender_id: 'u1', recipient_name: 'Y', recipient_email: 'y@x.com', status: 'sent', parent_invite_id: null, created_at: '2025-01-01T00:01:00Z' },
-      { id: 'i3', film_id: 'f', sender_name: 'Bob', sender_email: 'b@x.com', sender_id: 'u2', recipient_name: 'Z', recipient_email: 'z@x.com', status: 'sent', parent_invite_id: null, created_at: '2025-01-01T00:02:00Z' },
-    ]
-    const layout = buildGraphLayout({ filmInvites: invites })
-    expect(layout.sectionLabels.length).toBe(2) // Alice and Bob
-    const labels = layout.sectionLabels.map((s) => s.label).sort()
-    expect(labels).toEqual(['Alice', 'Bob'])
-  })
-
   it('nodes on the same ring maintain at least 32px spacing', () => {
     const invites = makeInvites(30)
-    const layout = buildGraphLayout({ filmInvites: invites })
+    const layout = buildGraphLayout({ filmInvites: invites, creatorId: 'user-1' })
     const ring1 = layout.nodesData.filter((n) => n.tier === 1)
     for (let i = 0; i < ring1.length; i++) {
       for (let j = i + 1; j < ring1.length; j++) {
         expect(dist(ring1[i], ring1[j])).toBeGreaterThanOrEqual(31)
       }
     }
+  })
+
+  /* ---- Canonical graph model ---- */
+
+  it('creator-sent invites always attach to the central node, even with a bogus stored parent (phantom-node guard)', () => {
+    const invites = [
+      // Filmmaker invites A (clean) and B (B's row wrongly carries A's invite as parent — the historical bug)
+      { id: 'i1', film_id: 'f', sender_name: 'Cleo', sender_email: 'cleo@x.com', sender_id: 'creator-1', recipient_name: 'A', recipient_email: 'a@x.com', status: 'sent', parent_invite_id: null, created_at: '2025-01-01T00:00:00Z' },
+      { id: 'i2', film_id: 'f', sender_name: 'Cleo', sender_email: 'cleo@x.com', sender_id: 'creator-1', recipient_name: 'B', recipient_email: 'b@x.com', status: 'sent', parent_invite_id: 'i1', created_at: '2025-01-01T00:01:00Z' },
+    ]
+    const layout = buildGraphLayout({ filmInvites: invites, creatorId: 'creator-1' })
+    // Both invitees sit on ring 1, linked straight to the film node — no phantom hop via A.
+    const i2 = layout.nodesData.find((n) => n.id === 'i2')
+    expect(i2.tier).toBe(1)
+    expect(layout.linksData.find((l) => l.target === 'i2').source).toBe('film-root')
+    // And there is never a separate filmmaker user node.
+    expect(layout.nodesData.some((n) => n.label === 'Cleo')).toBe(false)
+  })
+
+  it('team members get their own node under the central node; their invitees hang off it', () => {
+    const invites = [
+      { id: 'i1', film_id: 'f', sender_name: 'Tess Member', sender_email: 'tess@x.com', sender_id: 'tm-1', recipient_name: 'X', recipient_email: 'x@x.com', status: 'sent', parent_invite_id: null, created_at: '2025-01-01T00:00:00Z' },
+      { id: 'i2', film_id: 'f', sender_name: 'Tess Member', sender_email: 'tess@x.com', sender_id: 'tm-1', recipient_name: 'Y', recipient_email: 'y@x.com', status: 'sent', parent_invite_id: null, created_at: '2025-01-01T00:01:00Z' },
+    ]
+    const layout = buildGraphLayout({ filmInvites: invites, creatorId: 'creator-1', teamMemberIds: ['tm-1'] })
+    const memberNode = layout.nodesData.find((n) => n.type === 'member')
+    expect(memberNode).toBeDefined()
+    expect(memberNode.tier).toBe(1)
+    expect(memberNode.label).toBe('Tess')
+    expect(layout.linksData.find((l) => l.target === memberNode.id).source).toBe('film-root')
+    // Invitees are ring 2, attached to the member node
+    for (const id of ['i1', 'i2']) {
+      expect(layout.nodesData.find((n) => n.id === id).tier).toBe(2)
+      expect(layout.linksData.find((l) => l.target === id).source).toBe(memberNode.id)
+    }
+  })
+
+  it('repairs lost parent linkage via the sender\'s received invite (relinked-invite case)', () => {
+    const invites = [
+      // Filmmaker invites A; A's outgoing share lost its parent_invite_id
+      { id: 'i1', film_id: 'f', sender_name: 'Cleo', sender_email: 'cleo@x.com', sender_id: 'creator-1', recipient_name: 'A', recipient_email: 'a@x.com', status: 'sent', parent_invite_id: null, created_at: '2025-01-01T00:00:00Z' },
+      { id: 'i2', film_id: 'f', sender_name: 'A', sender_email: 'a@x.com', sender_id: 'u-a', recipient_name: 'B', recipient_email: 'b@x.com', status: 'sent', parent_invite_id: null, created_at: '2025-01-02T00:00:00Z' },
+    ]
+    const layout = buildGraphLayout({ filmInvites: invites, creatorId: 'creator-1' })
+    // B attaches under A's invite node, not under a synthetic sender node
+    expect(layout.linksData.find((l) => l.target === 'i2').source).toBe('i1')
+    expect(layout.nodesData.find((n) => n.id === 'i2').tier).toBe(2)
+    expect(layout.nodesData.some((n) => n.type === 'member')).toBe(false)
+  })
+
+  it('highlights the path from the central node through a team member to the viewer', () => {
+    const invites = [
+      { id: 'i1', film_id: 'f', sender_name: 'Tess', sender_email: 'tess@x.com', sender_id: 'tm-1', recipient_name: 'V', recipient_email: 'v@x.com', status: 'sent', parent_invite_id: null, created_at: '2025-01-01T00:00:00Z' },
+      { id: 'i2', film_id: 'f', sender_name: 'Tess', sender_email: 'tess@x.com', sender_id: 'tm-1', recipient_name: 'W', recipient_email: 'w@x.com', status: 'sent', parent_invite_id: null, created_at: '2025-01-01T00:01:00Z' },
+    ]
+    const layout = buildGraphLayout({
+      filmInvites: invites, creatorId: 'creator-1', teamMemberIds: ['tm-1'], focusInviteId: 'i1',
+    })
+    const memberNode = layout.nodesData.find((n) => n.type === 'member')
+    // Chain root → member → viewer is highlighted; the sibling W is not.
+    expect(layout.defaultActiveNodes.has('i1')).toBe(true)
+    expect(layout.defaultActiveNodes.has(memberNode.id)).toBe(true)
+    expect(layout.defaultActiveNodes.has('film-root')).toBe(true)
+    expect(layout.defaultActiveNodes.has('i2')).toBe(false)
+  })
+
+  it('a team member viewing the graph highlights their own node via viewerUserId', () => {
+    const invites = [
+      { id: 'i1', film_id: 'f', sender_name: 'Tess', sender_email: 'tess@x.com', sender_id: 'tm-1', recipient_name: 'V', recipient_email: 'v@x.com', status: 'sent', parent_invite_id: null, created_at: '2025-01-01T00:00:00Z' },
+    ]
+    const layout = buildGraphLayout({
+      filmInvites: invites, creatorId: 'creator-1', teamMemberIds: ['tm-1'], viewerUserId: 'tm-1',
+    })
+    const memberNode = layout.nodesData.find((n) => n.tier === 1 && n.id.startsWith('member:'))
+    expect(memberNode.type).toBe('viewer')
+    expect(layout.defaultActiveNodes.has(memberNode.id)).toBe(true)
+  })
+})
+
+/* ================================================================
+   resolveViewerFocus — shared viewer path resolution
+   ================================================================ */
+
+describe('resolveViewerFocus', () => {
+  const invites = [
+    { id: 'i1', token: 'tok-1', sender_id: 'u0', sender_email: 's@x.com', recipient_name: 'A', recipient_email: 'a@x.com', parent_invite_id: null, created_at: '2025-01-01T00:00:00Z' },
+    { id: 'i2', token: 'tok-2', sender_id: 'u-a', sender_email: 'a@x.com', recipient_name: 'B', recipient_email: 'b@x.com', parent_invite_id: 'i1', created_at: '2025-01-02T00:00:00Z' },
+  ]
+
+  it('matches by email first', () => {
+    const r = resolveViewerFocus(invites, 'A@X.com')
+    expect(r.focusInviteId).toBe('i1')
+    expect(r.viewerRecipientKey).toBe('a@x.com:a')
+  })
+
+  it('falls back to invite token', () => {
+    const r = resolveViewerFocus(invites, 'other@x.com', { inviteToken: 'tok-2' })
+    expect(r.focusInviteId).toBe('i2')
+  })
+
+  it('falls back to the common parent of sent invites', () => {
+    const r = resolveViewerFocus(invites, 'other@x.com', { viewerUserId: 'u-a' })
+    expect(r.focusInviteId).toBe('i1')
+  })
+
+  it('returns nulls when nothing matches', () => {
+    const r = resolveViewerFocus(invites, 'nobody@x.com')
+    expect(r.focusInviteId).toBeNull()
+    expect(r.viewerRecipientKey).toBeNull()
   })
 })

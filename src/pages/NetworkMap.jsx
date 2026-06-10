@@ -5,15 +5,7 @@ import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
 import DeepcastLogo from '../components/DeepcastLogo'
 import NetworkGraph from '../components/NetworkGraph'
-import { buildGraphLayout, inviteRecipientKey } from '../lib/graphLayout'
-
-function recipientKeyForRow(row) {
-  if (!row) return null
-  if (row.recipient_name) {
-    return `${row.recipient_email || ''}:${String(row.recipient_name).trim().toLowerCase()}`
-  }
-  return row.recipient_email || null
-}
+import { buildGraphLayout, resolveViewerFocus } from '../lib/graphLayout'
 
 export default function NetworkMap() {
   const { profile } = useAuth()
@@ -24,6 +16,8 @@ export default function NetworkMap() {
   const [selectedFilmId, setSelectedFilmId] = useState(null)
   const [resendStatusByInvite, setResendStatusByInvite] = useState({})
   const [creatorName, setCreatorName] = useState('')
+  const [creatorId, setCreatorId] = useState(null)
+  const [teamMemberIds, setTeamMemberIds] = useState([])
   const resendInviteTimeouts = useRef({})
 
   useEffect(() => {
@@ -41,13 +35,31 @@ export default function NetworkMap() {
   useEffect(() => {
     if (!selectedFilmId) {
       setCreatorName('')
+      setCreatorId(null)
+      setTeamMemberIds([])
       return
     }
     if (profile?.role === 'creator') {
       setCreatorName(profile?.name || '')
-      return
+      setCreatorId(profile?.id || null)
+      let cancelled = false
+      ;(async () => {
+        // RLS lets creators read their team members' profiles.
+        const { data: team } = await supabase
+          .from('users')
+          .select('id')
+          .eq('team_creator_id', profile.id)
+        if (!cancelled) setTeamMemberIds((team || []).map((u) => u.id))
+      })()
+      return () => {
+        cancelled = true
+      }
     }
     if (profile?.role === 'team_member' && profile?.team_creator_id) {
+      setCreatorId(profile.team_creator_id)
+      // RLS only exposes the member's own row, so the team list is at least themselves;
+      // other members' nodes are derived structurally by the graph builder.
+      setTeamMemberIds([profile.id])
       let cancelled = false
       ;(async () => {
         const { data: u } = await supabase
@@ -68,11 +80,13 @@ export default function NetworkMap() {
         .select('creator_id')
         .eq('id', selectedFilmId)
         .single()
-      if (!film?.creator_id || cancelled) {
+      if (cancelled) return
+      setCreatorId(film?.creator_id || null)
+      if (!film?.creator_id) {
         setCreatorName('')
         return
       }
-      const { data: u } = await supabase.from('users').select('name').eq('id', film.creator_id).single()
+      const { data: u } = await supabase.from('users').select('name').eq('id', film.creator_id).maybeSingle()
       if (!cancelled) setCreatorName(u?.name || '')
     })()
     return () => {
@@ -191,25 +205,11 @@ export default function NetworkMap() {
     return filmOptions.find((film) => film.id === selectedFilmId)?.title || 'Untitled'
   }, [filmOptions, selectedFilmId])
 
-  const viewerRecipientKey = useMemo(() => {
-    if (profile?.role !== 'viewer' || !profile?.email || !filteredInvites.length) return null
-    const e = profile.email.trim().toLowerCase()
-    const row = filteredInvites.find((r) => (r.recipient_email || '').toLowerCase() === e)
-    return recipientKeyForRow(row)
-  }, [profile?.role, profile?.email, filteredInvites])
-
-  const viewerFocusInviteId = useMemo(() => {
-    if (!viewerRecipientKey || !filteredInvites.length) return null
-    const matches = filteredInvites.filter(
-      (r) => inviteRecipientKey(r) === viewerRecipientKey
-    )
-    if (!matches.length) return null
-    return [...matches].sort((a, b) => {
-      const tb = b.created_at ? new Date(b.created_at).getTime() : 0
-      const ta = a.created_at ? new Date(a.created_at).getTime() : 0
-      return tb - ta
-    })[0]?.id
-  }, [viewerRecipientKey, filteredInvites])
+  // Shared focus resolution — identical helper to the dashboard and screening pages.
+  const { viewerRecipientKey, focusInviteId: viewerFocusInviteId } = useMemo(() => {
+    if (profile?.role !== 'viewer') return { viewerRecipientKey: null, focusInviteId: null }
+    return resolveViewerFocus(filteredInvites, profile?.email, { viewerUserId: profile?.id })
+  }, [profile?.role, profile?.email, profile?.id, filteredInvites])
 
   const graphLayout = useMemo(() => {
     if (!filteredInvites.length) return null
@@ -217,10 +217,13 @@ export default function NetworkMap() {
       filmInvites: filteredInvites,
       filmTitle: selectedFilmTitle,
       creatorName,
+      creatorId,
+      teamMemberIds,
       viewerRecipientKey,
       focusInviteId: viewerFocusInviteId,
+      viewerUserId: profile?.role === 'team_member' ? profile?.id : null,
     })
-  }, [filteredInvites, selectedFilmTitle, creatorName, viewerRecipientKey, viewerFocusInviteId])
+  }, [filteredInvites, selectedFilmTitle, creatorName, creatorId, teamMemberIds, viewerRecipientKey, viewerFocusInviteId, profile?.role, profile?.id])
 
   const handleResendInvite = async (inviteId) => {
     setResendStatusByInvite((prev) => ({ ...prev, [inviteId]: 'sending' }))

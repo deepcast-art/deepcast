@@ -5,35 +5,15 @@ import { supabase } from '../lib/supabase'
 import InviteForm from '../components/InviteForm'
 import DeepcastLogo from '../components/DeepcastLogo'
 import NetworkGraph from '../components/NetworkGraph'
-import { buildGraphLayout, inviteRecipientKey } from '../lib/graphLayout'
+import { buildGraphLayout, resolveViewerFocus } from '../lib/graphLayout'
 import { ensureHttpsUrl } from '../lib/httpsUrl.js'
 
-function recipientKeyForRow(row) {
-  if (!row) return null
-  if (row.recipient_name) {
-    return `${row.recipient_email || ''}:${String(row.recipient_name).trim().toLowerCase()}`
-  }
-  return row.recipient_email || null
-}
-
 function FilmNetworkPreview({ film, invites, creatorName, profileEmail, profileRole }) {
-  const viewerRecipientKey = useMemo(() => {
-    if (profileRole !== 'viewer' || !profileEmail || !invites?.length) return null
-    const e = profileEmail.trim().toLowerCase()
-    const row = invites.find((r) => (r.recipient_email || '').toLowerCase() === e)
-    return recipientKeyForRow(row)
+  // Shared focus resolution — identical helper to the dashboard and screening pages.
+  const { viewerRecipientKey, focusInviteId } = useMemo(() => {
+    if (profileRole !== 'viewer') return { viewerRecipientKey: null, focusInviteId: null }
+    return resolveViewerFocus(invites, profileEmail)
   }, [profileRole, profileEmail, invites])
-
-  const focusInviteId = useMemo(() => {
-    if (!viewerRecipientKey || !invites?.length) return null
-    const matches = invites.filter((r) => inviteRecipientKey(r) === viewerRecipientKey)
-    if (!matches.length) return null
-    return [...matches].sort((a, b) => {
-      const tb = b.created_at ? new Date(b.created_at).getTime() : 0
-      const ta = a.created_at ? new Date(a.created_at).getTime() : 0
-      return tb - ta
-    })[0]?.id
-  }, [viewerRecipientKey, invites])
 
   const graphLayout = useMemo(
     () =>
@@ -42,11 +22,12 @@ function FilmNetworkPreview({ film, invites, creatorName, profileEmail, profileR
             filmInvites: invites,
             filmTitle: film.title,
             creatorName: creatorName || '',
+            creatorId: film.creator_id ?? null,
             viewerRecipientKey,
             focusInviteId,
           })
         : null,
-    [invites, film.title, creatorName, viewerRecipientKey, focusInviteId]
+    [invites, film.title, film.creator_id, creatorName, viewerRecipientKey, focusInviteId]
   )
 
   if (!graphLayout) return null

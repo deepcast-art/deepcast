@@ -268,7 +268,22 @@ export function generateGraphData(userShares = 0) {
    buildGraphLayout — real-data layout (Dashboard / InviteScreening)
 
    Uses the same seam-based radial algorithm from the spec.
-   Builds rings from actual invite chain depth (parent_invite_id).
+
+   CANONICAL GRAPH MODEL (single source of truth for every surface):
+   - The filmmaker IS the central film node. There is never a separate
+     filmmaker user node. Any invite SENT by the filmmaker connects its
+     recipient directly to the central node — regardless of what
+     parent_invite_id is stored on the row (self-healing against the
+     historical bug where filmmaker-sent invites picked up a stale
+     parent via the server's watch-session fallback).
+   - Unlimited-share users (filmmaking team members) get their own
+     nodes connected directly to the central node; people they invite
+     connect to the team member's node.
+   - Everyone else connects to whoever shared the film with them:
+     their invite's parent_invite_id chain, or — when that linkage is
+     missing — the invite through which their own email received the
+     film. A sender we can't place at all is rendered as a node
+     directly under the central node (same treatment as a team member).
    ================================================================ */
 function toFirstName(value, fallback = 'Invitee') {
   if (!value) return fallback
@@ -293,30 +308,138 @@ function senderKey(row) {
   return row.sender_email || (row.sender_id ? `member:${row.sender_id}` : '') || (row.sender_name ? `name:${row.sender_name}` : 'Unknown sender')
 }
 
+function normEmail(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
+/**
+ * Shared viewer-focus resolution — every page that highlights "your" path uses
+ * this single helper so the graph can never disagree between surfaces.
+ * Returns { viewerRecipientKey, focusInviteId } for buildGraphLayout.
+ */
+export function resolveViewerFocus(filmInvites, viewerEmail, { inviteToken = null, viewerUserId = null } = {}) {
+  const result = { viewerRecipientKey: null, focusInviteId: null }
+  if (!filmInvites?.length) return result
+
+  const email = normEmail(viewerEmail)
+  if (email) {
+    const row = filmInvites.find((r) => normEmail(r.recipient_email) === email)
+    if (row) {
+      result.viewerRecipientKey = recipientKey(row)
+      const matches = filmInvites.filter((r) => recipientKey(r) === result.viewerRecipientKey)
+      if (matches.length) {
+        result.focusInviteId = [...matches].sort((a, b) => {
+          const tb = b.created_at ? new Date(b.created_at).getTime() : 0
+          const ta = a.created_at ? new Date(a.created_at).getTime() : 0
+          return tb - ta
+        })[0]?.id
+      }
+    }
+  }
+
+  // Token fallback — covers a viewer who signed up under a different email than
+  // the one the invite was addressed to.
+  if (!result.focusInviteId && inviteToken) {
+    const row = filmInvites.find((r) => r.token === inviteToken)
+    if (row?.id) result.focusInviteId = row.id
+  }
+
+  // Sent-invite fallback — if every invite this user sent hangs off one parent,
+  // that parent is the invite that brought them the film.
+  if (!result.focusInviteId && viewerUserId) {
+    const sent = filmInvites.filter((r) => r.sender_id === viewerUserId)
+    const parentIds = new Set(sent.map((r) => r.parent_invite_id).filter(Boolean))
+    if (parentIds.size === 1) result.focusInviteId = [...parentIds][0]
+  }
+
+  return result
+}
+
 export function buildGraphLayout({
   filmInvites,
   filmTitle = 'Film',
   creatorName = '',
+  creatorId = null,
+  teamMemberIds = null,
   viewerRecipientKey: viewerRKey = null,
   focusInviteId = null,
+  viewerUserId = null,
   rootId = 'film-root',
   creatorNodeId: _creatorNodeId = 'creator-root',
 }) {
   if (!filmInvites?.length) return null
 
-  /* --- Compute invite chain depth via parent_invite_id --- */
   const inviteById = new Map(filmInvites.map((r) => [r.id, r]))
 
+  /* --- Canonical sender classification --- */
+  const creatorFirst = toFirstName(creatorName, '').toLowerCase()
+  const teamIdSet = new Set((teamMemberIds || []).map((id) => String(id)))
+
+  // creatorId is authoritative when provided; the first-name heuristic only
+  // applies when the caller couldn't supply it (legacy/cached data paths).
+  const isCreatorSender = (inv) => {
+    if (creatorId != null) return String(inv.sender_id) === String(creatorId)
+    if (!creatorFirst) return false
+    const senderFirst = toFirstName(inv.sender_name || inv.sender_email, '').toLowerCase()
+    return !!senderFirst && senderFirst === creatorFirst
+  }
+
+  // Earliest invite addressed to each email — repairs lost parent linkage by
+  // attaching a sender to the invite through which they received the film.
+  const earliestByRecipient = new Map()
+  for (const inv of filmInvites) {
+    const e = normEmail(inv.recipient_email)
+    if (!e) continue
+    const cur = earliestByRecipient.get(e)
+    if (!cur || new Date(inv.created_at || 0) < new Date(cur.created_at || 0)) {
+      earliestByRecipient.set(e, inv)
+    }
+  }
+
+  /* --- Team-member (and unplaceable-sender) nodes, keyed by sender --- */
+  const memberNodes = new Map() // senderKey -> { id, label, senderId }
+  const memberNodeFor = (inv) => {
+    const sk = senderKey(inv)
+    if (!memberNodes.has(sk)) {
+      memberNodes.set(sk, {
+        id: `member:${sk}`,
+        label: toFirstName(inv.sender_name || inv.sender_email, 'Member'),
+        senderId: inv.sender_id != null ? String(inv.sender_id) : null,
+      })
+    }
+    return memberNodes.get(sk)
+  }
+
+  /* --- Resolve each invite's parent node (the canonical model) --- */
+  const parentByInviteId = new Map()
+  for (const inv of filmInvites) {
+    let parent
+    if (isCreatorSender(inv)) {
+      parent = rootId
+    } else if (inv.sender_id != null && teamIdSet.has(String(inv.sender_id))) {
+      parent = memberNodeFor(inv).id
+    } else if (inv.parent_invite_id && inv.parent_invite_id !== inv.id && inviteById.has(inv.parent_invite_id)) {
+      parent = inv.parent_invite_id
+    } else {
+      const received = earliestByRecipient.get(normEmail(inv.sender_email))
+      parent = received && received.id !== inv.id ? received.id : memberNodeFor(inv).id
+    }
+    parentByInviteId.set(inv.id, parent)
+  }
+
+  const memberNodeIds = new Set([...memberNodes.values()].map((m) => m.id))
+
+  /* --- Depth per node (root = 0, ring 1 = 1, …) with cycle guard --- */
   const depthCache = new Map()
   function getDepth(id) {
+    if (id === rootId) return 0
+    if (memberNodeIds.has(id)) return 1
     if (depthCache.has(id)) return depthCache.get(id)
-    const inv = inviteById.get(id)
-    if (!inv || !inv.parent_invite_id || !inviteById.has(inv.parent_invite_id)) {
-      depthCache.set(id, 1); return 1
-    }
-    depthCache.set(id, 1) // guard against cycles
-    const d = 1 + getDepth(inv.parent_invite_id)
-    depthCache.set(id, d); return d
+    depthCache.set(id, 1) // guard against degenerate parent cycles
+    const parent = parentByInviteId.get(id)
+    const d = parent == null ? 1 : 1 + getDepth(parent)
+    depthCache.set(id, d)
+    return d
   }
   filmInvites.forEach((r) => getDepth(r.id))
 
@@ -327,42 +450,53 @@ export function buildGraphLayout({
     byDepth.get(d).push(inv)
   }
 
-  const ring1Invites = byDepth.get(1) || []
-  if (!ring1Invites.length) return null
-
-  /* --- Group ring-1 by sender (= "team") --- */
-  const creatorFirst = toFirstName(creatorName, '').toLowerCase()
-  const senderGroupMap = new Map()
-  for (const inv of ring1Invites) {
-    const sk = senderKey(inv)
-    if (!senderGroupMap.has(sk)) {
-      const senderFirst = toFirstName(inv.sender_name || inv.sender_email, 'Member')
-      const isCreator = !!creatorFirst && senderFirst.toLowerCase() === creatorFirst
-      senderGroupMap.set(sk, { label: senderFirst, invites: [], isCreator })
+  /* --- Ring-1 groups, in first-encounter order ---
+     Creator-sent invites form one contiguous arc of individual nodes;
+     each team-member/unplaced sender contributes a single node. */
+  const ring1Groups = []
+  const groupByKey = new Map()
+  for (const inv of filmInvites) {
+    const parent = parentByInviteId.get(inv.id)
+    if (parent === rootId) {
+      let g = groupByKey.get('creator-root')
+      if (!g) {
+        g = { id: 'creator-root', isCreator: true, entries: [] }
+        groupByKey.set('creator-root', g)
+        ring1Groups.push(g)
+      }
+      g.entries.push({ kind: 'invite', inv })
+    } else if (memberNodeIds.has(parent) && !groupByKey.has(parent)) {
+      const member = [...memberNodes.values()].find((m) => m.id === parent)
+      const g = { id: parent, isCreator: false, entries: [{ kind: 'member', member }] }
+      groupByKey.set(parent, g)
+      ring1Groups.push(g)
     }
-    senderGroupMap.get(sk).invites.push(inv)
   }
-  const teams = [...senderGroupMap.entries()].map(([id, v]) => ({
-    id, label: v.label, invites: v.invites, isCreator: v.isCreator,
-  }))
 
-  /* --- Build parent→children map for deeper tiers --- */
+  const totalR1 = ring1Groups.reduce((sum, g) => sum + g.entries.length, 0)
+  if (!totalR1) return null
+
+  /* --- Children per resolved parent node (rings 2+) --- */
   const childrenByParentId = new Map()
   for (const inv of filmInvites) {
-    if (inv.parent_invite_id && depthCache.get(inv.id) > 1) {
-      if (!childrenByParentId.has(inv.parent_invite_id))
-        childrenByParentId.set(inv.parent_invite_id, [])
-      childrenByParentId.get(inv.parent_invite_id).push(inv)
-    }
+    const parent = parentByInviteId.get(inv.id)
+    if (parent === rootId) continue
+    if (!childrenByParentId.has(parent)) childrenByParentId.set(parent, [])
+    childrenByParentId.get(parent).push(inv)
   }
 
   /* --- Resolve viewer node ID ---
      Each invite is its own node (id = inv.id). The viewer is identified by
-     focusInviteId (preferred) or by matching viewerRecipientKey against invites. */
+     focusInviteId (preferred) or by matching viewerRecipientKey against invites.
+     A team member viewing the graph is their own member node (viewerUserId). */
   let viewerNodeId = focusInviteId || null
   if (!viewerNodeId && viewerRKey) {
     const match = filmInvites.find((inv) => recipientKey(inv) === viewerRKey)
     if (match) viewerNodeId = match.id
+  }
+  if (!viewerNodeId && viewerUserId != null) {
+    const member = [...memberNodes.values()].find((m) => m.senderId === String(viewerUserId))
+    if (member) viewerNodeId = member.id
   }
 
   /* --- Spec constants --- */
@@ -370,7 +504,6 @@ export function buildGraphLayout({
   const R1_BASE = 200
   const RING_GAP = 65
 
-  const totalR1 = ring1Invites.length
   const R1 = Math.max(R1_BASE, Math.ceil((totalR1 * MIN_SPACING) / TWO_PI))
   const maxRealDepth = Math.max(...byDepth.keys(), 1)
 
@@ -408,12 +541,9 @@ export function buildGraphLayout({
   nodeIdSet.add(rootId)
 
   /* --- Ring 1: uniform global-slot layout.
-     Each invite is its own node (node id = invite id) — no dedupe.
-     Every ring-1 invite gets the same arc slot (2π/totalR1) regardless
-     of how many invites its team contains, so the ring is evenly
-     distributed around the circle. Team sections become implicit
-     contiguous runs of the shared global slot; the section label sits
-     at the mid-angle of the team's node span.
+     Entries are creator-sent invites (one node each, contiguous arc) and
+     team-member nodes (one node per member). Every entry gets the same
+     arc slot (2π/totalR1) so the ring is evenly distributed.
 
      Rotation: canonical 12 o'clock origin is -π/2. Adding 270° (3π/2 rad)
      rotates the whole graph clockwise by three-quarters of a turn, so
@@ -422,51 +552,45 @@ export function buildGraphLayout({
   const slotAngle = TWO_PI / totalR1
   const startAngle = -Math.PI / 2 + GRAPH_ROTATION
   let r1GlobalIdx = 0
+  const ring1Placed = []
 
-  for (const team of teams) {
-    const N = team.invites.length
-    if (!N) continue
-    const teamStartIdx = r1GlobalIdx
-
-    for (let j = 0; j < N; j++) {
-      const inv = team.invites[j]
+  for (const group of ring1Groups) {
+    for (const entry of group.entries) {
       const angle = startAngle + r1GlobalIdx * slotAngle
-      const isViewer = inv.id === viewerNodeId
+      let nodeId, label, type, size
+      if (entry.kind === 'invite') {
+        const inv = entry.inv
+        const isViewer = inv.id === viewerNodeId
+        nodeId = inv.id
+        label = isViewer ? 'You' : toFirstName(inv.recipient_name || inv.recipient_email)
+        type = isViewer ? 'viewer' : 'person'
+        size = isViewer ? 1.3 : 1.0
+      } else {
+        const isViewer = entry.member.id === viewerNodeId
+        nodeId = entry.member.id
+        label = isViewer ? 'You' : entry.member.label
+        type = isViewer ? 'viewer' : 'member'
+        size = isViewer ? 1.3 : 1.0
+      }
 
       nodesData.push({
-        id: inv.id,
-        label: isViewer ? 'You' : toFirstName(inv.recipient_name || inv.recipient_email),
+        id: nodeId, label,
         x: cx + R1 * Math.cos(angle),
         y: cy + R1 * Math.sin(angle),
-        size: isViewer ? 1.3 : 1.0,
-        type: isViewer ? 'viewer' : 'person',
-        tier: 1, angle, teamId: team.id,
+        size, type,
+        tier: 1, angle, teamId: group.id,
       })
-      nodeIdSet.add(inv.id)
-      linksData.push({ source: rootId, target: inv.id })
+      nodeIdSet.add(nodeId)
+      linksData.push({ source: rootId, target: nodeId })
+      ring1Placed.push({ id: nodeId, angle, teamId: group.id })
       r1GlobalIdx += 1
-    }
-
-    const teamEndIdx = r1GlobalIdx - 1
-    if (!team.isCreator) {
-      const midAngle = startAngle + ((teamStartIdx + teamEndIdx) / 2) * slotAngle
-      sectionLabels.push({
-        label: team.label,
-        angle: midAngle,
-        r: R1 - 40,
-        cx, cy,
-        teamId: team.id,
-      })
     }
   }
 
   /* --- Rings 2+: seam-based radial layout (spec §Rings 3-5+) ---
-     prevRingNodes tracks each invite by its own id and angle. */
-  const nodeById = new Map(nodesData.map((n) => [n.id, n]))
-  let prevRingNodes = ring1Invites.map((inv) => {
-    const node = nodeById.get(inv.id)
-    return node ? { id: inv.id, angle: node.angle, teamId: node.teamId, inviteId: inv.id } : null
-  }).filter(Boolean)
+     prevRingNodes tracks each placed node by id and angle; children are
+     looked up by the resolved parent node id. */
+  let prevRingNodes = ring1Placed
 
   for (let depth = 2; depth <= maxRealDepth; depth++) {
     const tierR = ringRadii[depth]
@@ -476,7 +600,7 @@ export function buildGraphLayout({
     /* Step 1: select sharers (parents that have children at this depth) */
     const sharers = []
     for (const pn of prevRingNodes) {
-      const kids = childrenByParentId.get(pn.inviteId) || []
+      const kids = (childrenByParentId.get(pn.id) || []).filter((inv) => !nodeIdSet.has(inv.id))
       if (kids.length) sharers.push({ parent: pn, children: kids })
     }
     if (!sharers.length) break
@@ -538,7 +662,7 @@ export function buildGraphLayout({
       })
       nodeIdSet.add(p.inv.id)
       linksData.push({ source: p.parentId, target: p.inv.id })
-      thisRingNodes.push({ id: p.inv.id, angle: p.angle, teamId: p.teamId, inviteId: p.inv.id })
+      thisRingNodes.push({ id: p.inv.id, angle: p.angle, teamId: p.teamId })
     }
     prevRingNodes = thisRingNodes
   }

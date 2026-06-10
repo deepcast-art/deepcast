@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import InviteForm from '../components/InviteForm'
 import DeepcastLogo from '../components/DeepcastLogo'
 import NetworkGraph from '../components/NetworkGraph'
-import { buildGraphLayout, inviteRecipientKey } from '../lib/graphLayout'
+import { buildGraphLayout, resolveViewerFocus } from '../lib/graphLayout'
 import { api } from '../lib/api'
 import { ensureHttpsUrl } from '../lib/httpsUrl.js'
 
@@ -13,14 +13,6 @@ import { ensureHttpsUrl } from '../lib/httpsUrl.js'
 // up. Pending invites have not been opened yet.
 const OPENED_STATUSES = ['opened', 'watched', 'signed_up']
 const isOpened = (inv) => OPENED_STATUSES.includes(inv?.status)
-
-function recipientKeyForRow(row) {
-  if (!row) return null
-  if (row.recipient_name) {
-    return `${row.recipient_email || ''}:${String(row.recipient_name).trim().toLowerCase()}`
-  }
-  return row.recipient_email || null
-}
 
 function formatNamesList(names) {
   const filtered = names.filter(Boolean)
@@ -74,6 +66,7 @@ export default function Dashboard() {
     try { return sessionStorage.getItem('dash_viewer_film_id') || null } catch { return null }
   })
   const [viewerFilmTitle, setViewerFilmTitle] = useState('')
+  const [viewerFilmCreatorId, setViewerFilmCreatorId] = useState(null)
   const [viewerInviteToken, setViewerInviteToken] = useState(null)
   const [viewerFilmInvites, setViewerFilmInvites] = useState([])
   const [viewerAllFilms, setViewerAllFilms] = useState([])
@@ -157,51 +150,16 @@ export default function Dashboard() {
   const canShareMore = isViewer && viewerFilmId
   const shareDisabled = !invitesLeft || invitesLeft <= 0
 
-  const viewerRecipientKey = useMemo(() => {
-    if (!profile?.email || !viewerFilmInvites.length) return null
-    const e = profile.email.trim().toLowerCase()
-    const row = viewerFilmInvites.find(
-      (r) => (r.recipient_email || '').toLowerCase() === e
-    )
-    return recipientKeyForRow(row)
-  }, [profile?.email, viewerFilmInvites])
-
-  const viewerFocusInviteId = useMemo(() => {
-    if (!viewerFilmInvites.length) return null
-
-    // Primary: match the viewer's received invite by recipient_email
-    if (viewerRecipientKey) {
-      const matches = viewerFilmInvites.filter(
-        (r) => inviteRecipientKey(r) === viewerRecipientKey
-      )
-      if (matches.length) {
-        return [...matches].sort((a, b) => {
-          const tb = b.created_at ? new Date(b.created_at).getTime() : 0
-          const ta = a.created_at ? new Date(a.created_at).getTime() : 0
-          return tb - ta
-        })[0]?.id
-      }
-    }
-
-    // Secondary: match by invite token — covers the case where the viewer signed up
-    // with a different email than the one the invite was sent to.
-    if (viewerInviteToken) {
-      const row = viewerFilmInvites.find((r) => r.token === viewerInviteToken)
-      if (row?.id) return row.id
-    }
-
-    // Fallback: derive viewer's own invite id from invites they sent.
-    // Every invite sent by this user must have parent_invite_id pointing to the
-    // viewer's originating invite. If all outgoing invites share the same
-    // parent_invite_id, treat that as the viewer's focus invite.
-    if (profile?.id) {
-      const sentByViewer = viewerFilmInvites.filter((r) => r.sender_id === profile.id)
-      const parentIds = new Set(sentByViewer.map((r) => r.parent_invite_id).filter(Boolean))
-      if (parentIds.size === 1) return [...parentIds][0]
-    }
-
-    return null
-  }, [viewerRecipientKey, viewerFilmInvites, viewerInviteToken, profile?.id])
+  // Shared focus resolution (same helper every graph surface uses): email match first,
+  // then invite-token match, then the common parent of the viewer's sent invites.
+  const { viewerRecipientKey, focusInviteId: viewerFocusInviteId } = useMemo(
+    () =>
+      resolveViewerFocus(viewerFilmInvites, profile?.email, {
+        inviteToken: viewerInviteToken,
+        viewerUserId: profile?.id,
+      }),
+    [viewerFilmInvites, profile?.email, viewerInviteToken, profile?.id]
+  )
 
   const viewerChainInvites = useMemo(() => {
     if (!viewerFilmInvites?.length) return viewerFilmInvites
@@ -250,10 +208,11 @@ export default function Dashboard() {
       filmInvites: viewerFilmInvites,
       filmTitle: viewerFilmTitle || 'Film',
       creatorName: viewerCreatorName,
+      creatorId: viewerFilmCreatorId,
       viewerRecipientKey,
       focusInviteId: viewerFocusInviteId,
     })
-  }, [viewerFilmInvites, viewerFilmTitle, viewerCreatorName, viewerRecipientKey, viewerFocusInviteId])
+  }, [viewerFilmInvites, viewerFilmTitle, viewerCreatorName, viewerFilmCreatorId, viewerRecipientKey, viewerFocusInviteId])
 
   const formattedRecipientNames = useMemo(() => {
     const names = viewerSentInvites.map(
@@ -269,6 +228,7 @@ export default function Dashboard() {
       setViewerFilmTitle('')
       setViewerFilmInvites([])
       setViewerCreatorName('')
+      setViewerFilmCreatorId(null)
       setViewerInviteToken(null)
       return
     }
@@ -289,14 +249,17 @@ export default function Dashboard() {
 
     setViewerFilmTitle(filmRow?.title || '')
     setViewerFilmInvites(allInv || [])
+    setViewerFilmCreatorId(filmRow?.creator_id || null)
 
     let cname = ''
     if (filmRow?.creator_id) {
+      // maybeSingle: viewers can't read the creator's profile under RLS — zero rows
+      // is expected, not an error (the graph keys off creator_id, not the name).
       const { data: cr } = await supabase
         .from('users')
         .select('name')
         .eq('id', filmRow.creator_id)
-        .single()
+        .maybeSingle()
       cname = cr?.name || ''
     }
     setViewerCreatorName(cname)
@@ -396,14 +359,17 @@ export default function Dashboard() {
 
     setViewerFilmTitle(filmRow?.title || '')
     setViewerFilmInvites(allInv || [])
+    setViewerFilmCreatorId(filmRow?.creator_id || null)
 
     let cname = ''
     if (filmRow?.creator_id) {
+      // maybeSingle: viewers can't read the creator's profile under RLS — zero rows
+      // is expected, not an error (the graph keys off creator_id, not the name).
       const { data: cr } = await supabase
         .from('users')
         .select('name')
         .eq('id', filmRow.creator_id)
-        .single()
+        .maybeSingle()
       cname = cr?.name || ''
     }
     setViewerCreatorName(cname)
@@ -1493,8 +1459,11 @@ export default function Dashboard() {
                       filmInvites: filmInvitesRaw[film.id],
                       filmTitle: film.title,
                       creatorName: leadCreatorName,
+                      creatorId: filmOwnerId,
+                      teamMemberIds: [profile.id],
                       viewerRecipientKey: null,
                       focusInviteId: null,
+                      viewerUserId: profile.id,
                     })
                     return gl ? (
                       <div className="mb-2 flex w-full flex-col">
