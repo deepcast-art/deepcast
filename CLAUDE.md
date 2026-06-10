@@ -71,6 +71,13 @@ npm test                 # Unit + E2E
 - **Destructive-data rule:** any script that writes to or deletes production data must default to dry-run and require an owner-run `--execute` (with typed confirmation) — never execute such an operation yourself. (`server/reset-test-data.js` is the scoped, allowlisted exception used for test links; still dry-run it first.)
 - **Prefer single simple commands** over compound shell chains (`;`, `&&`, `|`) when feasible, so permission prompts stay rare.
 
+## Email-sending doctrine
+
+- **Every outgoing email goes through the one dispatcher** (`deliverEmail` in `server/index.js`, built on `server/emailDelivery.js`): sends are strictly sequential and throttled below Resend's rate limit, and each send is automatically retried with backoff before giving up. Never call Resend directly from a route.
+- **Acceptance is verified, per recipient.** The dispatcher resolves only once Resend confirmed it accepted the email. `/api/invites/send` awaits this before answering; on permanent failure it rolls back the invite row and the allocation and returns an error, so a retry starts clean (not blocked by the duplicate-invite check).
+- **The UI never claims success for a recipient whose email was not confirmed accepted.** Multi-recipient sends report per-recipient truth: failures are shown clearly and the failed recipients stay in the form for retry (`handleSendLetter` in `InviteScreening.jsx`, `InviteForm.jsx`). `server/emailDelivery.test.js` proves the throttling, the retry, and the honest-failure behaviour.
+- The Resend API key is **send-only** — it cannot read send history, so past sends can't be audited through the API. Acceptance must be captured at send time: the `emailId` in the `/api/invites/send` response and the `[email] Resend accepted` server log line.
+
 ## Standing product rules
 
 - **Personal notes are always visible.** Wherever sharing happens — the share prompt, the dashboard invite form, any future surface — every recipient row shows a visible, optional, clearly-labeled personal-note field by default, for normal and unlimited users alike. Never collapse the note behind a link, icon, or toggle; the note is core to the gifting experience.

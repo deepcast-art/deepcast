@@ -6,6 +6,7 @@ import { Resend } from 'resend'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { buildGraphLayout } from '../src/lib/graphLayout.js'
+import { createEmailDispatcher } from './emailDelivery.js'
 
 const app = express()
 app.use(cors())
@@ -334,6 +335,21 @@ async function sendInviteEmailResend(payload) {
   return data
 }
 
+/**
+ * EMAIL DOCTRINE: every outgoing email goes through this one dispatcher —
+ * sequential, throttled below Resend's rate limit, retried with backoff.
+ * Await it. It resolves only when Resend ACCEPTED the email; if it rejects,
+ * the email was not sent and the caller must report that honestly (never
+ * answer success to the client before this resolves).
+ */
+const deliverEmail = createEmailDispatcher({
+  sendFn: sendInviteEmailResend,
+  onRetry: (err, attempt, payload) => {
+    const to = Array.isArray(payload?.to) ? payload.to.join(', ') : String(payload?.to || '')
+    console.warn(`[email] attempt ${attempt} failed (will retry) — to: ${to} — ${err?.message || err}`)
+  },
+})
+
 app.post('/api/invites/send', async (req, res) => {
   try {
     const {
@@ -550,7 +566,12 @@ app.post('/api/invites/send', async (req, res) => {
       throw inviteError
     }
 
-    // ── Phase 5: respond immediately, then send email in background ────────
+    // ── Phase 5: send the email, then respond with the truth ──────────────
+    // The email is awaited BEFORE we answer: success means Resend confirmed
+    // acceptance of this recipient's email. On failure the invite row and the
+    // allocation are rolled back and the client gets an error, so the
+    // recipient stays in the form and a retry isn't blocked by the
+    // "already invited" duplicate check.
     const baseUrl = resolveBaseUrl(appUrl, req.get('origin'))
     const senderFirst = sender?.name?.trim().split(/\s+/)[0] || ''
     // Greeting uses the dedicated first-name field exactly as entered (e.g. "Min Hye",
@@ -566,7 +587,6 @@ app.post('/api/invites/send', async (req, res) => {
     const inviteUrl = ctx ? `${baseUrl}/i/${token}?ctx=${ctx}` : `${baseUrl}/i/${token}`
 
     console.log(`Invite created: token=${token}, recipient=${recipientEmailNorm}, inviteUrl=${inviteUrl}`)
-    res.json({ success: true, token })
 
     // Count was fetched before insert; +1 accounts for the invite just created
     const inviteOrdinal = preInsertCount != null ? preInsertCount + 1 : null
@@ -604,16 +624,28 @@ app.post('/api/invites/send', async (req, res) => {
       inviteUrl
     )
 
-    sendInviteEmailResend(emailPayload).catch(() => {
-      setTimeout(() => {
-        sendInviteEmailResend(emailPayload).catch((retryErr) => {
-          console.error(
-            `[invite/send] email retry failed — manually resend via POST /api/invites/resend {"inviteId":"<id for token ${token}>"}\n` +
-            `  token: ${token}\n  to: ${recipientEmailNorm}\n  error: ${retryErr?.message || retryErr}`
-          )
-        })
-      }, 2000)
-    })
+    try {
+      const accepted = await deliverEmail(emailPayload)
+      res.json({ success: true, token, emailId: accepted?.id || null })
+    } catch (emailErr) {
+      console.error(
+        `[invite/send] email failed after retries — rolling back invite\n` +
+        `  token: ${token}\n  to: ${recipientEmailNorm}\n  error: ${emailErr?.message || emailErr}`
+      )
+      // Undo everything this request created so a retry starts clean.
+      const { error: deleteErr } = await supabase.from('invites').delete().eq('token', token)
+      if (deleteErr) console.error('Failed to rollback invite row:', deleteErr)
+      if (allocationDecremented && previousAllocation !== null && senderId) {
+        const { error: rollbackErr } = await supabase
+          .from('users')
+          .update({ invite_allocation: previousAllocation })
+          .eq('id', senderId)
+        if (rollbackErr) console.error('Failed to rollback invite_allocation:', rollbackErr)
+      }
+      return res.status(502).json({
+        error: `The invitation email to ${recipientEmailNorm} could not be sent. Nothing was used up — please try again.`,
+      })
+    }
 
   } catch (err) {
     console.error('Invite send error:', err)
@@ -708,7 +740,7 @@ app.post('/api/invites/resend-last', async (req, res) => {
         inviteOrdinal,
         invite.personal_note || null
       )
-      await sendInviteEmailResend(
+      await deliverEmail(
         withFilmInviteMailingHeaders(
           withReplyTo(
             {
@@ -818,7 +850,7 @@ app.post('/api/invites/resend', async (req, res) => {
         inviteOrdinal,
         invite.personal_note || null
       )
-      await sendInviteEmailResend(
+      await deliverEmail(
         withFilmInviteMailingHeaders(
           withReplyTo(
             {
@@ -1041,7 +1073,7 @@ app.post('/api/team/send-invite', async (req, res) => {
         const loginUrl = `${baseUrl}/login`
 
         try {
-          await sendInviteEmailResend(
+          await deliverEmail(
             withReplyTo(
               {
                 to: emailNorm,
@@ -1120,7 +1152,7 @@ app.post('/api/team/send-invite', async (req, res) => {
     const joinUrl = `${baseUrl}/team/join?token=${encodeURIComponent(inviteToken)}`
 
     try {
-      await sendInviteEmailResend(
+      await deliverEmail(
         withReplyTo(
           {
             to: emailNorm,
@@ -1679,7 +1711,7 @@ async function sendSignInLinkEmail(emailNorm, redirectTo, contextLine) {
   if (error || !data?.properties?.action_link) {
     throw new Error(error?.message || 'Could not generate sign-in link')
   }
-  await sendInviteEmailResend({
+  await deliverEmail({
     to: emailNorm,
     subject: 'Your Deepcast sign-in link',
     html: buildSignInEmailHtml(data.properties.action_link, contextLine),

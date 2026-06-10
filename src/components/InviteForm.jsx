@@ -76,68 +76,91 @@ export default function InviteForm({
     setSending(true)
     setError('')
 
+    // Per-recipient truth: each send is confirmed by the server (which only
+    // answers success once the email was accepted for delivery). A failure
+    // keeps that recipient in the form for retry and never hides behind a
+    // neighbour's success.
+    const succeeded = []
+    const failed = []
     try {
       const appUrl = window?.location?.origin || null
 
       for (const recipient of validRecipients) {
-        const { data: existing } = await supabase
-          .from('invites')
-          .select('id')
-          .eq('film_id', filmId)
-          .ilike('recipient_email', recipient.email.trim())
-          .limit(1)
-          .maybeSingle()
+        try {
+          const { data: existing } = await supabase
+            .from('invites')
+            .select('id')
+            .eq('film_id', filmId)
+            .ilike('recipient_email', recipient.email.trim())
+            .limit(1)
+            .maybeSingle()
 
-        if (existing) {
-          const name = recipient.firstName.trim() || recipient.email.trim().split('@')[0]
-          setError(`${name} has already received an invitation to this film. Try someone else.`)
-          setSending(false)
-          return
+          if (existing) {
+            failed.push({
+              ...recipient,
+              reason: 'has already received an invitation to this film',
+            })
+            continue
+          }
+
+          const recipientNote = recipient.note.trim()
+          const recipientName =
+            recipient.firstName.trim() || recipient.email.trim().split('@')[0] || ''
+          await api.sendInvite(
+            filmId,
+            recipient.email.trim(),
+            recipientName,
+            senderName,
+            senderId,
+            senderEmail,
+            recipientNote,
+            appUrl,
+            null,
+            recipient.firstName.trim()
+          )
+          succeeded.push(recipient)
+          setSent((prev) => [...prev, recipient])
+        } catch (err) {
+          console.error('Invite send error:', err)
+          failed.push({ ...recipient, reason: err.message || 'could not be sent' })
         }
+      }
 
-        const recipientNote = recipient.note.trim()
-        const recipientName =
-          recipient.firstName.trim() || recipient.email.trim().split('@')[0] || ''
-        await api.sendInvite(
-          filmId,
-          recipient.email.trim(),
-          recipientName,
-          senderName,
-          senderId,
-          senderEmail,
-          recipientNote,
-          appUrl,
-          null,
-          recipient.firstName.trim()
+      if (failed.length) {
+        // Keep exactly the failed recipients in the form so they can retry.
+        setRecipients(failed.map(({ firstName, email, note }) => ({ firstName, email, note })))
+        setError(
+          failed
+            .map((f) => `${f.firstName.trim() || f.email.trim()} ${f.reason}`)
+            .join(' — ')
         )
-        setSent((prev) => [...prev, recipient])
+      } else {
+        setRecipients([{ firstName: '', email: '', note: '' }])
       }
-      setRecipients([{ firstName: '', email: '', note: '' }])
 
-      const oneName =
-        validRecipients[0].firstName.trim() ||
-        validRecipients[0].email.trim().split('@')[0] ||
-        'them'
-      const msg =
-        validRecipients.length === 1
-          ? `Invitation sent to ${oneName}. They’ll receive an email with a private screening link.`
-          : `${validRecipients.length} invitations sent. Each person will receive an email with a private screening link.`
-      setSuccessMessage(msg)
+      if (succeeded.length) {
+        const oneName =
+          succeeded[0].firstName.trim() ||
+          succeeded[0].email.trim().split('@')[0] ||
+          'them'
+        const msg =
+          succeeded.length === 1
+            ? `Invitation sent to ${oneName}. They’ll receive an email with a private screening link.`
+            : `${succeeded.length} invitations sent. Each person will receive an email with a private screening link.`
+        setSuccessMessage(msg)
 
-      if (onInviteSent) {
-        const payload = {
-          senderName,
-          senderEmail,
-          recipients: validRecipients,
+        if (onInviteSent) {
+          const payload = {
+            senderName,
+            senderEmail,
+            recipients: succeeded,
+          }
+          onInviteSentTimeoutRef.current = setTimeout(() => {
+            onInviteSent(payload)
+            onInviteSentTimeoutRef.current = null
+          }, ON_INVITE_SENT_DELAY_MS)
         }
-        onInviteSentTimeoutRef.current = setTimeout(() => {
-          onInviteSent(payload)
-          onInviteSentTimeoutRef.current = null
-        }, ON_INVITE_SENT_DELAY_MS)
       }
-    } catch (err) {
-      console.error('Invite send error:', err)
-      setError(err.message || 'Failed to send invitation. Please try again.')
     } finally {
       setSending(false)
     }
