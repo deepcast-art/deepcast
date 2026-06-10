@@ -114,26 +114,29 @@ export default function Profile() {
   async function loadData() {
     setLoading(true)
 
-    // Get films watched through watch sessions
-    const { data: sessions } = await supabase
-      .from('watch_sessions')
-      .select('*, films(*)')
-      .eq('viewer_id', profile.id)
-      .order('created_at', { ascending: false })
+    // Watch sessions by viewer id, the viewer's invite tokens, and their sent
+    // invites are all independent — fetch together. Round trips from the browser
+    // to the database are the cost here, not the queries themselves.
+    const [{ data: sessions }, { data: tokenRows }, { data: invites }] = await Promise.all([
+      supabase
+        .from('watch_sessions')
+        .select('*, films(*)')
+        .eq('viewer_id', profile.id)
+        .order('created_at', { ascending: false }),
+      supabase.from('invites').select('token').eq('recipient_email', profile.email),
+      supabase
+        .from('invites')
+        .select('*, films(title)')
+        .eq('sender_id', profile.id)
+        .order('created_at', { ascending: false }),
+    ])
+    setSentInvites(invites || [])
 
-    // Also get films watched via invite email match
+    // Films watched via invite email match — needs the tokens from above.
     const { data: inviteSessions } = await supabase
       .from('watch_sessions')
       .select('*, films(*)')
-      .in(
-        'invite_token',
-        (
-          await supabase
-            .from('invites')
-            .select('token')
-            .eq('recipient_email', profile.email)
-        ).data?.map((i) => i.token) || []
-      )
+      .in('invite_token', (tokenRows || []).map((i) => i.token).filter(Boolean))
       .order('created_at', { ascending: false })
 
     const allSessions = [...(sessions || []), ...(inviteSessions || [])]
@@ -144,53 +147,43 @@ export default function Profile() {
 
     const watchedFilmIds = uniqueFilms.map((film) => film.id)
     const creatorIds = uniqueFilms.map((film) => film.creator_id).filter(Boolean)
-    if (watchedFilmIds.length > 0) {
-      const { data: filmInvites } = await supabase
-        .from('invites')
-        .select(
-          'id, film_id, sender_id, sender_name, sender_email, recipient_name, recipient_email, status, parent_invite_id, created_at'
-        )
-        .in('film_id', watchedFilmIds)
-        .order('created_at', { ascending: true })
 
-      const grouped = (filmInvites || []).reduce((acc, invite) => {
-        if (!acc[invite.film_id]) acc[invite.film_id] = []
-        acc[invite.film_id].push(invite)
-        return acc
-      }, {})
-      setFilmInvitesById(grouped)
-    } else {
-      setFilmInvitesById({})
-    }
+    // Per-film invites and creator names both depend only on the films above —
+    // fetch together.
+    const [{ data: filmInvites }, { data: creators }] = await Promise.all([
+      watchedFilmIds.length > 0
+        ? supabase
+            .from('invites')
+            .select(
+              'id, film_id, sender_id, sender_name, sender_email, recipient_name, recipient_email, status, parent_invite_id, created_at'
+            )
+            .in('film_id', watchedFilmIds)
+            .order('created_at', { ascending: true })
+        : Promise.resolve({ data: null }),
+      creatorIds.length > 0
+        ? supabase.from('users').select('id, name').in('id', creatorIds)
+        : Promise.resolve({ data: null }),
+    ])
 
-    if (creatorIds.length > 0) {
-      const { data: creators } = await supabase
-        .from('users')
-        .select('id, name')
-        .in('id', creatorIds)
-      const creatorMap = (creators || []).reduce((acc, creator) => {
-        acc[creator.id] = creator.name
-        return acc
-      }, {})
-      const filmCreatorMap = uniqueFilms.reduce((acc, film) => {
-        if (film.creator_id && creatorMap[film.creator_id]) {
-          acc[film.id] = creatorMap[film.creator_id]
-        }
-        return acc
-      }, {})
-      setCreatorNameByFilmId(filmCreatorMap)
-    } else {
-      setCreatorNameByFilmId({})
-    }
+    const grouped = (filmInvites || []).reduce((acc, invite) => {
+      if (!acc[invite.film_id]) acc[invite.film_id] = []
+      acc[invite.film_id].push(invite)
+      return acc
+    }, {})
+    setFilmInvitesById(grouped)
 
-    // Get sent invites
-    const { data: invites } = await supabase
-      .from('invites')
-      .select('*, films(title)')
-      .eq('sender_id', profile.id)
-      .order('created_at', { ascending: false })
+    const creatorMap = (creators || []).reduce((acc, creator) => {
+      acc[creator.id] = creator.name
+      return acc
+    }, {})
+    const filmCreatorMap = uniqueFilms.reduce((acc, film) => {
+      if (film.creator_id && creatorMap[film.creator_id]) {
+        acc[film.id] = creatorMap[film.creator_id]
+      }
+      return acc
+    }, {})
+    setCreatorNameByFilmId(filmCreatorMap)
 
-    setSentInvites(invites || [])
     setLoading(false)
   }
 

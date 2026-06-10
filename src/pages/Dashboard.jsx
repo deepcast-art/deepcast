@@ -238,6 +238,9 @@ export default function Dashboard() {
 
     let filmId = sentList[0]?.film_id
     const tokenByFilmId = {}
+    /** creator_id for the selected film when the received-films query already has it —
+     *  lets the creator-name lookup run in the same round trip as the film + invites. */
+    let knownCreatorId = null
 
     // Fetch ALL films the viewer has been invited to watch
     if (email) {
@@ -253,7 +256,7 @@ export default function Dashboard() {
         // Resolve film details for every received film
         const { data: filmRows } = await supabase
           .from('films')
-          .select('id, title, thumbnail_url')
+          .select('id, title, thumbnail_url, creator_id')
           .in('id', uniqueRecvd.map(r => r.film_id))
 
         const filmsMap = new Map((filmRows || []).map(f => [f.id, f]))
@@ -273,6 +276,7 @@ export default function Dashboard() {
 
         // Primary film = most recent received
         if (!filmId) filmId = uniqueRecvd[0]?.film_id
+        knownCreatorId = filmsMap.get(filmId)?.creator_id || null
 
         setViewerInviteToken(
           tokenByFilmId[filmId] || uniqueRecvd[0]?.token || localStorage.getItem('viewer_invite_token') || null
@@ -290,24 +294,29 @@ export default function Dashboard() {
     setViewerFilmId(filmId)
     try { sessionStorage.setItem('dash_viewer_film_id', filmId) } catch {}
 
-    // Selected film's row and its invites are independent — fetch together.
-    const [{ data: filmRow }, { data: allInv }] = await Promise.all([
+    // Selected film's row, its invites, and (when the creator is already known
+    // from the received-films query) the creator's name are independent — fetch
+    // together. maybeSingle on the name: viewers can't read the creator's profile
+    // under RLS — zero rows is expected, not an error.
+    const [{ data: filmRow }, { data: allInv }, knownCreatorRes] = await Promise.all([
       supabase
         .from('films')
         .select('id, title, thumbnail_url, creator_id')
         .eq('id', filmId)
         .single(),
       supabase.from('invites').select('*').eq('film_id', filmId),
+      knownCreatorId
+        ? supabase.from('users').select('name').eq('id', knownCreatorId).maybeSingle()
+        : Promise.resolve({ data: null }),
     ])
 
     setViewerFilmTitle(filmRow?.title || '')
     setViewerFilmInvites(allInv || [])
     setViewerFilmCreatorId(filmRow?.creator_id || null)
 
-    let cname = ''
-    if (filmRow?.creator_id) {
-      // maybeSingle: viewers can't read the creator's profile under RLS — zero rows
-      // is expected, not an error (the graph keys off creator_id, not the name).
+    let cname = knownCreatorRes?.data?.name || ''
+    if (!cname && filmRow?.creator_id && filmRow.creator_id !== knownCreatorId) {
+      // Rare path: the film row revealed a creator we didn't already know about.
       const { data: cr } = await supabase
         .from('users')
         .select('name')

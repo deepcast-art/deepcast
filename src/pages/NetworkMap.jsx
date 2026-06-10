@@ -138,15 +138,18 @@ export default function NetworkMap() {
       return
     }
 
-    const { data: sessions } = await supabase
-      .from('watch_sessions')
-      .select('film_id')
-      .eq('viewer_id', profile.id)
-
-    const { data: emailInvites } = await supabase
-      .from('invites')
-      .select('token')
-      .eq('recipient_email', profile.email)
+    // The viewer's watch sessions, received-invite tokens, and sent/received
+    // invites are all independent — fetch together (browser→DB round trips are
+    // the cost, not the queries).
+    const [{ data: sessions }, { data: emailInvites }, { data: viewerScoped }] =
+      await Promise.all([
+        supabase.from('watch_sessions').select('film_id').eq('viewer_id', profile.id),
+        supabase.from('invites').select('token').eq('recipient_email', profile.email),
+        supabase
+          .from('invites')
+          .select('film_id')
+          .or(`recipient_email.eq.${profile.email},sender_id.eq.${profile.id}`),
+      ])
 
     const tokens = (emailInvites || []).map((i) => i.token).filter(Boolean)
     let inviteSessionRows = []
@@ -161,11 +164,6 @@ export default function NetworkMap() {
     const filmIdSet = new Set()
     ;(sessions || []).forEach((s) => s.film_id && filmIdSet.add(s.film_id))
     inviteSessionRows.forEach((s) => s.film_id && filmIdSet.add(s.film_id))
-
-    const { data: viewerScoped } = await supabase
-      .from('invites')
-      .select('film_id')
-      .or(`recipient_email.eq.${profile.email},sender_id.eq.${profile.id}`)
     ;(viewerScoped || []).forEach((i) => i.film_id && filmIdSet.add(i.film_id))
 
     const viewerFilmIds = Array.from(filmIdSet)
