@@ -8,11 +8,13 @@ import NetworkGraph from '../components/NetworkGraph'
 import { buildGraphLayout, resolveViewerFocus } from '../lib/graphLayout'
 import { api } from '../lib/api'
 import { ensureHttpsUrl } from '../lib/httpsUrl.js'
-
-// An invite counts as "opened" once the recipient opened it, watched, or signed
-// up. Pending invites have not been opened yet.
-const OPENED_STATUSES = ['opened', 'watched', 'signed_up']
-const isOpened = (inv) => OPENED_STATUSES.includes(inv?.status)
+// Canonical reach stat — every reach count on every surface comes from here.
+import {
+  isInviteOpened as isOpened,
+  buildChildrenByParentId,
+  reachBelowInvite,
+  computeUserReach,
+} from '../lib/reach.js'
 
 /** Sent-invitations list renders in pages so an unlimited sharer with hundreds of
  *  shares can see them ALL without slowing the dashboard down. Normal users never
@@ -84,57 +86,25 @@ export default function Dashboard() {
   )
 
   // parent_invite_id -> child invites, across the film's entire invite tree.
-  const childrenByParentId = useMemo(() => {
-    const map = new Map()
-    for (const inv of viewerFilmInvites) {
-      if (!inv.parent_invite_id) continue
-      if (!map.has(inv.parent_invite_id)) map.set(inv.parent_invite_id, [])
-      map.get(inv.parent_invite_id).push(inv)
-    }
-    return map
-  }, [viewerFilmInvites])
-
-  // Shared "reach" helper: how many of an invite's transitive descendants have
-  // opened (all levels deep), NOT counting the invite itself. Walks the
-  // parent_invite_id tree breadth-first; `seen` guards against dupes/cycles.
-  const reachFromInvite = useCallback(
-    (rootId) => {
-      let count = 0
-      const seen = new Set()
-      const queue = [...(childrenByParentId.get(rootId) || [])]
-      while (queue.length) {
-        const inv = queue.shift()
-        if (seen.has(inv.id)) continue
-        seen.add(inv.id)
-        if (isOpened(inv)) count += 1
-        const kids = childrenByParentId.get(inv.id)
-        if (kids) queue.push(...kids)
-      }
-      return count
-    },
-    [childrenByParentId]
+  const childrenByParentId = useMemo(
+    () => buildChildrenByParentId(viewerFilmInvites),
+    [viewerFilmInvites]
   )
 
-  // "People you've reached": everyone in the viewer's downstream chain whose
-  // invite is opened — their direct invitees plus all deeper descendants.
-  // By construction this equals (direct invitees who opened) + (sum of each
-  // invitee's reach) — the same decomposition the per-invitee rows show.
-  const viewerReachedCount = useMemo(() => {
-    let total = 0
-    for (const inv of viewerSentInvites) {
-      if (isOpened(inv)) total += 1
-      total += reachFromInvite(inv.id)
-    }
-    return total
-  }, [viewerSentInvites, reachFromInvite])
+  // "People you've reached": the canonical reach stat (src/lib/reach.js) —
+  // everyone in the viewer's downstream branch whose invite is OPENED.
+  const viewerReachedCount = useMemo(
+    () => computeUserReach(viewerSentInvites, childrenByParentId),
+    [viewerSentInvites, childrenByParentId]
+  )
 
   // Per direct invitee: how many people THEY have reached (their opened
-  // descendants, not counting themselves).
+  // descendants, not counting themselves). Same canonical computation.
   const reachByInvite = useMemo(() => {
     const counts = {}
-    for (const inv of viewerSentInvites) counts[inv.id] = reachFromInvite(inv.id)
+    for (const inv of viewerSentInvites) counts[inv.id] = reachBelowInvite(childrenByParentId, inv.id)
     return counts
-  }, [viewerSentInvites, reachFromInvite])
+  }, [viewerSentInvites, childrenByParentId])
 
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
   const [modalFirst, setModalFirst] = useState('')
@@ -148,7 +118,6 @@ export default function Dashboard() {
   const [nameDraft, setNameDraft] = useState('')
   const [nameBusy, setNameBusy] = useState(false)
   const [nameError, setNameError] = useState('')
-  const graphSectionRef = useRef(null)
 
   const isTeamMember = profile?.role === 'team_member'
   const filmOwnerId =
@@ -161,24 +130,8 @@ export default function Dashboard() {
     ? Math.max(0, profile?.invite_allocation ?? 0)
     : null
   const sentCount = isViewer ? viewerSentInvites.length : 0
-  const totalInvites = (invitesLeft ?? 0) + sentCount
   const canShareMore = isViewer && viewerFilmId
   const shareDisabled = !isUnlimitedViewer && (!invitesLeft || invitesLeft <= 0)
-
-  // Downstream subtree size: everyone the viewer's shares have reached, at any
-  // depth — the same branch the network graph highlights.
-  const viewerSubtreeSize = useMemo(() => {
-    const seen = new Set()
-    const queue = [...viewerSentInvites]
-    while (queue.length) {
-      const inv = queue.shift()
-      if (seen.has(inv.id)) continue
-      seen.add(inv.id)
-      const kids = childrenByParentId.get(inv.id)
-      if (kids) queue.push(...kids)
-    }
-    return seen.size
-  }, [viewerSentInvites, childrenByParentId])
 
   // Shared focus resolution (same helper every graph surface uses): email match first,
   // then invite-token match, then the common parent of the viewer's sent invites.
@@ -594,10 +547,6 @@ export default function Dashboard() {
     setIsShareModalOpen(true)
   }
 
-  const scrollToGraph = () => {
-    graphSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
   /**
    * Edit name (passwordless platform — replaces the old change-password link).
    * Propagates everywhere the name appears: the profile (future share emails use
@@ -794,9 +743,9 @@ export default function Dashboard() {
                 type="button"
                 onClick={openShareModal}
                 disabled={shareDisabled}
-                className="w-full border border-accent/50 bg-transparent px-4 py-3 text-center font-sans text-[10px] font-medium uppercase tracking-[0.28em] text-accent transition-colors hover:border-accent hover:bg-accent/[0.06] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-accent/50 disabled:hover:bg-transparent"
+                className="w-full bg-accent px-4 py-4 text-center font-sans text-[11px] font-semibold uppercase tracking-[0.28em] text-ink transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Share more
+                Share this film
               </button>
             )}
             {!editingName ? (
@@ -809,7 +758,7 @@ export default function Dashboard() {
                 }}
                 className="text-left font-sans text-[10px] uppercase tracking-[0.22em] text-warm/35 transition-colors hover:text-warm/70"
               >
-                Edit name
+                Edit your profile name
               </button>
             ) : (
               <div className="flex flex-col gap-2.5">
@@ -887,37 +836,6 @@ export default function Dashboard() {
             </div>
           ) : (
             <>
-              {/* ── Share hero: the primary action ── */}
-              <section className="mb-10 w-full max-w-6xl animate-fade-in">
-                <div className="flex flex-col gap-5 border border-accent/25 bg-ink/40 p-6 sm:flex-row sm:items-center sm:justify-between sm:gap-8 md:p-8">
-                  <div className="flex flex-col gap-2">
-                    <span className="font-sans text-[11px] font-medium uppercase tracking-[0.25em] text-warm/85">
-                      {isUnlimitedViewer
-                        ? 'Unlimited invitations'
-                        : `${invitesLeft} of ${totalInvites} invitation${totalInvites === 1 ? '' : 's'} remaining`}
-                    </span>
-                    {viewerSubtreeSize > 0 && (
-                      <button
-                        type="button"
-                        onClick={scrollToGraph}
-                        className="text-left font-sans text-[10px] uppercase tracking-[0.22em] text-accent/80 underline-offset-4 transition-colors hover:text-accent hover:underline"
-                      >
-                        Your shares have reached {viewerSubtreeSize}{' '}
-                        {viewerSubtreeSize === 1 ? 'person' : 'people'}
-                      </button>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={openShareModal}
-                    disabled={shareDisabled || !canShareMore}
-                    className="w-full shrink-0 bg-accent px-12 py-5 text-center font-sans text-[12px] font-semibold uppercase tracking-[0.3em] text-ink transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
-                  >
-                    Share this film
-                  </button>
-                </div>
-              </section>
-
               {/* ── Your screenings ── */}
               {viewerAllFilms.length > 0 && (
                 <section className="mb-10 w-full max-w-6xl animate-fade-in" style={{ animationDelay: '40ms' }}>
@@ -1034,7 +952,7 @@ export default function Dashboard() {
                 )}
 
                 {graphLayout ? (
-                  <div ref={graphSectionRef} className="mb-12 flex w-full flex-col animate-fade-in">
+                  <div className="mb-12 flex w-full flex-col animate-fade-in">
                     <div className="mb-5 flex flex-row items-baseline justify-between gap-4">
                       <h3 className="font-sans text-[10px] font-medium uppercase tracking-[0.32em] text-warm/50">
                         My network impact
