@@ -217,6 +217,38 @@ export default function InviteScreening() {
       }))
   }, [invite?.id, filmInvites])
 
+  /**
+   * "Has this account ever shared?" — the same signal ViewerShareGate uses (any invite row with
+   * sender_id = this account). sentLetters alone is too narrow: it only counts children of the
+   * invite row being watched right now, so a viewer whose share hangs off a sibling invite row
+   * for the same film (the R5 no-relink case) looked like they had never shared and lost their
+   * "Go to dashboard" path on the completion screen.
+   */
+  const hasSharedFromThisFilm = useMemo(() => {
+    if (!user?.id) return false
+    return filmInvites.some((fi) => fi.sender_id === user.id)
+  }, [user?.id, filmInvites])
+
+  /** Cross-film fallback: shares that live on another film's invite list (one head-count query,
+   *  identical to ViewerShareGate's check, only fired when the film-local rows say "no"). */
+  const [hasSharedElsewhere, setHasSharedElsewhere] = useState(false)
+  useEffect(() => {
+    if (!user?.id) { setHasSharedElsewhere(false); return }
+    if (hasSharedFromThisFilm) return
+    let cancelled = false
+    supabase
+      .from('invites')
+      .select('id', { count: 'exact', head: true })
+      .eq('sender_id', user.id)
+      .then(({ count }) => {
+        if (!cancelled) setHasSharedElsewhere(Boolean(count && count > 0))
+      })
+    return () => { cancelled = true }
+  }, [user?.id, hasSharedFromThisFilm])
+
+  const hasEverShared =
+    sentLetters.length > 0 || hasSharedFromThisFilm || hasSharedElsewhere
+
   const [preScreeningPrologue, setPreScreeningPrologue] = useState({
     visible: false,
     textVisible: false,
@@ -1506,7 +1538,7 @@ export default function InviteScreening() {
                 user={user}
                 goToDashboard={() => navigate('/dashboard', { replace: true, state: { screeningToken: token } })}
                 resumeFilm={resumeFilm}
-                hasSentInvite={sentLetters.length > 0}
+                hasSentInvite={hasEverShared}
               />
               <DesktopPassItOn
                 graphLayout={graphLayout}
@@ -1526,7 +1558,7 @@ export default function InviteScreening() {
                 user={user}
                 goToDashboard={() => navigate('/dashboard', { replace: true, state: { screeningToken: token } })}
                 resumeFilm={resumeFilm}
-                hasSentInvite={sentLetters.length > 0}
+                hasSentInvite={hasEverShared}
               />
 
               </>

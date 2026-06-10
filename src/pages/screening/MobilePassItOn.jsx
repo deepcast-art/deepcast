@@ -153,18 +153,20 @@ export default function MobilePassItOn({
                     className="w-full py-2 min-h-[36px] bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-['DM_Sans',sans-serif] text-[10px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none disabled:opacity-40 touch-manipulation">
                     {letterSending ? 'Sending…' : 'Share invitation'}
                   </button>
-
-                  {passItOnLayerActive && user && hasSentInvite && (
-                    <button type="button" onClick={goToDashboard}
-                      className="mt-1.5 w-full py-0.5 font-['DM_Sans',sans-serif] text-[7px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors">
-                      Skip — Go to dashboard
-                    </button>
-                  )}
                 </>
               ) : (
                 <p className="font-['Fraunces',serif] text-center text-sm text-[#2a2a2a]/75 py-2">
                   All invitations have been sent.
                 </p>
+              )}
+
+              {/* Outside the slots ternary: a viewer who has already shared (incl. all slots used)
+                  must always keep a path to the dashboard. */}
+              {passItOnLayerActive && user && hasSentInvite && (
+                <button type="button" onClick={goToDashboard}
+                  className="mt-1.5 w-full py-0.5 min-h-[28px] font-['DM_Sans',sans-serif] text-[7px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors touch-manipulation">
+                  Skip — Go to dashboard
+                </button>
               )}
             </div>
           </div>
@@ -240,18 +242,20 @@ export default function MobilePassItOn({
                     className="w-full py-3 min-h-[44px] bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-['DM_Sans',sans-serif] text-[11px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none disabled:opacity-40 touch-manipulation">
                     {letterSending ? 'Sending…' : 'Share invitation'}
                   </button>
-
-                  {passItOnLayerActive && user && hasSentInvite && (
-                    <button type="button" onClick={goToDashboard}
-                      className="mt-4 w-full py-2 font-['DM_Sans',sans-serif] text-[9px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors">
-                      Skip — Go to dashboard
-                    </button>
-                  )}
                 </>
               ) : (
                 <p className="font-['Fraunces',serif] text-center text-lg text-[#2a2a2a]/75 py-6">
                   All invitations have been sent.
                 </p>
+              )}
+
+              {/* Outside the slots ternary: a viewer who has already shared (incl. all slots used)
+                  must always keep a path to the dashboard. */}
+              {passItOnLayerActive && user && hasSentInvite && (
+                <button type="button" onClick={goToDashboard}
+                  className="mt-4 w-full py-2 min-h-[44px] font-['DM_Sans',sans-serif] text-[9px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors touch-manipulation">
+                  Skip — Go to dashboard
+                </button>
               )}
             </div>
           </div>

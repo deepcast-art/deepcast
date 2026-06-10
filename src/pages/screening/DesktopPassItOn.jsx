@@ -150,19 +150,21 @@ export default function DesktopPassItOn({
                   <button type="button" onClick={handleSendLetter} disabled={letterSending} className="w-full max-w-[340px] py-3 bg-[#b1a180] hover:bg-[#978768] text-[#dddddd] font-['DM_Sans',sans-serif] text-[11px] tracking-[0.3em] uppercase transition-colors duration-[300ms] rounded-none disabled:opacity-40">
                     {letterSending ? 'Sending…' : 'Share invitation'}
                   </button>
-
-                  {passItOnLayerActive && user && hasSentInvite && (
-                    <button
-                      type="button"
-                      onClick={goToDashboard}
-                      className="w-full max-w-[340px] py-2 font-['DM_Sans',sans-serif] text-[9px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors"
-                    >
-                      Skip — Go to dashboard
-                    </button>
-                  )}
                 </div>
               ) : (
                 <p className="font-['Fraunces',serif] text-2xl text-[#2a2a2a]/80 my-10">All invitations have been sent.</p>
+              )}
+
+              {/* Outside the slots ternary: a viewer who has already shared (incl. all slots used)
+                  must always keep a path to the dashboard. */}
+              {passItOnLayerActive && user && hasSentInvite && (
+                <button
+                  type="button"
+                  onClick={goToDashboard}
+                  className="w-full max-w-[340px] py-2 font-['DM_Sans',sans-serif] text-[9px] uppercase tracking-[0.25em] text-[#2a2a2a]/40 hover:text-[#2a2a2a]/70 transition-colors"
+                >
+                  Skip — Go to dashboard
+                </button>
               )}
             </div>
           </div>
