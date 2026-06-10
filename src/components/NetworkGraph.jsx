@@ -36,9 +36,17 @@ function dampPinchRatio(ratio, damp) {
 /*  FILM NODE — camera/projector icon at center                        */
 /* ------------------------------------------------------------------ */
 
-function FilmNode({ x, y, size, isActive, isFaded, onMouseEnter, onMouseLeave }) {
+function FilmNode({ x, y, size, creatorLabel, isActive, isFaded, onMouseEnter, onMouseLeave }) {
   const r = 18 * size
   const iconScale = size * 0.38
+  /* Filmmaker credit sits BELOW the icon: every human node's label sits above
+     its node, so the space under the centre is always free of ring-1 labels.
+     Long names are ellipsised so they can never reach ring-1 (radius ≥ 200). */
+  const MAX_NAME_CHARS = 24
+  const displayName =
+    creatorLabel && creatorLabel.length > MAX_NAME_CHARS
+      ? `${creatorLabel.slice(0, MAX_NAME_CHARS - 1).trimEnd()}…`
+      : creatorLabel
 
   return (
     <g
@@ -86,6 +94,38 @@ function FilmNode({ x, y, size, isActive, isFaded, onMouseEnter, onMouseLeave })
           style={{ transition: 'stroke 500ms ease' }}
         />
       </g>
+      {displayName && (
+        <>
+          <text
+            y={r * 1.6 + 13}
+            textAnchor="middle"
+            style={{
+              fontFamily: "'Phoenix', system-ui, sans-serif",
+              fontSize: '11px',
+              fontWeight: 500,
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              fill: isActive ? GRAPH_COLORS.warm : GRAPH_COLORS.muted,
+              transition: 'fill 500ms ease',
+            }}
+          >
+            {displayName}
+          </text>
+          <text
+            y={r * 1.6 + 25}
+            textAnchor="middle"
+            style={{
+              fontFamily: "'Phoenix', system-ui, sans-serif",
+              fontSize: '8px',
+              letterSpacing: '0.12em',
+              fill: GRAPH_COLORS.muted,
+              opacity: 0.85,
+            }}
+          >
+            (filmmaker)
+          </text>
+        </>
+      )}
     </g>
   )
 }
@@ -739,6 +779,7 @@ export default function NetworkGraph({
               key={node.id}
               x={node.x} y={node.y}
               size={node.size}
+              creatorLabel={node.creatorLabel}
               isActive={isActive}
               isFaded={isFaded}
               onMouseEnter={() => setHoveredNode(node.id)}

@@ -256,6 +256,26 @@ describe('buildGraphLayout', () => {
     expect(layout.ringRadii.length).toBe(2) // [0, R1]
   })
 
+  it('puts the filmmaker name on the central node (creatorLabel)', () => {
+    const layout = buildGraphLayout({
+      filmInvites: makeInvites(3),
+      filmTitle: 'Test Film',
+      creatorName: 'Alice Aardvark',
+      creatorId: 'user-1',
+    })
+    expect(layout.rootNode.creatorLabel).toBe('Alice Aardvark')
+  })
+
+  it('falls back to the creator-sent invite sender_name when creatorName is hidden (RLS)', () => {
+    const layout = buildGraphLayout({
+      filmInvites: makeInvites(3, 'Alice'),
+      filmTitle: 'Test Film',
+      creatorName: '',
+      creatorId: 'user-1', // makeInvites sets sender_id user-1 / sender_name Alice
+    })
+    expect(layout.rootNode.creatorLabel).toBe('Alice')
+  })
+
   it('builds multiple rings from invite chains', () => {
     const invites = [
       // Ring 1: Alice invites Bob and Carol

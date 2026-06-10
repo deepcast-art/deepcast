@@ -532,9 +532,22 @@ export function buildGraphLayout({
   const sectionLabels = []
   const nodeIdSet = new Set()
 
+  /* Filmmaker display name for the central node (the filmmaker IS this node).
+     Caller-provided name first; when RLS hides the users row from the caller
+     (viewer surfaces), fall back to the sender_name carried on any invite the
+     filmmaker sent — so every surface still shows the same name. */
+  let creatorLabel = (creatorName || '').trim()
+  if (!creatorLabel) {
+    const fromInvite = filmInvites.find(
+      (inv) => isCreatorSender(inv) && (inv.sender_name || '').trim()
+    )
+    creatorLabel = (fromInvite?.sender_name || '').trim()
+  }
+
   nodesData.push({
     id: rootId,
     label: toFirstName(filmTitle, 'Film'),
+    creatorLabel,
     x: cx, y: cy,
     size: 1.2, type: 'film', tier: 0, angle: 0,
   })
