@@ -27,8 +27,8 @@ export default defineConfig([
     },
   },
   {
-    // Server-side scripts run under Node — give them Node globals (process, Buffer, …).
-    files: ['server/**/*.js', 'scripts/**/*.js', 'verify-flow.js'],
+    // Server-side scripts and Playwright specs run under Node — give them Node globals (process, Buffer, …).
+    files: ['server/**/*.js', 'scripts/**/*.js', 'e2e/**/*.js', 'verify-flow.js'],
     languageOptions: {
       globals: { ...globals.browser, ...globals.node },
     },
