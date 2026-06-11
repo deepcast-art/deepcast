@@ -4,6 +4,24 @@
 
 Deepcast is an invite-based social network for sharing films through word of mouth. Users receive screening invites, watch films, and pass invitations along to others, forming a network graph.
 
+## Platform principles (use these when writing any user-facing copy or making product decisions)
+
+- Deepcast is private, human-to-human film sharing. No algorithms, no feed, no AI curation. Films travel person to person, by invitation only — "the modern-day version of storytelling around the fire."
+- The core idea: going from broadcasting to deepcasting. Millions of views mean nothing without resonance. We optimize for humanity and substance, never for attention, virality, extraction, polarization, or spectacle.
+- Origin: the founder (Ien Chi) is a lifelong filmmaker; at Jubilee he helped grow a YouTube channel to 5M subscribers / 1B+ views and watched platform incentives push everything toward clickbait. Deepcast is the counter-bet — preserving real human curation and connection in the age of AI slop.
+- Deepcast is NOT: a gatekeeper, a content factory, a quantity play, or an attention business.
+- It's for people who live for higher ideals — artists, creators, mission-driven people — and for filmmakers making bold, substantive work that might not survive gatekeepers: "ideas like mustard seeds" that grow once championed.
+- The network graph exists so people FEEL their impact: connected to everyone who led a film to them, and everyone who'll receive it because of them. A movement, not a passive audience.
+- A share is a gift — chosen for one specific person (their values, their time of life), not broadcast to everyone.
+- Long-term vision: the home for substantive filmmakers and audiences; a place where great IP is born.
+- This is an early MVP built by Ien. We actively want filmmakers, collaborators, advisors, investors, engineers with taste, designers, curators, and community builders to reach out: ien.chi96@gmail.com.
+
+## Voice and copy rules
+
+- All user-facing copy is written in Ien's founder voice: personal, heartfelt, direct, human. Never corporate, never marketing-speak.
+- It speaks to the heart, not the mind — but stays simple, crystal clear, and concise. Short sharp answers over long explanations.
+- Copy approved by Ien is verbatim-only. Never rewrite, expand, or "improve" approved copy without his explicit approval. The current text in src/pages/About.jsx is founder-approved canonical copy.
+
 ## Tech stack
 
 - **Frontend:** React 19 + Vite 7, Tailwind CSS 4, React Router 7
@@ -91,6 +109,13 @@ npm test                 # Unit + E2E
 - **Every recipient is an identical letter block.** On the share prompt, each recipient renders as the same full letter — "Dear [First Name]," + the note-writing area + "Deliver To [email]" — with a subtle brand divider between consecutive letters. No compact/abbreviated rows for added recipients.
 - **User-facing naming is first-name-only, and labeled as such wherever it appears.** Users edit only their first name; every label, placeholder, and helper around it must say "first name" explicitly (dashboard: "Edit your first name" → a "First name" field with the helper "This is how your name appears on the network."). Saving propagates to the profile, sent-invite sender labels, and received-invite recipient labels (graph nodes) — see `handleSaveName` in `Dashboard.jsx`.
 - **The share prompt shows ONE static invitations line** — "You have N invitations" (or "You have unlimited invitations"), where N comes from `invitationsRemaining(profile)` in `src/lib/shares.js`. It sits beneath the letter block(s), above the share button, and never live-subtracts as recipient rows are added. The cap still applies: the form never allows more recipient letters than the remaining allocation.
+
+## About page (added June 2026)
+
+- Route: /about, content in src/pages/About.jsx. FAQ format.
+- Requires login, but is DELIBERATELY not wrapped in ViewerShareGate — any signed-in user can view it regardless of role or share status. Do not add it to the gate.
+- Dashboard entry points: viewer sidebar (button directly above the name-edit button) and filmmaker/team sidebar (link above Sign out). Keep both when modifying sidebars.
+- Contact email on the page (ien.chi96@gmail.com) is a mailto link and must stay one.
 
 ## Canonical displayed stats — one shared computation per stat
 
