@@ -189,6 +189,11 @@ export default function InviteScreening() {
   const [screeningPlaybackEverStarted, setScreeningPlaybackEverStarted] = useState(false)
   /** Narrow layout: full Pass it on only after the viewer explicitly pauses (not buffering / end / programmatic). */
   const [passItOnFromUserPause, setPassItOnFromUserPause] = useState(false)
+  /** Early-mount hold: during the pre-screening prologue the player is mounted behind the opaque
+   *  overlay (so the film buffers while the message shows) but MUST NOT start playing. Every
+   *  play-trigger — the autoPlay prop, onCanPlay, and the autoplay-retry loop — is gated on this
+   *  flag; it releases when the prologue begins its fade, the moment playback started before. */
+  const [prologueHoldingPlayback, setPrologueHoldingPlayback] = useState(false)
 
   /* ---------- LETTER FORM STATE ---------- */
 
@@ -334,17 +339,18 @@ export default function InviteScreening() {
     setScreeningNeedsUserGesturePlay(false)
     prologueWelcomeStartedRef.current = false
     prologueDismissedRef.current = false
+    setPrologueHoldingPlayback(false)
     setPrologueTextsDone(false)
     setPrologueNamesReady(false)
     hasRelinkedRef.current = false
   }, [token])
 
   useEffect(() => {
-    if (currentView !== 'screening' || isScreeningPaused) return
+    if (currentView !== 'screening' || isScreeningPaused || prologueHoldingPlayback) return
     setFilmTitleHidden(false)
     const id = window.setTimeout(() => setFilmTitleHidden(true), 1200)
     return () => clearTimeout(id)
-  }, [currentView, isScreeningPaused, token])
+  }, [currentView, isScreeningPaused, prologueHoldingPlayback, token])
 
   useEffect(() => {
     // Instant Resume: on ?play=1, a validation cached earlier in this tab lets playback start
@@ -763,8 +769,10 @@ export default function InviteScreening() {
 
   const handleMuxScreeningCanPlay = useCallback(() => {
     screeningMediaReadyRef.current = true
+    // Early-mount hold: media getting ready during the prologue must not start playback.
+    if (prologueHoldingPlayback) return
     tryScreeningPlay()
-  }, [tryScreeningPlay])
+  }, [prologueHoldingPlayback, tryScreeningPlay])
 
   /** Pass it on whenever the viewer pauses mid-film. Mux owns the pause button now, so we
    *  infer user intent from screeningPlaybackEverStarted — pause events emitted before the
@@ -829,13 +837,21 @@ export default function InviteScreening() {
   const startPreScreeningSequence = useCallback(() => {
     requestScreeningFullscreen()
     setPreScreeningPrologue({ visible: true, textVisible: false, text2Visible: false, fading: false })
+    // Early mount: switch to the screening room NOW, behind the opaque z-[3000] prologue overlay,
+    // so the MuxPlayer mounts and buffers the film while the message plays. The hold flag keeps
+    // every play-trigger silent until t3 below — the same moment playback used to begin.
+    setPrologueHoldingPlayback(true)
+    setCurrentView('screening')
+    setViewVisible(true)
     entrySplashTimerRef.current = null
 
     const t1 = window.setTimeout(() => setPreScreeningPrologue((s) => ({ ...s, textVisible: true })), 600)
     const t2 = window.setTimeout(() => setPreScreeningPrologue((s) => ({ ...s, text2Visible: true })), 2625)
     const t3 = window.setTimeout(() => {
-      // Begin fade-out AND silently switch the view underneath so the landing never flashes
+      // Begin fade-out and release the playback hold — the (already-mounted, buffered) film
+      // starts under the fade exactly when it did before the early mount.
       setPreScreeningPrologue((s) => ({ ...s, fading: true }))
+      setPrologueHoldingPlayback(false)
       setIsScreeningPaused(false)
       setCurrentView('screening')
       setViewVisible(true)
@@ -1260,6 +1276,7 @@ export default function InviteScreening() {
    *  call mux.play() every 200ms and cancel the user's pause). */
   useEffect(() => {
     if (currentView !== 'screening' || !film?.mux_playback_id) return
+    if (prologueHoldingPlayback) return
     if (showPostFilm) return
     if (isScreeningPaused) return
     if (desktopPassItOnActive) return
@@ -1284,7 +1301,7 @@ export default function InviteScreening() {
       cancelled = true
       window.clearInterval(id)
     }
-  }, [currentView, film?.mux_playback_id, token, tryScreeningPlay, showPostFilm, passItOnFromUserPause, isLgUp, isScreeningPaused, desktopPassItOnActive])
+  }, [currentView, film?.mux_playback_id, token, tryScreeningPlay, showPostFilm, passItOnFromUserPause, isLgUp, isScreeningPaused, desktopPassItOnActive, prologueHoldingPlayback])
 
 
   /* ================================================================ */
@@ -1535,7 +1552,7 @@ export default function InviteScreening() {
                     minResolution="1080p"
                     metadata={{ video_title: film.title }}
                     accentColor="#b1a180"
-                    autoPlay={!showPostFilm}
+                    autoPlay={!showPostFilm && !prologueHoldingPlayback}
                     autohide={-1}
                     startTime={Number(startTimeParam) || Number(safeLocalStorage.getItem(`screening_position_${token}`)) || 0}
                     onTimeUpdate={handleTimeUpdate}
