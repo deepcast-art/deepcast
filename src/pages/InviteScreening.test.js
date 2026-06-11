@@ -64,7 +64,7 @@ function passItOnContentVisible(s) {
 
 /** Derived: shouldStartWelcomePrologue */
 function shouldStartWelcomePrologue(s, directPlay = false) {
-  return directPlay ? false : s.status !== 'invalid' && s.status !== 'expired'
+  return directPlay ? false : s.status !== 'invalid'
 }
 
 /** Simulate: handleMuxPause */
@@ -130,9 +130,8 @@ describe('§0 Cold Start & Validate', () => {
     expect(shouldStartWelcomePrologue(s)).toBe(true)
   })
 
-  it('prologue blocked for invalid/expired', () => {
+  it('prologue blocked for invalid', () => {
     expect(shouldStartWelcomePrologue(createScreeningState({ status: 'invalid' }))).toBe(false)
-    expect(shouldStartWelcomePrologue(createScreeningState({ status: 'expired' }))).toBe(false)
   })
 
   it('prologue blocked when directPlay=true', () => {

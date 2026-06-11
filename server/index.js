@@ -7,6 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { buildGraphLayout } from '../src/lib/graphLayout.js'
 import { createEmailDispatcher } from './emailDelivery.js'
+import { isInviteUsable } from './inviteValidation.js'
 
 const app = express()
 app.use(cors())
@@ -69,15 +70,17 @@ const supabase = createClient(supabaseUrl, supabaseKey)
 const APP_URL = process.env.APP_URL || 'http://localhost:3000'
 
 /**
- * Film screening invite links expire after this many days (default 365).
- * New invites only — existing rows keep their stored expires_at unless you update them in SQL.
- * Set INVITE_EXPIRY_DAYS (e.g. 7 for tests). Capped at 3650 (~10y).
+ * expires_at stamped on new film invites (default 3650 days ≈ 10y). The value is
+ * informational only — invite links never expire in the MVP and nothing enforces
+ * this date (see server/inviteValidation.js). Far-future by default so that if
+ * expiration is reintroduced post-MVP, MVP-era links don't retroactively die.
+ * Set INVITE_EXPIRY_DAYS to override. Capped at 3650.
  */
 function getFilmInviteExpiryDays() {
   const raw = process.env.INVITE_EXPIRY_DAYS
-  if (raw == null || String(raw).trim() === '') return 365
+  if (raw == null || String(raw).trim() === '') return 3650
   const n = parseInt(String(raw), 10)
-  if (!Number.isFinite(n) || n <= 0) return 365
+  if (!Number.isFinite(n) || n <= 0) return 3650
   return Math.min(n, 3650)
 }
 
@@ -1984,24 +1987,8 @@ app.get('/api/invites/validate/:token', async (req, res) => {
       .eq('token', token)
       .single()
 
-    if (error || !inv) {
+    if (error || !isInviteUsable(inv)) {
       return res.status(404).json({ error: 'Invite not found' })
-    }
-
-    const skipExpiryCheck =
-      process.env.SKIP_INVITE_EXPIRY_CHECK === '1' ||
-      process.env.SKIP_INVITE_EXPIRY_CHECK === 'true'
-    /** When true, past expires_at returns 410. Default false so screening links stay usable long-term. */
-    const enforceExpiry =
-      process.env.INVITE_ENFORCE_EXPIRY === '1' ||
-      process.env.INVITE_ENFORCE_EXPIRY === 'true'
-    if (
-      enforceExpiry &&
-      !skipExpiryCheck &&
-      inv.expires_at &&
-      new Date(inv.expires_at) < new Date()
-    ) {
-      return res.status(410).json({ error: 'Invite expired' })
     }
 
     // All five follow-ups depend only on the invite row already loaded, so they run in parallel —

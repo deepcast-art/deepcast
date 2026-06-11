@@ -31,8 +31,9 @@ Click the eye icon next to each value to reveal it. You will copy these to the n
 | `APP_URL` | Public website address used inside emails | Your production site origin (e.g. `https://deepcast.art`) — copy exactly what the old service has |
 | `INVITE_CTX_SECRET` | Encrypts names in invite links | Copy from old service — must match the `VITE_INVITE_CTX_SECRET` set in Vercel |
 
-Optional — copy **only if they exist** on the old service: `INVITE_ENFORCE_EXPIRY`,
-`SKIP_INVITE_EXPIRY_CHECK`, `INVITE_EXPIRY_DAYS`, `SUPABASE_ANON_KEY`.
+Optional — copy **only if they exist** on the old service: `INVITE_EXPIRY_DAYS`,
+`SUPABASE_ANON_KEY`. (`INVITE_ENFORCE_EXPIRY` and `SKIP_INVITE_EXPIRY_CHECK` are obsolete —
+invite links never expire in the MVP; leave them out.)
 
 Do **not** set `PORT` — Render provides it automatically.
 

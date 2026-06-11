@@ -86,6 +86,7 @@ npm test                 # Unit + E2E
 
 ## Standing product rules
 
+- **Invite links do not expire in the MVP.** The server never rejects a film invite on `expires_at` — the single gate for invite usability is `isInviteUsable` in `server/inviteValidation.js` (unit-tested with past-dated rows) — and the frontend has no "expired" state, copy, or 410 handling anywhere. The `invites.expires_at` column is retained and still written (far-future, default 3650 days via `INVITE_EXPIRY_DAYS`) so expiration can be reintroduced post-MVP; reintroducing it is a deliberate product decision to be made in that one function, updating its tests and `e2e/invite-never-expires.spec.js`. (Team-invite links — teammate account creation — are a separate feature and still expire after 14 days; Supabase magic sign-in links also expire shortly. Both are auth links, not invite links.)
 - **Personal notes are MANDATORY and never hidden.** Wherever sharing happens — the share prompt, the dashboard invite form, any future surface — every recipient shows a visible personal-note field by default, for normal and unlimited users alike, and a send is refused (with a gentle inline message) if any recipient's note is empty or whitespace-only. Never label the note "optional", and never collapse it behind a link, icon, or toggle; the note is the gift, not the link.
 - **Every recipient is an identical letter block.** On the share prompt, each recipient renders as the same full letter — "Dear [First Name]," + the note-writing area + "Deliver To [email]" — with a subtle brand divider between consecutive letters. No compact/abbreviated rows for added recipients.
 - **User-facing naming is first-name-only, and labeled as such wherever it appears.** Users edit only their first name; every label, placeholder, and helper around it must say "first name" explicitly (dashboard: "Edit your first name" → a "First name" field with the helper "This is how your name appears on the network."). Saving propagates to the profile, sent-invite sender labels, and received-invite recipient labels (graph nodes) — see `handleSaveName` in `Dashboard.jsx`.
@@ -125,6 +126,10 @@ npm test                 # Unit + E2E
 - `server/index.js` shares utility code from `src/lib/` (e.g., `httpsUrl.js`, `graphLayout.js`).
 - Supabase migrations are in `supabase/migrations/` — apply in order.
 - Landing page is currently disabled (Login is the home page at `/`).
+
+## Known limitations (MVP)
+
+- **Safari private-browsing playback may still skip to the post-film screen.** All storage-related causes are fixed (everything goes through `safeStorage`, with unit + e2e coverage); the remaining suspect is Safari's private-mode autoplay policy. Deprioritized for MVP — revisit only if real viewers report it.
 
 ## Dashboard behaviour (viewer role)
 

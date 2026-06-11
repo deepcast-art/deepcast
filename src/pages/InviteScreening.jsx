@@ -426,7 +426,6 @@ export default function InviteScreening() {
         return
       } catch (err) {
         const msg = String(err?.message || '')
-        if (msg === 'expired') { clearInviteValidateCache(token); setStatus('expired'); return }
         // Retryable: network failures, aborted requests (timeout), and server-side 502/503
         const isRetryable =
           /failed to fetch|networkerror|load failed|network request failed/i.test(msg) ||
@@ -561,7 +560,7 @@ export default function InviteScreening() {
   const shouldStartWelcomePrologue =
     directPlay || showShareIntent
       ? false
-      : status !== 'invalid' && status !== 'expired'
+      : status !== 'invalid'
 
   /** Names are ready once we have real sender/recipient names from ?ctx= decrypt OR the API response.
    *  When ?ctx= is present, we first try the local decrypt (~1ms). If that fails (e.g. missing env var),
@@ -576,7 +575,7 @@ export default function InviteScreening() {
     // have — real or fallback — are final and won't change, so a legitimately empty name
     // ('for you' / 'someone who chose you') still lets the prologue appear, never hangs.
     const apiSettled =
-      status === 'valid' || status === 'invalid' || status === 'expired' || status === 'network'
+      status === 'valid' || status === 'invalid' || status === 'network'
     // Reveal only when BOTH displayed names are final. A name is final when it has a real
     // value OR all its sources (ctx decrypt + API) have resolved. Using AND (not the old
     // OR) means a ctx that supplies only ONE name no longer reveals the other's fallback
@@ -645,7 +644,7 @@ export default function InviteScreening() {
   }, [prologueTextsDone])
 
   useEffect(() => {
-    if (status === 'invalid' || status === 'expired') {
+    if (status === 'invalid') {
       prologueWelcomeStartedRef.current = false
       prologueDismissedRef.current = false
       setPrologueTextsDone(false)
@@ -1311,16 +1310,14 @@ export default function InviteScreening() {
     )
   }
 
-  if (status === 'invalid' || status === 'expired') {
+  if (status === 'invalid') {
     return (
       <div className="fixed inset-0 flex flex-col items-center justify-center px-6 text-center bg-[#080c18] text-[#dddddd]">
         <h1 className="font-body font-light text-2xl md:text-4xl mb-6 tracking-tight">
           This screening is no longer available.
         </h1>
         <p className="font-body font-light text-sm text-[#dddddd]/55 max-w-sm mx-auto">
-          {status === 'expired'
-            ? 'This invitation has expired. Ask the sender for a new one.'
-            : 'This invitation link is not valid. Confirm the token exists in your database (invites.token) and matches this environment.'}
+          This invitation link is not valid. Confirm the token exists in your database (invites.token) and matches this environment.
         </p>
       </div>
     )

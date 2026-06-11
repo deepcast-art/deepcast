@@ -56,7 +56,6 @@ export const api = {
     const enc = encodeURIComponent(token)
     const res = await fetchWithTimeout(`${API_BASE}/invites/validate/${enc}`)
     if (res.ok) return res.json()
-    if (res.status === 410) throw new Error('expired')
     if (res.status === 404) throw new Error('invalid')
     if (res.status === 502 || res.status === 503) throw new Error('server_unavailable')
     const error = await res.json().catch(() => ({ error: 'Request failed' }))

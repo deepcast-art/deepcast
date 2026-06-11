@@ -37,7 +37,8 @@ const TARGET_EMAILS = [
 
 const PROTECTED_EMAILS = ['filmmaker@gmail.com']
 const FILM_TITLE = 'The New Narrative'
-const INVITE_EXPIRY_DAYS = 365
+// Informational only — invite links never expire in the MVP (see server/inviteValidation.js).
+const INVITE_EXPIRY_DAYS = 3650
 
 const DRY_RUN = process.argv.includes('--dry-run')
 const BASE_URL = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '')
