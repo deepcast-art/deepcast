@@ -732,7 +732,7 @@ export default function Dashboard() {
                 </span>
                 <span
                   role="tooltip"
-                  className="pointer-events-none absolute bottom-full left-0 z-20 mb-2 w-60 border border-faint/40 bg-[#05070a] px-3 py-2 text-[10px] font-normal normal-case leading-relaxed tracking-normal text-warm/80 opacity-0 shadow-lg transition-opacity duration-200 group-hover:opacity-100"
+                  className="pointer-events-none absolute bottom-full left-0 z-20 mb-2 w-60 border border-faint/40 bg-[#05070a] px-3 py-2 text-sm font-normal normal-case leading-relaxed tracking-normal text-warm/80 opacity-0 shadow-lg transition-opacity duration-200 group-hover:opacity-100"
                 >
                   Everyone who&apos;s opened an invite because of you — the people you shared with, plus everyone they passed it on to.
                 </span>
