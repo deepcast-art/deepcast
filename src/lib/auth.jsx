@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useRef } from 'react'
 import { supabase } from './supabase'
 import { api } from './api'
 import { clearAllInviteValidateCaches } from './inviteValidateCache'
+import { safeLocalStorage } from './safeStorage'
 
 const AuthContext = createContext(null)
 
@@ -66,7 +67,7 @@ export function AuthProvider({ children }) {
     try {
       let accessToken = token
       if (!accessToken) {
-        const stored = localStorage.getItem('sb-wmtjgpxhjtbocsmutqqc-auth-token')
+        const stored = safeLocalStorage.getItem('sb-wmtjgpxhjtbocsmutqqc-auth-token')
         if (stored) {
           try { accessToken = JSON.parse(stored)?.access_token } catch { /* ignore */ }
         }

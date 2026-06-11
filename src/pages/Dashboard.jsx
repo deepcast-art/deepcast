@@ -18,6 +18,7 @@ import {
 // Canonical share quota + per-film stats — same single-source rule as reach.
 import { invitationsRemaining } from '../lib/shares.js'
 import { computeFilmStats } from '../lib/filmStats.js'
+import { safeLocalStorage, safeSessionStorage } from '../lib/safeStorage.js'
 
 /** Sent-invitations list renders in pages so an unlimited sharer with hundreds of
  *  shares can see them ALL without slowing the dashboard down. Normal users never
@@ -60,21 +61,19 @@ export default function Dashboard() {
   const [teamInvites, setTeamInvites] = useState([])
   const [teamMembers, setTeamMembers] = useState([])
   const [teamRemoveBusyId, setTeamRemoveBusyId] = useState(null)
-  const [sidebarOpen, setSidebarOpen] = useState(() => {
-    try { return sessionStorage.getItem('dash_creator_sidebar') === 'true' } catch { return false }
-  })
+  const [sidebarOpen, setSidebarOpen] = useState(
+    () => safeSessionStorage.getItem('dash_creator_sidebar') === 'true'
+  )
   const [viewerSidebarOpen, setViewerSidebarOpen] = useState(() => {
-    try {
-      const stored = sessionStorage.getItem('dash_viewer_sidebar')
-      return stored === null ? true : stored === 'true'
-    } catch { return true }
+    const stored = safeSessionStorage.getItem('dash_viewer_sidebar')
+    return stored === null ? true : stored === 'true'
   })
 
   const [newestInviteId, setNewestInviteId] = useState(null)
   const [allViewerSentInvites, setAllViewerSentInvites] = useState([])
-  const [viewerFilmId, setViewerFilmId] = useState(() => {
-    try { return sessionStorage.getItem('dash_viewer_film_id') || null } catch { return null }
-  })
+  const [viewerFilmId, setViewerFilmId] = useState(
+    () => safeSessionStorage.getItem('dash_viewer_film_id') || null
+  )
   const [viewerFilmTitle, setViewerFilmTitle] = useState('')
   const [viewerFilmCreatorId, setViewerFilmCreatorId] = useState(null)
   const [viewerInviteToken, setViewerInviteToken] = useState(null)
@@ -167,7 +166,7 @@ export default function Dashboard() {
   const selectViewerFilm = useCallback(async (filmId) => {
     if (!filmId) {
       setViewerFilmId(null)
-      try { sessionStorage.removeItem('dash_viewer_film_id') } catch {}
+      safeSessionStorage.removeItem('dash_viewer_film_id')
       setViewerFilmTitle('')
       setViewerFilmInvites([])
       setViewerCreatorName('')
@@ -177,7 +176,7 @@ export default function Dashboard() {
     }
 
     setViewerFilmId(filmId)
-    try { sessionStorage.setItem('dash_viewer_film_id', filmId) } catch {}
+    safeSessionStorage.setItem('dash_viewer_film_id', filmId)
 
     // Film row and the film's invites are independent — fetch together. Round trips from the
     // browser to the database are the cost here, not the queries themselves.
@@ -279,7 +278,7 @@ export default function Dashboard() {
         knownCreatorId = filmsMap.get(filmId)?.creator_id || null
 
         setViewerInviteToken(
-          tokenByFilmId[filmId] || uniqueRecvd[0]?.token || localStorage.getItem('viewer_invite_token') || null
+          tokenByFilmId[filmId] || uniqueRecvd[0]?.token || safeLocalStorage.getItem('viewer_invite_token') || null
         )
       }
     }
@@ -292,7 +291,7 @@ export default function Dashboard() {
     }
 
     setViewerFilmId(filmId)
-    try { sessionStorage.setItem('dash_viewer_film_id', filmId) } catch {}
+    safeSessionStorage.setItem('dash_viewer_film_id', filmId)
 
     // Selected film's row, its invites, and (when the creator is already known
     // from the received-films query) the creator's name are independent — fetch
@@ -463,11 +462,11 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => {
-    try { sessionStorage.setItem('dash_creator_sidebar', sidebarOpen ? 'true' : 'false') } catch {}
+    safeSessionStorage.setItem('dash_creator_sidebar', sidebarOpen ? 'true' : 'false')
   }, [sidebarOpen])
 
   useEffect(() => {
-    try { sessionStorage.setItem('dash_viewer_sidebar', viewerSidebarOpen ? 'true' : 'false') } catch {}
+    safeSessionStorage.setItem('dash_viewer_sidebar', viewerSidebarOpen ? 'true' : 'false')
   }, [viewerSidebarOpen])
 
   if (!profileLoaded || !profile) return null
@@ -905,13 +904,13 @@ export default function Dashboard() {
                         </div>
                         <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:ml-auto">
                           {film.token && (() => {
-                            const savedPos = localStorage.getItem(`screening_position_${film.token}`)
+                            const savedPos = safeLocalStorage.getItem(`screening_position_${film.token}`)
                             const resume = savedPos && parseInt(savedPos, 10) > 0
                             return (
                               <button
                                 type="button"
                                 onClick={() => {
-                                  const n = parseInt(localStorage.getItem(`screening_position_${film.token}`) || '0', 10)
+                                  const n = parseInt(safeLocalStorage.getItem(`screening_position_${film.token}`) || '0', 10)
                                   navigate(n > 0 ? `/i/${film.token}?play=1&t=${n}` : `/i/${film.token}?play=1`)
                                 }}
                                 className="flex items-center gap-1.5 border border-warm/20 px-4 py-2 font-sans text-[10px] uppercase tracking-[0.25em] text-warm/60 transition-colors hover:border-warm/40 hover:text-warm"

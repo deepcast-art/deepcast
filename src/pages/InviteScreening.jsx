@@ -25,6 +25,7 @@ import MobilePassItOn from './screening/MobilePassItOn'
 import DesktopPassItOn from './screening/DesktopPassItOn'
 // Canonical share quota (src/lib/shares.js) — single source for "invitations remaining".
 import { isUnlimitedSharer as profileIsUnlimitedSharer, invitationsRemaining } from '../lib/shares'
+import { safeLocalStorage } from '../lib/safeStorage'
 import './screening-room.css'
 
 const VIEWER_SHARE_LIMIT = 5
@@ -801,7 +802,7 @@ export default function InviteScreening() {
       // position and navigate back to /dashboard instead of showing pass-it-on.
       if (user?.id && directPlay) {
         if (token && currentTime > 0) {
-          localStorage.setItem(`screening_position_${token}`, String(Math.floor(currentTime)))
+          safeLocalStorage.setItem(`screening_position_${token}`, String(Math.floor(currentTime)))
         }
         navigate('/dashboard', { replace: true, state: { screeningToken: token } })
         return
@@ -991,7 +992,7 @@ export default function InviteScreening() {
     const pct = Math.round((p.currentTime / p.duration) * 100)
 
     // Persist playback position so the user can resume later
-    if (token) localStorage.setItem(`screening_position_${token}`, Math.floor(p.currentTime))
+    if (token) safeLocalStorage.setItem(`screening_position_${token}`, Math.floor(p.currentTime))
 
     if (pct >= 70 && !hasMarkedWatched.current) {
       hasMarkedWatched.current = true
@@ -1046,10 +1047,10 @@ export default function InviteScreening() {
         .eq('id', sessionId)
 
     // Clear stored position so "watch again" always starts from the beginning
-    if (token) localStorage.removeItem(`screening_position_${token}`)
+    if (token) safeLocalStorage.removeItem(`screening_position_${token}`)
 
     if (user?.id) {
-      if (token) localStorage.setItem('viewer_invite_token', token)
+      if (token) safeLocalStorage.setItem('viewer_invite_token', token)
       if (sessionId) {
         supabase
           .from('watch_sessions')
@@ -1203,12 +1204,12 @@ export default function InviteScreening() {
           }
         }
 
-        if (token) localStorage.setItem('viewer_invite_token', token)
+        if (token) safeLocalStorage.setItem('viewer_invite_token', token)
 
         // Snapshot current playback position so dashboard can offer "Resume"
         const muxEl = document.querySelector('mux-player')
         if (token && muxEl && muxEl.currentTime > 0 && !showPostFilm) {
-          localStorage.setItem(`screening_position_${token}`, Math.floor(muxEl.currentTime))
+          safeLocalStorage.setItem(`screening_position_${token}`, Math.floor(muxEl.currentTime))
         }
       }
 
@@ -1538,7 +1539,7 @@ export default function InviteScreening() {
                     accentColor="#b1a180"
                     autoPlay={!showPostFilm}
                     autohide={-1}
-                    startTime={Number(startTimeParam) || Number(localStorage.getItem(`screening_position_${token}`)) || 0}
+                    startTime={Number(startTimeParam) || Number(safeLocalStorage.getItem(`screening_position_${token}`)) || 0}
                     onTimeUpdate={handleTimeUpdate}
                     onEnded={handleEnded}
                     onCanPlay={handleMuxScreeningCanPlay}

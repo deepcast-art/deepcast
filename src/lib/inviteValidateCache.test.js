@@ -67,10 +67,15 @@ describe('inviteValidateCache', () => {
     expect(sessionStorage.getItem('unrelated')).toBe('keep-me')
   })
 
-  it('is inert when sessionStorage is unavailable (no throw)', () => {
+  it('falls back to in-memory storage when sessionStorage is unavailable (never throws)', () => {
+    // safeStorage keeps the cache working in memory when storage is restricted
+    // (Safari private mode), so Instant Resume still works within the page's lifetime.
     delete globalThis.sessionStorage
     expect(() => writeInviteValidateCache('tok1', payload)).not.toThrow()
-    expect(readInviteValidateCache('tok1')).toBeNull()
+    const cached = readInviteValidateCache('tok1')
+    expect(cached?.invite?.id).toBe('inv-1')
+    expect(cached?.sessionId).toBeUndefined()
     expect(() => clearAllInviteValidateCaches()).not.toThrow()
+    expect(readInviteValidateCache('tok1')).toBeNull()
   })
 })

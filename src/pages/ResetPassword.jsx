@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import DeepcastLogo from '../components/DeepcastLogo'
+import { safeLocalStorage } from '../lib/safeStorage'
 
 function formatResetRequestError(err) {
   const msg = (err?.message || '').trim()
@@ -29,7 +30,7 @@ export default function ResetPassword() {
 
   useEffect(() => {
     const stored =
-      localStorage.getItem('deepcast:last_email') || localStorage.getItem('seen:last_email')
+      safeLocalStorage.getItem('deepcast:last_email') || safeLocalStorage.getItem('seen:last_email')
     if (stored && !email) setEmail(stored)
   }, [])
 

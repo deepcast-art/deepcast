@@ -3,6 +3,7 @@ import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { checkEmail } from '../lib/emailCheck'
 import DeepcastLogo from '../components/DeepcastLogo'
+import { safeLocalStorage } from '../lib/safeStorage'
 
 export default function Login() {
   const [searchParams] = useSearchParams()
@@ -28,7 +29,7 @@ export default function Login() {
     if (email) return
     const paramEmail = searchParams.get('email')
     const storedEmail =
-      localStorage.getItem('deepcast:last_email') || localStorage.getItem('seen:last_email')
+      safeLocalStorage.getItem('deepcast:last_email') || safeLocalStorage.getItem('seen:last_email')
     const prefill = paramEmail || storedEmail
     if (prefill) setEmail(prefill)
   }, [email, searchParams])
@@ -44,7 +45,7 @@ export default function Login() {
     }
     setLinkSending(true)
     try {
-      localStorage.setItem('deepcast:last_email', normalized)
+      safeLocalStorage.setItem('deepcast:last_email', normalized)
       await sendSignInLink(normalized, '/dashboard')
       setLinkSent(true)
     } catch (err) {
@@ -60,7 +61,7 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
-      if (email) localStorage.setItem('deepcast:last_email', email)
+      if (email) safeLocalStorage.setItem('deepcast:last_email', email)
       const result = await signIn(email, password)
       const role = result?.profile?.role
       window.location.href =

@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import DeepcastLogo from '../components/DeepcastLogo'
+import { safeLocalStorage } from '../lib/safeStorage'
 
 export default function TeamJoin() {
   const [searchParams] = useSearchParams()
@@ -52,7 +53,7 @@ export default function TeamJoin() {
         password,
       })
       if (signErr) throw signErr
-      if (info.email) localStorage.setItem('deepcast:last_email', info.email)
+      if (info.email) safeLocalStorage.setItem('deepcast:last_email', info.email)
       navigate('/dashboard', { replace: true })
     } catch (err) {
       setError(err.message || 'Could not complete registration.')
