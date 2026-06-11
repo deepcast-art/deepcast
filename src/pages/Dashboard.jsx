@@ -762,6 +762,12 @@ export default function Dashboard() {
                 Share this film
               </button>
             )}
+            <Link
+              to="/about"
+              className="text-left font-sans text-[10px] uppercase tracking-[0.22em] text-warm/35 transition-colors hover:text-warm/70"
+            >
+              About
+            </Link>
             {!editingName ? (
               <button
                 type="button"
@@ -1230,6 +1236,9 @@ export default function Dashboard() {
               Upload film
             </Link>
           )}
+          <Link className="text-warm/40 transition-colors hover:text-warm" to="/about">
+            About
+          </Link>
           <button
             type="button"
             onClick={() => signOut()}

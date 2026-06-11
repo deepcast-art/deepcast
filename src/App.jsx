@@ -13,6 +13,7 @@ const NetworkMap = lazy(() => import('./pages/NetworkMap.jsx'))
 const TeamJoin = lazy(() => import('./pages/TeamJoin.jsx'))
 const Unsubscribe = lazy(() => import('./pages/Unsubscribe.jsx'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword.jsx'))
+const About = lazy(() => import('./pages/About.jsx'))
 
 function RouteFallback({ inverse = false }) {
   return (
@@ -203,6 +204,17 @@ export default function App() {
           <ProtectedRoute>
             <Suspense fallback={<RouteFallback />}>
               <Profile />
+            </Suspense>
+          </ProtectedRoute>
+        }
+      />
+      {/* Open to every logged-in user, any role — intentionally NOT wrapped in ViewerShareGate. */}
+      <Route
+        path="/about"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={<RouteFallback />}>
+              <About />
             </Suspense>
           </ProtectedRoute>
         }
