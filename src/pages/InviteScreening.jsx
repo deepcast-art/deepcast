@@ -1532,6 +1532,7 @@ export default function InviteScreening() {
                     ref={muxPlayerRef}
                     streamType="on-demand"
                     playbackId={film.mux_playback_id}
+                    minResolution="1080p"
                     metadata={{ video_title: film.title }}
                     accentColor="#b1a180"
                     autoPlay={!showPostFilm}
