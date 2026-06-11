@@ -53,14 +53,16 @@ npm test                 # Unit + E2E
 ## Testing
 
 - **Unit tests:** `*.test.js` colocated with modules, uses Vitest. Run with `npm run test:unit`.
-- **E2E tests:** `e2e/*.spec.js`, uses Playwright (Chromium). Run with `npm run test:e2e`.
-  - If the headless-shell download stalls on this machine, use the full-Chromium fallback: `npx playwright test --config playwright.local.config.js` (local-only file, not committed).
+- **E2E tests:** `e2e/*.spec.js`, uses Playwright on **all three browser engines** — chromium, webkit (Safari), firefox. Run with `npm run test:e2e`.
+  - **Every commit that touches user-facing flows must have a green e2e run on all three engines** (or on every engine that can be installed, with the gap named in the final report).
+  - **Playwright's browser installer hangs on this machine** (downloads reach 100%, then its extractor stalls at ~15 MB — do NOT keep retrying `npx playwright install`). Manual install works instantly: download the build zip with `curl` from `https://cdn.playwright.dev` (paths/revisions in `node_modules/playwright-core/browsers.json` + `lib/server/registry/index.js`), `unzip` it into `~/Library/Caches/ms-playwright/<browser>-<revision>/`, then `touch INSTALLATION_COMPLETE` in that directory. Also beware: a partial `npx playwright install` run may garbage-collect existing browser builds it thinks are stale.
+  - `npx playwright test --config playwright.local.config.js` (local-only file, not committed) is the fallback that launches full Chromium instead of headless-shell.
 - Build includes unit tests: `npm run build` runs `vitest run && vite build`.
 - Local dev: Vite on port **3000**, Express API on port **3001** (Vite proxies `/api/*` to 3001). `npm run dev` starts both.
 - **Fresh manual-test links:** `node server/reset-test-data.js` (dry-run first with `--dry-run`) deletes ONLY the allowlisted test emails' data and mints five fresh, unopened filmmaker invites — one per allowlisted email. These are the five standard scenarios used to manually walk the invite → watch → pass-it-on → dashboard journey from five separate identities (including the already-signed-in relink case and the R5 no-relink case).
 - **Email rendering:** `node server/preview-email.js` writes `server/email-preview.html` to inspect the invite email without sending anything.
 - **Read-only database inspection:** ALL read-only inspection (checking, comparing, verifying data) must go through `node server/db-read.js "select ..."` — never the Supabase MCP connection — so the owner is only ever prompted for genuine database WRITES. The script rejects anything that isn't a single SELECT / WITH...SELECT at the code level (tested in `server/db-read.test.js`), and the backing `db_read` Postgres function runs in a READ ONLY transaction as a second layer.
-- Setup for new clone: `npm install && npx playwright install chromium`.
+- Setup for new clone: `npm install && npx playwright install chromium webkit firefox` (on this machine, use the manual curl+unzip install above instead).
 
 ## Standing doctrine (every session)
 
@@ -72,6 +74,8 @@ npm test                 # Unit + E2E
 - **Prefer single simple commands** over compound shell chains (`;`, `&&`, `|`) when feasible, so permission prompts stay rare.
 - **Prefer allowlisted read-only routes over approval-prompting tools.** For any read-only action use what's already allowed: `node server/db-read.js` for database reads, `grep`/`cat`/`git diff` for code, `npx eslint` for lint, and the allowlisted read-only MCP tools (Supabase/Vercel `list_*`/`get_*`/`search_docs` in `.claude/settings.local.json`) for infra inspection. Never reach for a tool that can write when a read-only route answers the question.
 - **Pre-existing lint never blocks work.** Verify a lint issue pre-dates your changes (e.g. lint the file at HEAD), report it in the final summary, and move on — fix it only if asked.
+- **All browser storage access goes through `src/lib/safeStorage.js`** (`safeLocalStorage` / `safeSessionStorage`) — never raw `localStorage`/`sessionStorage` calls, never at module scope, in render, or mid-handler. Safari can block storage entirely (SecurityError on access) or fail every write (private-mode QuotaExceededError); the helper feature-detects per call and falls back to in-memory state for the visit, so a storage failure can never crash a screen or change what the user sees.
+- **New code that touches storage must include a restricted-storage test:** unit coverage against the missing / access-throws / write-throws modes (see `src/lib/safeStorage.test.js`) and, for user-visible flows, an e2e case in `e2e/storage-restricted.spec.js` (which runs both Safari restriction modes on all three engines).
 
 ## Email-sending doctrine
 
