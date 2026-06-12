@@ -4,6 +4,14 @@
 
 Deepcast is an invite-based social network for sharing films through word of mouth. Users receive screening invites, watch films, and pass invitations along to others, forming a network graph.
 
+## ⚠️ PRODUCTION HAS REAL USERS (June 2026)
+
+**The database is no longer disposable.** Trace Bell (`contact@tracebelll.com`) is a real user — he must NEVER be deleted or modified destructively by any cleanup, reset, or migration, in any table. The filmmaker account (`filmmaker@gmail.com`) was always protected; Trace now is too.
+
+- `server/reset-test-data.js` enforces this in code: real users live in its `PROTECTED_EMAILS` list and the script refuses to run if its allowlist ever includes one. **Every future data script must follow the same pattern** — explicit allowlists only (never pattern matches), real users in a hard-refusal guard, dry-run by default.
+- Before ANY production deletion: SELECT and show the owner the exact rows first. No exceptions.
+- The 50 seeded demo graph nodes (invites with `recipient_email LIKE '%@demo.invalid'`) are intentional and stay.
+
 ## Platform principles (use these when writing any user-facing copy or making product decisions)
 
 - Deepcast is private, human-to-human film sharing. No algorithms, no feed, no AI curation. Films travel person to person, by invitation only — "the modern-day version of storytelling around the fire."
@@ -96,6 +104,12 @@ npm test                 # Unit + E2E
 - **All browser storage access goes through `src/lib/safeStorage.js`** (`safeLocalStorage` / `safeSessionStorage`) — never raw `localStorage`/`sessionStorage` calls, never at module scope, in render, or mid-handler. Safari can block storage entirely (SecurityError on access) or fail every write (private-mode QuotaExceededError); the helper feature-detects per call and falls back to in-memory state for the visit, so a storage failure can never crash a screen or change what the user sees.
 - **New code that touches storage must include a restricted-storage test:** unit coverage against the missing / access-throws / write-throws modes (see `src/lib/safeStorage.test.js`) and, for user-visible flows, an e2e case in `e2e/storage-restricted.spec.js` (which runs both Safari restriction modes on all three engines).
 
+## Security doctrine — privileged endpoints
+
+- **The verified-session pattern is REQUIRED for every privileged endpoint:** read the `Authorization: Bearer` token, verify it cryptographically with `supabase.auth.getUser(jwt)`, and take the caller's identity ONLY from the verified token. **Never trust a client-sent user/creator ID** — that was the old `/api/team/remove-member` hole, closed June 2026. Reference implementations: `/api/invites/relink`, `/api/team/remove-member`, and the `/api/admin/*` endpoints.
+- Authorization decisions live in small unit-tested modules (`server/adminAuth.js`, `server/teamRules.js`) so every rejection path has a test.
+- **Owner-only admin endpoints** (`/api/admin/unlimited-shares` + `/status`) are pinned to the `ADMIN_USER_ID` env var — an exact user-ID match against Ien's account, NOT a role check (a hypothetical second creator must be rejected; role is belt-and-suspenders only). They **fail closed**: when `ADMIN_USER_ID` is unset, everyone gets 503, including a valid creator session. The variable must be set in Render's environment and local `.env`.
+
 ## Email-sending doctrine
 
 - **Every outgoing email goes through the one dispatcher** (`deliverEmail` in `server/index.js`, built on `server/emailDelivery.js`): sends are strictly sequential and throttled below Resend's rate limit, and each send is automatically retried with backoff before giving up. Never call Resend directly from a route.
@@ -105,6 +119,8 @@ npm test                 # Unit + E2E
 
 ## Standing product rules
 
+- **`users.unlimited_shares` is the ONLY mechanism for per-user unlimited shares — and it is quota-only by design.** It removes the share cap (no allocation check, no decrement, every quota UI shows "unlimited" via `isUnlimitedSharer`) while changing NOTHING else: same viewer role, same dashboard, same ViewerShareGate, and the user's sent invites still record `parent_invite_id`. **NEVER use `team_creator_id` to grant quota** — team linkage suppresses parent-link recording on sends (part of the phantom-node fix), which silently breaks the word-of-mouth chain, reach stats, and the graph for that user. Grant/revoke happens through the owner-only admin toggle on the creator dashboard's invite chain (revoke = back to the standard allocation).
+- **Invites to the film creator's email are refused server-side — by design; don't "fix" it.** The rule lives in `server/shareRules.js` and runs in `/api/invites/send` before anything is written or emailed. The message is predicate-style because both share forms render failures as "<first name> <reason>".
 - **Invite links do not expire in the MVP.** The server never rejects a film invite on `expires_at` — the single gate for invite usability is `isInviteUsable` in `server/inviteValidation.js` (unit-tested with past-dated rows) — and the frontend has no "expired" state, copy, or 410 handling anywhere. The `invites.expires_at` column is retained and still written (far-future, default 3650 days via `INVITE_EXPIRY_DAYS`) so expiration can be reintroduced post-MVP; reintroducing it is a deliberate product decision to be made in that one function, updating its tests and `e2e/invite-never-expires.spec.js`. (Team-invite links — teammate account creation — are a separate feature and still expire after 14 days; Supabase magic sign-in links also expire shortly. Both are auth links, not invite links.)
 - **Personal notes are MANDATORY and never hidden.** Wherever sharing happens — the share prompt, the dashboard invite form, any future surface — every recipient shows a visible personal-note field by default, for normal and unlimited users alike, and a send is refused (with a gentle inline message) if any recipient's note is empty or whitespace-only. Never label the note "optional", and never collapse it behind a link, icon, or toggle; the note is the gift, not the link.
 - **Every recipient is an identical letter block.** On the share prompt, each recipient renders as the same full letter — "Dear [First Name]," + the note-writing area + "Deliver To [email]" — with a subtle brand divider between consecutive letters. No compact/abbreviated rows for added recipients.
@@ -123,7 +139,7 @@ npm test                 # Unit + E2E
 **Standing rule:** every number displayed anywhere in the app must have exactly ONE shared, unit-tested computation in `src/lib/` used by every surface that shows it. Never write an inline calculation in a page component; two paths for one stat is exactly the class of bug these modules exist to prevent.
 
 - **Reach** (`src/lib/reach.js`): a user's reach = the number of people in their downstream branch who have **OPENED** their invite (status `opened` / `watched` / `signed_up`) — *not* merely received one. Use `computeUserReach`, `reachBelowInvite`, `isInviteOpened`. Shown as "People you've reached" / per-invitee "People they've reached" on the dashboard.
-- **Invitations remaining** (`src/lib/shares.js`): the server-enforced `users.invite_allocation` (decremented by one on every successful send), never below zero; **Infinity** for unlimited sharers. `isUnlimitedSharer(profile)` = creator, team member, or team-linked viewer — the exact rule `/api/invites/send` enforces. Use `invitationsRemaining(profile)` everywhere ("Shares left" on the dashboard, the share-prompt label, the Profile invites stat, `InviteForm`'s `maxInvites` prop). Never hardcode a cap (the old `min(5, allocation)` bug). `InviteForm` freezes the quota at mount and subtracts its own session sends, so a parent refetching the profile can't double-count.
+- **Invitations remaining** (`src/lib/shares.js`): the server-enforced `users.invite_allocation` (decremented by one on every successful send), never below zero; **Infinity** for unlimited sharers. `isUnlimitedSharer(profile)` = creator, team member, team-linked viewer, or `unlimited_shares === true` — the exact rule `/api/invites/send` enforces. Use `invitationsRemaining(profile)` everywhere ("Shares left" on the dashboard, the share-prompt label, the Profile invites stat, `InviteForm`'s `maxInvites` prop). Never hardcode a cap (the old `min(5, allocation)` bug). `InviteForm` freezes the quota at mount and subtracts its own session sends, so a parent refetching the profile can't double-count.
 - **Per-film invite stats** (`src/lib/filmStats.js`): `computeFilmStats(invites)` → `sent` (all invites), `opened` (`opened`/`watched`/`signed_up` — shares the status list with reach), `watched` (`watched`/`signed_up`), `signedUp` (`signed_up`). Statuses are cumulative. Used by the creator dashboard's Invited/Opened/Watched/Signed-up panel and the network map's "N watched".
 - **Shares used** (dashboard) = the viewer's sent-invite rows for the selected film (list length — counts the same rows the sent-list shows). **Films / N invites / Show more (N remaining)** are plain lengths of the displayed lists themselves.
 
@@ -152,16 +168,22 @@ npm test                 # Unit + E2E
 - `server/index.js` shares utility code from `src/lib/` (e.g., `httpsUrl.js`, `graphLayout.js`).
 - Supabase migrations are in `supabase/migrations/` — apply in order.
 - Landing page is currently disabled (Login is the home page at `/`).
+- **The MVP version label has exactly two definitions:** the shared `MvpVersionLabel` component (`src/components/MvpVersionLabel.jsx` — used on the landing page, both dashboard views, and the network map) and the "© deepcast — MVP v1.0" email footer line (invite email HTML + plain text, sign-in email, and `server/preview-email.js`). When the version changes, update the component and the footers — nowhere else.
+- A used/expired magic link is captured at boot (`src/lib/authLinkError.js`, called from `main.jsx` before any redirect strips the URL hash) and explained on the login page — never a silent bare login form.
 
-## Known limitations (MVP)
+## Known limitations (MVP) & deferred work
 
 - **Safari private-browsing playback may still skip to the post-film screen.** All storage-related causes are fixed (everything goes through `safeStorage`, with unit + e2e coverage); the remaining suspect is Safari's private-mode autoplay policy. Deprioritized for MVP — revisit only if real viewers report it.
+- **`NetworkMap.jsx` has 5 React Compiler lint errors hidden behind its declaration-order error.** Fixing the visible "Cannot access variable before it is declared" un-bails the compiler and surfaces setState-in-effect and memoization issues that require restructuring the component's effects. This needs its own task with testing — it is NOT a lint-only fix; do not paper over it with suppressions.
+- **Render region migration** (API is far from the Seoul-based owner and the us-east-1 DB) — runbook in `docs/render-migration-runbook.md`; awaiting an owner decision.
+- **Invite expiry** is deliberately disabled (see Standing product rules); reintroducing it post-MVP is a one-function decision in `server/inviteValidation.js`.
 
 ## Dashboard behaviour (viewer role)
 
 ### Resume & return flow
 - The "Resume / Watch again" button on each film card uses React Router `navigate()` — not `window.location.href` — so the SPA stays alive and auth state is preserved.
 - When a logged-in viewer pauses the screening (`?play=1` flow), `InviteScreening` saves the playback position to `localStorage` under the key `screening_position_<token>` and navigates to `/dashboard` with `location.state.screeningToken = token`.
+- **Resume-position rules live in `src/lib/resumePosition.js`, with ONE completion-zone constant (`RESUME_COMPLETION_FRACTION`, final 5%) shared by both sides.** Every save goes through `resumePositionToSave` — inside the completion zone the stored position is ERASED, never updated — and on `canplay` a start position inside the zone self-heals to 0. **Never reintroduce a raw near-end save** (a stored position in the final seconds resumes BEHIND the opaque prologue, fires `ended` invisibly, and skips the viewer straight to pass-it-on — the June 2026 mobile skip bug, pinned by `e2e/resume-skip-regression.spec.js`).
 - `loadViewerDashboard` reads `location.state.screeningToken` on mount and selects the matching film as the active film, so the same film the user clicked Resume on is highlighted when they return.
 - `viewerInviteToken` is set to `tokenByFilmId[filmId]` (the token for the currently selected film), not always `uniqueRecvd[0]?.token`.
 

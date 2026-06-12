@@ -10,7 +10,8 @@
  *
  * Hard safety guarantees:
  *   - Operates on an explicit allowlist (TARGET_EMAILS) — never a pattern/substring match.
- *   - Refuses to run if the allowlist contains a protected email (filmmaker@gmail.com).
+ *   - Refuses to run if the allowlist contains a protected email (the filmmaker
+ *     account or any real production user — see PROTECTED_EMAILS).
  *   - Reads (never modifies/deletes) the filmmaker account and the film row.
  *   - Aborts if a NON-target invite depends on a target invite (so it never touches other data).
  *   - --dry-run prints exactly what it WOULD delete/create and changes nothing.
@@ -35,7 +36,9 @@ const TARGET_EMAILS = [
   'jobs@wcfoundation.org',
 ].map((e) => e.trim().toLowerCase())
 
-const PROTECTED_EMAILS = ['filmmaker@gmail.com']
+// Real users — the script refuses to run if the allowlist ever includes one.
+// contact@tracebelll.com is Trace Bell, the first real production user (June 2026).
+const PROTECTED_EMAILS = ['filmmaker@gmail.com', 'contact@tracebelll.com']
 const FILM_TITLE = 'The New Narrative'
 // Informational only — invite links never expire in the MVP (see server/inviteValidation.js).
 const INVITE_EXPIRY_DAYS = 3650
