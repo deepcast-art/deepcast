@@ -1500,24 +1500,35 @@ export default function InviteScreening() {
           }}
         >
           <div className="flex flex-col items-center gap-3 z-10 max-w-xl text-center">
-            <div
-              className="font-display font-light text-base md:text-lg text-[#dddddd]/85 leading-relaxed"
-              style={{
-                transition: 'opacity 2.5s ease-in-out',
-                opacity: prologueState.textsVisible && prologueState.text1 ? 1 : 0,
-              }}
-            >
-              A thoughtfully curated film experience for {recipientFirstName},
-            </div>
-            <div
-              className="font-display font-light text-base md:text-lg text-[#dddddd]/85 leading-relaxed"
-              style={{
-                transition: 'opacity 2.5s ease-in-out',
-                opacity: prologueState.textsVisible && prologueState.text2 ? 1 : 0,
-              }}
-            >
-              gifted by {sharerFirstForGift || 'someone who chose you'}.
-            </div>
+            {showShareIntent ? (
+              /* Gate-bounce arrival (a returning viewer sent here to share first):
+                 the gift-welcome copy reads wrong for them — show a neutral veil
+                 while the invite validates. */
+              <div className="font-display font-light text-base md:text-lg text-[#dddddd]/85 leading-relaxed">
+                One moment — opening your screening room.
+              </div>
+            ) : (
+              <>
+                <div
+                  className="font-display font-light text-base md:text-lg text-[#dddddd]/85 leading-relaxed"
+                  style={{
+                    transition: 'opacity 2.5s ease-in-out',
+                    opacity: prologueState.textsVisible && prologueState.text1 ? 1 : 0,
+                  }}
+                >
+                  A thoughtfully curated film experience for {recipientFirstName},
+                </div>
+                <div
+                  className="font-display font-light text-base md:text-lg text-[#dddddd]/85 leading-relaxed"
+                  style={{
+                    transition: 'opacity 2.5s ease-in-out',
+                    opacity: prologueState.textsVisible && prologueState.text2 ? 1 : 0,
+                  }}
+                >
+                  gifted by {sharerFirstForGift || 'someone who chose you'}.
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1818,6 +1829,7 @@ export default function InviteScreening() {
                 goToDashboard={() => navigate('/dashboard', { replace: true, state: { screeningToken: token } })}
                 resumeFilm={resumeFilm}
                 hasSentInvite={hasEverShared}
+                gateNotice={showShareIntent}
               />
               <DesktopPassItOn
                 graphLayout={graphLayout}
@@ -1838,6 +1850,7 @@ export default function InviteScreening() {
                 goToDashboard={() => navigate('/dashboard', { replace: true, state: { screeningToken: token } })}
                 resumeFilm={resumeFilm}
                 hasSentInvite={hasEverShared}
+                gateNotice={showShareIntent}
               />
 
               </>

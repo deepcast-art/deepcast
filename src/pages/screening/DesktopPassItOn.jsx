@@ -20,6 +20,8 @@ export default function DesktopPassItOn({
   goToDashboard,
   resumeFilm,
   hasSentInvite,
+  /** Gate-bounce arrival: a returning viewer who must share once to reach the dashboard. */
+  gateNotice = false,
 }) {
   return (
     /* ── Desktop (wide): resume bar + two-column diptych ── */
@@ -51,6 +53,11 @@ export default function DesktopPassItOn({
             >
               Pass it on. Make an impact.
             </h2>
+            {gateNotice && (
+              <p className="font-serif-v3 text-[15px] italic leading-snug text-[#b1a180]">
+                Share this film with one person to open your dashboard.
+              </p>
+            )}
             {showPostFilm && user && hasSentInvite && (
               <Link
                 to="/dashboard"

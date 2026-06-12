@@ -19,6 +19,8 @@ export default function MobilePassItOn({
   goToDashboard,
   resumeFilm,
   hasSentInvite,
+  /** Gate-bounce arrival: a returning viewer who must share once to reach the dashboard. */
+  gateNotice = false,
 }) {
   return (
     <div className="lg:hidden flex h-full min-h-0 w-full flex-1 flex-col bg-[#080c18] portrait:h-auto portrait:flex-none landscape:max-h-[100dvh] landscape:overflow-hidden">
@@ -67,6 +69,11 @@ export default function MobilePassItOn({
           >
             Pass it on. Make an impact.
           </h2>
+          {gateNotice && (
+            <p className="font-serif-v3 mb-2 text-[13px] italic leading-snug text-[#b1a180]">
+              Share this film with one person to open your dashboard.
+            </p>
+          )}
           <p className="font-serif-v3 text-[12px] italic leading-snug text-[#dddddd]/60 mb-3">
             If you choose not to share, the film&apos;s journey ends with you. That&apos;s ok — but know
             that it was carried this far by people who believed in it.
@@ -202,6 +209,11 @@ export default function MobilePassItOn({
           >
             Pass it on. Make an impact.
           </h2>
+          {gateNotice && (
+            <p className="font-serif-v3 mb-2 text-[13px] italic leading-snug text-[#b1a180]">
+              Share this film with one person to open your dashboard.
+            </p>
+          )}
         </div>
 
         {/* Letter card */}
