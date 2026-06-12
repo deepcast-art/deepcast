@@ -5,6 +5,7 @@ import { checkEmail } from '../lib/emailCheck'
 import DeepcastLogo from '../components/DeepcastLogo'
 import MvpVersionLabel from '../components/MvpVersionLabel'
 import { safeLocalStorage } from '../lib/safeStorage'
+import { consumeAuthLinkError } from '../lib/authLinkError'
 
 export default function Login() {
   const [searchParams] = useSearchParams()
@@ -17,6 +18,9 @@ export default function Login() {
   const [linkSent, setLinkSent] = useState(false)
   /** Password is the secondary option (D1: creators/team keep it); hidden until requested. */
   const [showPassword, setShowPassword] = useState(false)
+  /** Used/expired magic link (captured at boot in main.jsx, one-shot): explain it
+   *  instead of a silent plain login page. Cleared once a fresh link is sent. */
+  const [expiredLinkNotice, setExpiredLinkNotice] = useState(() => Boolean(consumeAuthLinkError()))
   const { signIn, sendSignInLink, user, profile, loading: authLoading, isRecovery } = useAuth()
 
   // Same-device return: a valid stored session lands straight on the dashboard.
@@ -49,6 +53,7 @@ export default function Login() {
       safeLocalStorage.setItem('deepcast:last_email', normalized)
       await sendSignInLink(normalized, '/dashboard')
       setLinkSent(true)
+      setExpiredLinkNotice(false)
     } catch (err) {
       setError(err.message || 'Could not send a sign-in link. Please try again.')
     } finally {
@@ -112,6 +117,12 @@ export default function Login() {
         </div>
 
         <form onSubmit={handleSendLink} className="space-y-5 animate-fade-in animate-delay-300">
+          {expiredLinkNotice && (
+            <div className="text-accent text-sm text-center leading-relaxed bg-accent/10 rounded-none py-3 px-4">
+              That sign-in link has already been used or expired — they only work once. Enter
+              your email and we&apos;ll send you a fresh one.
+            </div>
+          )}
           {error && (
             <div className="text-error text-sm text-center bg-error/10 rounded-none py-2 px-4">
               {error}
