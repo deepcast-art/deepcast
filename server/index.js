@@ -1712,7 +1712,7 @@ function buildSignInEmailHtml(actionLink, contextLine) {
   <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:12px;line-height:1.6;color:#6b7fa3;text-align:center;">If you didn’t request this, you can safely ignore this email.</p>
 </td></tr>
 <tr><td align="center" style="padding:8px 40px 40px;">
-  <p style="margin:0;font-size:10px;color:#2a3a5a;letter-spacing:2px;font-family:system-ui,-apple-system,sans-serif;">© deepcast</p>
+  <p style="margin:0;font-size:10px;color:#2a3a5a;letter-spacing:2px;font-family:system-ui,-apple-system,sans-serif;">© deepcast — MVP v1.0</p>
 </td></tr>
 </table>
 </td></tr>
@@ -2129,7 +2129,7 @@ function buildInviteEmailPlainText(
   if (inviteOrdinal) {
     body += `You are the ${ordinalSuffix(inviteOrdinal)} person invited to this private screening.\n\n`
   }
-  body += `© deepcast\n`
+  body += `© deepcast — MVP v1.0\n`
   return body
 }
 
@@ -2226,7 +2226,7 @@ ${gifBlock}
 </td></tr>
 
 <tr><td align="center" style="padding:24px 40px;">
-  <p style="margin:0;font-size:10px;color:#2a3a5a;letter-spacing:2px;font-family:system-ui,-apple-system,sans-serif;">© deepcast</p>
+  <p style="margin:0;font-size:10px;color:#2a3a5a;letter-spacing:2px;font-family:system-ui,-apple-system,sans-serif;">© deepcast — MVP v1.0</p>
 </td></tr>
 
 </table>

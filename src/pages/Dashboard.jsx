@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import InviteForm from '../components/InviteForm'
 import DeepcastLogo from '../components/DeepcastLogo'
+import MvpVersionLabel from '../components/MvpVersionLabel'
 import NetworkGraph from '../components/NetworkGraph'
 import { buildGraphLayout, resolveViewerFocus } from '../lib/graphLayout'
 import { api } from '../lib/api'
@@ -1151,6 +1152,7 @@ export default function Dashboard() {
               <footer className="w-full py-12 text-center font-sans text-[10px] uppercase tracking-widest text-warm/40">
                 &copy; {new Date().getFullYear()}{' '}
                 <span className="font-sans font-semibold normal-case">Deepcast</span>.
+                <MvpVersionLabel className="mt-2" />
               </footer>
             </>
           )}
@@ -1704,6 +1706,7 @@ export default function Dashboard() {
             })}
           </div>
         )}
+        <MvpVersionLabel className="mt-14 self-center pb-2 text-center" />
       </main>
     </div>
   )

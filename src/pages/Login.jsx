@@ -3,6 +3,7 @@ import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { checkEmail } from '../lib/emailCheck'
 import DeepcastLogo from '../components/DeepcastLogo'
+import MvpVersionLabel from '../components/MvpVersionLabel'
 import { safeLocalStorage } from '../lib/safeStorage'
 
 export default function Login() {
@@ -94,6 +95,7 @@ export default function Login() {
             Use a different email
           </button>
         </div>
+        <MvpVersionLabel className="fixed bottom-[max(0.75rem,env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2" />
       </div>
     )
   }
@@ -186,6 +188,7 @@ export default function Login() {
           )}
         </div>
       </div>
+      <MvpVersionLabel className="fixed bottom-[max(0.75rem,env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2" />
     </div>
   )
 }

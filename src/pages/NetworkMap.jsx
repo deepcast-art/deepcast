@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
 import DeepcastLogo from '../components/DeepcastLogo'
+import MvpVersionLabel from '../components/MvpVersionLabel'
 import NetworkGraph from '../components/NetworkGraph'
 import { buildGraphLayout, resolveViewerFocus } from '../lib/graphLayout'
 // Canonical "watched" definition (src/lib/filmStats.js) — same one the dashboard stats use.
@@ -450,6 +451,7 @@ export default function NetworkMap() {
             </div>
           </div>
         )}
+        <MvpVersionLabel className="mt-14 pb-2 text-center" />
       </div>
     </div>
   )
