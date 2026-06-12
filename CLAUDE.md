@@ -173,7 +173,7 @@ npm test                 # Unit + E2E
 
 ## Known limitations (MVP) & deferred work
 
-- **Safari private-browsing playback may still skip to the post-film screen.** All storage-related causes are fixed (everything goes through `safeStorage`, with unit + e2e coverage); the remaining suspect is Safari's private-mode autoplay policy. Deprioritized for MVP — revisit only if real viewers report it.
+- **Safari private-browsing skip-to-post-film: likely resolved, needs re-testing — do NOT declare fixed.** The June 2026 iOS playback-denial fix (a denied autoplay attempt fires play→pause with zero progress; that phantom pause must never read as a user pause — see `e2e/ios-denied-autoplay.spec.js`) almost certainly covers this same family. Re-test on a real device in private browsing before closing.
 - **`NetworkMap.jsx` has 5 React Compiler lint errors hidden behind its declaration-order error.** Fixing the visible "Cannot access variable before it is declared" un-bails the compiler and surfaces setState-in-effect and memoization issues that require restructuring the component's effects. This needs its own task with testing — it is NOT a lint-only fix; do not paper over it with suppressions.
 - **Render region migration** (API is far from the Seoul-based owner and the us-east-1 DB) — runbook in `docs/render-migration-runbook.md`; awaiting an owner decision.
 - **Invite expiry** is deliberately disabled (see Standing product rules); reintroducing it post-MVP is a one-function decision in `server/inviteValidation.js`.

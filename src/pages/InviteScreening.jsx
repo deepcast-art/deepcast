@@ -823,6 +823,12 @@ export default function InviteScreening() {
 
       if (!screeningPlaybackEverStarted && !ended && !nearEnd) return
 
+      // iOS playback-denial noise: a denied/interrupted attempt fires play→pause
+      // with the playhead still at the start. That is never a user pause — ignore
+      // it and let the retry / tap-to-play flow own recovery. (A real person
+      // cannot tap pause within the first 0.05s of the film.)
+      if (currentTime <= 0.05 && !ended && !nearEnd) return
+
       // Record pause intent so a late canplay/buffer event can't restart playback
       // underneath the pass-it-on overlay. Cleared by resumeFilm / the retry effect.
       if (!ended && !nearEnd) userPauseIntentRef.current = true
@@ -1085,6 +1091,10 @@ export default function InviteScreening() {
   }
 
   function handleEnded() {
+    // Nothing may play under the post-film screen — including the player's own
+    // internal autoplay re-attempt after it resets to 0. The intent ref blocks
+    // tryScreeningPlay, and onPlay re-pauses anything that slips through.
+    userPauseIntentRef.current = true
     setIsScreeningPaused(true)
     setPassItOnFromUserPause(false)
 
@@ -1593,9 +1603,19 @@ export default function InviteScreening() {
                     onCanPlay={handleMuxScreeningCanPlay}
                     onPause={handleMuxPause}
                     onPlay={() => {
+                      // Playback against recorded pause intent (post-film screen, user
+                      // pause) is unwanted no matter who started it — re-pause at the source.
+                      if (userPauseIntentRef.current) {
+                        try { muxPlayerRef.current?.pause() } catch { /* ignored */ }
+                        return
+                      }
+                      // 'play' must NOT set screeningPlaybackEverStarted: on iOS a DENIED
+                      // autoplay attempt fires play→pause with zero frames played, and
+                      // marking "started" here made that phantom pause read as a user pause
+                      // (the mobile skip-to-pass-it-on bug). Real progress sets the flag in
+                      // handleTimeUpdate (currentTime > 0.05).
                       setIsScreeningPaused(false)
                       setPassItOnFromUserPause(false)
-                      setScreeningPlaybackEverStarted(true)
                       setScreeningNeedsUserGesturePlay(false)
                       tryIOSNativeVideoFullscreen()
                     }}
