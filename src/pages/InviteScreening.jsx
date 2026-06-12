@@ -197,6 +197,25 @@ export default function InviteScreening() {
    *  flag; it releases when the prologue begins its fade, the moment playback started before. */
   const [prologueHoldingPlayback, setPrologueHoldingPlayback] = useState(false)
 
+  /* ---------- TEMPORARY DIAGNOSTIC OVERLAY (?debug=1) ----------
+   * Owner-only ground-truth capture for device-specific playback bugs: append
+   * ?debug=1 (or &debug=1) to a screening URL to see the live player event
+   * timeline + state flags on screen. Renders NOTHING and logs NOTHING unless
+   * the flag is in the URL — normal viewers can never see it. */
+  const debugEnabled = searchParams.get('debug') === '1'
+  const debugLinesRef = useRef([])
+  const debugStartRef = useRef(Date.now())
+  const [, setDebugTick] = useState(0)
+  const dbg = useCallback(
+    (msg) => {
+      if (!debugEnabled) return
+      const t = ((Date.now() - debugStartRef.current) / 1000).toFixed(1)
+      debugLinesRef.current = [...debugLinesRef.current.slice(-29), `+${t}s ${msg}`]
+      setDebugTick((n) => n + 1)
+    },
+    [debugEnabled]
+  )
+
   /* ---------- LETTER FORM STATE ---------- */
 
   /** Multi-recipient: each row is its own invite + email, with an always-visible
@@ -759,15 +778,47 @@ export default function InviteScreening() {
     void mux
       .play()
       .then(() => {
+        dbg('play() RESOLVED')
         setScreeningNeedsUserGesturePlay(false)
         if (userPauseIntentRef.current) {
           try { mux.pause() } catch { /* ignore */ }
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        dbg(`play() REJECTED ${err?.name || 'Error'} mediaReady=${screeningMediaReadyRef.current}`)
         if (screeningMediaReadyRef.current) setScreeningNeedsUserGesturePlay(true)
       })
-  }, [])
+  }, [dbg])
+
+  /** ?debug=1 only: mirror every media event (the mux host re-emits them across
+   *  its shadow DOM) into the on-screen timeline. Attaches via a short poll —
+   *  the lazy player can mount well after this effect first runs. */
+  useEffect(() => {
+    if (!debugEnabled || currentView !== 'screening') return
+    const events = ['loadedmetadata', 'canplay', 'play', 'playing', 'pause', 'ended', 'error', 'seeked', 'waiting', 'stalled', 'emptied']
+    let attached = null
+    const handlers = new Map()
+    const attach = () => {
+      const mux = muxPlayerRef.current || document.querySelector('mux-player')
+      if (!mux || attached) return
+      attached = mux
+      for (const ev of events) {
+        const h = () => {
+          const m = mux.media
+          dbg(`ev:${ev} ct=${m?.currentTime?.toFixed?.(2) ?? '?'} dur=${Number.isFinite(m?.duration) ? m.duration.toFixed(1) : '?'} paused=${m?.paused ?? '?'} ended=${m?.ended ?? '?'}`)
+        }
+        handlers.set(ev, h)
+        mux.addEventListener(ev, h)
+      }
+      dbg('debug attached to player')
+    }
+    const poll = window.setInterval(attach, 250)
+    attach()
+    return () => {
+      window.clearInterval(poll)
+      if (attached) for (const [ev, h] of handlers) attached.removeEventListener(ev, h)
+    }
+  }, [debugEnabled, currentView, dbg])
 
   /** Persist (or erase) the resume position through the ONE rule module: inside the
    *  completion zone the stored position is removed, never updated, so finishing a
@@ -795,6 +846,7 @@ export default function InviteScreening() {
         media &&
         isInCompletionZone(media.currentTime, media.duration)
       ) {
+        dbg(`HEAL start ${media.currentTime?.toFixed?.(1)} in completion zone -> 0`)
         try { media.currentTime = 0 } catch { /* ignored */ }
         if (token) safeLocalStorage.removeItem(`screening_position_${token}`)
       }
@@ -805,7 +857,7 @@ export default function InviteScreening() {
       if (showPostFilm) return
       tryScreeningPlay()
     },
-    [prologueHoldingPlayback, screeningPlaybackEverStarted, showPostFilm, token, tryScreeningPlay]
+    [prologueHoldingPlayback, screeningPlaybackEverStarted, showPostFilm, token, tryScreeningPlay, dbg]
   )
 
   /** Pass it on whenever the viewer pauses mid-film. Mux owns the pause button now, so we
@@ -821,13 +873,20 @@ export default function InviteScreening() {
       const ended = Boolean(mediaEl?.ended)
       const nearEnd = duration > 0 && currentTime >= duration - 0.45
 
-      if (!screeningPlaybackEverStarted && !ended && !nearEnd) return
+      if (!screeningPlaybackEverStarted && !ended && !nearEnd) {
+        dbg(`pause IGNORED (not started) ct=${currentTime.toFixed(2)}`)
+        return
+      }
 
       // iOS playback-denial noise: a denied/interrupted attempt fires play→pause
       // with the playhead still at the start. That is never a user pause — ignore
       // it and let the retry / tap-to-play flow own recovery. (A real person
       // cannot tap pause within the first 0.05s of the film.)
-      if (currentTime <= 0.05 && !ended && !nearEnd) return
+      if (currentTime <= 0.05 && !ended && !nearEnd) {
+        dbg(`pause IGNORED (start noise) ct=${currentTime.toFixed(2)}`)
+        return
+      }
+      dbg(`pause ACCEPTED ct=${currentTime.toFixed(2)} ended=${ended} nearEnd=${nearEnd} directPlay=${directPlay}`)
 
       // Record pause intent so a late canplay/buffer event can't restart playback
       // underneath the pass-it-on overlay. Cleared by resumeFilm / the retry effect.
@@ -855,7 +914,7 @@ export default function InviteScreening() {
 
       setPassItOnFromUserPause(true)
     },
-    [exitScreeningFullscreen, user?.id, directPlay, token, navigate, screeningPlaybackEverStarted, persistResumePosition]
+    [exitScreeningFullscreen, user?.id, directPlay, token, navigate, screeningPlaybackEverStarted, persistResumePosition, dbg]
   )
 
   const finalizeEnterScreening = useCallback(() => {
@@ -1091,6 +1150,7 @@ export default function InviteScreening() {
   }
 
   function handleEnded() {
+    dbg('ENDED -> post-film')
     // Nothing may play under the post-film screen — including the player's own
     // internal autoplay re-attempt after it resets to 0. The intent ref blocks
     // tryScreeningPlay, and onPlay re-pauses anything that slips through.
@@ -1500,6 +1560,23 @@ export default function InviteScreening() {
           >
             For the full cinematic experience
           </p>
+        </div>
+      )}
+
+      {/* TEMPORARY DIAGNOSTIC (?debug=1 only — unreachable for normal viewers). */}
+      {debugEnabled && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed left-1 top-1 z-[6000] max-h-[70vh] max-w-[92vw] overflow-hidden bg-black/85 p-2 font-mono text-[9px] leading-[1.35] text-green-300"
+        >
+          <div className="text-amber-300">
+            started={String(screeningPlaybackEverStarted)} paused={String(isScreeningPaused)}{' '}
+            userPause={String(passItOnFromUserPause)} postFilm={String(showPostFilm)}{' '}
+            needsTap={String(screeningNeedsUserGesturePlay)} hold={String(prologueHoldingPlayback)}
+          </div>
+          {debugLinesRef.current.map((line, i) => (
+            <div key={i}>{line}</div>
+          ))}
         </div>
       )}
 
