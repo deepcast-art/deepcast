@@ -1,0 +1,23 @@
+/**
+ * The ONE rule for whether an invite recipient is blocked because they are
+ * the film's creator. The film began with the filmmaker — sharing it back to
+ * them is never useful, so /api/invites/send refuses it with a friendly,
+ * founder-voice message.
+ *
+ * CREATOR_SHARE_BLOCK_REASON is a predicate (no subject): both share surfaces
+ * (InviteScreening's letter form and InviteForm) display send failures as
+ * "<recipient first name> <reason>", so the full sentence the user reads is
+ * e.g. "Ien made this film — it already lives with them. Share it with
+ * someone who hasn't seen it yet."
+ */
+export const CREATOR_SHARE_BLOCK_REASON =
+  "made this film — it already lives with them. Share it with someone who hasn't seen it yet."
+
+/** True when the would-be recipient's user account IS the film's creator. */
+export function isShareToFilmCreator({ recipientUserId, filmCreatorId }) {
+  if (recipientUserId == null || filmCreatorId == null) return false
+  return (
+    String(recipientUserId).trim().toLowerCase() ===
+    String(filmCreatorId).trim().toLowerCase()
+  )
+}

@@ -8,6 +8,7 @@ import crypto from 'crypto'
 import { buildGraphLayout } from '../src/lib/graphLayout.js'
 import { createEmailDispatcher } from './emailDelivery.js'
 import { isInviteUsable } from './inviteValidation.js'
+import { CREATOR_SHARE_BLOCK_REASON, isShareToFilmCreator } from './shareRules.js'
 
 const app = express()
 app.use(cors())
@@ -390,6 +391,7 @@ app.post('/api/invites/send', async (req, res) => {
       { data: claimedParent },
       { count: preInsertCount, error: inviteCountError },
       { data: existingInvite },
+      { data: recipientUser },
     ] = await Promise.all([
       supabase.from('films').select('title, description, thumbnail_url, creator_id, mux_playback_id, gif_start, gif_end').eq('id', filmId).single(),
       // maybeSingle: a missing profile row returns data:null WITHOUT an error, so we can tell a real
@@ -402,6 +404,8 @@ app.post('/api/invites/send', async (req, res) => {
         : Promise.resolve({ data: null, error: null }),
       supabase.from('invites').select('*', { count: 'exact', head: true }).eq('film_id', filmId),
       supabase.from('invites').select('id').eq('film_id', filmId).ilike('recipient_email', recipientEmailNorm).limit(1).maybeSingle(),
+      // Recipient's account (if any) — used to refuse sharing back to the filmmaker.
+      supabase.from('users').select('id').ilike('email', recipientEmailNorm).limit(1).maybeSingle(),
     ])
 
     if (inviteCountError) {
@@ -411,6 +415,12 @@ app.post('/api/invites/send', async (req, res) => {
     // ── Phase 2: validation (no DB) ────────────────────────────────────────
     if (filmLookupError || !film) {
       return res.status(404).json({ error: 'Film not found' })
+    }
+
+    // The film began with its maker — never share it back to them. Predicate-style
+    // message: both share forms render failures as "<first name> <reason>".
+    if (isShareToFilmCreator({ recipientUserId: recipientUser?.id, filmCreatorId: film.creator_id })) {
+      return res.status(400).json({ error: CREATOR_SHARE_BLOCK_REASON })
     }
 
     if (existingInvite) {
