@@ -820,6 +820,41 @@ export default function InviteScreening() {
     }
   }, [debugEnabled, currentView, dbg])
 
+  /** Mobile: a tap on the film must REVEAL the control bar, never toggle pause —
+   *  disable media-chrome's tap/click play-pause gesture (the activity-based
+   *  control reveal + autohide is separate and keeps working). Pausing happens
+   *  only through the control bar's pause button, which keeps today's exact
+   *  pause semantics. Desktop (lg+) is untouched. */
+  useEffect(() => {
+    if (isLgUp || currentView !== 'screening' || !film?.mux_playback_id) return
+    // The controller lives behind nested shadow roots (player → theme → controller),
+    // which closest()/querySelector can't cross — walk them.
+    const findController = (root, depth = 0) => {
+      if (!root || depth > 4) return null
+      const direct = root.querySelector?.('media-controller')
+      if (direct) return direct
+      for (const el of root.querySelectorAll?.('*') || []) {
+        if (el.shadowRoot) {
+          const found = findController(el.shadowRoot, depth + 1)
+          if (found) return found
+        }
+      }
+      return null
+    }
+    const attempt = () => {
+      const host = muxPlayerRef.current || document.querySelector('mux-player')
+      const controller = findController(host?.shadowRoot)
+      if (controller && !controller.hasAttribute('gesturesdisabled')) {
+        controller.setAttribute('gesturesdisabled', '')
+      }
+    }
+    attempt()
+    // Keep re-asserting: some engines rebuild the player's internals after a
+    // media teardown, dropping the attribute with them.
+    const id = window.setInterval(attempt, 400)
+    return () => window.clearInterval(id)
+  }, [isLgUp, currentView, film?.mux_playback_id])
+
   /** Persist (or erase) the resume position through the ONE rule module: inside the
    *  completion zone the stored position is removed, never updated, so finishing a
    *  film can never leave a near-end resume point behind. */
@@ -1673,7 +1708,7 @@ export default function InviteScreening() {
                     metadata={{ video_title: film.title }}
                     accentColor="#b1a180"
                     autoPlay={!showPostFilm && !prologueHoldingPlayback}
-                    autohide={-1}
+                    autohide={isLgUp ? -1 : 4}
                     startTime={Number(startTimeParam) || Number(safeLocalStorage.getItem(`screening_position_${token}`)) || 0}
                     onTimeUpdate={handleTimeUpdate}
                     onEnded={handleEnded}
@@ -1708,15 +1743,11 @@ export default function InviteScreening() {
                     }}
                   />
                 </Suspense>
-                {!isLgUp && !isScreeningPaused && !passItOnLayerActive && !showPostFilm && !screeningNeedsUserGesturePlay && (
-                  <div
-                    role="button"
-                    tabIndex={-1}
-                    aria-label="Pause film"
-                    onClick={() => { try { muxPlayerRef.current?.pause() } catch { /* ignore */ } }}
-                    className="absolute inset-0 z-[15] touch-manipulation"
-                  />
-                )}
+                {/* Mobile taps go to the PLAYER (tap reveals the control bar; scrub /
+                    volume / pause are reachable). The old invisible full-screen
+                    pause-catcher made any touch an instant pause — controls were
+                    unreachable on phones. Pausing via the control bar's pause button
+                    keeps today's exact pause semantics (pass-it-on with Resume Film). */}
                 {screeningNeedsUserGesturePlay && !showPostFilm && (
                   <button
                     type="button"
