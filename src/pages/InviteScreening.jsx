@@ -26,6 +26,8 @@ import DesktopPassItOn from './screening/DesktopPassItOn'
 // Canonical share quota (src/lib/shares.js) — single source for "invitations remaining".
 import { isUnlimitedSharer as profileIsUnlimitedSharer, invitationsRemaining } from '../lib/shares'
 import { safeLocalStorage } from '../lib/safeStorage'
+// Resume-position rules — one shared "effectively finished" definition for save + load.
+import { isInCompletionZone, resumePositionToSave } from '../lib/resumePosition'
 import './screening-room.css'
 
 const VIEWER_SHARE_LIMIT = 5
@@ -767,12 +769,44 @@ export default function InviteScreening() {
       })
   }, [])
 
-  const handleMuxScreeningCanPlay = useCallback(() => {
-    screeningMediaReadyRef.current = true
-    // Early-mount hold: media getting ready during the prologue must not start playback.
-    if (prologueHoldingPlayback) return
-    tryScreeningPlay()
-  }, [prologueHoldingPlayback, tryScreeningPlay])
+  /** Persist (or erase) the resume position through the ONE rule module: inside the
+   *  completion zone the stored position is removed, never updated, so finishing a
+   *  film can never leave a near-end resume point behind. */
+  const persistResumePosition = useCallback(
+    (currentTime, duration) => {
+      if (!token) return
+      const pos = resumePositionToSave(currentTime, duration)
+      if (pos == null) safeLocalStorage.removeItem(`screening_position_${token}`)
+      else safeLocalStorage.setItem(`screening_position_${token}`, String(pos))
+    },
+    [token]
+  )
+
+  const handleMuxScreeningCanPlay = useCallback(
+    (e) => {
+      screeningMediaReadyRef.current = true
+      // Self-heal a stale near-end start position (legacy stored resume point or ?t=):
+      // a screening must never START inside the completion zone — it would "end"
+      // instantly behind the opaque prologue and skip straight to pass-it-on
+      // (the mobile Chrome skip bug). Heal to 0 and erase the stored position.
+      const media = muxPlayerRef.current?.media || e?.target
+      if (
+        !screeningPlaybackEverStarted &&
+        media &&
+        isInCompletionZone(media.currentTime, media.duration)
+      ) {
+        try { media.currentTime = 0 } catch { /* ignored */ }
+        if (token) safeLocalStorage.removeItem(`screening_position_${token}`)
+      }
+      // Early-mount hold: media getting ready during the prologue must not start playback.
+      if (prologueHoldingPlayback) return
+      // Post-film screen owns the viewport: a late canplay (e.g. after the ended
+      // player resets to 0) must never restart playback under the share form.
+      if (showPostFilm) return
+      tryScreeningPlay()
+    },
+    [prologueHoldingPlayback, screeningPlaybackEverStarted, showPostFilm, token, tryScreeningPlay]
+  )
 
   /** Pass it on whenever the viewer pauses mid-film. Mux owns the pause button now, so we
    *  infer user intent from screeningPlaybackEverStarted — pause events emitted before the
@@ -808,16 +842,14 @@ export default function InviteScreening() {
       // Resume-from-dashboard flow: logged-in user arrived via ?play=1. Persist current
       // position and navigate back to /dashboard instead of showing pass-it-on.
       if (user?.id && directPlay) {
-        if (token && currentTime > 0) {
-          safeLocalStorage.setItem(`screening_position_${token}`, String(Math.floor(currentTime)))
-        }
+        if (currentTime > 0) persistResumePosition(currentTime, duration)
         navigate('/dashboard', { replace: true, state: { screeningToken: token } })
         return
       }
 
       setPassItOnFromUserPause(true)
     },
-    [exitScreeningFullscreen, user?.id, directPlay, token, navigate, screeningPlaybackEverStarted]
+    [exitScreeningFullscreen, user?.id, directPlay, token, navigate, screeningPlaybackEverStarted, persistResumePosition]
   )
 
   const finalizeEnterScreening = useCallback(() => {
@@ -1006,8 +1038,9 @@ export default function InviteScreening() {
     if (p.currentTime > 0.05) setScreeningPlaybackEverStarted(true)
     const pct = Math.round((p.currentTime / p.duration) * 100)
 
-    // Persist playback position so the user can resume later
-    if (token) safeLocalStorage.setItem(`screening_position_${token}`, Math.floor(p.currentTime))
+    // Persist playback position so the user can resume later (erased in the
+    // completion zone — finishing the film must not leave a resume point).
+    persistResumePosition(p.currentTime, p.duration)
 
     if (pct >= 70 && !hasMarkedWatched.current) {
       hasMarkedWatched.current = true
@@ -1223,8 +1256,8 @@ export default function InviteScreening() {
 
         // Snapshot current playback position so dashboard can offer "Resume"
         const muxEl = document.querySelector('mux-player')
-        if (token && muxEl && muxEl.currentTime > 0 && !showPostFilm) {
-          safeLocalStorage.setItem(`screening_position_${token}`, Math.floor(muxEl.currentTime))
+        if (muxEl && muxEl.currentTime > 0 && !showPostFilm) {
+          persistResumePosition(muxEl.currentTime, muxEl.duration)
         }
       }
 
