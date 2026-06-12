@@ -397,7 +397,7 @@ app.post('/api/invites/send', async (req, res) => {
       // maybeSingle: a missing profile row returns data:null WITHOUT an error, so we can tell a real
       // DB error apart from "profile not created yet" (the passwordless magic-link race) and self-heal.
       senderId
-        ? supabase.from('users').select('invite_allocation, role, team_creator_id, id, email, name').eq('id', senderId).maybeSingle()
+        ? supabase.from('users').select('invite_allocation, role, team_creator_id, unlimited_shares, id, email, name').eq('id', senderId).maybeSingle()
         : Promise.resolve({ data: null, error: null }),
       clientParentInviteId
         ? supabase.from('invites').select('id, film_id').eq('id', clientParentInviteId).maybeSingle()
@@ -428,6 +428,10 @@ app.post('/api/invites/send', async (req, res) => {
     }
 
     let unlimitedInvites = false
+    // Quota-only unlimited (users.unlimited_shares): never blocks on allocation and
+    // never decrements, but unlike creator/team unlimited it keeps the normal viewer
+    // chain semantics — parent_invite_id is still recorded on every send.
+    let unlimitedQuota = false
     let sender = senderInitial
 
     if (senderId) {
@@ -466,7 +470,9 @@ app.post('/api/invites/send', async (req, res) => {
         role === 'team_member' ||
         (role === 'viewer' && onCreatorTeam)
 
-      if (!unlimitedInvites && sender.invite_allocation <= 0) {
+      unlimitedQuota = unlimitedInvites || sender.unlimited_shares === true
+
+      if (!unlimitedQuota && sender.invite_allocation <= 0) {
         console.warn('No invites remaining for sender:', senderId, sender)
         return res.status(400).json({ error: 'No invites remaining' })
       }
@@ -486,7 +492,7 @@ app.post('/api/invites/send', async (req, res) => {
     // ── Phase 3: decrement + parent fallbacks in parallel ─────────────────
     // Fallbacks only run when the client claim didn't resolve a parent.
     // Decrement runs alongside them — it doesn't depend on the fallback results.
-    const needsDecrement = Boolean(senderId && !unlimitedInvites)
+    const needsDecrement = Boolean(senderId && !unlimitedQuota)
     const needsFallbacks = !parentInviteId && !unlimitedInvites
 
     if (needsDecrement || needsFallbacks) {

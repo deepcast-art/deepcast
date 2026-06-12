@@ -11,13 +11,18 @@
  * disagree (and so nobody re-invents a hardcoded cap like the old min(5, …)).
  */
 
-/** Filmmaker, team member, or a viewer linked to a filmmaker's team. */
+/**
+ * Filmmaker, team member, a viewer linked to a filmmaker's team, or a user
+ * granted per-user unlimited shares (users.unlimited_shares — quota-only:
+ * unlike team linkage it changes nothing about role, gating, or the graph).
+ */
 export function isUnlimitedSharer(profile) {
   return Boolean(
     profile &&
       (profile.role === 'creator' ||
         profile.role === 'team_member' ||
-        (profile.role === 'viewer' && profile.team_creator_id))
+        (profile.role === 'viewer' && profile.team_creator_id) ||
+        profile.unlimited_shares === true)
   )
 }
 

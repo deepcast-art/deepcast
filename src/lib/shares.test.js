@@ -18,6 +18,21 @@ describe('isUnlimitedSharer', () => {
     expect(isUnlimitedSharer({ role: 'viewer', team_creator_id: null, invite_allocation: 5 })).toBe(false)
   })
 
+  it('viewer with the per-user unlimited_shares grant is unlimited', () => {
+    expect(
+      isUnlimitedSharer({ role: 'viewer', team_creator_id: null, unlimited_shares: true, invite_allocation: 4 })
+    ).toBe(true)
+  })
+
+  it('unlimited_shares must be exactly true — truthy junk does not unlock', () => {
+    expect(isUnlimitedSharer({ role: 'viewer', unlimited_shares: 'yes', invite_allocation: 4 })).toBe(false)
+    expect(isUnlimitedSharer({ role: 'viewer', unlimited_shares: 1, invite_allocation: 4 })).toBe(false)
+  })
+
+  it('revoked unlimited_shares falls back to the normal allocation', () => {
+    expect(isUnlimitedSharer({ role: 'viewer', unlimited_shares: false, invite_allocation: 4 })).toBe(false)
+  })
+
   it('missing profile is not unlimited', () => {
     expect(isUnlimitedSharer(null)).toBe(false)
     expect(isUnlimitedSharer(undefined)).toBe(false)
@@ -47,5 +62,6 @@ describe('invitationsRemaining', () => {
     expect(invitationsRemaining({ role: 'creator', invite_allocation: 3 })).toBe(Infinity)
     expect(invitationsRemaining({ role: 'team_member', invite_allocation: 0 })).toBe(Infinity)
     expect(invitationsRemaining({ role: 'viewer', team_creator_id: 'abc', invite_allocation: 0 })).toBe(Infinity)
+    expect(invitationsRemaining({ role: 'viewer', unlimited_shares: true, invite_allocation: 0 })).toBe(Infinity)
   })
 })
