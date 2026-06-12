@@ -33,6 +33,50 @@ function formatNamesList(names) {
   return `${filtered.slice(0, -1).join(', ')}, and ${filtered[filtered.length - 1]}`
 }
 
+/** "People you've reached" label with its explainer. Hover opens it on desktop;
+ *  on touch screens (no hover) tapping the ? toggles it and tapping anywhere
+ *  else closes it. `tipBelow` flips the bubble under the label for spots where
+ *  above would clip (the mobile stats strip sits at the top of the scroll area). */
+function ReachExplainer({ tipBelow = false }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [open])
+  return (
+    <span
+      ref={ref}
+      className="group relative inline-flex w-fit cursor-help font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45"
+    >
+      People you&apos;ve reached
+      <button
+        type="button"
+        aria-label="What does this number mean?"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className={`ml-1.5 inline-flex h-3.5 w-3.5 shrink-0 cursor-help touch-manipulation items-center justify-center self-start rounded-full border text-[8px] font-medium leading-none tracking-normal transition-colors duration-200 group-hover:border-warm/60 group-hover:text-warm/75 ${
+          open ? 'border-warm/60 text-warm/75' : 'border-warm/30 text-warm/45'
+        }`}
+      >
+        ?
+      </button>
+      <span
+        role="tooltip"
+        className={`pointer-events-none absolute left-0 z-20 w-60 border border-faint/40 bg-[#05070a] px-3 py-2 text-sm font-normal normal-case leading-relaxed tracking-normal text-warm/80 shadow-lg transition-opacity duration-200 group-hover:opacity-100 ${
+          tipBelow ? 'top-full mt-2' : 'bottom-full mb-2'
+        } ${open ? 'opacity-100' : 'opacity-0'}`}
+      >
+        Everyone who&apos;s opened an invite because of you — the people you shared with, plus everyone they passed it on to.
+      </span>
+    </span>
+  )
+}
+
 export default function Dashboard() {
   const { profile, signOut, fetchProfile, profileLoaded } = useAuth()
   const location = useLocation()
@@ -116,19 +160,6 @@ export default function Dashboard() {
   const [modalError, setModalError] = useState('')
 
   const [visibleSentCount, setVisibleSentCount] = useState(SENT_LIST_PAGE_SIZE)
-  /** "People you've reached" explainer: tap-toggled on touch screens (hover can't
-   *  open it there); desktop keeps the pure hover behaviour. Closes on any tap
-   *  outside the label. */
-  const [reachTipOpen, setReachTipOpen] = useState(false)
-  const reachTipRef = useRef(null)
-  useEffect(() => {
-    if (!reachTipOpen) return
-    const close = (e) => {
-      if (reachTipRef.current && !reachTipRef.current.contains(e.target)) setReachTipOpen(false)
-    }
-    document.addEventListener('pointerdown', close)
-    return () => document.removeEventListener('pointerdown', close)
-  }, [reachTipOpen])
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [nameBusy, setNameBusy] = useState(false)
@@ -735,31 +766,7 @@ export default function Dashboard() {
               )}
             </div>
             <div className="flex flex-col gap-1.5">
-              <span
-                ref={reachTipRef}
-                className="group relative inline-flex w-fit cursor-help font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45"
-              >
-                People you&apos;ve reached
-                <button
-                  type="button"
-                  aria-label="What does this number mean?"
-                  aria-expanded={reachTipOpen}
-                  onClick={() => setReachTipOpen((open) => !open)}
-                  className={`ml-1.5 inline-flex h-3.5 w-3.5 shrink-0 cursor-help touch-manipulation items-center justify-center self-start rounded-full border text-[8px] font-medium leading-none tracking-normal transition-colors duration-200 group-hover:border-warm/60 group-hover:text-warm/75 ${
-                    reachTipOpen ? 'border-warm/60 text-warm/75' : 'border-warm/30 text-warm/45'
-                  }`}
-                >
-                  ?
-                </button>
-                <span
-                  role="tooltip"
-                  className={`pointer-events-none absolute bottom-full left-0 z-20 mb-2 w-60 border border-faint/40 bg-[#05070a] px-3 py-2 text-sm font-normal normal-case leading-relaxed tracking-normal text-warm/80 shadow-lg transition-opacity duration-200 group-hover:opacity-100 ${
-                    reachTipOpen ? 'opacity-100' : 'opacity-0'
-                  }`}
-                >
-                  Everyone who&apos;s opened an invite because of you — the people you shared with, plus everyone they passed it on to.
-                </span>
-              </span>
+              <ReachExplainer />
               <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-warm md:text-[2.5rem]">
                 {viewerReachedCount}
               </span>
@@ -885,6 +892,43 @@ export default function Dashboard() {
             </div>
           ) : (
             <>
+              {/* Mobile-only stats strip (lg:hidden — desktop keeps the always-visible
+                  sidebar untouched): the SAME key numbers as the sidebar, same canonical
+                  values and styling, visible immediately without opening the hamburger. */}
+              <section
+                aria-label="Your stats"
+                className={`${viewerSidebarOpen ? 'hidden' : 'grid'} mb-10 w-full max-w-6xl grid-cols-2 gap-x-8 gap-y-7 animate-fade-in lg:hidden`}
+              >
+                <div className="flex flex-col gap-1.5">
+                  <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
+                    Shares used
+                  </span>
+                  <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-warm">
+                    {sentCount}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
+                    Shares left
+                  </span>
+                  {invitesLeft === Infinity ? (
+                    <span className="font-display text-2xl font-normal leading-none tracking-tight text-accent">
+                      Unlimited
+                    </span>
+                  ) : (
+                    <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-accent">
+                      {invitesLeft}
+                    </span>
+                  )}
+                </div>
+                <div className="col-span-2 flex flex-col gap-1.5">
+                  <ReachExplainer tipBelow />
+                  <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-warm">
+                    {viewerReachedCount}
+                  </span>
+                </div>
+              </section>
+
               {/* ── Your screenings ── */}
               {viewerAllFilms.length > 0 && (
                 <section className="mb-10 w-full max-w-6xl animate-fade-in" style={{ animationDelay: '40ms' }}>
@@ -1273,6 +1317,25 @@ export default function Dashboard() {
       </aside>
 
       <main className="flex w-full min-w-0 flex-1 flex-col overflow-y-auto px-4 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] pt-8 sm:px-6 sm:py-10 panel-scroll lg:w-[78%] lg:px-10 lg:py-12">
+        {/* Mobile-only stats strip (lg:hidden — desktop keeps the always-visible
+            sidebar untouched): the same totals as the sidebar, same values and
+            styling, visible immediately without opening the hamburger. */}
+        <div
+          aria-label="Your stats"
+          className={`${sidebarOpen ? 'hidden' : 'flex'} mb-8 flex-wrap items-start gap-x-10 gap-y-5 font-sans text-[9px] uppercase tracking-widest text-accent/80 animate-fade-in lg:hidden`}
+        >
+          <div>
+            <span className="block text-warm/50">Films</span>
+            <span className="font-display text-2xl font-light text-warm">{films.length}</span>
+          </div>
+          <div>
+            <span className="block text-warm/50">Invites (all films)</span>
+            <span className="font-display text-2xl font-light text-warm">{creatorTotalInvites}</span>
+          </div>
+          {(profile.role === 'creator' || isTeamMember) && (
+            <p className="self-end normal-case text-warm/45">Unlimited invites</p>
+          )}
+        </div>
         {profile.role === 'creator' && (
           <section className="mb-10 animate-fade-in border border-border bg-bg-card p-6">
             <h2 className="mb-4 text-xs font-medium uppercase tracking-wider text-text-muted">
