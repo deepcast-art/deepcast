@@ -1051,7 +1051,8 @@ app.post('/api/team/send-invite', async (req, res) => {
           })
         }
 
-        const { data: upRows, error: upErr } = await supabase
+        // Update failures surface through the empty-rows check + RPC fallback below.
+        const { data: upRows } = await supabase
           .from('users')
           .update({
             role: 'team_member',
