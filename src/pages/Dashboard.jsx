@@ -116,6 +116,19 @@ export default function Dashboard() {
   const [modalError, setModalError] = useState('')
 
   const [visibleSentCount, setVisibleSentCount] = useState(SENT_LIST_PAGE_SIZE)
+  /** "People you've reached" explainer: tap-toggled on touch screens (hover can't
+   *  open it there); desktop keeps the pure hover behaviour. Closes on any tap
+   *  outside the label. */
+  const [reachTipOpen, setReachTipOpen] = useState(false)
+  const reachTipRef = useRef(null)
+  useEffect(() => {
+    if (!reachTipOpen) return
+    const close = (e) => {
+      if (reachTipRef.current && !reachTipRef.current.contains(e.target)) setReachTipOpen(false)
+    }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [reachTipOpen])
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [nameBusy, setNameBusy] = useState(false)
@@ -722,17 +735,27 @@ export default function Dashboard() {
               )}
             </div>
             <div className="flex flex-col gap-1.5">
-              <span className="group relative inline-flex w-fit cursor-help font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
+              <span
+                ref={reachTipRef}
+                className="group relative inline-flex w-fit cursor-help font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45"
+              >
                 People you&apos;ve reached
-                <span
-                  aria-hidden="true"
-                  className="ml-1.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center self-start rounded-full border border-warm/30 text-[8px] font-medium leading-none tracking-normal text-warm/45 transition-colors duration-200 group-hover:border-warm/60 group-hover:text-warm/75"
+                <button
+                  type="button"
+                  aria-label="What does this number mean?"
+                  aria-expanded={reachTipOpen}
+                  onClick={() => setReachTipOpen((open) => !open)}
+                  className={`ml-1.5 inline-flex h-3.5 w-3.5 shrink-0 cursor-help touch-manipulation items-center justify-center self-start rounded-full border text-[8px] font-medium leading-none tracking-normal transition-colors duration-200 group-hover:border-warm/60 group-hover:text-warm/75 ${
+                    reachTipOpen ? 'border-warm/60 text-warm/75' : 'border-warm/30 text-warm/45'
+                  }`}
                 >
                   ?
-                </span>
+                </button>
                 <span
                   role="tooltip"
-                  className="pointer-events-none absolute bottom-full left-0 z-20 mb-2 w-60 border border-faint/40 bg-[#05070a] px-3 py-2 text-sm font-normal normal-case leading-relaxed tracking-normal text-warm/80 opacity-0 shadow-lg transition-opacity duration-200 group-hover:opacity-100"
+                  className={`pointer-events-none absolute bottom-full left-0 z-20 mb-2 w-60 border border-faint/40 bg-[#05070a] px-3 py-2 text-sm font-normal normal-case leading-relaxed tracking-normal text-warm/80 shadow-lg transition-opacity duration-200 group-hover:opacity-100 ${
+                    reachTipOpen ? 'opacity-100' : 'opacity-0'
+                  }`}
                 >
                   Everyone who&apos;s opened an invite because of you — the people you shared with, plus everyone they passed it on to.
                 </span>
