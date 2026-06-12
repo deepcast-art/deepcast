@@ -177,9 +177,11 @@ export const api = {
       body: JSON.stringify({ token, password, fullName }),
     }),
 
-  removeTeamMember: (creatorId, memberId) =>
+  // Identity is the verified session token — the server never trusts a client-sent creatorId.
+  removeTeamMember: (memberId, accessToken) =>
     request('/team/remove-member', {
       method: 'POST',
-      body: JSON.stringify({ creatorId, memberId }),
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      body: JSON.stringify({ memberId }),
     }),
 }

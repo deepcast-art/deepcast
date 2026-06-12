@@ -10,6 +10,7 @@ import { createEmailDispatcher } from './emailDelivery.js'
 import { isInviteUsable } from './inviteValidation.js'
 import { CREATOR_SHARE_BLOCK_REASON, isShareToFilmCreator } from './shareRules.js'
 import { adminAuthDecision, unlimitedToggleTargetDecision } from './adminAuth.js'
+import { removeTeammateDecision } from './teamRules.js'
 
 const app = express()
 app.use(cors())
@@ -2023,42 +2024,34 @@ app.post('/api/auth/signin-link', async (req, res) => {
 
 app.post('/api/team/remove-member', async (req, res) => {
   try {
-    const { creatorId, memberId } = req.body
-    if (!creatorId || !memberId) {
-      return res.status(400).json({ error: 'Creator ID and member ID are required' })
-    }
-    if (uuidStringEq(creatorId, memberId)) {
-      return res.status(400).json({ error: 'You cannot remove yourself' })
-    }
+    // Verified-session pattern (same as /api/invites/relink and the admin endpoints):
+    // the creator's identity comes ONLY from the verified token — a client-sent
+    // creatorId is no longer accepted or read.
+    const authHeader = req.get('authorization') || ''
+    const jwt = authHeader.replace(/^Bearer\s+/i, '').trim()
+    if (!jwt) return res.status(401).json({ error: 'Not authenticated' })
 
-    const { data: creator, error: cErr } = await supabase
-      .from('users')
-      .select('id, role')
-      .eq('id', creatorId)
-      .single()
+    const { data: userData, error: userErr } = await supabase.auth.getUser(jwt)
+    const authUser = userData?.user
+    if (userErr || !authUser?.id) return res.status(401).json({ error: 'Invalid session' })
+    const creatorId = authUser.id
 
-    if (cErr || !creator || String(creator.role || '').trim().toLowerCase() !== 'creator') {
-      return res.status(403).json({ error: 'Only creators can remove teammates' })
-    }
+    const { memberId } = req.body || {}
 
-    const { data: member, error: mErr } = await supabase
-      .from('users')
-      .select('id, role, team_creator_id')
-      .eq('id', memberId)
-      .single()
+    const [{ data: caller }, { data: member }] = await Promise.all([
+      supabase.from('users').select('id, role').eq('id', creatorId).maybeSingle(),
+      memberId
+        ? supabase.from('users').select('id, role, team_creator_id').eq('id', memberId).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ])
 
-    if (mErr || !member) {
-      return res.status(404).json({ error: 'User not found' })
-    }
-
-    if (!uuidStringEq(member.team_creator_id, creatorId)) {
-      return res.status(403).json({ error: 'This person is not on your team' })
-    }
-
-    const mRole = String(member.role || '').trim().toLowerCase()
-    if (mRole === 'creator') {
-      return res.status(400).json({ error: 'Invalid team member' })
-    }
+    const decision = removeTeammateDecision({
+      callerId: creatorId,
+      callerRole: caller?.role,
+      memberId,
+      member,
+    })
+    if (!decision.ok) return res.status(decision.status).json({ error: decision.error })
 
     const { data: updatedRows, error: upErr } = await supabase
       .from('users')

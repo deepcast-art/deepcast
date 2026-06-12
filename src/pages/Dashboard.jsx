@@ -1500,7 +1500,8 @@ export default function Dashboard() {
                           setTeamRemoveBusyId(m.id)
                           try {
                             const memberId = m.id
-                            await api.removeTeamMember(profile.id, memberId)
+                            const { data: { session } } = await supabase.auth.getSession()
+                            await api.removeTeamMember(memberId, session?.access_token)
                             setTeamMembers((prev) =>
                               prev.filter((x) => String(x.id) !== String(memberId))
                             )
