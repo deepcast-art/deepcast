@@ -106,13 +106,11 @@ export default function Dashboard() {
   const [teamInvites, setTeamInvites] = useState([])
   const [teamMembers, setTeamMembers] = useState([])
   const [teamRemoveBusyId, setTeamRemoveBusyId] = useState(null)
-  const [sidebarOpen, setSidebarOpen] = useState(
-    () => safeSessionStorage.getItem('dash_creator_sidebar') === 'true'
-  )
-  const [viewerSidebarOpen, setViewerSidebarOpen] = useState(() => {
-    const stored = safeSessionStorage.getItem('dash_viewer_sidebar')
-    return stored === null ? true : stored === 'true'
-  })
+  /** Mobile menus always START closed and never auto-open — the dashboard's main
+   *  page is the initial view (key stats live in the mobile strip; the menu is
+   *  navigation only). Desktop sidebars are always visible and unaffected. */
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [viewerSidebarOpen, setViewerSidebarOpen] = useState(false)
 
   const [newestInviteId, setNewestInviteId] = useState(null)
   const [allViewerSentInvites, setAllViewerSentInvites] = useState([])
@@ -565,14 +563,6 @@ export default function Dashboard() {
     }
   }, [])
 
-  useEffect(() => {
-    safeSessionStorage.setItem('dash_creator_sidebar', sidebarOpen ? 'true' : 'false')
-  }, [sidebarOpen])
-
-  useEffect(() => {
-    safeSessionStorage.setItem('dash_viewer_sidebar', viewerSidebarOpen ? 'true' : 'false')
-  }, [viewerSidebarOpen])
-
   if (!profileLoaded || !profile) return null
 
   const statusBadge = {
@@ -787,7 +777,10 @@ export default function Dashboard() {
         </div>
 
         <aside className={`${viewerSidebarOpen ? 'flex' : 'hidden'} lg:flex w-full min-h-0 shrink-0 flex-col gap-6 overflow-y-auto border-b border-faint/30 bg-ink/80 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] pt-4 sm:px-6 sm:py-10 panel-scroll lg:max-h-[100dvh] lg:w-[22%] lg:min-h-screen lg:border-b-0 lg:border-r lg:px-6 lg:py-10`}>
-          <div className="shrink-0 animate-fade-in">
+          {/* Mobile menu = navigation only (About / Edit your first name / Sign out).
+              Stats + share live on the main page's strip; everything below that's
+              hidden on mobile stays exactly as-is on desktop (lg:). */}
+          <div className="hidden shrink-0 animate-fade-in lg:block">
             <Link to="/" className="hidden lg:inline-block">
               <DeepcastLogo variant="wordmark" className="!text-4xl sm:!text-5xl text-warm" />
             </Link>
@@ -795,12 +788,12 @@ export default function Dashboard() {
           </div>
 
           <div
-            className="h-px w-full shrink-0 bg-warm/[0.08] animate-fade-in"
+            className="hidden h-px w-full shrink-0 bg-warm/[0.08] animate-fade-in lg:block"
             style={{ animationDelay: '60ms' }}
           />
 
           <div
-            className="flex shrink-0 flex-col gap-7 animate-fade-in"
+            className="hidden shrink-0 flex-col gap-7 animate-fade-in lg:flex"
             style={{ animationDelay: '100ms' }}
           >
             <div className="flex flex-col gap-1.5">
@@ -834,7 +827,7 @@ export default function Dashboard() {
           </div>
 
           <div
-            className="h-[0.5px] w-full shrink-0 bg-accent/20 animate-fade-in"
+            className="hidden h-[0.5px] w-full shrink-0 bg-accent/20 animate-fade-in lg:block"
             style={{ animationDelay: '140ms' }}
           />
 
@@ -847,7 +840,7 @@ export default function Dashboard() {
                 type="button"
                 onClick={openShareModal}
                 disabled={shareDisabled}
-                className="w-full bg-accent px-4 py-4 text-center font-sans text-[11px] font-semibold uppercase tracking-[0.28em] text-ink transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+                className="hidden w-full bg-accent px-4 py-4 text-center font-sans text-[11px] font-semibold uppercase tracking-[0.28em] text-ink transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 lg:block"
               >
                 Share this film
               </button>
@@ -957,7 +950,7 @@ export default function Dashboard() {
                   values and styling, visible immediately without opening the hamburger. */}
               <section
                 aria-label="Your stats"
-                className={`${viewerSidebarOpen ? 'hidden' : 'grid'} mb-10 w-full max-w-6xl grid-cols-2 gap-x-8 gap-y-7 animate-fade-in lg:hidden`}
+                className="mb-10 grid w-full max-w-6xl grid-cols-2 gap-x-8 gap-y-7 animate-fade-in lg:hidden"
               >
                 <div className="flex flex-col gap-1.5">
                   <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
@@ -1334,8 +1327,9 @@ export default function Dashboard() {
             <p className="mt-1 font-sans text-xs text-warm/50">For {leadCreatorName}&rsquo;s films</p>
           )}
         </div>
-        <div className="h-[0.5px] w-full bg-accent/20" />
-        <div className="flex flex-col gap-5 font-sans text-[9px] uppercase tracking-widest text-accent/80">
+        <div className="hidden h-[0.5px] w-full bg-accent/20 lg:block" />
+        {/* Stats hidden on mobile — the main page's strip already shows them. */}
+        <div className="hidden flex-col gap-5 font-sans text-[9px] uppercase tracking-widest text-accent/80 lg:flex">
           <div>
             <span className="block text-warm/50">Films</span>
             <span className="font-display text-2xl font-light text-warm">{films.length}</span>
@@ -1348,7 +1342,7 @@ export default function Dashboard() {
             <p className="normal-case text-warm/45">Unlimited invites</p>
           )}
         </div>
-        <div className="h-[0.5px] w-full bg-accent/20" />
+        <div className="hidden h-[0.5px] w-full bg-accent/20 lg:block" />
         <nav className="flex flex-col gap-3 font-sans text-[10px] uppercase tracking-widest">
           <Link className="text-warm/40 transition-colors hover:text-warm" to="/profile">
             Profile
@@ -1383,7 +1377,7 @@ export default function Dashboard() {
             styling, visible immediately without opening the hamburger. */}
         <div
           aria-label="Your stats"
-          className={`${sidebarOpen ? 'hidden' : 'flex'} mb-8 flex-wrap items-start gap-x-10 gap-y-5 font-sans text-[9px] uppercase tracking-widest text-accent/80 animate-fade-in lg:hidden`}
+          className="mb-8 flex flex-wrap items-start gap-x-10 gap-y-5 font-sans text-[9px] uppercase tracking-widest text-accent/80 animate-fade-in lg:hidden"
         >
           <div>
             <span className="block text-warm/50">Films</span>

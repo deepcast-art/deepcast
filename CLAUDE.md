@@ -188,12 +188,12 @@ npm test                 # Unit + E2E
 - `viewerInviteToken` is set to `tokenByFilmId[filmId]` (the token for the currently selected film), not always `uniqueRecvd[0]?.token`.
 
 ### Mobile sidebar (viewer)
-- On mobile (`< lg`), the viewer dashboard has a collapsible sidebar toggled by a hamburger button in the top bar.
-- Sidebar defaults to **open** on first visit (so sign-out and stats are always accessible). The open/closed state persists in `sessionStorage` under `dash_viewer_sidebar` and is restored when the user returns from a screening.
-- On desktop (`lg:`), the sidebar is always visible as a left column.
+- On mobile (`< lg`), the viewer dashboard has a collapsible sidebar toggled by a hamburger button in the top bar. It **always starts closed and never auto-opens** — the main page (with the mobile stats strip) is the initial view.
+- On mobile the menu is **navigation only**: About, Edit your first name, Sign out. Stats and the share button live on the main page (the strip + film cards) and are hidden in the mobile menu to avoid duplication.
+- On desktop (`lg:`), the sidebar is always visible as a left column with everything (name, stats, share button, nav) — unchanged.
 
 ### Mobile sidebar (creator / team_member)
-- The creator/team_member sidebar open/closed state persists in `sessionStorage` under `dash_creator_sidebar` and is restored across navigation.
+- Same rules: starts closed, never auto-opens, stats hidden on mobile (the strip shows them); the nav links (Profile, Set password, Network map, Upload, About, Sign out) remain. Desktop unchanged.
 
 ### Network graph (viewer)
 - The "My network impact" graph feeds `buildGraphLayout` with **all** invites for the selected film (`viewerFilmInvites`), not just the viewer's ancestor/descendant chain. This matches the Network Map page and produces the full circular graph with the viewer's path highlighted in amber against a faded background.
