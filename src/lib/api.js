@@ -104,6 +104,21 @@ export const api = {
       body: JSON.stringify({ token }),
     }),
 
+  // Owner-only admin (server enforces the ADMIN_USER_ID pin; these just pass the session token)
+  adminUnlimitedSharesStatus: (emails, accessToken) =>
+    request('/admin/unlimited-shares/status', {
+      method: 'POST',
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      body: JSON.stringify({ emails }),
+    }),
+
+  adminSetUnlimitedShares: (email, unlimited, accessToken) =>
+    request('/admin/unlimited-shares', {
+      method: 'POST',
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      body: JSON.stringify({ email, unlimited }),
+    }),
+
   sendSignInLink: (email, appUrl = null, redirectPath = '/dashboard') =>
     request('/auth/signin-link', {
       method: 'POST',

@@ -161,6 +161,13 @@ export default function Dashboard() {
   const [modalError, setModalError] = useState('')
 
   const [visibleSentCount, setVisibleSentCount] = useState(SENT_LIST_PAGE_SIZE)
+  /** Owner-only unlimited-shares toggle: per-email status from the admin endpoint
+   *  ({ invitedByYou, hasAccount, eligible, unlimited }). Stays empty for anyone
+   *  the server rejects (the endpoint is pinned to ADMIN_USER_ID server-side),
+   *  so no toggles render for non-owner accounts. */
+  const [unlimitedStatuses, setUnlimitedStatuses] = useState({})
+  const [unlimitedBusy, setUnlimitedBusy] = useState({})
+  const [unlimitedError, setUnlimitedError] = useState({})
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [nameBusy, setNameBusy] = useState(false)
@@ -419,6 +426,57 @@ export default function Dashboard() {
     if (profile?.role === 'creator') void loadTeamSection()
   }, [profile?.id, profile?.role])
 
+  /** Load unlimited-shares statuses for the people the creator invited. The server
+   *  is the gate (ADMIN_USER_ID pin) — a 403/503 here simply leaves the map empty
+   *  and no toggle UI renders. Read-only; never touches gating or quotas itself. */
+  useEffect(() => {
+    if (profile?.role !== 'creator') return
+    const emails = [
+      ...new Set(
+        Object.values(inviteTree)
+          .flat()
+          .filter((n) => n.senderId === profile.id)
+          .map((n) => (n.recipient || '').trim().toLowerCase())
+          .filter(Boolean)
+      ),
+    ]
+    if (!emails.length) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session?.access_token) return
+        const { statuses } = await api.adminUnlimitedSharesStatus(emails, session.access_token)
+        if (!cancelled && statuses) setUnlimitedStatuses(statuses)
+      } catch {
+        /* not the owner account (or not configured) — no toggles shown */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [profile?.id, profile?.role, inviteTree])
+
+  async function handleToggleUnlimited(rawEmail) {
+    const email = (rawEmail || '').trim().toLowerCase()
+    const current = unlimitedStatuses[email]
+    if (!current?.eligible || unlimitedBusy[email]) return
+    setUnlimitedBusy((prev) => ({ ...prev, [email]: true }))
+    setUnlimitedError((prev) => ({ ...prev, [email]: '' }))
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const result = await api.adminSetUnlimitedShares(email, !current.unlimited, session?.access_token)
+      setUnlimitedStatuses((prev) => ({
+        ...prev,
+        [email]: { ...prev[email], unlimited: Boolean(result.unlimited) },
+      }))
+    } catch (err) {
+      setUnlimitedError((prev) => ({ ...prev, [email]: err.message || 'Could not update' }))
+    } finally {
+      setUnlimitedBusy((prev) => ({ ...prev, [email]: false }))
+    }
+  }
+
   async function loadDashboard() {
     try {
       if (profile.role === 'viewer') {
@@ -478,6 +536,7 @@ export default function Dashboard() {
           return {
             id: inv.id,
             sender: sender?.name || sender?.email || 'Anonymous',
+            senderId: inv.sender_id,
             recipient: inv.recipient_email,
             status: inv.status,
           }
@@ -1685,6 +1744,43 @@ export default function Dashboard() {
                                 Failed
                               </span>
                             )}
+                            {node.senderId === profile.id &&
+                              (() => {
+                                const email = (node.recipient || '').trim().toLowerCase()
+                                const status = unlimitedStatuses[email]
+                                if (!status) return null
+                                if (!status.eligible) {
+                                  return status.hasAccount ? null : (
+                                    <span className="text-[10px] uppercase tracking-wider text-text-muted/50">
+                                      No account yet
+                                    </span>
+                                  )
+                                }
+                                return (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleUnlimited(email)}
+                                      disabled={Boolean(unlimitedBusy[email])}
+                                      aria-pressed={status.unlimited}
+                                      className={`text-[10px] uppercase tracking-wider transition-colors disabled:opacity-50 ${
+                                        status.unlimited
+                                          ? 'text-accent hover:text-accent-hover'
+                                          : 'text-text-muted hover:text-text'
+                                      }`}
+                                    >
+                                      {unlimitedBusy[email]
+                                        ? 'Saving...'
+                                        : `Unlimited: ${status.unlimited ? 'On' : 'Off'}`}
+                                    </button>
+                                    {unlimitedError[email] && (
+                                      <span className="text-[10px] normal-case text-error">
+                                        {unlimitedError[email]}
+                                      </span>
+                                    )}
+                                  </>
+                                )
+                              })()}
                             <span
                               className={`ml-auto uppercase tracking-wider ${
                                 node.status === 'watched' || node.status === 'signed_up'
