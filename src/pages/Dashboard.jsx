@@ -166,6 +166,8 @@ export default function Dashboard() {
   const [unlimitedStatuses, setUnlimitedStatuses] = useState({})
   const [unlimitedBusy, setUnlimitedBusy] = useState({})
   const [unlimitedError, setUnlimitedError] = useState({})
+  /** Per-email inline confirm (the pill never flips without one). */
+  const [unlimitedConfirm, setUnlimitedConfirm] = useState({})
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [nameBusy, setNameBusy] = useState(false)
@@ -536,6 +538,7 @@ export default function Dashboard() {
             sender: sender?.name || sender?.email || 'Anonymous',
             senderId: inv.sender_id,
             recipient: inv.recipient_email,
+            recipientName: inv.recipient_name,
             status: inv.status,
           }
         })
@@ -1751,22 +1754,55 @@ export default function Dashboard() {
                                     </span>
                                   )
                                 }
+                                const first =
+                                  (node.recipientName || '').trim().split(/\s+/)[0] ||
+                                  email.split('@')[0]
+                                if (unlimitedConfirm[email]) {
+                                  return (
+                                    <span className="flex flex-wrap items-center gap-2 normal-case">
+                                      <span className="text-[11px] text-text">
+                                        {status.unlimited
+                                          ? `Return ${first} to the standard share count?`
+                                          : `Give ${first} unlimited shares?`}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setUnlimitedConfirm((p) => ({ ...p, [email]: false }))
+                                          handleToggleUnlimited(email)
+                                        }}
+                                        className="text-[10px] uppercase tracking-wider text-accent transition-colors hover:text-accent-hover"
+                                      >
+                                        Confirm
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setUnlimitedConfirm((p) => ({ ...p, [email]: false }))}
+                                        className="text-[10px] uppercase tracking-wider text-text-muted transition-colors hover:text-text"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </span>
+                                  )
+                                }
                                 return (
                                   <>
                                     <button
                                       type="button"
-                                      onClick={() => handleToggleUnlimited(email)}
+                                      onClick={() => setUnlimitedConfirm((p) => ({ ...p, [email]: true }))}
                                       disabled={Boolean(unlimitedBusy[email])}
                                       aria-pressed={status.unlimited}
-                                      className={`text-[10px] uppercase tracking-wider transition-colors disabled:opacity-50 ${
+                                      className={`rounded-full border px-2.5 py-0.5 text-[9px] uppercase tracking-[0.18em] transition-colors disabled:opacity-50 ${
                                         status.unlimited
-                                          ? 'text-accent hover:text-accent-hover'
-                                          : 'text-text-muted hover:text-text'
+                                          ? 'border-accent/50 text-accent hover:border-accent'
+                                          : 'border-border text-text-muted hover:border-text-muted hover:text-text'
                                       }`}
                                     >
                                       {unlimitedBusy[email]
-                                        ? 'Saving...'
-                                        : `Unlimited: ${status.unlimited ? 'On' : 'Off'}`}
+                                        ? 'Saving…'
+                                        : status.unlimited
+                                          ? 'Unlimited shares'
+                                          : 'Standard · 5 shares'}
                                     </button>
                                     {unlimitedError[email] && (
                                       <span className="text-[10px] normal-case text-error">
