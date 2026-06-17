@@ -2,6 +2,11 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from './lib/auth'
 import { supabase } from './lib/supabase'
+import { DEV_HARNESS_ENABLED } from './lib/devHarness'
+
+// DEV-ONLY harness page. Gated on import.meta.env.DEV so the import() lives in dead code in a
+// production build — Rollup drops the chunk entirely (no DevHarness chunk ships to production).
+const DevHarness = import.meta.env.DEV ? lazy(() => import('./pages/dev/DevHarness.jsx')) : null
 
 const InviteScreening = lazy(() => import('./pages/InviteScreening.jsx'))
 const Signup = lazy(() => import('./pages/Signup.jsx'))
@@ -255,6 +260,16 @@ export default function App() {
           </ProtectedRoute>
         }
       />
+      {DEV_HARNESS_ENABLED && DevHarness && (
+        <Route
+          path="/dev"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <DevHarness />
+            </Suspense>
+          }
+        />
+      )}
     </Routes>
     </>
   )

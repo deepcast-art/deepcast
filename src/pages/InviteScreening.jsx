@@ -430,6 +430,30 @@ export default function InviteScreening() {
     setShowPostFilm(true)
   }, [showShareIntent, status])
 
+  // DEV-ONLY: ?devStage=prologue|completion jumps straight to an internal screening state that
+  // the normal flow only reaches via timers. Leads with import.meta.env.DEV so a production build
+  // dead-code-eliminates this whole effect (the 'devStage' string never ships). Fails closed when
+  // VITE_ENABLE_DEV_HARNESS !== 'true'. The production code path is untouched when the gate is off.
+  useEffect(() => {
+    if (!import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEV_HARNESS !== 'true') return
+    if (status !== 'valid') return
+    const stage = searchParams.get('devStage')
+    if (stage !== 'prologue' && stage !== 'completion') return
+    if (entrySplashTimerRef.current?.clear) entrySplashTimerRef.current.clear()
+    entrySplashRunningRef.current = false
+    setMobileRotateGateActive(false)
+    setPrologueState({ text1: false, text2: false, textsVisible: false, overlayVisible: false, mounted: false })
+    setViewVisible(true)
+    setCurrentView('screening')
+    if (stage === 'prologue') {
+      setPrologueHoldingPlayback(true)
+      setPreScreeningPrologue({ visible: true, textVisible: true, text2Visible: true, fading: false })
+    } else {
+      setShowPostFilm(true)
+      setCompletionThankYouVisible(true)
+    }
+  }, [status, searchParams])
+
   async function validateInvite() {
     // Exponential backoff: 0 → 1s → 2s → 4s → 8s (5 attempts, ~15s total budget)
     const DELAYS = [0, 1000, 2000, 4000, 8000]
