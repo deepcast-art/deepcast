@@ -183,8 +183,6 @@ export default function InviteScreening() {
   const [viewVisible, setViewVisible] = useState(false)
   const [isScreeningPaused, setIsScreeningPaused] = useState(true)
   const [showPostFilm, setShowPostFilm] = useState(false)
-  /** After the film ends (guests): full thank-you step before “Pass it on” — all viewports. */
-  const [completionThankYouVisible, setCompletionThankYouVisible] = useState(false)
   /** While playing: hide “Now Screening” + film title after 5s; reset when playback pauses. */
   const [filmTitleHidden, setFilmTitleHidden] = useState(false)
   /** True after first play / meaningful progress — avoids showing Pass it on before the film has started. */
@@ -337,7 +335,7 @@ export default function InviteScreening() {
   const desktopPassItOnActive = isLgUp && isScreeningPaused && screeningPlaybackEverStarted && !showPostFilm
   const passItOnLayerActive = showPostFilm || narrowPausePassItOn || desktopPassItOnActive
   const passItOnContentVisible =
-    (showPostFilm && !completionThankYouVisible) || narrowPausePassItOn || desktopPassItOnActive
+    showPostFilm || narrowPausePassItOn || desktopPassItOnActive
 
   /* ---------- DATA FETCHING ---------- */
 
@@ -352,7 +350,6 @@ export default function InviteScreening() {
 
   useEffect(() => {
     iosVideoFullscreenDoneRef.current = false
-    setCompletionThankYouVisible(false)
     setFilmTitleHidden(false)
     setScreeningPlaybackEverStarted(false)
     setPassItOnFromUserPause(false)
