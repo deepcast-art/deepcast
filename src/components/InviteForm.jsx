@@ -19,7 +19,7 @@ export default function InviteForm({
 }) {
   /** See slotsRemaining: the quota is frozen at mount on purpose. */
   const [quotaAtMount] = useState(() => Math.max(0, maxInvites))
-  const [recipients, setRecipients] = useState(() => [{ firstName: '', email: '', note: '' }])
+  const [recipients, setRecipients] = useState(() => [{ firstName: '', lastName: '', email: '', note: '' }])
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState([])
   const [error, setError] = useState('')
@@ -57,6 +57,12 @@ export default function InviteForm({
     })
     if (validRecipients.length === 0) {
       setError('Please add a valid email for each invite.')
+      return
+    }
+
+    // First and last name are both mandatory for every recipient.
+    if (validRecipients.some((r) => !r.firstName.trim() || !r.lastName.trim())) {
+      setError('Each invitation needs the recipient’s first and last name.')
       return
     }
 
@@ -110,8 +116,9 @@ export default function InviteForm({
           }
 
           const recipientNote = recipient.note.trim()
-          const recipientName =
-            recipient.firstName.trim() || recipient.email.trim().split('@')[0] || ''
+          // recipientName stays first-name only (every display surface reads it as such);
+          // the last name rides alongside and is stored in its own column.
+          const recipientName = recipient.firstName.trim()
           await api.sendInvite(
             filmId,
             recipient.email.trim(),
@@ -122,7 +129,8 @@ export default function InviteForm({
             recipientNote,
             appUrl,
             null,
-            recipient.firstName.trim()
+            recipient.firstName.trim(),
+            recipient.lastName.trim()
           )
           succeeded.push(recipient)
           setSent((prev) => [...prev, recipient])
@@ -134,14 +142,14 @@ export default function InviteForm({
 
       if (failed.length) {
         // Keep exactly the failed recipients in the form so they can retry.
-        setRecipients(failed.map(({ firstName, email, note }) => ({ firstName, email, note })))
+        setRecipients(failed.map(({ firstName, lastName, email, note }) => ({ firstName, lastName, email, note })))
         setError(
           failed
             .map((f) => `${f.firstName.trim() || f.email.trim()} ${f.reason}`)
             .join(' — ')
         )
       } else {
-        setRecipients([{ firstName: '', email: '', note: '' }])
+        setRecipients([{ firstName: '', lastName: '', email: '', note: '' }])
       }
 
       if (succeeded.length) {
@@ -241,11 +249,20 @@ export default function InviteForm({
                   className="w-1/2 bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
                 />
                 <input
+                  type="text"
+                  value={recipient.lastName}
+                  onChange={(e) => updateRecipient(i, 'lastName', e.target.value)}
+                  placeholder="Last name"
+                  className="w-1/2 bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+                />
+              </div>
+              <div className="flex gap-2">
+                <input
                   type="email"
                   value={recipient.email}
                   onChange={(e) => updateRecipient(i, 'email', e.target.value)}
                   placeholder="Email"
-                  className="w-1/2 bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
+                  className="flex-1 bg-bg-card border-[0.5px] border-border rounded-none px-4 py-3 text-text text-sm focus:outline-none focus:border-accent transition-colors"
                 />
                 {recipients.length > 1 && (
                   <button

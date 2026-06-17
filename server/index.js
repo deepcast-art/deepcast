@@ -378,6 +378,7 @@ app.post('/api/invites/send', async (req, res) => {
       recipientEmail,
       recipientName,
       recipientFirstName: recipientFirstNameInput,
+      recipientLastName: recipientLastNameInput,
       senderName,
       senderId,
       senderEmail,
@@ -393,6 +394,14 @@ app.post('/api/invites/send', async (req, res) => {
     const recipientEmailNorm = normalizeEmail(recipientEmail)
     if (!recipientEmailNorm || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmailNorm)) {
       return res.status(400).json({ error: 'Invalid recipient email address' })
+    }
+
+    // Recipient last name is mandatory (the share form collects first + last). Stored in its
+    // own column; recipient_name stays first-name only. Don't trust the client to enforce this.
+    const recipientLastName =
+      typeof recipientLastNameInput === 'string' ? recipientLastNameInput.trim() : ''
+    if (!recipientLastName) {
+      return res.status(400).json({ error: "Recipient last name is required" })
     }
 
     let previousAllocation = null
@@ -584,6 +593,7 @@ app.post('/api/invites/send', async (req, res) => {
         sender_email: senderEmail || null,
         recipient_email: recipientEmailNorm,
         recipient_name: recipientName || null,
+        recipient_last_name: recipientLastName,
         personal_note: personalNote || null,
         token,
         status: 'pending',
@@ -1424,7 +1434,7 @@ app.post('/api/invites/claim-account', async (req, res) => {
     //    The client-supplied email (if any) is intentionally ignored.
     const { data: invite, error: invErr } = await supabase
       .from('invites')
-      .select('id, recipient_email, recipient_name')
+      .select('id, recipient_email, recipient_name, recipient_last_name')
       .eq('token', t)
       .maybeSingle()
     if (invErr) {
@@ -1444,10 +1454,11 @@ app.post('/api/invites/claim-account', async (req, res) => {
         : invite.recipient_name && invite.recipient_name.trim()
           ? invite.recipient_name.trim()
           : emailNorm.split('@')[0]
-    // Names are first-name-only now — store the whole name as first_name; don't split off a
-    // last name. (Existing accounts are unaffected; nothing user-facing reads first_name.)
+    // displayName is the first name (users.name stays first-name only). The invite's last name,
+    // when present, carries into the new account's last_name so it holds the full name.
     const firstName = displayName
-    const lastName = ''
+    const lastName =
+      (invite.recipient_last_name && invite.recipient_last_name.trim()) || ''
 
     // 2) Find-or-create the auth user for the invited email.
     const existingAuthUser = await findAuthUserByEmail(emailNorm)
@@ -1639,11 +1650,11 @@ async function ensureProfileForUserId(userId) {
  * Returns { userId, created } — `created` is true only when THIS call created the auth user, so the
  * caller knows whether it's safe to roll the user back on a later failure.
  */
-async function findOrCreatePasswordlessAccount(emailNorm, displayName, precheckedAuthUser) {
-  // Names are first-name-only now — store the whole name as first_name; don't split off a
-  // last name. (Existing accounts are unaffected; nothing user-facing reads first_name.)
+async function findOrCreatePasswordlessAccount(emailNorm, displayName, precheckedAuthUser, lastNameInput = '') {
+  // displayName is the first name (users.name stays first-name only). The last name, when the
+  // invite carried one, is stored in its own column so the account holds the full name.
   const firstName = displayName
-  const lastName = ''
+  const lastName = typeof lastNameInput === 'string' ? lastNameInput.trim() : ''
 
   // `precheckedAuthUser` lets a caller that already ran findAuthUserByEmail (an admin scan of
   // every auth user) pass its result in — undefined means "not checked, look it up here".
@@ -1778,16 +1789,19 @@ app.post('/api/invites/session', async (req, res) => {
 
     // Invite lookup and the existing-account scan are independent — run them together.
     const [{ data: invite, error: invErr }, existingAuthUser] = await Promise.all([
-      supabase.from('invites').select('id, recipient_name, recipient_email').eq('token', t).maybeSingle(),
+      supabase.from('invites').select('id, recipient_name, recipient_last_name, recipient_email').eq('token', t).maybeSingle(),
       // EXISTING-ACCOUNT GUARD: never mint a session without an inbox round-trip.
       findAuthUserByEmail(emailNorm),
     ])
     if (invErr) return res.status(500).json({ error: 'Failed to load invitation' })
     if (!invite) return res.status(404).json({ error: 'Invitation not found' })
 
-    // Name follows the invite record, not the typed email.
+    // Name follows the invite record, not the typed email. First name → displayName/users.name;
+    // the invite's last name (when present) carries into the new account's last_name.
     const displayName =
       (invite.recipient_name && invite.recipient_name.trim()) || emailNorm.split('@')[0]
+    const recipientLastName =
+      (invite.recipient_last_name && invite.recipient_last_name.trim()) || ''
     if (existingAuthUser) {
       const baseUrl = resolveBaseUrl(appUrl, req.get('origin'))
       const redirectTo = `${baseUrl}/i/${encodeURIComponent(t)}`
@@ -1805,7 +1819,7 @@ app.post('/api/invites/session', async (req, res) => {
     try {
       // The guard above already scanned for this email and found nothing — pass that result
       // through (null) so the helper doesn't repeat the full-account-list scan.
-      ({ userId, created } = await findOrCreatePasswordlessAccount(emailNorm, displayName, existingAuthUser))
+      ({ userId, created } = await findOrCreatePasswordlessAccount(emailNorm, displayName, existingAuthUser, recipientLastName))
     } catch (err) {
       if (err.alreadyExists) {
         // Raced with a create — fall back to the email round-trip rather than minting.
