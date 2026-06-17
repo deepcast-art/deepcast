@@ -1635,17 +1635,28 @@ export default function InviteScreening() {
             className="max-w-2xl px-6 md:px-8 text-left"
             style={{ transition: 'opacity 3s ease-in-out', opacity: preScreeningPrologue.textVisible && !preScreeningPrologue.fading ? 1 : 0 }}
           >
-            <p className="font-serif-v3 italic text-lg md:text-2xl text-[#dddddd]/90 leading-relaxed">
-              {entryRecipientLabel}, you already know something is wrong.{' '}
-              {sharerFirstForSplash} thinks you&apos;re ready for something more.
-            </p>
-            <p
-              className="font-serif-v3 italic text-lg md:text-2xl text-[#dddddd]/90 leading-relaxed mt-4 md:mt-6"
-              style={{ transition: 'opacity 2.5s ease-in-out', opacity: preScreeningPrologue.text2Visible ? 1 : 0 }}
-            >
-              This is for the hungry ones. Those building a better world, seeking real
-              depth, real connection, real meaning — and refusing to settle for anything less.
-            </p>
+            {film?.id === '7c42093d-d5eb-4a38-a9fa-d28ca41d7b0f' ? (
+              /* "A Sacred Pause" — custom pre-screening welcome (this film only). */
+              <p className="font-serif-v3 italic text-lg md:text-2xl text-[#dddddd]/90 leading-relaxed">
+                Jon, this is where we can write any custom messages we&apos;d like to
+                share with the viewers - whether it&apos;s a heartfelt message of thanks,
+                a line or two about the theme of the film, or anything else we&apos;d like.
+              </p>
+            ) : (
+              <>
+                <p className="font-serif-v3 italic text-lg md:text-2xl text-[#dddddd]/90 leading-relaxed">
+                  {entryRecipientLabel}, you already know something is wrong.{' '}
+                  {sharerFirstForSplash} thinks you&apos;re ready for something more.
+                </p>
+                <p
+                  className="font-serif-v3 italic text-lg md:text-2xl text-[#dddddd]/90 leading-relaxed mt-4 md:mt-6"
+                  style={{ transition: 'opacity 2.5s ease-in-out', opacity: preScreeningPrologue.text2Visible ? 1 : 0 }}
+                >
+                  This is for the hungry ones. Those building a better world, seeking real
+                  depth, real connection, real meaning — and refusing to settle for anything less.
+                </p>
+              </>
+            )}
           </div>
         </div>
       )}
