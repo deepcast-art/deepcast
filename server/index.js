@@ -356,11 +356,17 @@ const deliverEmail = createEmailDispatcher({
   },
 })
 
+// "A Sacred Pause" gets a few invite-email customizations gated to this exact film id;
+// every other film is unaffected. (Same id used by the screening welcome-message gate.)
+const SACRED_PAUSE_FILM_ID = '7c42093d-d5eb-4a38-a9fa-d28ca41d7b0f'
+
 /** Animated-preview GIF for the invite email, built from the film's Mux playback id.
- *  Returns null when the film has no playback id. */
-function buildFilmGifUrl(film) {
+ *  A Sacred Pause renders at 15fps; every other film keeps the original 10fps and the
+ *  byte-for-byte identical URL. Returns null when the film has no playback id. */
+function buildFilmGifUrl(film, filmId) {
   if (!film.mux_playback_id) return null
-  return `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=380&fps=10` +
+  const fps = filmId === SACRED_PAUSE_FILM_ID ? 15 : 10
+  return `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=380&fps=${fps}` +
     `${film.gif_start != null ? `&start=${film.gif_start}` : ''}` +
     `${film.gif_end != null ? `&end=${film.gif_end}` : ''}`
 }
@@ -623,7 +629,7 @@ app.post('/api/invites/send', async (req, res) => {
     const displaySender = senderName || 'Someone'
     const displaySenderEmail = senderEmail || null
 
-    const filmGifUrl = buildFilmGifUrl(film)
+    const filmGifUrl = buildFilmGifUrl(film, filmId)
 
     const emailPayload = withFilmInviteMailingHeaders(
       withReplyTo(
@@ -635,6 +641,7 @@ app.post('/api/invites/send', async (req, res) => {
             senderName: displaySender,
             recipientName: recipientFirstName,
             filmTitle: film.title,
+            filmId,
             filmDescription: film.description,
             filmGifUrl,
             inviteUrl,
@@ -742,12 +749,13 @@ app.post('/api/invites/resend-last', async (req, res) => {
     const inviteUrl = ctx ? `${baseUrl}/i/${invite.token}?ctx=${ctx}` : `${baseUrl}/i/${invite.token}`
 
     try {
-      const filmGifUrl = buildFilmGifUrl(film)
+      const filmGifUrl = buildFilmGifUrl(film, invite.film_id)
 
       const htmlBody = buildInviteEmailHtml({
         senderName: displaySender,
         recipientName: recipientFirstName,
         filmTitle: film.title,
+        filmId: invite.film_id,
         filmDescription: film.description,
         filmGifUrl,
         inviteUrl,
@@ -850,12 +858,13 @@ app.post('/api/invites/resend', async (req, res) => {
     const inviteUrl = ctx ? `${baseUrl}/i/${invite.token}?ctx=${ctx}` : `${baseUrl}/i/${invite.token}`
 
     try {
-      const filmGifUrl = buildFilmGifUrl(film)
+      const filmGifUrl = buildFilmGifUrl(film, invite.film_id)
 
       const htmlBody = buildInviteEmailHtml({
         senderName: displaySender,
         recipientName: recipientFirstName,
         filmTitle: film.title,
+        filmId: invite.film_id,
         filmDescription: film.description,
         filmGifUrl,
         inviteUrl,
@@ -2249,6 +2258,7 @@ function buildInviteEmailHtml({
   senderName,
   recipientName,
   filmTitle,
+  filmId,
   filmDescription,
   filmGifUrl,
   inviteUrl,
@@ -2268,6 +2278,15 @@ function buildInviteEmailHtml({
     inviteUrl: escapeHtml(inviteUrl),
     filmGifUrl: filmGifUrl ? escapeHtml(filmGifUrl) : null,
   }
+
+  // A Sacred Pause only: italicize the title and any "A Sacred Pause" in the synopsis.
+  // Applied to the ALREADY-ESCAPED strings by wrapping in <i>…</i> we control — the data
+  // is never unescaped and no data-supplied HTML is ever allowed through.
+  const isSacredPause = filmId === SACRED_PAUSE_FILM_ID
+  const filmTitleHtml = isSacredPause ? `<i>${safe.filmTitle}</i>` : safe.filmTitle
+  const filmDescriptionHtml = isSacredPause
+    ? safe.filmDescription.replace(/A Sacred Pause/g, '<i>A Sacred Pause</i>')
+    : safe.filmDescription
 
   const gifBlock = safe.filmGifUrl
     ? `<tr><td align="center" style="padding:16px 0;">
@@ -2320,13 +2339,13 @@ ${greetingBlock}
 ${noteBlock}
 
 <tr><td style="padding:0 40px 12px;">
-  <p style="margin:0;font-family:system-ui,-apple-system,sans-serif;font-weight:700;font-size:15px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;">${safe.filmTitle}</p>
+  <p style="margin:0;font-family:system-ui,-apple-system,sans-serif;font-weight:700;font-size:15px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;">${filmTitleHtml}</p>
 </td></tr>
 
 ${gifBlock}
 
 <tr><td style="padding:0 40px 32px;">
-  <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.7;color:#8a9bb8;">${safe.filmDescription}</p>
+  <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.7;color:#8a9bb8;">${filmDescriptionHtml}</p>
 </td></tr>
 
 <tr><td align="center" style="padding:0 40px 40px;">
