@@ -12,6 +12,25 @@ Deepcast is an invite-based social network for sharing films through word of mou
 - Before ANY production deletion: SELECT and show the owner the exact rows first. No exceptions.
 - The 50 seeded demo graph nodes (invites with `recipient_email LIKE '%@demo.invalid'`) are intentional and stay.
 
+## Films (two films, June 2026)
+
+The app is multi-film. There are currently two films:
+
+- **"The New Narrative"** (`80df945a-6fb7-416b-ad73-3fab4b9cadf8`) — the REAL film, with real users and the real share graph. Covered by the real-users rule above.
+- **"A Sacred Pause"** (`7c42093d-d5eb-4a38-a9fa-d28ca41d7b0f`, mux playback `6GMWj01CjP01Y1ee001Vd2qYqUPJtEOgUYz00nG02BYE9F9E`) — a **DEMO** film owned by the filmmaker (`filmmaker@gmail.com`), seeded with ghost invites (recipients `…@demo-deepcast.invalid`) to demonstrate the share graph. Its `description` and `gif_start=616` / `gif_end=624` are set so its custom invite email renders a real synopsis + GIF window.
+  - **Distinct from** the 50 `…@demo.invalid` seeded graph nodes on The New Narrative (real-users section above) — different film, different email domain. Do not conflate the two demo sets.
+  - **Teardown:** `node server/teardown-demo-film.js --id=7c42093d-d5eb-4a38-a9fa-d28ca41d7b0f` removes everything the demo created (its invites, watch_sessions, then the film row). Dry-run by default; `--execute` + typed confirmation to delete. Scoped to that one film id, and refuses to touch protected real-user emails.
+
+### A Sacred Pause demo stopgaps (tech debt — NOT general behaviour)
+
+Three customizations are hardcoded behind `SACRED_PAUSE_FILM_ID === '7c42093d-…'` purely for the demo. Do NOT read them as general app behaviour:
+
+- the custom pre-screening welcome message (`src/pages/InviteScreening.jsx`),
+- the invite-email title + synopsis italics (`buildInviteEmailHtml`, `server/index.js`),
+- the invite-email GIF at `fps=15` (`buildFilmGifUrl`, `server/index.js`).
+
+These are per-film hardcodes pending the multi-film / editable-welcome work, where they become per-film editable fields (editable welcome copy, synopsis, GIF window + fps). When that lands, delete the `SACRED_PAUSE_FILM_ID` gates.
+
 ## Platform principles (use these when writing any user-facing copy or making product decisions)
 
 - Deepcast is private, human-to-human film sharing. No algorithms, no feed, no AI curation. Films travel person to person, by invitation only — "the modern-day version of storytelling around the fire."
@@ -117,6 +136,22 @@ npm test                 # Unit + E2E
 - **Acceptance is verified, per recipient.** The dispatcher resolves only once Resend confirmed it accepted the email. `/api/invites/send` awaits this before answering; on permanent failure it rolls back the invite row and the allocation and returns an error, so a retry starts clean (not blocked by the duplicate-invite check).
 - **The UI never claims success for a recipient whose email was not confirmed accepted.** Multi-recipient sends report per-recipient truth: failures are shown clearly and the failed recipients stay in the form for retry (`handleSendLetter` in `InviteScreening.jsx`, `InviteForm.jsx`). `server/emailDelivery.test.js` proves the throttling, the retry, and the honest-failure behaviour.
 - The Resend API key is **send-only** — it cannot read send history, so past sends can't be audited through the API. Acceptance must be captured at send time: the `emailId` in the `/api/invites/send` response and the `[email] Resend accepted` server log line.
+
+## Invite email content & MUX GIF
+
+(Delivery/throttling is the doctrine above; this is how the email's CONTENT is built.)
+
+- **The invite email is film-data-driven.** Synopsis = `films.description`; the animated preview GIF URL is built by `buildFilmGifUrl(film, filmId)` from `films.mux_playback_id` + `films.gif_start`/`gif_end`. The HTML body is assembled in `buildInviteEmailHtml` (`server/index.js`). Per-film content needs only the film row, not code — the A Sacred Pause italics/fps are the gated demo exception noted in the Films section.
+- **`films.description` is HTML-escaped and its newlines are dropped.** It is inserted via `escapeHtml`, with no `\n`→`<br>` conversion, so any markup or line breaks in the data are lost. **Formatting must be done in the template, not the data** — wrap the already-escaped strings in tags we control; never unescape, never allow data-supplied HTML through.
+- **GIF params:** requested at `width=380` (displayed at `520`), `fps=10` (`fps=15` for A Sacred Pause). `&start=`/`&end=` are appended only when `gif_start`/`gif_end` are set.
+- **MUX's animated-GIF endpoint ignores `fit_mode`/`crop`** — letterbox bars baked into a source video CANNOT be removed via URL params. Fix the source video, not the URL.
+- **`server/preview-email.js` is a SEPARATE, drifted copy** — it does NOT import the real `buildInviteEmailHtml`; it keeps its own copy that has already diverged (header label, personal-note block, paddings). It is an approximation for eyeballing layout only and does NOT reflect real email changes. To trust a change, render the real builder, not the preview.
+
+## Invite send flow (multi-film)
+
+- **Sending is multi-film.** On the creator dashboard, each film card's "Invite friends" button passes that `film.id` to the shared `InviteForm` (`src/components/InviteForm.jsx`), which POSTs to `/api/invites/send` with that `filmId`. The film is the form's prop — never hardcoded. (Upload and Profile also mount `InviteForm` with their own film id.)
+- **Creators are unlimited and may invite for any film they own** (the server requires `films.creator_id` to match the sender; a creator inviting to a film they don't own is rejected).
+- **Send guards** (`/api/invites/send`): no invite to the film creator's own email (see Standing product rules / `server/shareRules.js`); **dedup is one invite per (film, email)** — a duplicate returns 409, and `InviteForm` also pre-checks it; there is **no test-email allowlist** on the send endpoint (allowlists live only in the maintenance scripts).
 
 ## Standing product rules
 
