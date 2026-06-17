@@ -356,6 +356,15 @@ const deliverEmail = createEmailDispatcher({
   },
 })
 
+/** Animated-preview GIF for the invite email, built from the film's Mux playback id.
+ *  Returns null when the film has no playback id. */
+function buildFilmGifUrl(film) {
+  if (!film.mux_playback_id) return null
+  return `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=380&fps=10` +
+    `${film.gif_start != null ? `&start=${film.gif_start}` : ''}` +
+    `${film.gif_end != null ? `&end=${film.gif_end}` : ''}`
+}
+
 app.post('/api/invites/send', async (req, res) => {
   try {
     const {
@@ -614,9 +623,7 @@ app.post('/api/invites/send', async (req, res) => {
     const displaySender = senderName || 'Someone'
     const displaySenderEmail = senderEmail || null
 
-    const filmGifUrl = film.mux_playback_id
-      ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=380&fps=10${film.gif_start != null ? `&start=${film.gif_start}` : ''}${film.gif_end != null ? `&end=${film.gif_end}` : ''}`
-      : null
+    const filmGifUrl = buildFilmGifUrl(film)
 
     const emailPayload = withFilmInviteMailingHeaders(
       withReplyTo(
@@ -735,9 +742,7 @@ app.post('/api/invites/resend-last', async (req, res) => {
     const inviteUrl = ctx ? `${baseUrl}/i/${invite.token}?ctx=${ctx}` : `${baseUrl}/i/${invite.token}`
 
     try {
-      const filmGifUrl = film.mux_playback_id
-        ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=380&fps=10${film.gif_start != null ? `&start=${film.gif_start}` : ''}${film.gif_end != null ? `&end=${film.gif_end}` : ''}`
-        : null
+      const filmGifUrl = buildFilmGifUrl(film)
 
       const htmlBody = buildInviteEmailHtml({
         senderName: displaySender,
@@ -845,9 +850,7 @@ app.post('/api/invites/resend', async (req, res) => {
     const inviteUrl = ctx ? `${baseUrl}/i/${invite.token}?ctx=${ctx}` : `${baseUrl}/i/${invite.token}`
 
     try {
-      const filmGifUrl = film.mux_playback_id
-        ? `https://image.mux.com/${film.mux_playback_id}/animated.gif?width=380&fps=10${film.gif_start != null ? `&start=${film.gif_start}` : ''}${film.gif_end != null ? `&end=${film.gif_end}` : ''}`
-        : null
+      const filmGifUrl = buildFilmGifUrl(film)
 
       const htmlBody = buildInviteEmailHtml({
         senderName: displaySender,
