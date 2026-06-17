@@ -81,7 +81,6 @@ export default function DevHarness() {
     ['Fresh entry (sign out)', () => freshEntry(t)],
     ['Pre-screening prologue', () => navigate(`/i/${t}?devStage=prologue`)],
     ['Player (resume @Ns)', () => navigate(`/i/${t}?play=1&t=${Math.max(0, Number(resumeSec) || 0)}`)],
-    ['Completion / thank-you', () => navigate(`/i/${t}?devStage=completion`)],
     ['Pass-it-on', () => navigate(`/i/${t}`, { state: { showShare: true } })],
   ]
 
