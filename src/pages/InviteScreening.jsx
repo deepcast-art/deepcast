@@ -33,7 +33,7 @@ import './screening-room.css'
 const VIEWER_SHARE_LIMIT = 5
 
 /** Blank share-letter recipient row (always-visible optional note). */
-const EMPTY_RECIPIENT = { first: '', email: '', note: '' }
+const EMPTY_RECIPIENT = { first: '', last: '', email: '', note: '' }
 
 /** Mobile “Open your invitation” waits until this orientation before the prologue + film (landscape = widescreen cinema). */
 function isLandscapeOrientation() {
@@ -1282,11 +1282,12 @@ export default function InviteScreening() {
 
     const rows = letterRecipients.map((r) => ({
       first: r.first.trim(),
+      last: (r.last || '').trim(),
       email: r.email.trim(),
       note: (r.note || '').trim(),
     }))
-    if (rows.some((r) => !r.first || !r.email || !r.email.includes('@'))) {
-      setLetterError('Please enter a first name and valid email for each recipient.')
+    if (rows.some((r) => !r.first || !r.last || !r.email || !r.email.includes('@'))) {
+      setLetterError('Please enter a first name, last name and valid email for each recipient.')
       return
     }
     // Personal notes are mandatory — the note is the gift, not the link.
@@ -1349,7 +1350,8 @@ export default function InviteScreening() {
             r.note || null,
             window.location.origin,
             invite?.id || null,
-            r.first
+            r.first,
+            r.last
           )
           succeeded.push(r)
         } catch (err) {
@@ -1398,7 +1400,7 @@ export default function InviteScreening() {
       // report exactly which sends succeeded and which didn't.
       if (failed.length) {
         setLetterRecipients(
-          failed.map((f) => ({ first: f.first, email: f.email, note: f.note || '' }))
+          failed.map((f) => ({ first: f.first, last: f.last || '', email: f.email, note: f.note || '' }))
         )
         if (succeeded.length) {
           setLetterSuccess(`Sent to ${succeeded.map((s) => s.first).join(', ')}.`)

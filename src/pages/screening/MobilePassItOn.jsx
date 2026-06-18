@@ -150,6 +150,8 @@ export default function MobilePassItOn({
                             <span className="italic">Dear</span>
                             <input type="text" placeholder="First name" aria-label={`Recipient ${i + 1} first name`} value={r.first} onChange={(e) => updateLetterRecipient(i, 'first', e.target.value)}
                                    className="min-w-0 flex-1 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center text-[10px] focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" autoComplete="given-name" />
+                            <input type="text" placeholder="Last name" aria-label={`Recipient ${i + 1} last name`} value={r.last || ''} onChange={(e) => updateLetterRecipient(i, 'last', e.target.value)}
+                                   className="min-w-0 flex-1 bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center text-[10px] focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" autoComplete="family-name" />
                             <span>,</span>
                           </div>
                           <textarea rows={1} placeholder="Write your note here. Tell them why this film made you think of them specifically…" aria-label={`Personal note for recipient ${i + 1}`} value={r.note || ''} onChange={(e) => updateLetterRecipient(i, 'note', e.target.value)}
@@ -262,7 +264,9 @@ export default function MobilePassItOn({
                           <div className="flex flex-wrap justify-center items-end gap-x-3 gap-y-1 mb-3">
                             <span className="italic">Dear</span>
                             <input type="text" placeholder="First name" aria-label={`Recipient ${i + 1} first name`} value={r.first} onChange={(e) => updateLetterRecipient(i, 'first', e.target.value)}
-                                   className="w-[140px] bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" autoComplete="given-name" />
+                                   className="w-[120px] bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" autoComplete="given-name" />
+                            <input type="text" placeholder="Last name" aria-label={`Recipient ${i + 1} last name`} value={r.last || ''} onChange={(e) => updateLetterRecipient(i, 'last', e.target.value)}
+                                   className="w-[120px] bg-transparent border-b-[0.5px] border-[#2a2a2a]/30 text-center focus:outline-none focus:border-[#2a2a2a] text-[#2a2a2a] placeholder-[#2a2a2a]/30 transition-colors" autoComplete="family-name" />
                             <span>,</span>
                           </div>
                           <textarea rows={2} placeholder="Write your note here. Tell them why this film made you think of them specifically..." aria-label={`Personal note for recipient ${i + 1}`} value={r.note || ''} onChange={(e) => updateLetterRecipient(i, 'note', e.target.value)}

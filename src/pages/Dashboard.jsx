@@ -153,6 +153,7 @@ export default function Dashboard() {
 
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
   const [modalFirst, setModalFirst] = useState('')
+  const [modalLast, setModalLast] = useState('')
   const [modalEmail, setModalEmail] = useState('')
   const [modalNote, setModalNote] = useState('')
   const [modalBusy, setModalBusy] = useState(false)
@@ -642,6 +643,7 @@ export default function Dashboard() {
   const openShareModal = () => {
     setModalError('')
     setModalFirst('')
+    setModalLast('')
     setModalEmail('')
     setModalNote('')
     setIsShareModalOpen(true)
@@ -697,6 +699,10 @@ export default function Dashboard() {
       setModalError('No film is linked to your account yet.')
       return
     }
+    if (!modalFirst.trim() || !modalLast.trim()) {
+      setModalError('Enter a first and last name.')
+      return
+    }
     if (!modalEmail.trim() || !modalEmail.includes('@')) {
       setModalError('Enter a valid email.')
       return
@@ -723,8 +729,8 @@ export default function Dashboard() {
         return
       }
 
-      const recipientName =
-        modalFirst.trim() || modalEmail.trim().split('@')[0] || ''
+      // recipientName stays first-name only; the last name rides in its own column.
+      const recipientName = modalFirst.trim()
       await api.sendInvite(
         viewerFilmId,
         modalEmail.trim(),
@@ -735,7 +741,8 @@ export default function Dashboard() {
         modalNote.trim() || null,
         window.location.origin,
         viewerFocusInviteId || null,
-        modalFirst.trim()
+        modalFirst.trim(),
+        modalLast.trim()
       )
       await fetchProfile(profile.id)
       const newId = await loadViewerDashboard()
@@ -1263,6 +1270,15 @@ export default function Dashboard() {
                     value={modalFirst}
                     onChange={(e) => setModalFirst(e.target.value)}
                     className="min-w-0 flex-1 border-b border-[#6b5d4a]/40 bg-transparent text-center text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none"
+                    autoComplete="given-name"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Last name"
+                    value={modalLast}
+                    onChange={(e) => setModalLast(e.target.value)}
+                    className="min-w-0 flex-1 border-b border-[#6b5d4a]/40 bg-transparent text-center text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none"
+                    autoComplete="family-name"
                   />
                   <span>,</span>
                 </div>
