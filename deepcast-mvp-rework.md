@@ -93,6 +93,8 @@ Tracker for the invite/share overhaul. Work top to bottom within each phase; Pha
 - [ ] **E4. Purpose mechanism revisit** — evaluate lineage's effect on sharing; consider patronage framing if/when economics are real.
 - [ ] **E5. Reserved-name/route guard** — blocklist for URL slugs (app routes, offensive terms) if not handled in A1.
 - [ ] **E6. Evaluate signed MUX playback URLs once claim flow is stable** — playback is currently public-policy; exclusivity is page-layer only.
+- [ ] **E7. Rotate service-role, Resend, and MUX secrets** (exposed to local transcript 2026-07-06).
+- [ ] **E8. Set up proper pg_dump backup path (DB password + libpq) before user count grows.**
 
 ---
 
