@@ -91,6 +91,7 @@ Tracker for the invite/share overhaul. Work top to bottom within each phase; Pha
 - [ ] **E3. Editable sharer message** — upgrade B-standard line to optional custom note in sharer's voice.
 - [ ] **E4. Purpose mechanism revisit** — evaluate lineage's effect on sharing; consider patronage framing if/when economics are real.
 - [ ] **E5. Reserved-name/route guard** — blocklist for URL slugs (app routes, offensive terms) if not handled in A1.
+- [ ] **E6. Evaluate signed MUX playback URLs once claim flow is stable** — playback is currently public-policy; exclusivity is page-layer only.
 
 ---
 
@@ -115,3 +116,5 @@ Tracker for the invite/share overhaul. Work top to bottom within each phase; Pha
 | Platform idea at first touch | Single constraint line on landing page ("can't be searched... only passed person to person") | 2026-07-06 |
 | names-piece2 (profile last-name) | Parked — superseded by first-name-only design | 2026-07-06 |
 | Legacy last-name invite collection | Surfaces retired with email flow; DB columns left dormant | 2026-07-06 |
+| Bulk email-invite tool | Retired — all invite creation moves to link-only; legacy `/i/:token` acceptance path (and its email templates) stays untouched indefinitely | 2026-07-06 |
+| `claimed_by` field design | Split: `claimed_email`/`claimed_at` capture identity at claim (Phase 1, no account required); `claimed_by` stays a nullable user reference, backfilled by email match only if an account is created later (Phase 2, E2) | 2026-07-06 |
