@@ -158,8 +158,14 @@ A2 asks for: `token`, `invitee_first_name`, `created_by`, `claimed_by`, `claimed
 - `invites.claimed_email` (new, nullable text) — capture-time email (A4); the Phase 1 identity of a claim.
 - `invites.claimed_at` (new, nullable timestamptz).
 - `invites.claimed_by` (new, nullable `users.id` FK) — empty at claim time; backfilled by email match only if/when an account is created (Phase 2, E2).
-- `invites.status` — extend CHECK to add new-flow values (exact vocabulary is an open question, §5, but at minimum needs an "unclaimed/created" state distinct from legacy `'pending'` if the two flows are to be told apart in queries and the reminder job).
-- Optionally, `invites.link_slug` (new, nullable, unique) — the short public-facing slug, kept separate from the existing high-entropy `token` (see Open Questions §5 on why conflating them is risky).
+- `invites.status` — extend CHECK to add new-flow values (exact vocabulary is an implementation detail to nail down at Step 1 build time, not a blocking open question — at minimum needs an "unclaimed/created" state distinct from legacy `'pending'` if the two flows are to be told apart in queries and the reminder job).
+- `invites.link_slug` (new, nullable, unique index) — **RESOLVED (2026-07-06):** a new column, not an overload of `token`. The legacy `token` keeps its unguessable-by-design property untouched; `link_slug` is guessable-by-design and lives its own lifecycle. Format: `{sanitized-first-name}-{suffix}`, see the slug spec below.
+
+**Slug spec — RESOLVED (2026-07-06).** The slug is routing only; display names always come from `invitee_first_name`/`recipient_name` in the DB, never parsed back out of the URL.
+- Name part: Unicode-normalize, strip diacritics, drop all characters outside `a-z`, lowercase, max 20 chars. If nothing survives sanitization, falls back to the literal string `invite`.
+- Suffix: 4 chars drawn from an unambiguous alphabet (excludes `0, o, 1, l, i`).
+- Collision handling: regenerate the suffix up to 3 times; if still colliding, widen to a 5-char suffix.
+- Profanity filtering beyond the existing reserved-route blocklist (`login, signup, profile, about, dashboard, upload, network, dev, team, unsubscribe, reset-password, i`) is explicitly deferred to Phase 2 (E5) — not a Phase 1 blocker.
 
 **`recipient_last_name` / `users.last_name`**: per the decisions log, both stay in schema, dormant, no migration. Confirmed clean by dedicated recon: **zero downstream reads** of `users.last_name` exist anywhere in `src/` or `server/` outside the known write sites (`src/lib/auth.jsx:40,169`, `src/pages/Signup.jsx:24`, `server/index.js:1041,1358,1508,1634,1695`) — no display-name concatenation, no NOT NULL check, no template assumes it's populated. Safe to leave dormant exactly as decided.
 
@@ -203,7 +209,8 @@ Per Phase 1 item:
 
 **C2 — Lineage visibility**
 - Needs new code (§1d) — not a risk exactly, but don't let it get built by extending `buildGraphLayout`'s output; a parallel lightweight function avoids coupling a text feature's correctness to the SVG graph's rendering assumptions.
-- Depends on `invites.parent_invite_id`, which is **only populated for the old email-first flow's fallback logic** (`server/index.js:518-580`, keyed off `sender_id`/`sender_email`/watch-session-token matching). The new claim-link flow's `created_by`/`claimed_email` fields are a *different* edge representation — someone must decide whether the new flow also populates `parent_invite_id` (so C2's ancestor-walk can stay one code path for both old and new invites) or whether C2 needs to branch on invite "shape." Flagged in Open Questions.
+- **RESOLVED (2026-07-06), unified model**: the new flow populates `invites.parent_invite_id` exactly as the old flow does — parenthood runs invite-to-invite, so a new claim link's `parent_invite_id` = the invite its sharer claimed through. `NetworkMap`/`NetworkGraph` and C2's ancestor-chain walk both stay on one data model with no branching on invite "shape." This resolves a design gap in A2's original spec: sharer identity for the new create-link endpoint is now **either** an authenticated session (account-holder sharers) **or** a valid claimed invite referenced client-side (accountless invitees sharing at credits-end via C3, who have no session — their claim IS their identity). See the A2 amendment recorded in `deepcast-mvp-rework.md`. Implementation note: the account-holder branch should reuse the *existing* parent-resolution fallback logic (`server/index.js:518-580` — email-match, prior-sender-invite, watch-session-token) rather than reinventing it, since that logic already answers "which invite did this sender receive the film through."
+- Residual note on the accountless-identity mechanism: whatever the client stores (cookie/localStorage) to prove "I am the person who claimed invite X" at share-time is not a cryptographic session — it carries the same trust level as already knowing that invite's `link_slug` (which is guessable-by-design per the slug spec). This is consistent with the app's existing no-auth trust model for playback (§1c) — worth a one-line acknowledgment in the build, not a blocker.
 
 **C3 — Post-film share moment**
 - Depends on B1's player/credits-end hook already existing in `InviteScreening.jsx` (there is a documented `hasMarkedWatched` ref and percentage-based logic at line ~1161-1166 this can piggyback on for detecting "credits end"). Low risk if built after B1's extraction.
@@ -225,65 +232,60 @@ Per Phase 1 item:
 
 Ordered so the app is deployable after every step. Each step names files touched, schema changes, new routes, blast radius, and how to verify before moving on.
 
-**Step 1 — Relax the last-name requirement (independent, ship first)**
-- *Files*: `src/components/InviteForm.jsx` (drop last-name required-check), `src/pages/InviteScreening.jsx` `handleSendLetter` + `DesktopPassItOn.jsx`/`MobilePassItOn.jsx` (drop field or make optional), `src/pages/Dashboard.jsx` `handleSendModalInvite`, `server/index.js` (~399-405: stop 400ing on blank last name).
-- *Schema*: none — columns stay, just stop requiring the value.
-- *Blast radius*: small, isolated to validation logic; doesn't touch the create/accept/account pipeline.
-- *Verify*: unit tests for the three client validators + the server route; `npm run test:unit`; manual send with blank last name via `node server/reset-test-data.js` fresh links.
-- *Why first*: standalone, immediately removes the design mismatch (Phase 1's A-series work doesn't need this done first, but every day it's not done is a live bug against the new decision).
+**Renumbered 2026-07-06**: the former "Step 1 — relax the last-name requirement" is **cut**. No step below it depends on the three old-flow send surfaces enforcing an optional (rather than mandatory) last name — nothing in Steps 1-9 touches `InviteForm.jsx`, the pass-it-on letter, or the dashboard invite modal at all, and Step 10 (old Step 11, A5) *retires those surfaces outright*. Fixing a validation rule on UI that's about to be deleted is wasted work; if a genuine dependency turns up during Step 10's build (e.g. a QA path that needs to exercise the old forms first), it can be done inline as part of that step rather than reserved as its own.
 
-**Step 2 — Additive schema migration**
-- New migration file: relax `invites.recipient_email` to nullable; add `invites.claimed_email` (nullable text), `invites.claimed_at` (nullable timestamptz), `invites.claimed_by` (nullable `users.id` FK, empty at claim, backfilled Phase 2), `invites.link_slug` (nullable, unique index) if the slug-vs-token question (Open Questions §1) resolves toward a separate column; extend the `status` CHECK constraint with new-flow values (final vocabulary depends on Open Questions §2).
+**Step 1 — Additive schema migration**
+- New migration file: relax `invites.recipient_email` to nullable; add `invites.claimed_email` (nullable text), `invites.claimed_at` (nullable timestamptz), `invites.claimed_by` (nullable `users.id` FK, empty at claim, backfilled Phase 2), `invites.link_slug` (nullable, unique index, per the resolved slug spec in §2); extend the `status` CHECK constraint with new-flow values. `invites.parent_invite_id` needs no schema change — the unified lineage model (Open Questions §6) reuses it as-is for both old and new invites.
 - *Blast radius*: additive/permissive only — no existing row is invalidated (see §2 analysis). Still requires the owner-run migration per standing doctrine (destructive-data rule doesn't strictly apply since nothing is deleted, but schema changes to production should still go through the owner's normal migration-apply step, not be run by Claude).
 - *Verify*: `node server/db-read.js` spot-checks post-migration that old rows are untouched; confirm the CHECK constraint change doesn't reject any existing row (`db-read.js "select status, count(*) from invites group by status"` before/after).
 
-**Step 3 — A1: claim-link generation**
-- New server route (e.g. `POST /api/invites/create-link`), verified-session pattern for `created_by` (Bearer token → `getUser()`, per security doctrine — do not accept a client-sent sharer id). Slug generation: lowercase, sanitized first name + 4-char suffix, collision retry loop against the new unique index, plus a minimal reserved-word blocklist (the existing top-level route segments: `login, signup, profile, about, dashboard, upload, network, dev, team, unsubscribe, reset-password, i`) so a Phase-1 slug can never literally shadow a fixed route even under future route-ordering mistakes.
+**Step 2 — A1: claim-link generation**
+- New server route (e.g. `POST /api/invites/create-link`). Two sharer-identity paths, per the resolved A2 amendment (§ Risk Register, C2): (a) verified session (Bearer token → `getUser()`, per security doctrine — never a client-sent sharer id) for account-holder sharers, resolving their own `parent_invite_id` via the *existing* fallback logic (`server/index.js:518-580`); (b) a valid claimed-invite reference for accountless credits-end sharers (C3), whose claim is their identity — `parent_invite_id` = that claimed invite directly. Slug generation per the resolved spec (§2): Unicode-normalize/strip diacritics/lowercase/`a-z`-only/max 20 chars, falling back to `invite`; 4-char unambiguous-alphabet suffix; retry the suffix up to 3 times on collision, then widen to 5 chars; reserved-word blocklist (`login, signup, profile, about, dashboard, upload, network, dev, team, unsubscribe, reset-password, i`).
 - *Files*: `server/index.js` (new route), a small new `src/lib/` or `server/` slug-utility module (unit-tested per the project's "one shared computation" convention).
-- *Verify*: unit tests for slug sanitization/collision/reserved-word rejection; no user-facing surface yet (nothing calls this route until Step 5), so this step alone can't break anything live.
+- *Verify*: unit tests for slug sanitization/collision-widen/reserved-word rejection, and for both sharer-identity paths resolving the correct `parent_invite_id`; no user-facing surface yet (nothing calls this route until Step 4), so this step alone can't break anything live.
 
-**Step 4 — New public route `/:slug` + landing page skeleton (A3)**
+**Step 3 — New public route `/:slug` + landing page skeleton (A3)**
 - *Files*: `src/App.jsx` (new route, added **after** all existing fixed routes to avoid any future ordering ambiguity), new page component for the personalized pre-claim landing page, rendering the 6 content elements from the tracker with placeholder copy where D2 hasn't landed yet.
 - *Blast radius*: purely additive route; nothing existing links to it yet.
 - *Verify*: manual render at `/testname-a1b2` style URL against a seeded test invite; e2e smoke test for the new route rendering invitee's first name correctly and 404-ing gracefully on an unknown slug (this also fixes the "no catch-all today" gap noted in the Risk Register, scoped to this one new route rather than a global 404 page).
 
-**Step 5 — A2: claim-bind endpoint**
+**Step 4 — A2: claim-bind endpoint**
 - New route (e.g. `POST /api/invites/claim`), atomic conditional update (`UPDATE invites SET claimed_email=..., claimed_at=now(), status='claimed' WHERE id=... AND claimed_email IS NULL`) to avoid the race flagged in the Risk Register. `claimed_by` stays untouched (NULL) in Phase 1 — it is not this endpoint's job to populate it. Landing page's "Accept your invite" CTA wires to this.
 - *Verify*: unit test for the race condition (concurrent claims resolve to exactly one winner); manual double-tab test.
 
-**Step 6 — B1: extract shared watch-page component**
+**Step 5 — B1: extract shared watch-page component**
 - *Files*: refactor `src/pages/InviteScreening.jsx` to extract the Mux player + post-film UI into a component reusable by both the legacy `/i/:token` flow and the new post-claim route, per the Risk Register's note on not duplicating ~1700 lines.
 - *Blast radius*: real risk here is regressing the legacy flow during extraction — this is exactly the kind of change CLAUDE.md's "screening page mounts desktop AND mobile simultaneously" warning applies to; any visual verification must render the live app at the actual target viewport, not just read the code.
 - *Verify*: full e2e suite on all three engines (chromium/webkit/firefox) before proceeding, since this step touches the highest-traffic existing surface. This is the one step in Phase 1 where regressing something *already shipped* (today's legacy invite flow, including real users' pending invites) is the dominant risk.
 
-**Step 7 — A4/B2: email capture + immediate watch**
-- Wire the landing page's post-claim step to write `claimed_email`/`claimed_at` (via Step 5's endpoint) then route straight into Step 6's shared watch component — no session minting, per §1c's resolved finding. Add the shared "14 minutes. Headphones recommended." string constant (B2) consumed by both the landing page and the watch page.
+**Step 6 — A4/B2: email capture + immediate watch**
+- Wire the landing page's post-claim step to write `claimed_email`/`claimed_at` (via Step 4's endpoint) then route straight into Step 5's shared watch component — no session minting, per §1c's resolved finding. Add the shared "14 minutes. Headphones recommended." string constant (B2) consumed by both the landing page and the watch page.
 - *Verify*: manual full click-through, link → landing → claim → watch, zero auth prompts.
 
-**Step 8 — C3: post-film share moment**
-- Hook into the existing post-film / credits-end state in the now-shared watch component; inline first-name entry calls Step 3's create-link endpoint directly, surfacing a shareable link immediately.
+**Step 7 — C3: post-film share moment**
+- Hook into the existing post-film / credits-end state in the now-shared watch component; inline first-name entry calls Step 2's create-link endpoint directly (accountless-sharer identity path), surfacing a shareable link immediately.
 - *Verify*: e2e case for the new share-moment prompt appearing at the right playback point (reuse the existing `hasMarkedWatched`-style percentage logic rather than reinventing it).
 
-**Step 9 — C2: lineage ancestor-chain text**
-- New small function (not a `buildGraphLayout` extension, per Risk Register) that walks `parent_invite_id` from a single invite to root; render as "This film reached you through: A → B → you" on the landing/film page. **Blocked on the Open Questions §5 decision** about whether new-flow invites populate `parent_invite_id` the same way — resolve that before starting this step, not during it.
+**Step 8 — C2: lineage ancestor-chain text**
+- New small function (not a `buildGraphLayout` extension, per Risk Register) that walks `parent_invite_id` from a single invite to root; render as "This film reached you through: A → B → you" on the landing/film page. No longer blocked — the unified lineage model (Open Questions §6) is resolved, so this step can build directly against `parent_invite_id` for both old- and new-flow invites.
 - *Verify*: unit test for the chain-walk function against a small fixture graph (including the creator-is-root and team-member-ring-1 special cases already established in `graphLayout.js`).
 
-**Step 10 — C1: transmission story content**
+**Step 9 — C1: transmission story content**
 - New nullable `films` columns for short/long story text (additive migration), rendered on landing + film page. Content itself is Ien's, not engineering's.
 
-**Step 11 — A5: retire the bulk email-invite tool**
-- Remove or hide the "invite friends" entry points that lead to `InviteForm.jsx`/the pass-it-on letter/the dashboard invite modal — **do not touch** `/i/:token`, its status machinery, or `buildInviteEmailHtml`/`PlainText` themselves; both stay live indefinitely for already-sent legacy invites (decided 2026-07-06). Explicitly decide and document the fate of `/api/invites/resend-last`/`/resend` before this step (still open, Open Questions §3).
-- *Verify*: confirm via `node server/db-read.js` that no code path can still create a *new* email-first invite after this step, while an existing legacy token (test with a pre-existing seeded invite) still opens and plays correctly end to end.
+**Step 10 — A5: retire the bulk email-invite tool**
+- Remove or hide the "invite friends" entry points that lead to `InviteForm.jsx`/the pass-it-on letter/the dashboard invite modal — **do not touch** `/i/:token`, its status machinery, or `buildInviteEmailHtml`/`PlainText` themselves; both stay live indefinitely for already-sent legacy invites (decided 2026-07-06). `/api/invites/resend-last` and `/api/invites/resend` are **kept, unchanged** — resolved 2026-07-06: the invariant is creation vs. delivery; A5 retires *creation* of new email invites, resend re-delivers existing ones and is part of the protected legacy acceptance machinery.
+- *Verify*: confirm via `node server/db-read.js` that no code path can still create a *new* email-first invite after this step, while an existing legacy token (test with a pre-existing seeded invite) still opens, resends, and plays correctly end to end.
 
-**Step 12 — B3: reminder email + scheduling infra**
-- Net-new infrastructure (Risk Register) — timebox separately. New authenticated internal endpoint + external cron trigger (Render cron job or equivalent) + email template using the existing single-dispatcher pattern (`deliverEmail`), never calling Resend directly.
-- *Verify*: `server/emailDelivery.test.js`-style unit coverage for the new template send path; manual dry run against a test invite claimed >48h ago via `db-read.js` seeded data.
+**Step 11 — B3: reminder email, cheapest viable mechanism**
+- Constrained scope (decided 2026-07-06): **one** new authenticated endpoint (e.g. `POST /api/internal/send-reminders`, not publicly callable) that queries claimed-but-unwatched invites past 48h and sends the single reminder via the existing `deliverEmail` dispatcher, plus **one** external daily cron trigger (a single Render Cron Job or equivalent hitting that one endpoint) — no standing scheduler, no job queue, no retry-scheduling framework beyond what `deliverEmail` already provides. A minimal idempotency guard (e.g. a `reminder_sent_at` column, additive) prevents double-sends across daily runs.
+- *Verify*: `server/emailDelivery.test.js`-style unit coverage for the new template send path; manual dry run against a test invite claimed >48h ago via `db-read.js` seeded data; confirm a second same-day run sends nothing further.
 
-**Step 13 — D1/D2: final copy pass**
-- Replace placeholder copy from Steps 4/7/8/10 with Ien-approved final text across landing page, watch page, and share-moment prompt.
+**Step 12 — D1/D2: final copy pass**
+- Replace placeholder copy from Steps 3/6/7/9 with Ien-approved final text across landing page, watch page, and share-moment prompt.
 
-**Step 14 — D3: update CLAUDE.md**
-- Run **last**, once Steps 1-13 have shipped and stabilized, so the doc describes what was actually built rather than the original tracker's aspirational shape. Update the "Invite send flow" and "Standing product rules" sections to remove the retired last-name-required rule and document the new link-based flow's actual schema/routes.
+**Step 13 — D3: update CLAUDE.md**
+- Run **last**, once Steps 1-12 have shipped and stabilized, so the doc describes what was actually built rather than the original tracker's aspirational shape. Update the "Invite send flow" and "Standing product rules" sections to remove the retired last-name-required rule and document the new link-based flow's actual schema/routes.
 
 ---
 
@@ -291,16 +293,16 @@ Ordered so the app is deployable after every step. Each step names files touched
 
 Requires a human decision — not assumed anywhere above:
 
-1. **Slug vs. token**: should the new public-facing `{firstname}-{4char}` slug be stored in a *new* `link_slug` column, or overload the existing high-entropy `token` column? Recommend a new column (analysis in §2) since the two serve different security properties (guessable-by-design public slug vs. today's unguessable 32-char token used for the still-live legacy flow) — but this is a naming/architecture call, not purely mine to make.
+1. **Slug vs. token — RESOLVED (2026-07-06).** New column, `link_slug`. `token` is not overloaded — it keeps its unguessable-by-design property for the still-live legacy flow; the slug is guessable-by-design and lives its own lifecycle.
 
-2. **Slug sanitization/collision handling beyond the 4-char suffix**: what's the exact sanitization rule (strip non-alphanumerics? unicode names? max length? profanity filter beyond the reserved-route blocklist?), and the exact retry/collision strategy (regenerate suffix N times then fail how?). The tracker says "lowercase, sanitized" but doesn't specify the character set or collision-retry ceiling.
+2. **Slug sanitization/collision handling — RESOLVED (2026-07-06).** The slug is routing only; display names always come from `invitee_first_name`/`recipient_name` in the DB, never parsed from the URL. Spec: Unicode-normalize, strip diacritics, drop all chars outside `a-z`, lowercase, max 20 chars for the name part; falls back to `invite` if nothing survives sanitization. Suffix: 4 chars from an unambiguous alphabet (excludes `0, o, 1, l, i`). Collision: regenerate the suffix up to 3 times, then widen to 5 chars. Profanity filtering beyond the reserved-route blocklist is deferred to Phase 2 (E5).
 
-3. **Fate of already-created invites under the old flow — PARTIALLY RESOLVED (2026-07-06).** Confirmed by decision: `/i/:token` and its status machinery stay untouched indefinitely for already-sent invites, and there is no plan to migrate, invalidate, or force-resend old invites under new slugs. **Still open**: what happens to `/api/invites/resend-last` and `/api/invites/resend` (both still call the "old" email builders) — kept as-is for legacy invites people ask to be re-sent, or retired alongside the send surfaces?
+3. **Fate of already-created invites under the old flow — RESOLVED (2026-07-06).** `/i/:token` and its status machinery stay untouched indefinitely for already-sent invites; no plan to migrate, invalidate, or force-resend old invites under new slugs. `/api/invites/resend-last` and `/api/invites/resend` are **kept, unchanged** — the invariant is creation vs. delivery: A5 retires *creation* of new email invites, resend re-delivers existing ones and is part of the protected legacy acceptance machinery.
 
-4. **Does the creator/Upload/Profile invite flow also move to link-based sharing, or only viewer-to-viewer shares? — RESOLVED (2026-07-06).** Retired. All invite creation — creator dashboard, Upload, Profile, and the viewer pass-it-on/dashboard-modal surfaces — moves to link-only sharing; the bulk email-invite tool is removed/hidden as part of Step 11 (A5). The legacy `/i/:token` acceptance path and its email templates stay untouched indefinitely (see §3 above).
+4. **Does the creator/Upload/Profile invite flow also move to link-based sharing, or only viewer-to-viewer shares? — RESOLVED (2026-07-06).** Retired. All invite creation — creator dashboard, Upload, Profile, and the viewer pass-it-on/dashboard-modal surfaces — moves to link-only sharing; the bulk email-invite tool is removed/hidden as part of Step 10 (A5). The legacy `/i/:token` acceptance path and its email templates stay untouched indefinitely (see §3 above).
 
 5. **`claimed_by` semantics — RESOLVED (2026-07-06).** Split: `claimed_email` (text) + `claimed_at` (timestamptz) capture the invitee's Phase 1 identity at claim time — the email captured at claim IS the identity, no account required. `claimed_by` is a nullable `users.id` FK, empty at claim time, backfilled later by email match only if/when the person creates an account (Phase 2, E2). Nothing in Phase 1 may depend on `claimed_by` being populated.
 
-6. **Does the new claim-link flow populate `parent_invite_id`** the same way the old flow's fallback logic does (§1d/Risk Register C2), so the lineage/ancestor-chain feature and the existing full-graph view (`NetworkMap`/`NetworkGraph`) can stay on one unified data model? Or is the new flow's lineage tracked entirely through `created_by`/`claimed_email` with a separate ancestor-walk that doesn't touch `parent_invite_id` at all? This blocks Step 9 and has knock-on effects for whether the existing Network Map page shows new-style invites at all.
+6. **Does the new claim-link flow populate `parent_invite_id`? — RESOLVED (2026-07-06), unified model.** Yes — exactly as the old flow does. Parenthood runs invite-to-invite: a new claim link's `parent_invite_id` = the invite its sharer claimed through. `NetworkMap`/`NetworkGraph` and the ancestor-chain feature (Step 8) stay on one unified data model, no branching on invite "shape." This decision also amends A2's sharer-identity model (recorded in `deepcast-mvp-rework.md`): sharer identity is now **either** an authenticated session (account-holder sharers) **or** a valid claimed invite referenced client-side (accountless invitees sharing at credits-end via C3 — their claim IS their identity, since they have no session).
 
 7. **`users.last_name` / legacy last-name collection — confirmed clean, no action needed**: dedicated recon found zero downstream code that reads or assumes `users.last_name` is populated (§2). The decision to leave both `recipient_last_name` and `users.last_name` dormant, unmigrated, carries no known risk. Flagging here only to close the loop on the item explicitly requested for verification — no open question remains on this point.

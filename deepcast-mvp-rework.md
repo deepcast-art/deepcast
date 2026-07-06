@@ -18,6 +18,7 @@ Tracker for the invite/share overhaul. Work top to bottom within each phase; Pha
   - Link is single-claim: first non-sharer to open and claim it becomes the invitee; dead afterward.
   - Sharer opening their own link does NOT claim it. Identify sharer via their authenticated session (they created the link while logged in). Logged-out opens on sharer's own device are an accepted edge case for MVP.
   - Invite record needs: `token`, `invitee_first_name`, `created_by`, `claimed_by`, `claimed_at`, `status`.
+  - **Amendment (2026-07-06) — sharer identity, widened.** Lineage is a unified model: `parent_invite_id` is populated the same way for new-flow and old-flow invites, so a new claim link's `parent_invite_id` = the invite its sharer claimed through. This means "sharer" isn't only an account holder — a person can share **at credits-end (C3) with no account at all**, right after watching. So sharer identity for link creation is EITHER an authenticated session (account holders) OR a valid claimed invite, referenced client-side (cookie/local storage) from that person's own claim. The accountless credits-end sharer has no session; their claim IS their identity. `claimed_by` (the user-id side) stays nullable and Phase 2-only — nothing in Phase 1 identity resolution depends on it.
 
 - [ ] **A3. Personalized landing page (pre-claim)**
   Invitee lands and immediately sees their name — the page is custom on arrival, not after acceptance.
@@ -118,3 +119,7 @@ Tracker for the invite/share overhaul. Work top to bottom within each phase; Pha
 | Legacy last-name invite collection | Surfaces retired with email flow; DB columns left dormant | 2026-07-06 |
 | Bulk email-invite tool | Retired — all invite creation moves to link-only; legacy `/i/:token` acceptance path (and its email templates) stays untouched indefinitely | 2026-07-06 |
 | `claimed_by` field design | Split: `claimed_email`/`claimed_at` capture identity at claim (Phase 1, no account required); `claimed_by` stays a nullable user reference, backfilled by email match only if an account is created later (Phase 2, E2) | 2026-07-06 |
+| Slug storage | New column, `link_slug` — does not overload `token`; legacy `token` keeps its unguessable-by-design property, slug is guessable-by-design with its own lifecycle | 2026-07-06 |
+| Slug spec | Routing only, never a display source. Unicode-normalize/strip diacritics/lowercase/`a-z`-only/max 20 chars, falls back to "invite"; 4-char unambiguous-alphabet suffix (excludes 0,o,1,l,i); retry suffix ×3 then widen to 5 chars; profanity filtering beyond the reserved-route blocklist deferred to Phase 2 (E5) | 2026-07-06 |
+| Resend endpoints | Kept, unchanged — invariant is creation vs. delivery; A5 retires creation of new email invites, resend re-delivers existing ones as part of the protected legacy machinery | 2026-07-06 |
+| Lineage model | Unified — new flow populates `parent_invite_id` exactly as the old flow does, invite-to-invite; sharer identity widened to session-OR-claimed-invite (see A2 amendment above) | 2026-07-06 |
