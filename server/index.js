@@ -11,6 +11,8 @@ import { isInviteUsable } from './inviteValidation.js'
 import { CREATOR_SHARE_BLOCK_REASON, isShareToFilmCreator } from './shareRules.js'
 import { adminAuthDecision, unlimitedToggleTargetDecision } from './adminAuth.js'
 import { removeTeammateDecision } from './teamRules.js'
+import { generateUniqueSlug } from './inviteSlug.js'
+import { resolveAccountlessSharerIdentity } from './claimIdentity.js'
 
 const app = express()
 app.use(cors())
@@ -696,6 +698,239 @@ app.post('/api/invites/send', async (req, res) => {
     console.error('Invite send error:', err)
     if (!res.headersSent) {
       res.status(500).json({ error: 'Failed to send invite' })
+    }
+  }
+})
+
+/**
+ * Create a claim link (PLAN.md Step 2 / A1). No email is collected here — the
+ * sharer enters only the invitee's first name and gets a link back instantly.
+ * recipient_email stays NULL until the link is claimed (Step 4 / A2); the
+ * film-creator share-block check therefore can't run yet either — it belongs
+ * at claim time, once an email exists.
+ *
+ * Two sharer-identity paths (deepcast-mvp-rework.md A2 amendment, 2026-07-06):
+ * a verified session takes priority when present (account-holder sharer);
+ * otherwise a claimed-invite reference is required (accountless credits-end
+ * sharer, C3) — that claim IS their identity, since they have no session.
+ */
+app.post('/api/invites/create-link', async (req, res) => {
+  try {
+    const {
+      filmId: filmIdInput,
+      inviteeFirstName: inviteeFirstNameInput,
+      claimedInviteId,
+      parentInviteId: clientParentInviteId,
+      appUrl,
+    } = req.body || {}
+
+    const inviteeFirstName =
+      typeof inviteeFirstNameInput === 'string' ? inviteeFirstNameInput.trim() : ''
+    if (!inviteeFirstName) {
+      return res.status(400).json({ error: "The invitee's first name is required" })
+    }
+
+    const authHeader = req.get('authorization') || ''
+    const jwt = authHeader.replace(/^Bearer\s+/i, '').trim()
+
+    let filmId = filmIdInput
+    let senderId = null
+    let senderName = null
+    let senderEmail = null
+    let parentInviteId = null
+    let previousAllocation = null
+    let allocationDecremented = false
+
+    if (jwt) {
+      // ── Account-holder sharer. Identity comes ONLY from the verified token —
+      // never a client-sent sender id (same rule as /api/invites/relink). ──
+      const { data: userData, error: userErr } = await supabase.auth.getUser(jwt)
+      const authUser = userData?.user
+      if (userErr || !authUser?.id) return res.status(401).json({ error: 'Invalid session' })
+
+      if (!filmId) return res.status(400).json({ error: 'Film ID is required' })
+
+      senderId = authUser.id
+      const sender = await ensureProfileForUserId(senderId)
+      if (!sender) return res.status(404).json({ error: 'Sender not found' })
+
+      const { data: film, error: filmLookupError } = await supabase
+        .from('films')
+        .select('id, creator_id')
+        .eq('id', filmId)
+        .single()
+      if (filmLookupError || !film) return res.status(404).json({ error: 'Film not found' })
+
+      const role = String(sender.role || '').trim().toLowerCase()
+      const creatorOwnsFilm = uuidStringEq(film.creator_id, sender.id)
+      const onCreatorTeam =
+        sender.team_creator_id != null && uuidStringEq(film.creator_id, sender.team_creator_id)
+
+      if (role === 'creator') {
+        if (!creatorOwnsFilm) {
+          return res.status(403).json({ error: 'You can only invite people to your own films' })
+        }
+      } else if (role === 'team_member' || (role === 'viewer' && sender.team_creator_id)) {
+        if (!onCreatorTeam) {
+          return res.status(403).json({ error: "You can only invite people to your team's films" })
+        }
+      }
+
+      // Same unlimited-sender rule as /api/invites/send.
+      const unlimitedInvites =
+        role === 'creator' || role === 'team_member' || (role === 'viewer' && onCreatorTeam)
+      const unlimitedQuota = unlimitedInvites || sender.unlimited_shares === true
+
+      if (!unlimitedQuota && sender.invite_allocation <= 0) {
+        return res.status(400).json({ error: 'No invites remaining' })
+      }
+
+      senderName = sender.name || null
+      senderEmail = sender.email || null
+
+      // Same parent-resolution rules as /api/invites/send: explicit client
+      // claim first, forced null for unlimited senders, then the existing
+      // fallback chain (email match → prior-sender invite → watch session).
+      const { data: claimedParent } = clientParentInviteId
+        ? await supabase.from('invites').select('id, film_id').eq('id', clientParentInviteId).maybeSingle()
+        : { data: null }
+      parentInviteId =
+        claimedParent && uuidStringEq(claimedParent.film_id, filmId) ? claimedParent.id : null
+      if (unlimitedInvites) parentInviteId = null
+
+      const needsDecrement = !unlimitedQuota
+      const needsFallbacks = !parentInviteId && !unlimitedInvites
+
+      if (needsDecrement) previousAllocation = sender.invite_allocation
+
+      if (needsDecrement || needsFallbacks) {
+        const candidates = new Set()
+        if (needsFallbacks && sender.email) candidates.add(normalizeEmail(sender.email))
+
+        const [{ error: decrementError }, { data: fb1 }, { data: fb2 }, { data: fb3a }] =
+          await Promise.all([
+            needsDecrement
+              ? supabase.from('users').update({ invite_allocation: sender.invite_allocation - 1 }).eq('id', senderId)
+              : Promise.resolve({ error: null }),
+            needsFallbacks && candidates.size > 0
+              ? supabase.from('invites').select('id').eq('film_id', filmId).in('recipient_email', [...candidates]).order('created_at', { ascending: true }).limit(1).maybeSingle()
+              : Promise.resolve({ data: null }),
+            needsFallbacks
+              ? supabase.from('invites').select('parent_invite_id').eq('film_id', filmId).eq('sender_id', senderId).not('parent_invite_id', 'is', null).order('created_at', { ascending: true }).limit(1).maybeSingle()
+              : Promise.resolve({ data: null }),
+            needsFallbacks
+              ? supabase.from('watch_sessions').select('invite_token').eq('viewer_id', senderId).eq('film_id', filmId).not('invite_token', 'is', null).order('created_at', { ascending: false }).limit(1).maybeSingle()
+              : Promise.resolve({ data: null }),
+          ])
+
+        if (needsDecrement) {
+          if (decrementError) {
+            console.error('Invite allocation decrement error:', decrementError.message || decrementError)
+            return res.status(500).json({ error: 'Unable to update invites' })
+          }
+          allocationDecremented = true
+        }
+
+        if (needsFallbacks) {
+          parentInviteId = fb1?.id || fb2?.parent_invite_id || null
+          if (!parentInviteId && fb3a?.invite_token) {
+            const { data: invByToken } = await supabase
+              .from('invites')
+              .select('id, film_id')
+              .eq('token', fb3a.invite_token)
+              .maybeSingle()
+            if (invByToken && uuidStringEq(invByToken.film_id, filmId)) {
+              parentInviteId = invByToken.id
+            }
+          }
+        }
+      }
+    } else {
+      // ── Accountless sharer (C3, credits-end share moment). No session
+      // exists — the invite this person themselves claimed IS their identity. ──
+      const claimId = typeof claimedInviteId === 'string' ? claimedInviteId.trim() : ''
+      if (!claimId) {
+        return res
+          .status(401)
+          .json({ error: 'Not authenticated, and no claimed invite reference was provided' })
+      }
+
+      const { data: claimedInvite, error: claimedLookupError } = await supabase
+        .from('invites')
+        .select('id, film_id, recipient_name, claimed_email, claimed_at')
+        .eq('id', claimId)
+        .maybeSingle()
+
+      const identity = resolveAccountlessSharerIdentity(claimedLookupError ? null : claimedInvite)
+      if (!identity.ok) {
+        return res.status(403).json({ error: identity.reason })
+      }
+
+      filmId = identity.filmId
+      parentInviteId = identity.parentInviteId
+      senderName = identity.senderName
+      senderEmail = identity.senderEmail
+      // No user row exists for an accountless sharer — invite_allocation is a
+      // per-account concept in this schema, so quota simply doesn't apply here.
+    }
+
+    const token = generateToken()
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + getFilmInviteExpiryDays())
+
+    let slug
+    try {
+      slug = await generateUniqueSlug(inviteeFirstName, async (candidate) => {
+        const { data } = await supabase
+          .from('invites')
+          .select('id')
+          .eq('link_slug', candidate)
+          .maybeSingle()
+        return Boolean(data)
+      })
+    } catch (slugErr) {
+      if (allocationDecremented && previousAllocation !== null && senderId) {
+        await supabase.from('users').update({ invite_allocation: previousAllocation }).eq('id', senderId)
+      }
+      console.error('Slug generation error:', slugErr)
+      return res.status(500).json({ error: 'Could not generate a link right now — please try again' })
+    }
+
+    const { data: created, error: insertError } = await supabase
+      .from('invites')
+      .insert({
+        film_id: filmId,
+        sender_id: senderId,
+        sender_name: senderName,
+        sender_email: senderEmail,
+        recipient_email: null,
+        recipient_name: inviteeFirstName,
+        token,
+        status: 'created',
+        expires_at: expiresAt.toISOString(),
+        parent_invite_id: parentInviteId,
+        link_slug: slug,
+      })
+      .select('id, link_slug')
+      .single()
+
+    if (insertError) {
+      if (allocationDecremented && previousAllocation !== null && senderId) {
+        await supabase.from('users').update({ invite_allocation: previousAllocation }).eq('id', senderId)
+      }
+      throw insertError
+    }
+
+    const baseUrl = resolveBaseUrl(appUrl, req.get('origin'))
+    return res.json({
+      success: true,
+      slug: created.link_slug,
+      url: `${baseUrl}/${created.link_slug}`,
+    })
+  } catch (err) {
+    console.error('Invite create-link error:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to create invite link' })
     }
   }
 })
