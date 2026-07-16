@@ -205,12 +205,15 @@ export default function ClaimLanding() {
   /* ── WIDE SHOT: the graph reveal — no text welcome, one tap onward. ── */
   if (beat === 'reveal' && graphLayout) {
     return (
-      <div className="min-h-dvh flex flex-col bg-bg-page text-warm">
+      // h-dvh + overflow-hidden (not min-h-dvh): the graph must be BOUNDED so
+      // the whole beat — logo, wide shot, continue — is one viewport, with the
+      // continue button always on screen (non-blocking, never below the fold).
+      <div className="flex h-dvh flex-col overflow-hidden bg-bg-page text-warm">
         <div className="flex justify-center pt-[max(1.5rem,env(safe-area-inset-top,0px))]">
           <LandingLogo />
         </div>
         <div
-          className="mt-4 min-h-0 flex-1 touch-manipulation dc-fade-in"
+          className="mt-4 min-h-0 flex-1 overflow-hidden touch-manipulation dc-fade-in"
           role="img"
           aria-label="The network this film has traveled through — your node is highlighted"
         >
