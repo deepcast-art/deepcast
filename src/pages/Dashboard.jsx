@@ -20,6 +20,9 @@ import {
 import { invitationsRemaining } from '../lib/shares.js'
 import { computeFilmStats } from '../lib/filmStats.js'
 import { safeLocalStorage, safeSessionStorage } from '../lib/safeStorage.js'
+import { readClaimStash } from '../lib/claimStash.js'
+import { INITIAL_CLAIMANT_TICKETS } from '../lib/ticketRules.js'
+import { formatOrdinal } from '../lib/ordinal.js'
 
 /** Sent-invitations list renders in pages so an unlimited sharer with hundreds of
  *  shares can see them ALL without slowing the dashboard down. Normal users never
@@ -79,16 +82,57 @@ function ReachExplainer({ tipBelow = false }) {
 }
 
 export default function Dashboard() {
-  const { profile, signOut, fetchProfile, profileLoaded } = useAuth()
+  const { profile: authProfile, signOut, fetchProfile, profileLoaded } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
+
+  /* ── Claimant mode (final spec 2026-07-16): an accountless claimant's
+     identity is their claimed invite (safeStorage stash → invite row). We
+     synthesize a viewer-shaped pseudo-profile so the whole viewer path below
+     works unchanged; account-only affordances (name edit, sign out, About,
+     the email share modal) are hidden for claimants further down. ── */
+  const claimStash = useMemo(() => (authProfile ? null : readClaimStash()), [authProfile])
+  const [claimantInvite, setClaimantInvite] = useState(null)
+  useEffect(() => {
+    if (!claimStash?.inviteId) return
+    let cancelled = false
+    supabase
+      .from('invites')
+      .select('*')
+      .eq('id', claimStash.inviteId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setClaimantInvite(data || null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [claimStash?.inviteId])
+
+  const profile = useMemo(() => {
+    if (authProfile) return authProfile
+    if (!claimStash || !claimantInvite) return null
+    return {
+      id: null,
+      email: claimStash.claimedEmail || claimantInvite.claimed_email || '',
+      name: claimantInvite.recipient_name || '',
+      role: 'viewer',
+      isClaimant: true,
+      claimedInviteId: claimantInvite.id,
+      claimedInviteToken: claimantInvite.token || null,
+      claim_ordinal: claimantInvite.claim_ordinal ?? null,
+      tickets_remaining: claimantInvite.tickets_remaining ?? null,
+      claimedFilmId: claimantInvite.film_id,
+    }
+  }, [authProfile, claimStash, claimantInvite])
+  const isClaimant = Boolean(profile?.isClaimant)
   const inviteSentConfirmation = location.state?.inviteSent
     ? location.state.recipientName || 'your invitee'
     : null
   const [films, setFilms] = useState([])
   const [filmStats, setFilmStats] = useState({})
   const [inviteTree, setInviteTree] = useState({})
-  const [loading, setLoading] = useState(!profileLoaded)
+  const [loading, setLoading] = useState(() => !profileLoaded || Boolean(readClaimStash()))
   const [inviteFilmId, setInviteFilmId] = useState(null)
   const [inviteSentByFilm, setInviteSentByFilm] = useState({})
   const inviteSentTimeouts = useRef({})
@@ -179,22 +223,32 @@ export default function Dashboard() {
     profile?.role === 'team_member' ? profile?.team_creator_id : profile?.id
   const isViewer = profile?.role === 'viewer'
 
-  /** Canonical quota (src/lib/shares.js): Infinity for unlimited sharers
-   *  (incl. team-linked viewers), else the server-maintained allocation. */
-  const invitesLeft = isViewer ? invitationsRemaining(profile) : null
+  /** Canonical quota, surfaced as TICKETS (2026-07-16). Claimants spend from
+   *  their claimed invite's tickets_remaining (NULL = claimed pre-migration →
+   *  full grant, healed server-side on first spend); accounts keep the
+   *  invitationsRemaining machinery (src/lib/shares.js) unchanged. */
+  const invitesLeft = !isViewer
+    ? null
+    : isClaimant
+      ? profile.tickets_remaining ?? INITIAL_CLAIMANT_TICKETS
+      : invitationsRemaining(profile)
   const sentCount = isViewer ? viewerSentInvites.length : 0
-  const canShareMore = isViewer && viewerFilmId
-  const shareDisabled = isViewer && invitationsRemaining(profile) <= 0
+  // The dashboard's email share modal is an account-flow surface — claimants
+  // share from the watch page's panel instead (flagged, per the final spec).
+  const canShareMore = isViewer && viewerFilmId && !isClaimant
+  const shareDisabled = isViewer && !isClaimant && invitationsRemaining(profile) <= 0
 
   // Shared focus resolution (same helper every graph surface uses): email match first,
   // then invite-token match, then the common parent of the viewer's sent invites.
   const { viewerRecipientKey, focusInviteId: viewerFocusInviteId } = useMemo(
     () =>
       resolveViewerFocus(viewerFilmInvites, profile?.email, {
-        inviteToken: viewerInviteToken,
+        // Claimants: their claimed invite's token is the reliable focus key —
+        // the claimed row has no recipient_email for the email match to find.
+        inviteToken: profile?.claimedInviteToken || viewerInviteToken,
         viewerUserId: profile?.id,
       }),
-    [viewerFilmInvites, profile?.email, viewerInviteToken, profile?.id]
+    [viewerFilmInvites, profile?.email, profile?.claimedInviteToken, viewerInviteToken, profile?.id]
   )
 
   const graphLayout = useMemo(() => {
@@ -264,24 +318,39 @@ export default function Dashboard() {
   }, [viewerTokenByFilmId])
 
   const loadViewerDashboard = useCallback(async () => {
-    if (!profile?.id || profile.role !== 'viewer') return
+    if (profile?.role !== 'viewer') return
+    if (!profile.id && !profile.isClaimant) return
     const uid = profile.id
     const email = (profile.email || '').trim()
 
-    // Sent and received invites depend only on the profile — fetch them together.
+    // Sent and received invites depend only on the identity — fetch together.
+    // Claimants: their sent links carry sender_email = claimed email (and no
+    // sender_id); their one "received" film IS their claimed invite — the
+    // claimed row has recipient_email NULL, so the email lookup can't find it.
     const [{ data: sent, error: sentErr }, { data: allRecvd }] = await Promise.all([
-      supabase
-        .from('invites')
-        .select('*')
-        .eq('sender_id', uid)
-        .order('created_at', { ascending: false }),
-      email
+      uid
         ? supabase
             .from('invites')
-            .select('film_id, token')
-            .ilike('recipient_email', email)
+            .select('*')
+            .eq('sender_id', uid)
             .order('created_at', { ascending: false })
-        : Promise.resolve({ data: null }),
+        : supabase
+            .from('invites')
+            .select('*')
+            .ilike('sender_email', email)
+            .is('sender_id', null)
+            .order('created_at', { ascending: false }),
+      profile.isClaimant
+        ? Promise.resolve({
+            data: [{ film_id: profile.claimedFilmId, token: profile.claimedInviteToken }],
+          })
+        : email
+          ? supabase
+              .from('invites')
+              .select('film_id, token')
+              .ilike('recipient_email', email)
+              .order('created_at', { ascending: false })
+          : Promise.resolve({ data: null }),
     ])
 
     if (sentErr) console.error(sentErr)
@@ -379,7 +448,7 @@ export default function Dashboard() {
     setViewerCreatorName(cname)
 
     return sentList[0]?.id ?? null
-  }, [profile?.id, profile?.role, profile?.email, selectViewerFilm])
+  }, [profile?.id, profile?.role, profile?.email, profile?.isClaimant, profile?.claimedFilmId, profile?.claimedInviteToken, selectViewerFilm])
 
   useEffect(() => {
     if (profile) loadDashboard()
@@ -808,7 +877,7 @@ export default function Dashboard() {
           >
             <div className="flex flex-col gap-1.5">
               <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
-                Shares used
+                Tickets given
               </span>
               <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-warm md:text-[2.5rem]">
                 {sentCount}
@@ -816,7 +885,7 @@ export default function Dashboard() {
             </div>
             <div className="flex flex-col gap-1.5">
               <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
-                Shares left
+                Tickets left
               </span>
               {invitesLeft === Infinity ? (
                 <span className="font-display text-2xl font-normal leading-none tracking-tight text-accent">
@@ -834,6 +903,18 @@ export default function Dashboard() {
                 {viewerReachedCount}
               </span>
             </div>
+            {/* Frozen at claim time (claim_ordinal) — never recomputed. */}
+            {isClaimant && formatOrdinal(profile.claim_ordinal) && (
+              <p className="font-sans text-[10px] uppercase tracking-[0.2em] text-warm/50">
+                You are the {formatOrdinal(profile.claim_ordinal)} person to be invited to watch
+                this film.
+              </p>
+            )}
+            {/* The platform-concept line, quietly (its primary home is the share panel). */}
+            <p className="font-serif-v3 text-xs italic leading-relaxed text-warm/45">
+              Films here can’t be searched, streamed, or subscribed to. They can only be passed
+              from one person to another.
+            </p>
           </div>
 
           <div
@@ -855,13 +936,18 @@ export default function Dashboard() {
                 Share this film
               </button>
             )}
+            {/* Account-only affordances — hidden for accountless claimants:
+                /about is ProtectedRoute-gated, the name edit writes the users
+                row (RLS self-only), and there is no session to sign out of. */}
+            {!isClaimant && (
             <Link
               to="/about"
               className="text-left font-sans text-[10px] uppercase tracking-[0.22em] text-warm/35 transition-colors hover:text-warm/70"
             >
               About
             </Link>
-            {!editingName ? (
+            )}
+            {isClaimant ? null : !editingName ? (
               <button
                 type="button"
                 onClick={() => {
@@ -918,6 +1004,7 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
+            {!isClaimant && (
             <button
               type="button"
               onClick={() => signOut()}
@@ -925,6 +1012,7 @@ export default function Dashboard() {
             >
               Sign out
             </button>
+            )}
           </div>
         </aside>
 
@@ -964,7 +1052,7 @@ export default function Dashboard() {
               >
                 <div className="flex flex-col gap-1.5">
                   <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
-                    Shares used
+                    Tickets given
                   </span>
                   <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-warm">
                     {sentCount}
@@ -972,7 +1060,7 @@ export default function Dashboard() {
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
-                    Shares left
+                    Tickets left
                   </span>
                   {invitesLeft === Infinity ? (
                     <span className="font-display text-2xl font-normal leading-none tracking-tight text-accent">
@@ -990,6 +1078,13 @@ export default function Dashboard() {
                     {viewerReachedCount}
                   </span>
                 </div>
+                {/* Frozen at claim time (claim_ordinal) — never recomputed. */}
+                {isClaimant && formatOrdinal(profile.claim_ordinal) && (
+                  <p className="col-span-2 font-sans text-[10px] uppercase tracking-[0.2em] text-warm/50">
+                    You are the {formatOrdinal(profile.claim_ordinal)} person to be invited to
+                    watch this film.
+                  </p>
+                )}
               </section>
 
               {/* ── Your screenings ── */}
@@ -1046,6 +1141,12 @@ export default function Dashboard() {
                               <button
                                 type="button"
                                 onClick={() => {
+                                  // Claimants watch on the claim-flow page, never the
+                                  // legacy /i/:token screening (their token is internal).
+                                  if (isClaimant && claimStash?.slug) {
+                                    navigate(`/watch/${claimStash.slug}`)
+                                    return
+                                  }
                                   const n = parseInt(safeLocalStorage.getItem(`screening_position_${film.token}`) || '0', 10)
                                   navigate(n > 0 ? `/i/${film.token}?play=1&t=${n}` : `/i/${film.token}?play=1`)
                                 }}

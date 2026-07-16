@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-
 import { useAuth } from './lib/auth'
 import { supabase } from './lib/supabase'
 import { DEV_HARNESS_ENABLED } from './lib/devHarness'
+import { readClaimStash } from './lib/claimStash'
 
 // DEV-ONLY harness page. Gated on import.meta.env.DEV so the import() lives in dead code in a
 // production build — Rollup drops the chunk entirely (no DevHarness chunk ships to production).
@@ -20,6 +21,7 @@ const Unsubscribe = lazy(() => import('./pages/Unsubscribe.jsx'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword.jsx'))
 const About = lazy(() => import('./pages/About.jsx'))
 const ClaimLanding = lazy(() => import('./pages/ClaimLanding.jsx'))
+const ClaimWatch = lazy(() => import('./pages/ClaimWatch.jsx'))
 
 function RouteFallback({ inverse = false }) {
   return (
@@ -143,6 +145,34 @@ function ViewerShareGate({ children }) {
   return children
 }
 
+/**
+ * /dashboard authorization (final spec 2026-07-16): an authenticated account
+ * takes the existing ProtectedRoute + ViewerShareGate path unchanged; an
+ * accountless claimant (identity = their claimed invite, recognized via the
+ * safeStorage stash) is admitted directly — no share gate, since claimants
+ * reach the dashboard before ever sharing. No session AND no stash → /login.
+ * Creator-only routes (/upload, /network) keep pure auth.
+ */
+function DashboardGate({ children }) {
+  const { user, loading } = useAuth()
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+  if (user) {
+    return (
+      <ProtectedRoute requiredRoles={['creator', 'team_member', 'viewer']}>
+        <ViewerShareGate>{children}</ViewerShareGate>
+      </ProtectedRoute>
+    )
+  }
+  if (readClaimStash()) return children
+  return <Navigate to="/login" replace />
+}
+
 export default function App() {
   return (
     <>
@@ -228,15 +258,19 @@ export default function App() {
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute
-            requiredRoles={['creator', 'team_member', 'viewer']}
-          >
-            <ViewerShareGate>
-              <Suspense fallback={<RouteFallback />}>
-                <Dashboard />
-              </Suspense>
-            </ViewerShareGate>
-          </ProtectedRoute>
+          <DashboardGate>
+            <Suspense fallback={<RouteFallback />}>
+              <Dashboard />
+            </Suspense>
+          </DashboardGate>
+        }
+      />
+      <Route
+        path="/watch/:slug"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <ClaimWatch />
+          </Suspense>
         }
       />
       <Route

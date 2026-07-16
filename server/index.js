@@ -13,6 +13,7 @@ import { adminAuthDecision, unlimitedToggleTargetDecision } from './adminAuth.js
 import { removeTeammateDecision } from './teamRules.js'
 import { generateUniqueSlug } from './inviteSlug.js'
 import { resolveAccountlessSharerIdentity } from './claimIdentity.js'
+import { INITIAL_CLAIMANT_TICKETS, ticketSpendDecision } from '../src/lib/ticketRules.js'
 
 const app = express()
 app.use(cors())
@@ -740,6 +741,11 @@ app.post('/api/invites/create-link', async (req, res) => {
     let parentInviteId = null
     let previousAllocation = null
     let allocationDecremented = false
+    // Accountless ticket spend: balance after a successful CAS decrement
+    // (null on the account path), plus what's needed to refund a spend if
+    // link creation itself fails (a failed generation is not a spent ticket).
+    let accountlessTicketsRemaining = null
+    let accountlessClaimId = null
 
     if (jwt) {
       // ── Account-holder sharer. Identity comes ONLY from the verified token —
@@ -857,7 +863,7 @@ app.post('/api/invites/create-link', async (req, res) => {
 
       const { data: claimedInvite, error: claimedLookupError } = await supabase
         .from('invites')
-        .select('id, film_id, recipient_name, claimed_email, claimed_at')
+        .select('*')
         .eq('id', claimId)
         .maybeSingle()
 
@@ -870,8 +876,47 @@ app.post('/api/invites/create-link', async (req, res) => {
       parentInviteId = identity.parentInviteId
       senderName = identity.senderName
       senderEmail = identity.senderEmail
-      // No user row exists for an accountless sharer — invite_allocation is a
-      // per-account concept in this schema, so quota simply doesn't apply here.
+
+      // Ticket economy (2026-07-16): accountless sharers spend from their own
+      // claimed invite's tickets_remaining — spent at link GENERATION, no
+      // refunds. Optimistic CAS with retries: the conditional UPDATE only
+      // lands if the balance is still what we read, so two concurrent
+      // generates can never spend the same ticket. NULL balance = claimed
+      // before the tickets migration → healed to the initial grant here.
+      let spent = false
+      for (let attempt = 0; attempt < 3 && !spent; attempt++) {
+        const { data: fresh } =
+          attempt === 0
+            ? { data: claimedInvite }
+            : await supabase.from('invites').select('*').eq('id', claimId).maybeSingle()
+        const decision = ticketSpendDecision(fresh?.tickets_remaining)
+        if (!decision.ok) {
+          return res.status(400).json({ error: decision.reason })
+        }
+        const cas = supabase.from('invites').update({ tickets_remaining: decision.next }).eq('id', claimId)
+        const { data: updated, error: spendError } =
+          fresh?.tickets_remaining == null
+            ? await cas.is('tickets_remaining', null).select('id').maybeSingle()
+            : await cas.eq('tickets_remaining', fresh.tickets_remaining).select('id').maybeSingle()
+        if (spendError) {
+          if (/tickets_remaining/.test(spendError.message || '')) {
+            // Pre-migration deploy: column missing — degrade to the legacy
+            // no-quota behavior rather than blocking sharing.
+            console.warn('[create-link] tickets_remaining column missing — no-quota fallback (apply the 20260716 migration)')
+            spent = true
+            break
+          }
+          throw spendError
+        }
+        if (updated) {
+          spent = true
+          accountlessTicketsRemaining = decision.next
+          accountlessClaimId = claimId
+        }
+      }
+      if (!spent) {
+        return res.status(409).json({ error: 'Please try again — your tickets were updating.' })
+      }
     }
 
     const token = generateToken()
@@ -891,6 +936,10 @@ app.post('/api/invites/create-link', async (req, res) => {
     } catch (slugErr) {
       if (allocationDecremented && previousAllocation !== null && senderId) {
         await supabase.from('users').update({ invite_allocation: previousAllocation }).eq('id', senderId)
+      }
+      if (accountlessClaimId != null && accountlessTicketsRemaining != null) {
+        // A failed generation is not a spent ticket — refund (best effort).
+        await supabase.from('invites').update({ tickets_remaining: accountlessTicketsRemaining + 1 }).eq('id', accountlessClaimId)
       }
       console.error('Slug generation error:', slugErr)
       return res.status(500).json({ error: 'Could not generate a link right now — please try again' })
@@ -918,6 +967,10 @@ app.post('/api/invites/create-link', async (req, res) => {
       if (allocationDecremented && previousAllocation !== null && senderId) {
         await supabase.from('users').update({ invite_allocation: previousAllocation }).eq('id', senderId)
       }
+      if (accountlessClaimId != null && accountlessTicketsRemaining != null) {
+        // A failed generation is not a spent ticket — refund (best effort).
+        await supabase.from('invites').update({ tickets_remaining: accountlessTicketsRemaining + 1 }).eq('id', accountlessClaimId)
+      }
       throw insertError
     }
 
@@ -926,6 +979,9 @@ app.post('/api/invites/create-link', async (req, res) => {
       success: true,
       slug: created.link_slug,
       url: `${baseUrl}/${created.link_slug}`,
+      // Balance after this spend — null on the account path (accounts surface
+      // quota via the existing invitationsRemaining machinery).
+      ticketsRemaining: accountlessTicketsRemaining,
     })
   } catch (err) {
     console.error('Invite create-link error:', err)
@@ -954,7 +1010,7 @@ app.get('/api/invites/link/:slug', async (req, res) => {
     // a column that doesn't exist yet would fail the whole query.
     const { data: invite, error } = await supabase
       .from('invites')
-      .select('id, film_id, sender_id, parent_invite_id, recipient_name, sender_name, status, created_at, films(*)')
+      .select('*, films(*)')
       .eq('link_slug', slug)
       .maybeSingle()
 
@@ -1017,6 +1073,14 @@ app.get('/api/invites/link/:slug', async (req, res) => {
         .map((r) => r.recipient_name || r.recipient_email || 'Someone'),
     ]
 
+    // Landing still: hand-picked films.poster_url first, else the film's
+    // public Mux poster frame, else null (page falls back to the dark bg).
+    const posterUrl =
+      invite.films?.poster_url ||
+      (invite.films?.mux_playback_id
+        ? `https://image.mux.com/${invite.films.mux_playback_id}/thumbnail.jpg`
+        : null)
+
     return res.json({
       inviteeFirstName: invite.recipient_name || null,
       sharerName: invite.sender_name || null,
@@ -1027,6 +1091,13 @@ app.get('/api/invites/link/:slug', async (req, res) => {
       status: invite.status,
       inviteOrdinal,
       lineageNames,
+      posterUrl,
+      // Watch-page needs on revisit (playback is public-policy; invites are
+      // world-readable under RLS, so none of this is a new exposure class).
+      muxPlaybackId: invite.films?.mux_playback_id || null,
+      inviteId: invite.id,
+      claimOrdinal: invite.claim_ordinal ?? null,
+      ticketsRemaining: invite.tickets_remaining ?? null,
     })
   } catch (err) {
     console.error('Invite link lookup error:', err)
@@ -1099,51 +1170,74 @@ app.post('/api/invites/claim', async (req, res) => {
       return res.status(400).json({ error: `${creatorFirst} ${CREATOR_SHARE_BLOCK_REASON}` })
     }
 
+    // Ordinal freeze: compute the invitee's position NOW and stamp it on the
+    // claim — never recomputed afterward (the dashboard shows this value).
+    const { data: ordinalRows } = await supabase
+      .from('invites')
+      .select('id, created_at')
+      .eq('film_id', invite.film_id)
+    const myCreated = new Date(
+      (ordinalRows || []).find((r) => r.id === invite.id)?.created_at || 0
+    ).getTime()
+    const claimOrdinal =
+      (ordinalRows || []).filter((r) => {
+        const t = new Date(r.created_at || 0).getTime()
+        return t < myCreated || (t === myCreated && r.id <= invite.id)
+      }).length || 1
+
     // Atomic claim-bind: the conditional UPDATE decides the race — only one
     // concurrent claimant can match status='created' AND claimed_email IS NULL.
     // claimed_by (the users.id reference) deliberately stays NULL in Phase 1.
-    const { data: claimedRow, error: claimError } = await supabase
+    // The same write stamps claim_ordinal and initializes tickets_remaining
+    // (the accountless ticket grant). Pre-migration fallback: if those columns
+    // don't exist yet, retry the legacy claim so production never breaks on a
+    // code-before-migration deploy.
+    const fullClaimUpdate = {
+      claimed_email: emailNorm,
+      claimed_at: new Date().toISOString(),
+      status: 'claimed',
+      claim_ordinal: claimOrdinal,
+      tickets_remaining: INITIAL_CLAIMANT_TICKETS,
+    }
+    let { data: claimedRow, error: claimError } = await supabase
       .from('invites')
-      .update({ claimed_email: emailNorm, claimed_at: new Date().toISOString(), status: 'claimed' })
+      .update(fullClaimUpdate)
       .eq('id', invite.id)
       .eq('status', 'created')
       .is('claimed_email', null)
       .select('id')
       .maybeSingle()
+    if (claimError && /claim_ordinal|tickets_remaining/.test(claimError.message || '')) {
+      console.warn('[claim] tickets/ordinal columns missing — legacy claim (apply the 20260716 migration)')
+      ;({ data: claimedRow, error: claimError } = await supabase
+        .from('invites')
+        .update({ claimed_email: emailNorm, claimed_at: new Date().toISOString(), status: 'claimed' })
+        .eq('id', invite.id)
+        .eq('status', 'created')
+        .is('claimed_email', null)
+        .select('id')
+        .maybeSingle())
+    }
     if (claimError) throw claimError
     if (!claimedRow) {
       return res.status(409).json({ error: 'This invitation has already been accepted.' })
     }
 
-    // Graph-reveal + watch payload (mirrors /api/invites/validate's shape).
-    const [{ data: filmInvites }, { data: creatorUser }, { data: teamMemberRows }] =
-      await Promise.all([
-        supabase
-          .from('invites')
-          .select('id, film_id, sender_id, sender_name, sender_email, recipient_name, recipient_email, status, created_at, parent_invite_id')
-          .eq('film_id', invite.film_id)
-          .order('created_at', { ascending: true }),
-        invite.films?.creator_id
-          ? supabase.from('users').select('name').eq('id', invite.films.creator_id).maybeSingle()
-          : Promise.resolve({ data: null }),
-        invite.films?.creator_id
-          ? supabase.from('users').select('id').eq('team_creator_id', invite.films.creator_id)
-          : Promise.resolve({ data: null }),
-      ])
-
+    // Claim routes DIRECTLY to the watch page (final spec 2026-07-16) — no
+    // reveal beat, so no graph payload here; the dashboard fetches its own.
     return res.json({
       success: true,
       inviteId: invite.id,
+      slug,
+      filmId: invite.film_id,
+      claimOrdinal,
+      ticketsRemaining: INITIAL_CLAIMANT_TICKETS,
       film: {
         id: invite.films?.id || invite.film_id,
         title: invite.films?.title || null,
         muxPlaybackId: invite.films?.mux_playback_id || null,
         transmissionHook: invite.films?.transmission_hook || null,
       },
-      filmInvites: filmInvites || [],
-      creatorName: creatorUser?.name?.trim() || '',
-      creatorId: invite.films?.creator_id || null,
-      teamMemberIds: (teamMemberRows || []).map((u) => u.id),
     })
   } catch (err) {
     console.error('Invite claim error:', err)

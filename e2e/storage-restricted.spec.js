@@ -124,5 +124,51 @@ for (const mode of MODES) {
       await expect(page.getByText('Deliver To').first()).not.toBeVisible()
       expect(jsErrors, 'no uncaught JS errors').toEqual([])
     })
+
+    test('claim-link flow: claiming still lands on the watch page (stash degrades to memory)', async ({ page }) => {
+      // The claim stash (src/lib/claimStash.js) is the claimant's identity.
+      // Under restricted storage it must fall back to in-memory state for the
+      // visit — the claim → watch handoff can never white-screen or bounce.
+      let claimed = false
+      await page.route('**/api/invites/link/**', (route) =>
+        route.fulfill({
+          json: {
+            inviteeFirstName: 'Alex',
+            sharerName: 'Ien',
+            filmTitle: 'E2E Test Film',
+            transmissionHook: null,
+            status: claimed ? 'claimed' : 'created',
+            lineageNames: ['Ien'],
+            posterUrl: null,
+            muxPlaybackId: 'e2e-fake-playback-id',
+            inviteId: 'e2e-claim-1',
+            claimOrdinal: null,
+            ticketsRemaining: claimed ? 5 : null,
+          },
+        })
+      )
+      await page.route('**/api/invites/claim', (route) => {
+        claimed = true
+        return route.fulfill({
+          json: {
+            success: true,
+            inviteId: 'e2e-claim-1',
+            slug: 'alex-e2e1',
+            filmId: 'e2e-film-1',
+            claimOrdinal: 1,
+            ticketsRemaining: 5,
+            film: { id: 'e2e-film-1', title: 'E2E Test Film', muxPlaybackId: 'e2e-fake-playback-id' },
+          },
+        })
+      })
+
+      await page.goto('/alex-e2e1', { waitUntil: 'domcontentloaded' })
+      await page.getByPlaceholder('you@example.com').fill('alex@example.com')
+      await page.getByRole('button', { name: /Accept your invite/i }).click()
+
+      await expect(page).toHaveURL(/\/watch\/alex-e2e1$/, { timeout: 15_000 })
+      await expect(page.locator('mux-player')).toBeAttached({ timeout: 45_000 })
+      expect(jsErrors, 'no uncaught JS errors').toEqual([])
+    })
   })
 }
