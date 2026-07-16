@@ -92,6 +92,17 @@ export const api = {
       }),
     }),
 
+  // Claim-link landing page (public, slug-based — minimal payload by design)
+  getLinkInvite: async (slug) => {
+    const enc = encodeURIComponent(slug)
+    const res = await fetchWithTimeout(`${API_BASE}/invites/link/${enc}`)
+    if (res.ok) return res.json()
+    if (res.status === 404) throw new Error('invalid')
+    if (res.status === 502 || res.status === 503) throw new Error('server_unavailable')
+    const error = await res.json().catch(() => ({ error: 'Request failed' }))
+    throw new Error(error.error || 'Request failed')
+  },
+
   // Passwordless invite-first sign-in
   inviteSession: (token, email, appUrl = null) =>
     request('/invites/session', {

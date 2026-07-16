@@ -935,6 +935,42 @@ app.post('/api/invites/create-link', async (req, res) => {
   }
 })
 
+/**
+ * Public lookup for the claim-link landing page (PLAN.md Step 3 / A3).
+ * Slugs are guessable-by-design, so the response is deliberately minimal:
+ * just what the personalized landing page renders. It never includes the
+ * invite id or the legacy `token` (which would hand out a watch URL before
+ * the claim step), and it does NOT transition status — viewing the landing
+ * page is not "opening" in the legacy sense; the only new-flow transition
+ * is the claim itself (Step 4).
+ */
+app.get('/api/invites/link/:slug', async (req, res) => {
+  try {
+    const slug = String(req.params.slug || '').trim().toLowerCase()
+    if (!slug) return res.status(400).json({ error: 'Slug is required' })
+
+    const { data: invite, error } = await supabase
+      .from('invites')
+      .select('recipient_name, sender_name, status, films(title)')
+      .eq('link_slug', slug)
+      .maybeSingle()
+
+    if (error || !invite) {
+      return res.status(404).json({ error: 'Invite link not found' })
+    }
+
+    return res.json({
+      inviteeFirstName: invite.recipient_name || null,
+      sharerName: invite.sender_name || null,
+      filmTitle: invite.films?.title || null,
+      status: invite.status,
+    })
+  } catch (err) {
+    console.error('Invite link lookup error:', err)
+    return res.status(500).json({ error: 'Failed to look up invite link' })
+  }
+})
+
 app.post('/api/invites/resend-last', async (req, res) => {
   try {
     const { filmId, senderId, appUrl } = req.body

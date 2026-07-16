@@ -19,6 +19,7 @@ const TeamJoin = lazy(() => import('./pages/TeamJoin.jsx'))
 const Unsubscribe = lazy(() => import('./pages/Unsubscribe.jsx'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword.jsx'))
 const About = lazy(() => import('./pages/About.jsx'))
+const ClaimLanding = lazy(() => import('./pages/ClaimLanding.jsx'))
 
 function RouteFallback({ inverse = false }) {
   return (
@@ -270,6 +271,18 @@ export default function App() {
           }
         />
       )}
+      {/* Claim-link landing (public, A3). KEEP LAST: a dynamic single-segment
+          catch-all — React Router ranks static routes above it, but ordering
+          it last keeps the intent unmissable. Unknown slugs render the page's
+          own graceful not-found state (there is no other 404 route). */}
+      <Route
+        path="/:slug"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <ClaimLanding />
+          </Suspense>
+        }
+      />
     </Routes>
     </>
   )
