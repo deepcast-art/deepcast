@@ -77,7 +77,8 @@ test.describe('three-page claim arc', () => {
     // Legacy full names trim to the first word on this page.
     await expect(page.getByText('watched this and thought of you')).toBeVisible()
     await expect(page.getByText('Ien Chi watched this')).toHaveCount(0)
-    // The thread (depth-1) and the film block.
+    // The thread (depth-1) with its context label, and the film block.
+    await expect(page.getByText('How this reached you')).toBeVisible()
     await expect(page.getByText('you', { exact: true })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'A Sacred Pause' })).toBeVisible()
     await expect(page.getByText('A one-line hook about why this film exists.')).toBeVisible()
@@ -188,6 +189,24 @@ test.describe('three-page claim arc', () => {
     await expect(page.getByRole('heading', { name: 'A Sacred Pause' })).toBeVisible()
     await expect(page.getByText(/placeholder/i)).toHaveCount(0)
     await expect(page.getByText('A one-line hook about why this film exists.')).toHaveCount(0)
+    expect(jsErrors).toEqual([])
+  })
+
+  test('dashboard never renders blank: a stash whose invite is gone gets the visitor screen', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        'deepcast:claim',
+        JSON.stringify({ slug: 'ghost-zz99', inviteId: 'gone-1', filmId: 'film-1', claimedEmail: 'x@example.com' })
+      )
+    })
+    // The claimant-invite lookup finds nothing (row deleted / bad stash).
+    await page.route('**/rest/v1/invites**', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: 'null' })
+    )
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+
+    await expect(page.getByText('This page belongs to invited viewers.')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole('link', { name: /Sign in/i })).toBeVisible()
     expect(jsErrors).toEqual([])
   })
 

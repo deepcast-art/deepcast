@@ -93,6 +93,10 @@ export default function Dashboard() {
      the email share modal) are hidden for claimants further down. ── */
   const claimStash = useMemo(() => (authProfile ? null : readClaimStash()), [authProfile])
   const [claimantInvite, setClaimantInvite] = useState(null)
+  /** true once the claimant-invite lookup has settled (found OR missing) —
+   *  the render gate below needs to tell "still resolving" from "no such
+   *  invite" so no identity state can ever render a blank page. */
+  const [claimantLookupDone, setClaimantLookupDone] = useState(false)
   useEffect(() => {
     if (!claimStash?.inviteId) return
     let cancelled = false
@@ -102,7 +106,12 @@ export default function Dashboard() {
       .eq('id', claimStash.inviteId)
       .maybeSingle()
       .then(({ data }) => {
-        if (!cancelled) setClaimantInvite(data || null)
+        if (cancelled) return
+        setClaimantInvite(data || null)
+        setClaimantLookupDone(true)
+      })
+      .catch(() => {
+        if (!cancelled) setClaimantLookupDone(true)
       })
     return () => {
       cancelled = true
@@ -636,7 +645,40 @@ export default function Dashboard() {
     }
   }, [])
 
-  if (!profileLoaded || !profile) return null
+  /* ── Identity gate. RULE (2026-07-16): no identity state may ever render a
+     blank page. The old `return null` here relied on ProtectedRoute
+     guaranteeing a profile — but profileLoaded stays FALSE forever for
+     visitors with no session (auth.jsx resets it on signed-out state), so a
+     claimant or stray visitor rendered nothing at all. Three explicit
+     states instead: still-resolving → spinner; claimant stash whose invite
+     can't be found (or any other unidentified arrival) → a graceful
+     visitor screen; identified → the dashboard. ── */
+  if (!profile) {
+    const stillResolving = claimStash ? !claimantLookupDone : !profileLoaded
+    if (stillResolving) {
+      return (
+        <div className="min-h-dvh flex items-center justify-center bg-bg-page">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" aria-hidden />
+        </div>
+      )
+    }
+    /* Draft copy — voice-pass pending. */
+    return (
+      <div className="min-h-dvh flex flex-col items-center justify-center bg-bg-page px-6 text-center text-warm">
+        <DeepcastLogo variant="wordmark" size="text-4xl" className="text-warm opacity-90" />
+        <p className="mt-10 font-serif-v3 text-xl">This page belongs to invited viewers.</p>
+        <p className="mt-3 max-w-sm font-serif-v3 text-sm italic text-warm/60">
+          If someone passed you a film, open the link they sent — it&apos;s your way in.
+        </p>
+        <Link
+          to="/login"
+          className="mt-8 font-sans text-[10px] uppercase tracking-[0.22em] text-warm/40 transition-colors hover:text-warm/70"
+        >
+          Sign in →
+        </Link>
+      </div>
+    )
+  }
 
   const statusBadge = {
     processing: 'bg-accent/20 text-accent',

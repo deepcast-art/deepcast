@@ -19,7 +19,12 @@ function LineageThread({ names }) {
   const items = buildLineageThread(names)
   if (!items.length) return null
   return (
-    <p className="mt-6 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 font-sans text-[10px] uppercase tracking-[0.22em] text-warm/60">
+    <>
+      {/* The one line of context a first-time invitee needs — nothing more. */}
+      <p className="mt-6 font-sans text-[10px] uppercase tracking-[0.22em] text-warm/45">
+        How this reached you
+      </p>
+      <p className="mt-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 font-sans text-[10px] uppercase tracking-[0.22em] text-warm/60">
       {items.map((item, i) => (
         <span key={i} className="flex items-center gap-x-2">
           {i > 0 && <span aria-hidden className="text-warm/30">——</span>}
@@ -34,7 +39,8 @@ function LineageThread({ names }) {
           )}
         </span>
       ))}
-    </p>
+      </p>
+    </>
   )
 }
 
@@ -176,15 +182,26 @@ export default function ClaimLanding() {
   return (
     <div className="relative min-h-dvh bg-bg-page text-warm">
       {posterUrl && (
-        <div aria-hidden className="absolute inset-0">
+        /* FIXED, not absolute: the still is locked to the viewport, edge to
+           edge at every size and orientation — no band, no bar; the logo and
+           letter sit directly on it. The scrim beneath the gradient is a
+           UNIFORM minimum darkening, so text contrast is guaranteed no
+           matter how bright the poster frame is. */
+        <div aria-hidden className="fixed inset-0">
+          {/* Inline height: the project's global `img { height: auto }`
+              (src/index.css — unlayered, so it beats every Tailwind height
+              utility on images) collapsed the still to its natural aspect,
+              leaving bands at tall viewports. Inline style wins the cascade
+              without touching the protective global rule. */}
           <img
             src={posterUrl}
             alt=""
-            className="h-full w-full object-cover opacity-45"
+            className="absolute inset-0 w-full object-cover"
+            style={{ height: '100%' }}
             draggable={false}
           />
-          {/* Darken toward the bottom for legibility over the still. */}
-          <div className="absolute inset-0 bg-gradient-to-b from-bg-page/40 via-bg-page/70 to-bg-page" />
+          <div className="absolute inset-0 bg-bg-page/55" />
+          <div className="absolute inset-0 bg-gradient-to-b from-bg-page/10 via-bg-page/45 to-bg-page/90" />
         </div>
       )}
 
