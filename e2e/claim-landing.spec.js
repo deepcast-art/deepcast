@@ -17,6 +17,7 @@ const READY_LINK = {
   inviteeFirstName: 'Alex',
   sharerName: 'Ien',
   filmTitle: 'A Sacred Pause',
+  transmissionHook: 'A one-line hook about why this film exists.',
   status: 'created',
 }
 
@@ -38,13 +39,27 @@ test.describe('claim-link landing page', () => {
     await expect(page.getByText('watched this and thought of you')).toBeVisible()
     // 3. Platform-concept line (approved verbatim copy).
     await expect(page.getByText(/can’t be searched, streamed, or subscribed to/)).toBeVisible()
-    // 4. Film title.
+    // 4. Film title + per-film transmission hook (films.transmission_hook).
     await expect(page.getByRole('heading', { name: 'A Sacred Pause' })).toBeVisible()
+    await expect(page.getByText('A one-line hook about why this film exists.')).toBeVisible()
     // 5. Conditions line (B2).
     await expect(page.getByText('14 minutes. Headphones recommended.')).toBeVisible()
     // 6. Single CTA.
     await expect(page.getByRole('button', { name: /Accept your invite/i })).toBeVisible()
 
+    expect(jsErrors).toEqual([])
+  })
+
+  test('a film with no transmission hook renders nothing in that slot — no box, no placeholder', async ({ page }) => {
+    await page.route('**/api/invites/link/**', (route) =>
+      route.fulfill({ json: { ...READY_LINK, transmissionHook: null } })
+    )
+    await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
+
+    await expect(page.getByRole('heading', { name: 'A Sacred Pause' })).toBeVisible()
+    // The hook slot must be completely absent — no placeholder copy of any kind.
+    await expect(page.getByText(/placeholder/i)).toHaveCount(0)
+    await expect(page.getByText('A one-line hook about why this film exists.')).toHaveCount(0)
     expect(jsErrors).toEqual([])
   })
 

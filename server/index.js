@@ -949,9 +949,12 @@ app.get('/api/invites/link/:slug', async (req, res) => {
     const slug = String(req.params.slug || '').trim().toLowerCase()
     if (!slug) return res.status(400).json({ error: 'Slug is required' })
 
+    // films(*) rather than named columns so this route keeps working before
+    // AND after the 20260716 transmission_hook migration is applied — naming
+    // a column that doesn't exist yet would fail the whole query.
     const { data: invite, error } = await supabase
       .from('invites')
-      .select('recipient_name, sender_name, status, films(title)')
+      .select('recipient_name, sender_name, status, films(*)')
       .eq('link_slug', slug)
       .maybeSingle()
 
@@ -963,6 +966,9 @@ app.get('/api/invites/link/:slug', async (req, res) => {
       inviteeFirstName: invite.recipient_name || null,
       sharerName: invite.sender_name || null,
       filmTitle: invite.films?.title || null,
+      // Per-film C1 hook — null until the filmmaker authors one; the landing
+      // page renders nothing at all for null (no box, no placeholder).
+      transmissionHook: invite.films?.transmission_hook || null,
       status: invite.status,
     })
   } catch (err) {

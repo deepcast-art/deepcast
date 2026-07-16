@@ -63,6 +63,7 @@ Tracker for the invite/share overhaul. Work top to bottom within each phase; Pha
   - 2–3 line version on the claim/landing page
   - Fuller version (director's-note length) on the film page, pre-play
   Note: the intro video inside the film does NOT cover this — it's only seen after commitment. These text surfaces are what give the sharer a sentence to say and the invitee a reason to trust. Content task (Ien writes), not just build task.
+  **Amendment (2026-07-16):** hook slot + demo copy shipped — `films.transmission_hook` (nullable; landing page renders nothing when NULL), demo text set on "A Sacred Pause" only. REAL hook and director's note for each real film are Ien-authored content, owner: Ien, required before any non-demo film ships. The fuller director's-note slot on the watch page remains unbuilt, pending that content.
 
 - [ ] **C2. Lineage visibility**
   Surface the existing graph mechanism: invitee can see the chain of hands the film traveled through to reach them; sharing extends the chain.

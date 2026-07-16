@@ -72,7 +72,8 @@ export default function ClaimLanding() {
     )
   }
 
-  const { inviteeFirstName, sharerName, filmTitle } = state.invite || {}
+  const { inviteeFirstName, sharerName, filmTitle, transmissionHook } = state.invite || {}
+  const hook = (transmissionHook || '').trim()
   const firstName = (inviteeFirstName || '').trim() || 'friend'
   const sharer = (sharerName || '').trim() || 'Someone'
 
@@ -108,16 +109,19 @@ export default function ClaimLanding() {
           one person to another.
         </p>
 
-        {/* 4. Film title + transmission hook (C1 placeholder until Ien writes it) */}
+        {/* 4. Film title + transmission hook. The hook is per-film DATA
+            (films.transmission_hook, C1) — when a film has none, nothing at
+            all renders here: no box, no placeholder. */}
         <div className="mt-12 w-full border-t border-warm/15 pt-10">
           <p className="font-sans text-[10px] uppercase tracking-[0.28em] text-warm/45">
             A private screening of
           </p>
           <h2 className="mt-3 font-serif-v3 text-2xl">{filmTitle || 'a film'}</h2>
-          <p className="mx-auto mt-4 max-w-sm border border-dashed border-warm/25 px-4 py-3 font-sans text-xs leading-relaxed text-warm/50">
-            [Placeholder — transmission hook: one line on why this film exists, written by the
-            filmmaker. Final copy pending (C1).]
-          </p>
+          {hook && (
+            <p className="mx-auto mt-4 max-w-sm font-serif-v3 text-sm italic leading-relaxed text-warm/70">
+              {hook}
+            </p>
+          )}
         </div>
 
         {/* 5. Conditions line (B2 — shared constant, nothing more around it) */}
