@@ -72,14 +72,14 @@ Tracker for the invite/share overhaul. Work top to bottom within each phase; Pha
   First names only. Revisit purpose mechanism (patronage/finite seats) after feedback.
   **Amendment (2026-07-16, supersedes the struck line):** the ancestor-walk slice is pulled forward into A3's lineage thread (pre-claim, close-up), and the full-graph reveal IS now in scope post-claim (wide shot) — see D1.
 
-- [ ] **C3. Post-film share moment**
-  At credits end, prompt: "Who is this film for?" → inline first-name entry → generates claim link (A1) right there. This is the primary share surface; any menu-based share button is secondary.
+- [ ] **C3. Post-film share moment** *(amended 2026-07-16, final spec: a permanent panel, not a credits-gated moment)*
+  The "Who is this film for?" share panel is permanently docked near the player on the watch page, collapsed by default, expandable by tap at ANY time — pausing nudges it, credits end auto-opens it, and it never overlays the video frame. Expanded order: the platform-concept line (this panel is its primary home — removed from everywhere else except, quietly, the dashboard) → "You have N tickets for this film. Each admits one person, once." → first-name field → generate → link + copy + ready-to-send line ("I watched this and thought of you — [link]") → "See where your ticket went →". Zero tickets: "You've given all your tickets for this film.", no upsell. This is the primary share surface.
 
 ### D. Copy pass
 
-- [ ] **D1. Post-claim welcome = the graph reveal** *(amended 2026-07-16 — replaces the text-welcome concept)*
+- [ ] **D1. Post-claim welcome = the dashboard graph** *(re-amended 2026-07-16, final spec — supersedes the reveal-beat version)*
   ~~Plainspoken, warm, brief. No ceremony, no manifesto. Philosophy is discovered through the films, not announced.~~
-  After a successful claim there is NO text welcome. The invitee sees the existing NetworkMap/NetworkGraph view with their own node newly added, connected to their sharer, their lineage path visually highlighted within the full network — the WIDE SHOT of the landing page's thread. Brief and non-blocking: one tap or short moment to continue to the watch flow, never a gate.
+  There is NO welcome beat on the claim path at all — claiming routes DIRECTLY to the watch page. The full-graph payoff lives on the dashboard (existing Dashboard.jsx adapted for claimed-invite identity), reached via "See where your ticket went →" after generating a link, plus a persistent quiet link on the watch page. Viewer's own path highlighted amber, including branches they created; frozen `claim_ordinal` line; tickets language; name-edit/sign-out/About hidden for accountless claimants. The interim post-claim reveal beat (built earlier the same day) is retired from the codebase.
 
 - [ ] **D4. Clean test/seed accounts from the production graph before the graph-reveal welcome ships** — the wide shot only works if the network looks real.
 
@@ -101,6 +101,7 @@ Tracker for the invite/share overhaul. Work top to bottom within each phase; Pha
 - [ ] **E6. Evaluate signed MUX playback URLs once claim flow is stable** — playback is currently public-policy; exclusivity is page-layer only.
 - [ ] **E7. Rotate service-role, Resend, and MUX secrets** (exposed to local transcript 2026-07-06).
 - [ ] **E8. Set up proper pg_dump backup path (DB password + libpq) before user count grows.**
+- [ ] **E9. Ambient dimmed network behind the landing letter** — polish, post-demo.
 
 ---
 
@@ -132,3 +133,7 @@ Tracker for the invite/share overhaul. Work top to bottom within each phase; Pha
 | Resend endpoints | Kept, unchanged — invariant is creation vs. delivery; A5 retires creation of new email invites, resend re-delivers existing ones as part of the protected legacy machinery | 2026-07-06 |
 | Lineage model | Unified — new flow populates `parent_invite_id` exactly as the old flow does, invite-to-invite; sharer identity widened to session-OR-claimed-invite (see A2 amendment above) | 2026-07-06 |
 | Arrival experience | Two-beat: close-up letter (landing page, with lineage thread) → wide-shot full-graph reveal post-claim; supersedes C2's "not full graph viz" note and D1's text welcome | 2026-07-16 |
+| Final three-page structure | Landing (film still + letter + thread + inline email) → Watch (share panel = constraint line's home) → Dashboard (full graph payoff, adapted old dashboard). Claim routes directly to watch; the reveal beat is retired | 2026-07-16 |
+| Ticket economy | Spent at link generation, no refunds. Dual backing: accounts keep `users.invite_allocation` (tickets language); accountless claimants get `invites.tickets_remaining`, initialized to 5 at claim (mirrors the uniform new-viewer grant), CAS-decremented by accountless create-link | 2026-07-16 |
+| Ordinal freeze | `invites.claim_ordinal` stamped once at claim, never recomputed; dashboard shows the frozen value; pre-claim displays may compute live | 2026-07-16 |
+| Revisit rule | Claimant re-opening own claimed link (recognized by safeStorage stash; slug fallback) → their watch/dashboard state; everyone else → dead-link page. Stash-less new browser → dead-link accepted as MVP limitation | 2026-07-16 |
