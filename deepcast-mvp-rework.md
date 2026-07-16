@@ -29,6 +29,7 @@ Tracker for the invite/share overhaul. Work top to bottom within each phase; Pha
   4. Film title + one-line transmission hook (short version of C1)
   5. "14 minutes. Headphones recommended."
   6. Single CTA: **Accept your invite**
+  **Amendment (2026-07-16, walkthrough review):** the page is the CLOSE-UP of the two-beat arrival (letter register; the post-claim graph reveal is the WIDE SHOT of the same object). Additions: a **lineage thread** between the sharer line and the film title — minimal horizontal chain of first-named nodes from `parent_invite_id` ancestry; depth ≤ 4 renders all names, depth ≥ 5 collapses the middle to "⋯ N hands ⋯" keeping three anchors (origin, direct sharer, you); no "passed through N hands" prose anywhere. Plus one quiet line near the film title: "You are the Nth person to be invited to watch this film." (N = real invite count; the ONLY written statistic permitted on the page). Legacy multi-word sharer names trim to first word on this page only.
 
 - [ ] **A4. Email capture at claim**
   On accepting, invitee enters their email. This is the claim action.
@@ -67,16 +68,20 @@ Tracker for the invite/share overhaul. Work top to bottom within each phase; Pha
 
 - [ ] **C2. Lineage visibility**
   Surface the existing graph mechanism: invitee can see the chain of hands the film traveled through to reach them; sharing extends the chain.
-  MVP version: simple ancestor chain on the film page ("This film reached you through: Dan → Sarah → you"), not full graph viz.
+  ~~MVP version: simple ancestor chain on the film page ("This film reached you through: Dan → Sarah → you"), not full graph viz.~~
   First names only. Revisit purpose mechanism (patronage/finite seats) after feedback.
+  **Amendment (2026-07-16, supersedes the struck line):** the ancestor-walk slice is pulled forward into A3's lineage thread (pre-claim, close-up), and the full-graph reveal IS now in scope post-claim (wide shot) — see D1.
 
 - [ ] **C3. Post-film share moment**
   At credits end, prompt: "Who is this film for?" → inline first-name entry → generates claim link (A1) right there. This is the primary share surface; any menu-based share button is secondary.
 
 ### D. Copy pass
 
-- [ ] **D1. Rewrite post-claim welcome**
-  Plainspoken, warm, brief. No ceremony, no manifesto. Philosophy is discovered through the films, not announced.
+- [ ] **D1. Post-claim welcome = the graph reveal** *(amended 2026-07-16 — replaces the text-welcome concept)*
+  ~~Plainspoken, warm, brief. No ceremony, no manifesto. Philosophy is discovered through the films, not announced.~~
+  After a successful claim there is NO text welcome. The invitee sees the existing NetworkMap/NetworkGraph view with their own node newly added, connected to their sharer, their lineage path visually highlighted within the full network — the WIDE SHOT of the landing page's thread. Brief and non-blocking: one tap or short moment to continue to the watch flow, never a gate.
+
+- [ ] **D4. Clean test/seed accounts from the production graph before the graph-reveal welcome ships** — the wide shot only works if the network looks real.
 
 - [ ] **D2. First-touch copy audit**
   Landing page + all claim-flow copy: exclusivity framed as gift-from-a-friend, not institution-granting-access. Kill anything that "announces the sacred."
@@ -126,3 +131,4 @@ Tracker for the invite/share overhaul. Work top to bottom within each phase; Pha
 | Slug spec | Routing only, never a display source. Unicode-normalize/strip diacritics/lowercase/`a-z`-only/max 20 chars, falls back to "invite"; 4-char unambiguous-alphabet suffix (excludes 0,o,1,l,i); retry suffix ×3 then widen to 5 chars; profanity filtering beyond the reserved-route blocklist deferred to Phase 2 (E5) | 2026-07-06 |
 | Resend endpoints | Kept, unchanged — invariant is creation vs. delivery; A5 retires creation of new email invites, resend re-delivers existing ones as part of the protected legacy machinery | 2026-07-06 |
 | Lineage model | Unified — new flow populates `parent_invite_id` exactly as the old flow does, invite-to-invite; sharer identity widened to session-OR-claimed-invite (see A2 amendment above) | 2026-07-06 |
+| Arrival experience | Two-beat: close-up letter (landing page, with lineage thread) → wide-shot full-graph reveal post-claim; supersedes C2's "not full graph viz" note and D1's text welcome | 2026-07-16 |
