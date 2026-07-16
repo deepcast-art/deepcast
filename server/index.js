@@ -954,13 +954,68 @@ app.get('/api/invites/link/:slug', async (req, res) => {
     // a column that doesn't exist yet would fail the whole query.
     const { data: invite, error } = await supabase
       .from('invites')
-      .select('recipient_name, sender_name, status, films(*)')
+      .select('id, film_id, sender_id, parent_invite_id, recipient_name, sender_name, status, created_at, films(*)')
       .eq('link_slug', slug)
       .maybeSingle()
 
     if (error || !invite) {
       return res.status(404).json({ error: 'Invite link not found' })
     }
+
+    // One film-scoped query powers BOTH the lineage thread and the invite
+    // ordinal — an in-memory walk over ≤ a few hundred rows, cheap enough for
+    // this public route (the graph surfaces already fetch the same set).
+    const [{ data: filmInvites }, { data: creatorUser }] = await Promise.all([
+      supabase
+        .from('invites')
+        .select('id, parent_invite_id, sender_id, sender_name, recipient_name, recipient_email, created_at')
+        .eq('film_id', invite.film_id),
+      invite.films?.creator_id
+        ? supabase.from('users').select('name').eq('id', invite.films.creator_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ])
+    const rows = filmInvites || []
+
+    // "You are the Nth person to be invited to watch this film." — this
+    // invite's position by creation time (stable across page loads).
+    const myCreatedAt = new Date(invite.created_at || 0).getTime()
+    const inviteOrdinal = rows.filter((r) => {
+      const t = new Date(r.created_at || 0).getTime()
+      return t < myCreatedAt || (t === myCreatedAt && r.id <= invite.id)
+    }).length || 1
+
+    // Lineage: walk parent_invite_id from this invite up to the root. The
+    // chain ends at a creator-sent or parentless invite (canonical model:
+    // the filmmaker IS the root). Cycle-guarded; names resolve client-side
+    // to first-name-only by the thread renderer.
+    const byId = new Map(rows.map((r) => [r.id, r]))
+    const creatorId = invite.films?.creator_id || null
+    const isCreatorSent = (row) => creatorId && row.sender_id != null && uuidStringEq(row.sender_id, creatorId)
+    const ancestors = [] // nearest (direct sharer's invite) → rootmost
+    const seen = new Set([invite.id])
+    let cur = invite
+    while (cur.parent_invite_id && byId.has(cur.parent_invite_id) && ancestors.length < 100) {
+      const parent = byId.get(cur.parent_invite_id)
+      if (seen.has(parent.id)) break
+      seen.add(parent.id)
+      ancestors.push(parent)
+      if (isCreatorSent(parent)) break
+      cur = parent
+    }
+    const creatorName =
+      (creatorUser?.name || '').trim() ||
+      (rows.find((r) => isCreatorSent(r) && (r.sender_name || '').trim())?.sender_name || '').trim() ||
+      (isCreatorSent(invite) ? (invite.sender_name || '').trim() : '') ||
+      'The filmmaker'
+    // Origin → direct sharer. For a creator-sent invite there are no
+    // ancestors and the chain is just [creator] — the depth-1 case.
+    const lineageNames = [
+      creatorName,
+      ...ancestors
+        .slice()
+        .reverse()
+        .map((r) => r.recipient_name || r.recipient_email || 'Someone'),
+    ]
 
     return res.json({
       inviteeFirstName: invite.recipient_name || null,
@@ -970,10 +1025,131 @@ app.get('/api/invites/link/:slug', async (req, res) => {
       // page renders nothing at all for null (no box, no placeholder).
       transmissionHook: invite.films?.transmission_hook || null,
       status: invite.status,
+      inviteOrdinal,
+      lineageNames,
     })
   } catch (err) {
     console.error('Invite link lookup error:', err)
     return res.status(500).json({ error: 'Failed to look up invite link' })
+  }
+})
+
+/**
+ * Claim a link invite (PLAN.md Step 4 / A2 + A4). The email IS the claim
+ * action — one field, no password, no account. Single-claim: the first
+ * non-sharer to claim wins; the row is dead to everyone else afterward.
+ *
+ * The success response carries everything the post-claim beats need — the
+ * graph-reveal payload (same safe column set as /api/invites/validate: no
+ * tokens, no slugs, no claimed emails of others) and the film's public Mux
+ * playback id for the watch beat (playback is public-policy; §1c of PLAN.md).
+ */
+app.post('/api/invites/claim', async (req, res) => {
+  try {
+    const { slug: slugInput, email: emailInput } = req.body || {}
+    const slug = String(slugInput || '').trim().toLowerCase()
+    if (!slug) return res.status(400).json({ error: 'Slug is required' })
+
+    const emailNorm = normalizeEmail(emailInput)
+    if (!emailNorm || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm)) {
+      return res.status(400).json({ error: 'Please enter a valid email address' })
+    }
+
+    const { data: invite, error: lookupError } = await supabase
+      .from('invites')
+      .select('id, film_id, sender_id, status, claimed_email, recipient_name, films(*)')
+      .eq('link_slug', slug)
+      .maybeSingle()
+    if (lookupError || !invite) {
+      return res.status(404).json({ error: 'Invite link not found' })
+    }
+
+    // The sharer opening (or submitting) their own link never claims it —
+    // identified by their authenticated session when one is present (A2;
+    // logged-out opens on the sharer's own device are an accepted MVP edge).
+    const authHeader = req.get('authorization') || ''
+    const jwt = authHeader.replace(/^Bearer\s+/i, '').trim()
+    if (jwt) {
+      const { data: userData } = await supabase.auth.getUser(jwt)
+      const authUser = userData?.user
+      if (authUser?.id && invite.sender_id != null && uuidStringEq(authUser.id, invite.sender_id)) {
+        return res.json({ sharerView: true })
+      }
+    }
+
+    if (invite.status !== 'created' || invite.claimed_email) {
+      return res.status(409).json({ error: 'This invitation has already been accepted.' })
+    }
+
+    // Standing rule (server/shareRules.js): the film never travels back to
+    // its maker. Same check as /api/invites/send, applied at claim time.
+    const { data: claimingUser } = await supabase
+      .from('users')
+      .select('id, name')
+      .ilike('email', emailNorm)
+      .limit(1)
+      .maybeSingle()
+    if (
+      isShareToFilmCreator({
+        recipientUserId: claimingUser?.id,
+        filmCreatorId: invite.films?.creator_id,
+      })
+    ) {
+      const creatorFirst = (claimingUser?.name || '').trim().split(/\s+/)[0] || 'You'
+      return res.status(400).json({ error: `${creatorFirst} ${CREATOR_SHARE_BLOCK_REASON}` })
+    }
+
+    // Atomic claim-bind: the conditional UPDATE decides the race — only one
+    // concurrent claimant can match status='created' AND claimed_email IS NULL.
+    // claimed_by (the users.id reference) deliberately stays NULL in Phase 1.
+    const { data: claimedRow, error: claimError } = await supabase
+      .from('invites')
+      .update({ claimed_email: emailNorm, claimed_at: new Date().toISOString(), status: 'claimed' })
+      .eq('id', invite.id)
+      .eq('status', 'created')
+      .is('claimed_email', null)
+      .select('id')
+      .maybeSingle()
+    if (claimError) throw claimError
+    if (!claimedRow) {
+      return res.status(409).json({ error: 'This invitation has already been accepted.' })
+    }
+
+    // Graph-reveal + watch payload (mirrors /api/invites/validate's shape).
+    const [{ data: filmInvites }, { data: creatorUser }, { data: teamMemberRows }] =
+      await Promise.all([
+        supabase
+          .from('invites')
+          .select('id, film_id, sender_id, sender_name, sender_email, recipient_name, recipient_email, status, created_at, parent_invite_id')
+          .eq('film_id', invite.film_id)
+          .order('created_at', { ascending: true }),
+        invite.films?.creator_id
+          ? supabase.from('users').select('name').eq('id', invite.films.creator_id).maybeSingle()
+          : Promise.resolve({ data: null }),
+        invite.films?.creator_id
+          ? supabase.from('users').select('id').eq('team_creator_id', invite.films.creator_id)
+          : Promise.resolve({ data: null }),
+      ])
+
+    return res.json({
+      success: true,
+      inviteId: invite.id,
+      film: {
+        id: invite.films?.id || invite.film_id,
+        title: invite.films?.title || null,
+        muxPlaybackId: invite.films?.mux_playback_id || null,
+        transmissionHook: invite.films?.transmission_hook || null,
+      },
+      filmInvites: filmInvites || [],
+      creatorName: creatorUser?.name?.trim() || '',
+      creatorId: invite.films?.creator_id || null,
+      teamMemberIds: (teamMemberRows || []).map((u) => u.id),
+    })
+  } catch (err) {
+    console.error('Invite claim error:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to accept the invitation' })
+    }
   }
 })
 

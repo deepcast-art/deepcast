@@ -103,6 +103,16 @@ export const api = {
     throw new Error(error.error || 'Request failed')
   },
 
+  // Claim a link invite — the email IS the claim action (one field, no account).
+  // accessToken (when a session exists) lets the server recognize the sharer
+  // opening their own link and refuse to claim it.
+  claimLinkInvite: (slug, email, accessToken = null) =>
+    request('/invites/claim', {
+      method: 'POST',
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      body: JSON.stringify({ slug, email }),
+    }),
+
   // Passwordless invite-first sign-in
   inviteSession: (token, email, appUrl = null) =>
     request('/invites/session', {

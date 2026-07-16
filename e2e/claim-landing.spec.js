@@ -15,10 +15,54 @@ import { test, expect } from '@playwright/test'
 
 const READY_LINK = {
   inviteeFirstName: 'Alex',
-  sharerName: 'Ien',
+  sharerName: 'Ien Chi',
   filmTitle: 'A Sacred Pause',
   transmissionHook: 'A one-line hook about why this film exists.',
   status: 'created',
+  inviteOrdinal: 57,
+  lineageNames: ['Ien Chi'],
+}
+
+/** Post-claim payload — a minimal coherent graph: creator root, one prior
+ *  invitee (Dan), and the just-claimed invite (Alex → the "You" node). */
+const CLAIM_RESPONSE = {
+  success: true,
+  inviteId: 'inv-you',
+  film: {
+    id: 'film-1',
+    title: 'A Sacred Pause',
+    muxPlaybackId: 'e2e-fake-playback-id',
+    transmissionHook: 'A one-line hook about why this film exists.',
+  },
+  filmInvites: [
+    {
+      id: 'inv-dan',
+      film_id: 'film-1',
+      sender_id: 'creator-1',
+      sender_name: 'Ien Chi',
+      sender_email: 'ien@example.com',
+      recipient_name: 'Dan',
+      recipient_email: 'dan@example.com',
+      status: 'watched',
+      parent_invite_id: null,
+      created_at: '2026-01-01T00:00:00Z',
+    },
+    {
+      id: 'inv-you',
+      film_id: 'film-1',
+      sender_id: 'creator-1',
+      sender_name: 'Ien Chi',
+      sender_email: 'ien@example.com',
+      recipient_name: 'Alex',
+      recipient_email: null,
+      status: 'claimed',
+      parent_invite_id: null,
+      created_at: '2026-07-01T00:00:00Z',
+    },
+  ],
+  creatorName: 'Ien Chi',
+  creatorId: 'creator-1',
+  teamMemberIds: [],
 }
 
 test.describe('claim-link landing page', () => {
@@ -35,18 +79,53 @@ test.describe('claim-link landing page', () => {
 
     // 1. Greeting with the invitee's first name — custom on arrival, not after acceptance.
     await expect(page.getByRole('heading', { name: /Dear Alex/ })).toBeVisible()
-    // 2. Sharer line.
+    // 2. Sharer line — legacy full names trim to the first word on this page.
     await expect(page.getByText('watched this and thought of you')).toBeVisible()
+    await expect(page.getByText('Ien Chi watched this')).toHaveCount(0)
+    // 2b. Lineage thread — depth-1 close-up: [Ien] —— [you].
+    await expect(page.getByText('you', { exact: true })).toBeVisible()
     // 3. Platform-concept line (approved verbatim copy).
     await expect(page.getByText(/can’t be searched, streamed, or subscribed to/)).toBeVisible()
     // 4. Film title + per-film transmission hook (films.transmission_hook).
     await expect(page.getByRole('heading', { name: 'A Sacred Pause' })).toBeVisible()
     await expect(page.getByText('A one-line hook about why this film exists.')).toBeVisible()
+    // 4b. The one permitted statistic.
+    await expect(page.getByText('You are the 57th person to be invited to watch this film.')).toBeVisible()
     // 5. Conditions line (B2).
     await expect(page.getByText('14 minutes. Headphones recommended.')).toBeVisible()
     // 6. Single CTA.
     await expect(page.getByRole('button', { name: /Accept your invite/i })).toBeVisible()
 
+    expect(jsErrors).toEqual([])
+  })
+
+  test('full arc: accept → email capture → graph reveal → watch beat', async ({ page }) => {
+    await page.route('**/api/invites/link/**', (route) => route.fulfill({ json: READY_LINK }))
+    await page.route('**/api/invites/claim', (route) => route.fulfill({ json: CLAIM_RESPONSE }))
+    await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
+
+    // Beat 1: the letter → tapping Accept opens the single email field (A4).
+    await page.getByRole('button', { name: /Accept your invite/i }).click()
+    const emailInput = page.getByPlaceholder('you@example.com')
+    await expect(emailInput).toBeVisible()
+    await emailInput.fill('alex@example.com')
+    await page.getByRole('button', { name: /Accept your invite/i }).click()
+
+    // Beat 2: the wide shot — the graph with the invitee's own node ("You"),
+    // no text welcome, a single non-blocking continue.
+    const continueBtn = page.getByRole('button', { name: /Continue to the film/i })
+    await expect(continueBtn).toBeVisible()
+    await expect(page.getByText('You', { exact: true })).toBeVisible()
+    await expect(page.getByText('Dan', { exact: true })).toBeVisible()
+
+    // Beat 3: the watch beat — player mounts with the film title + conditions.
+    await continueBtn.click()
+    await expect(page.locator('mux-player')).toBeAttached({ timeout: 20_000 })
+    await expect(page.getByRole('heading', { name: 'A Sacred Pause' })).toBeVisible()
+    await expect(page.getByText('14 minutes. Headphones recommended.')).toBeVisible()
+
+    // Demo hygiene: no placeholder or dev-note text anywhere in the arc.
+    await expect(page.getByText(/placeholder/i)).toHaveCount(0)
     expect(jsErrors).toEqual([])
   })
 
