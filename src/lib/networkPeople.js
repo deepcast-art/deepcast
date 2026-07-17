@@ -13,11 +13,12 @@
  * outstanding TICKET row (kind 'ticket', keyed by invite id since no email
  * exists): first name, the claim link's slug for recovery, and nothing else.
  *
- * SORT (Piece B, 2026-07-17 — supersedes A2's pin-to-top): ONE flat
- * chronological list, newest first, every row ordered by invite creation
- * time — ticket rows by their own invite, person rows by their first
- * received invite, sender-only rows (team members) by their first sent
- * invite. No grouping, no pinning.
+ * SORT (2026-07-17, oldest first — supersedes Piece B's newest-first): ONE
+ * flat chronological list ordered by invite creation time, OLDEST first, so
+ * the film's propagation reads top to bottom — the root of the network at
+ * the top, the newest activity at the bottom. Ticket rows sort by their own
+ * invite, person rows by their first received invite, sender-only rows
+ * (team members) by their first sent invite. No grouping, no pinning.
  * The film's creator never gets a row (they are the graph root, not a member
  * of their own audience).
  *
@@ -210,14 +211,15 @@ export function buildNetworkPeople({ filmInvites, users, creatorId } = {}) {
     })
   }
 
-  // ONE flat chronological list, newest first (Piece B): every row by its
-  // invite's creation time. Rows with no timestamp sort last, by name.
+  // ONE flat chronological list, OLDEST first: the film's propagation reads
+  // top to bottom (root at the top, newest activity at the bottom). Rows
+  // with no timestamp sort last, by name.
   const rows = [
     ...ticketRows.map((t) => ({ at: t.createdAt, name: t.name, row: t })),
     ...personRows.map((p) => ({ at: p.sortAt, name: p.name, row: p })),
   ]
   rows.sort((a, b) => {
-    if (a.at && b.at) return a.at < b.at ? 1 : a.at > b.at ? -1 : 0
+    if (a.at && b.at) return a.at < b.at ? -1 : a.at > b.at ? 1 : 0
     if (a.at) return -1
     if (b.at) return 1
     return a.name.localeCompare(b.name)
