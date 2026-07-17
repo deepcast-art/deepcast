@@ -35,7 +35,39 @@ export default function ClaimWatch() {
   const { slug } = useParams()
   const [searchParams] = useSearchParams()
   const stash = readClaimStash()
-  const owner = isClaimOwner(stash, slug)
+  const stashOwner = isClaimOwner(stash, slug)
+  /** Session-based ownership (Piece E return visits): on a new browser there
+   *  is no stash, but a signed-in silent-account holder whose claimed_by
+   *  matches this slug's invite is the same person. undefined = resolving. */
+  const [sessionOwner, setSessionOwner] = useState(stashOwner ? false : undefined)
+  useEffect(() => {
+    if (stashOwner) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { data: { session } = {} } = await supabase.auth.getSession()
+        const uid = session?.user?.id
+        if (!uid) {
+          if (!cancelled) setSessionOwner(false)
+          return
+        }
+        const { data: inv } = await supabase
+          .from('invites')
+          .select('id, claimed_by')
+          .eq('link_slug', String(slug || '').trim().toLowerCase())
+          .maybeSingle()
+        if (!cancelled) {
+          setSessionOwner(Boolean(inv?.claimed_by && String(inv.claimed_by) === String(uid)))
+        }
+      } catch {
+        if (!cancelled) setSessionOwner(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [slug, stashOwner])
+  const owner = stashOwner || sessionOwner === true
 
   /** Start position, resolved once at mount: "Watch again" (?again=1) starts
    *  clean and clears the saved spot; otherwise resume where they left off. */
@@ -82,6 +114,18 @@ export default function ClaimWatch() {
     }
   }, [slug, owner])
 
+  if (!stashOwner && sessionOwner === undefined) {
+    // Ownership still resolving (session lookup) — never flash the dead-link
+    // page at the rightful owner.
+    return (
+      <div className="min-h-dvh flex items-center justify-center bg-bg-page">
+        <div
+          className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin"
+          aria-hidden
+        />
+      </div>
+    )
+  }
   if (!owner) return <Navigate to={`/${slug}`} replace />
 
   /** ≥70% playback marks the invite watched (same threshold and update
@@ -108,11 +152,14 @@ export default function ClaimWatch() {
       }
     }
 
-    if (hasMarkedWatched.current || !stash?.inviteId) return
+    // The invite id comes from the stash, or from the link payload for a
+    // signed-in session owner on a new browser (Piece E return visits).
+    const ownInviteId = stash?.inviteId || link?.inviteId
+    if (hasMarkedWatched.current || !ownInviteId) return
     const pct = d > 0 ? (t / d) * 100 : 0
     if (pct >= 70) {
       hasMarkedWatched.current = true
-      await supabase.from('invites').update({ status: 'watched' }).eq('id', stash.inviteId)
+      await supabase.from('invites').update({ status: 'watched' }).eq('id', ownInviteId)
     }
   }
 
@@ -130,13 +177,15 @@ export default function ClaimWatch() {
       // the server then verifies identity from the token; the claimed invite
       // id still rides along as the lineage parent AND as the identity
       // fallback, so a stash-only claimant behaves exactly as before either
-      // way (the wallet is the same account balance on both paths).
+      // way (the wallet is the same account balance on both paths). On a new
+      // browser (no stash) the link payload supplies the invite id.
+      const ownInviteId = stash?.inviteId || link?.inviteId || null
       const { data: { session } = {} } = await supabase.auth.getSession()
       const result = await api.createInviteLink(name, {
-        claimedInviteId: stash.inviteId,
-        filmId: stash.filmId || null,
-        parentInviteId: stash.inviteId,
-        accessToken: stash.filmId ? session?.access_token || null : null,
+        claimedInviteId: ownInviteId,
+        filmId: stash?.filmId || null,
+        parentInviteId: ownInviteId,
+        accessToken: stash?.filmId ? session?.access_token || null : null,
         appUrl: window.location.origin,
       })
       setGenerated({ url: result.url, name })

@@ -22,6 +22,7 @@ const ResetPassword = lazy(() => import('./pages/ResetPassword.jsx'))
 const About = lazy(() => import('./pages/About.jsx'))
 const ClaimLanding = lazy(() => import('./pages/ClaimLanding.jsx'))
 const ClaimWatch = lazy(() => import('./pages/ClaimWatch.jsx'))
+const ReturnGate = lazy(() => import('./pages/ReturnGate.jsx'))
 
 function RouteFallback({ inverse = false }) {
   return (
@@ -108,6 +109,24 @@ function ViewerShareGate({ children }) {
         .eq('sender_id', profile.id)
       if (cancelled) return
       if (count && count > 0) {
+        setGate({ checked: true, allowed: true, to: null })
+        return
+      }
+      // Claim-link claimants reach the dashboard BEFORE ever sharing (final
+      // spec 2026-07-16) — the stash path already bypasses this gate, and a
+      // silent-account claimant keeps that same right once signed in
+      // (Piece E). Matched by claimed_by (primary) or claimed_email.
+      const gateEmail = (profile.email || '').trim()
+      const { count: claimedCount } = await supabase
+        .from('invites')
+        .select('id', { count: 'exact', head: true })
+        .or(
+          gateEmail
+            ? `claimed_by.eq.${profile.id},claimed_email.ilike.${gateEmail}`
+            : `claimed_by.eq.${profile.id}`
+        )
+      if (cancelled) return
+      if (claimedCount && claimedCount > 0) {
         setGate({ checked: true, allowed: true, to: null })
         return
       }
@@ -215,6 +234,14 @@ export default function App() {
         element={
           <Suspense fallback={<RouteFallback />}>
             <ResetPassword />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/return"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <ReturnGate />
           </Suspense>
         }
       />

@@ -51,7 +51,9 @@ export default function Login() {
     setLinkSending(true)
     try {
       safeLocalStorage.setItem('deepcast:last_email', normalized)
-      await sendSignInLink(normalized, '/dashboard')
+      // /return routes the person back into their Deepcast: mid-film → their
+      // watch page; finished (or no claim rows) → the dashboard (Piece E).
+      await sendSignInLink(normalized, '/return')
       setLinkSent(true)
       setExpiredLinkNotice(false)
     } catch (err) {
