@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  adminAuthDecision,
-  unlimitedToggleTargetDecision,
-  ticketControlTargetDecision,
-} from './adminAuth.js'
+import { adminAuthDecision, ticketControlTargetDecision } from './adminAuth.js'
 
 const ADMIN_ID = '67b6d7aa-3438-4be5-b317-7556b7cac193'
 
@@ -59,38 +55,6 @@ describe('adminAuthDecision', () => {
         callerRole: 'Creator',
       }).ok
     ).toBe(true)
-  })
-})
-
-describe('unlimitedToggleTargetDecision', () => {
-  const viewer = { id: 'v1', role: 'viewer' }
-
-  it('refuses when the email has no account yet', () => {
-    const d = unlimitedToggleTargetDecision({ targetUser: null, invitedByCaller: true })
-    expect(d.ok).toBe(false)
-    expect(d.status).toBe(404)
-  })
-
-  it('never touches a creator account', () => {
-    const d = unlimitedToggleTargetDecision({ targetUser: { role: 'creator' }, invitedByCaller: true })
-    expect(d.ok).toBe(false)
-    expect(d.status).toBe(403)
-  })
-
-  it('refuses team members (their unlimited comes from their role)', () => {
-    const d = unlimitedToggleTargetDecision({ targetUser: { role: 'team_member' }, invitedByCaller: true })
-    expect(d.ok).toBe(false)
-    expect(d.status).toBe(400)
-  })
-
-  it('scope: refuses a viewer the caller never invited', () => {
-    const d = unlimitedToggleTargetDecision({ targetUser: viewer, invitedByCaller: false })
-    expect(d.ok).toBe(false)
-    expect(d.status).toBe(403)
-  })
-
-  it('allows a viewer the caller invited', () => {
-    expect(unlimitedToggleTargetDecision({ targetUser: viewer, invitedByCaller: true }).ok).toBe(true)
   })
 })
 

@@ -153,20 +153,6 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  adminUnlimitedSharesStatus: (emails, accessToken) =>
-    request('/admin/unlimited-shares/status', {
-      method: 'POST',
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-      body: JSON.stringify({ emails }),
-    }),
-
-  adminSetUnlimitedShares: (email, unlimited, accessToken) =>
-    request('/admin/unlimited-shares', {
-      method: 'POST',
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-      body: JSON.stringify({ email, unlimited }),
-    }),
-
   sendSignInLink: (email, appUrl = null, redirectPath = '/dashboard') =>
     request('/auth/signin-link', {
       method: 'POST',

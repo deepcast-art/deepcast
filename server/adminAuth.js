@@ -70,21 +70,3 @@ export function ticketControlTargetDecision({ targetUser, action, amount, unlimi
   return { ok: false, status: 400, error: 'Unknown action' }
 }
 
-/** Decide whether the unlimited flag may be flipped on this target account. */
-export function unlimitedToggleTargetDecision({ targetUser, invitedByCaller }) {
-  if (!targetUser) {
-    return { ok: false, status: 404, error: 'No account exists for this email yet' }
-  }
-  const role = norm(targetUser.role)
-  if (role === 'creator') {
-    return { ok: false, status: 403, error: 'The filmmaker account cannot be changed' }
-  }
-  if (role === 'team_member') {
-    return { ok: false, status: 400, error: 'Team members already have unlimited shares' }
-  }
-  // Scope: defense-in-depth — only people the caller has personally invited.
-  if (!invitedByCaller) {
-    return { ok: false, status: 403, error: 'You can only change people you have invited' }
-  }
-  return { ok: true }
-}

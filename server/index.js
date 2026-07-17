@@ -9,7 +9,7 @@ import { buildGraphLayout } from '../src/lib/graphLayout.js'
 import { createEmailDispatcher } from './emailDelivery.js'
 import { isInviteUsable } from './inviteValidation.js'
 import { CREATOR_SHARE_BLOCK_REASON, isShareToFilmCreator } from './shareRules.js'
-import { adminAuthDecision, unlimitedToggleTargetDecision, ticketControlTargetDecision } from './adminAuth.js'
+import { adminAuthDecision, ticketControlTargetDecision } from './adminAuth.js'
 import { removeTeammateDecision } from './teamRules.js'
 import { generateUniqueSlug } from './inviteSlug.js'
 import { resolveAccountlessSharerIdentity } from './claimIdentity.js'
@@ -2542,7 +2542,7 @@ app.post('/api/invites/relink', async (req, res) => {
   }
 })
 
-/* ============ OWNER-ONLY ADMIN: unlimited-shares toggle ============ */
+/* ============ OWNER-ONLY ADMIN: ticket controls ============ */
 
 /**
  * Verify the caller is THE owner account (server/adminAuth.js): cryptographic
@@ -2579,96 +2579,6 @@ async function requireAdminCaller(req, res) {
   }
   return authUser
 }
-
-/** Grant/revoke per-user unlimited shares (users.unlimited_shares) for someone the owner invited. */
-app.post('/api/admin/unlimited-shares', async (req, res) => {
-  try {
-    const caller = await requireAdminCaller(req, res)
-    if (!caller) return
-
-    const { email, unlimited } = req.body || {}
-    const emailNorm = normalizeEmail(email)
-    if (!emailNorm || typeof unlimited !== 'boolean') {
-      return res.status(400).json({ error: 'An email and unlimited true/false are required' })
-    }
-
-    const [{ data: targetUser }, { data: callerInvite }] = await Promise.all([
-      supabase.from('users').select('id, email, role, unlimited_shares').ilike('email', emailNorm).limit(1).maybeSingle(),
-      // Claim-link invites keep the address in claimed_email (recipient_email
-      // stays NULL), so "people you invited" must match either column (Piece E).
-      supabase
-        .from('invites')
-        .select('id')
-        .eq('sender_id', caller.id)
-        .or(`recipient_email.ilike.${emailNorm},claimed_email.ilike.${emailNorm}`)
-        .limit(1)
-        .maybeSingle(),
-    ])
-
-    const decision = unlimitedToggleTargetDecision({
-      targetUser,
-      invitedByCaller: Boolean(callerInvite),
-    })
-    if (!decision.ok) return res.status(decision.status).json({ error: decision.error })
-
-    const { data: updated, error: updateErr } = await supabase
-      .from('users')
-      .update({ unlimited_shares: unlimited })
-      .eq('id', targetUser.id)
-      .select('email, unlimited_shares')
-      .single()
-    if (updateErr || !updated) {
-      console.error('admin unlimited-shares update:', updateErr)
-      return res.status(500).json({ error: 'Could not update this account' })
-    }
-    return res.json({ email: updated.email, unlimited: updated.unlimited_shares })
-  } catch (err) {
-    console.error('admin unlimited-shares error:', err)
-    return res.status(500).json({ error: 'Could not update this account' })
-  }
-})
-
-/** Current unlimited state for emails in the owner's share list (RLS hides users rows from the client). */
-app.post('/api/admin/unlimited-shares/status', async (req, res) => {
-  try {
-    const caller = await requireAdminCaller(req, res)
-    if (!caller) return
-
-    const emails = Array.isArray(req.body?.emails)
-      ? [...new Set(req.body.emails.map(normalizeEmail).filter(Boolean))].slice(0, 200)
-      : []
-    if (!emails.length) return res.json({ statuses: {} })
-
-    // Claim-link invites keep the address in claimed_email (recipient_email
-    // stays NULL), so "people you invited" must match either column (Piece E).
-    const [{ data: invitedRows }, { data: claimedRows }, { data: userRows }] = await Promise.all([
-      supabase.from('invites').select('recipient_email').eq('sender_id', caller.id).in('recipient_email', emails),
-      supabase.from('invites').select('claimed_email').eq('sender_id', caller.id).in('claimed_email', emails),
-      supabase.from('users').select('email, role, unlimited_shares').in('email', emails),
-    ])
-    const invited = new Set([
-      ...(invitedRows || []).map((r) => normalizeEmail(r.recipient_email)),
-      ...(claimedRows || []).map((r) => normalizeEmail(r.claimed_email)),
-    ])
-    const userByEmail = new Map((userRows || []).map((u) => [normalizeEmail(u.email), u]))
-
-    const statuses = {}
-    for (const email of emails) {
-      const u = userByEmail.get(email)
-      statuses[email] = {
-        invitedByYou: invited.has(email),
-        hasAccount: Boolean(u),
-        // Only viewer accounts the owner invited can be toggled (same rule the toggle enforces).
-        eligible: Boolean(u && String(u.role).toLowerCase() === 'viewer' && invited.has(email)),
-        unlimited: Boolean(u?.unlimited_shares),
-      }
-    }
-    return res.json({ statuses })
-  } catch (err) {
-    console.error('admin unlimited-shares status error:', err)
-    return res.status(500).json({ error: 'Could not load share statuses' })
-  }
-})
 
 /**
  * Ticket controls (Piece B, 2026-07-17): top-ups and unlimited for ANY person
