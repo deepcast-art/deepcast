@@ -126,8 +126,17 @@ export default function ClaimWatch() {
     setShareBusy(true)
     setShareError('')
     try {
+      // Piece E: when a session exists (silent account, signed in), send it —
+      // the server then verifies identity from the token; the claimed invite
+      // id still rides along as the lineage parent AND as the identity
+      // fallback, so a stash-only claimant behaves exactly as before either
+      // way (the wallet is the same account balance on both paths).
+      const { data: { session } = {} } = await supabase.auth.getSession()
       const result = await api.createInviteLink(name, {
         claimedInviteId: stash.inviteId,
+        filmId: stash.filmId || null,
+        parentInviteId: stash.inviteId,
+        accessToken: stash.filmId ? session?.access_token || null : null,
         appUrl: window.location.origin,
       })
       setGenerated({ url: result.url, name })

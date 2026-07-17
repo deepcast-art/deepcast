@@ -64,7 +64,7 @@ describe('buildNetworkPeople', () => {
     expect(ada.stage).toBe('watched') // account holders display as watched (A2)
     expect(ada.ticketsGenerated).toBe(1)
     expect(ada.ticketsClaimed).toBe(1) // legacy opened = claimed stage
-    expect(ada.claimTicketsLeft).toBe(null) // allocation lives on users, not here
+    expect(ada.ticketsLeft).toBe(null) // allocation lives on users, not here
     expect(ada.reach).toBe(1) // opened counts toward reach
 
     const ben = rows[1]
@@ -77,7 +77,7 @@ describe('buildNetworkPeople', () => {
     const toEve = inv({ sender_id: CREATOR, recipient_email: 'eve@x.com', status: 'pending' })
     const [eve] = buildNetworkPeople({ filmInvites: [toEve], users: [], creatorId: CREATOR })
     expect(eve.stage).toBe('unclaimed')
-    expect(eve.claimTicketsLeft).toBe(null)
+    expect(eve.ticketsLeft).toBe(null)
   })
 
   it('a send matching both sender_id and the parent pointer is counted once', () => {
@@ -135,14 +135,67 @@ describe('buildNetworkPeople', () => {
     expect(clara.stage).toBe('claimed')
     expect(clara.ticketsGenerated).toBe(1)
     expect(clara.ticketsClaimed).toBe(0)
-    expect(clara.claimTicketsLeft).toBe(4)
+    expect(clara.ticketsLeft).toBe(4)
     expect(clara.reach).toBe(0)
   })
 
   it('a pre-migration claimant (tickets_remaining NULL) reads as the full grant', () => {
     const claim = inv({ claimed_email: 'clara@x.com', status: 'claimed', tickets_remaining: null })
     const [clara] = buildNetworkPeople({ filmInvites: [claim], users: [], creatorId: CREATOR })
-    expect(clara.claimTicketsLeft).toBe(5)
+    expect(clara.ticketsLeft).toBe(5)
+  })
+
+  it('silent-account claimant (claimed_by): account wallet wins, stage stays claimed', () => {
+    const claim = inv({
+      claimed_email: 'clara@x.com',
+      recipient_name: 'Clara',
+      status: 'claimed',
+      claimed_by: 'user-clara',
+      tickets_remaining: null,
+    })
+    const [clara] = buildNetworkPeople({
+      filmInvites: [claim],
+      users: [
+        {
+          id: 'user-clara',
+          name: 'Clara N',
+          email: 'clara@x.com',
+          role: 'viewer',
+          team_creator_id: null,
+          unlimited_shares: false,
+          invite_allocation: 3,
+        },
+      ],
+      creatorId: CREATOR,
+    })
+    expect(clara.hasAccount).toBe(true)
+    expect(clara.name).toBe('Clara N')
+    // Having an account no longer implies watched — status rules the stage.
+    expect(clara.stage).toBe('claimed')
+    expect(clara.ticketsLeft).toBe(3)
+  })
+
+  it('unlimited account holders read Infinity; narrow users rows stay unknown', () => {
+    const toAda = inv({ sender_id: CREATOR, recipient_email: 'ada@x.com', status: 'signed_up' })
+    const toTom = inv({ sender_id: CREATOR, recipient_email: 'tom@x.com', status: 'signed_up' })
+    const rows = buildNetworkPeople({
+      filmInvites: [toAda, toTom],
+      users: [
+        {
+          id: 'user-ada',
+          name: 'Ada',
+          email: 'ada@x.com',
+          role: 'viewer',
+          team_creator_id: null,
+          unlimited_shares: true,
+          invite_allocation: 0,
+        },
+        { id: 'user-tom', name: 'Tom', email: 'tom@x.com' }, // no wallet columns loaded
+      ],
+      creatorId: CREATOR,
+    })
+    expect(rows.find((r) => r.email === 'ada@x.com').ticketsLeft).toBe(Infinity)
+    expect(rows.find((r) => r.email === 'tom@x.com').ticketsLeft).toBe(null)
   })
 
   it('outstanding tickets sort to the top, newest first, above person rows', () => {

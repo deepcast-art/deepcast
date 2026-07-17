@@ -27,12 +27,11 @@
  * claimed invite is the only back-link. "Tickets generated" is therefore the
  * union of both matches, counted once per invite row.
  *
- * Tickets left: an accountless claimant's balance lives on their own claimed
- * invite row (tickets_remaining; NULL means claimed pre-migration and reads as
- * the full grant — same healing rule as the server spend). Account holders'
- * allocation is NOT part of the film's invite rows, so claimTicketsLeft is
- * null for them and the display layer decides (∞ for unlimited, em dash when
- * the allocation isn't loaded).
+ * Tickets left (unified wallet, Piece E): account holders read the canonical
+ * invitationsRemaining off their users row when the caller loaded it with its
+ * wallet columns (Infinity for unlimited sharers); claim rows with no account
+ * read tickets_remaining (NULL = never initialized = full grant); null means
+ * unknown and the display layer decides (∞ or em dash).
  *
  * Reach is the canonical stat from src/lib/reach.js, unchanged: claimed-but-
  * unwatched people do NOT count toward reach (decision 2026-07-16), even
@@ -42,6 +41,7 @@ import { buildChildrenByParentId, computeUserReach } from './reach.js'
 import { isInviteClaimedStage } from './ticketFunnel.js'
 import { isInviteWatched } from './filmStats.js'
 import { INITIAL_CLAIMANT_TICKETS } from './ticketRules.js'
+import { invitationsRemaining } from './shares.js'
 
 const normEmail = (e) => (typeof e === 'string' ? e.trim().toLowerCase() : '')
 
@@ -51,10 +51,16 @@ export function inviteRecipientEmail(inv) {
   return normEmail(inv?.claimed_email) || normEmail(inv?.recipient_email)
 }
 
-/** Highest of the three display stages a person's own invites reached. */
+/** Highest of the three display stages a person's own invites reached.
+ *  Status comes from the invite rows, NOT from account existence — under
+ *  silent accounts (Piece E) every new claimant has an account instantly, so
+ *  "has an account" no longer implies they watched anything. The only
+ *  account-based case left: senders with no received invite at all (team
+ *  members), who have nothing to have watched a stage of. */
 function personStage({ hasAccount, receivedStatuses }) {
-  if (hasAccount || receivedStatuses.some((s) => isInviteWatched({ status: s }))) return 'watched'
+  if (receivedStatuses.some((s) => isInviteWatched({ status: s }))) return 'watched'
   if (receivedStatuses.some((s) => isInviteClaimedStage({ status: s }))) return 'claimed'
+  if (!receivedStatuses.length && hasAccount) return 'watched'
   return 'unclaimed'
 }
 
@@ -123,6 +129,8 @@ export function buildNetworkPeople({ filmInvites, users, creatorId } = {}) {
     if (inv.id != null) p.receivedInviteIds.add(inv.id)
     p.receivedStatuses.push(inv.status)
     if (!p.inviteName && inv.recipient_name) p.inviteName = inv.recipient_name
+    // Silent accounts (Piece E): claimed_by is the primary account link.
+    if (inv.claimed_by != null && !p.userId) p.userId = String(inv.claimed_by)
     if (normEmail(inv.claimed_email)) {
       p.hasClaimRow = true
       if (p.claimTickets === undefined) p.claimTickets = inv.tickets_remaining ?? null
@@ -169,6 +177,18 @@ export function buildNetworkPeople({ filmInvites, users, creatorId } = {}) {
         (inv.parent_invite_id != null && p.receivedInviteIds.has(inv.parent_invite_id))
     )
     const hasAccount = Boolean(p.userId) || p.receivedStatuses.includes('signed_up')
+    // Unified tickets-left (Piece E): the account wallet when the person's
+    // users row (with its allocation) is loaded — Infinity for unlimited
+    // sharers; the invite wallet only for claim rows with no account (NULL
+    // there means never initialized → full grant); null = unknown (the
+    // display layer decides between ∞ and an em dash).
+    const acct = p.userId ? userById.get(p.userId) : null
+    let ticketsLeft = null
+    if (acct && 'invite_allocation' in acct) {
+      ticketsLeft = invitationsRemaining(acct)
+    } else if (!hasAccount && p.hasClaimRow) {
+      ticketsLeft = p.claimTickets ?? INITIAL_CLAIMANT_TICKETS
+    }
     personRows.push({
       kind: 'person',
       email: p.email,
@@ -177,11 +197,7 @@ export function buildNetworkPeople({ filmInvites, users, creatorId } = {}) {
       stage: personStage({ hasAccount, receivedStatuses: p.receivedStatuses }),
       ticketsGenerated: generated.length,
       ticketsClaimed: generated.filter(isInviteClaimedStage).length,
-      // NULL on a claimed row means claimed pre-migration → full grant (the
-      // server heals it on first spend). Account holders get null: their
-      // allocation lives on users, not on the film's invite rows.
-      claimTicketsLeft:
-        !hasAccount && p.hasClaimRow ? (p.claimTickets ?? INITIAL_CLAIMANT_TICKETS) : null,
+      ticketsLeft,
       reach: computeUserReach(generated, childrenByParentId),
       receivedInviteIds: [...p.receivedInviteIds],
       firstReceivedAt: p.firstReceivedAt,

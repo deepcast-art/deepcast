@@ -2594,7 +2594,15 @@ app.post('/api/admin/unlimited-shares', async (req, res) => {
 
     const [{ data: targetUser }, { data: callerInvite }] = await Promise.all([
       supabase.from('users').select('id, email, role, unlimited_shares').ilike('email', emailNorm).limit(1).maybeSingle(),
-      supabase.from('invites').select('id').eq('sender_id', caller.id).ilike('recipient_email', emailNorm).limit(1).maybeSingle(),
+      // Claim-link invites keep the address in claimed_email (recipient_email
+      // stays NULL), so "people you invited" must match either column (Piece E).
+      supabase
+        .from('invites')
+        .select('id')
+        .eq('sender_id', caller.id)
+        .or(`recipient_email.ilike.${emailNorm},claimed_email.ilike.${emailNorm}`)
+        .limit(1)
+        .maybeSingle(),
     ])
 
     const decision = unlimitedToggleTargetDecision({
@@ -2631,11 +2639,17 @@ app.post('/api/admin/unlimited-shares/status', async (req, res) => {
       : []
     if (!emails.length) return res.json({ statuses: {} })
 
-    const [{ data: invitedRows }, { data: userRows }] = await Promise.all([
+    // Claim-link invites keep the address in claimed_email (recipient_email
+    // stays NULL), so "people you invited" must match either column (Piece E).
+    const [{ data: invitedRows }, { data: claimedRows }, { data: userRows }] = await Promise.all([
       supabase.from('invites').select('recipient_email').eq('sender_id', caller.id).in('recipient_email', emails),
+      supabase.from('invites').select('claimed_email').eq('sender_id', caller.id).in('claimed_email', emails),
       supabase.from('users').select('email, role, unlimited_shares').in('email', emails),
     ])
-    const invited = new Set((invitedRows || []).map((r) => normalizeEmail(r.recipient_email)))
+    const invited = new Set([
+      ...(invitedRows || []).map((r) => normalizeEmail(r.recipient_email)),
+      ...(claimedRows || []).map((r) => normalizeEmail(r.claimed_email)),
+    ])
     const userByEmail = new Map((userRows || []).map((u) => [normalizeEmail(u.email), u]))
 
     const statuses = {}

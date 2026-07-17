@@ -103,13 +103,14 @@ export const api = {
     throw new Error(error.error || 'Request failed')
   },
 
-  // Generate a claim link. Accountless sharers pass their claimed invite id
-  // (their identity); account holders pass filmId + a session token instead.
-  createInviteLink: (inviteeFirstName, { claimedInviteId = null, filmId = null, accessToken = null, appUrl = null } = {}) =>
+  // Generate a claim link. Sharers pass their claimed invite id (their
+  // identity when no session exists) and/or filmId + a session token;
+  // parentInviteId lets a session-holding claimant keep exact lineage.
+  createInviteLink: (inviteeFirstName, { claimedInviteId = null, filmId = null, accessToken = null, appUrl = null, parentInviteId = null } = {}) =>
     request('/invites/create-link', {
       method: 'POST',
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-      body: JSON.stringify({ inviteeFirstName, claimedInviteId, filmId, appUrl }),
+      body: JSON.stringify({ inviteeFirstName, claimedInviteId, filmId, appUrl, parentInviteId }),
     }),
 
   // Claim a link invite — the email IS the claim action (one field, no account).

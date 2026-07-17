@@ -364,8 +364,16 @@ export default function Dashboard() {
         : email
           ? supabase
               .from('invites')
-              .select('film_id, token, status')
-              .ilike('recipient_email', email)
+              .select('film_id, token, status, link_slug, claimed_by')
+              // Silent accounts (Piece E): claim-link rows keep recipient_email
+              // NULL — an account holder's claimed films are found by
+              // claimed_by (primary; exact) or claimed_email (attach-failed /
+              // pre-backfill fallback).
+              .or(
+                uid
+                  ? `recipient_email.ilike.${email},claimed_by.eq.${uid},claimed_email.ilike.${email}`
+                  : `recipient_email.ilike.${email},claimed_email.ilike.${email}`
+              )
               .order('created_at', { ascending: false })
           : Promise.resolve({ data: null }),
     ])
@@ -406,6 +414,9 @@ export default function Dashboard() {
               title: filmsMap.get(r.film_id)?.title || '',
               thumbnail_url: filmsMap.get(r.film_id)?.thumbnail_url || null,
               token: r.token,
+              // Claim-flow invites route by slug (Piece E) — the card sends
+              // them to /watch/{slug} instead of the legacy /i/{token}.
+              linkSlug: r.link_slug || null,
               // Received-invite status — drives the screening card's
               // Resume film / Watch again state (screeningCard.js).
               status: r.status || null,
@@ -612,10 +623,36 @@ export default function Dashboard() {
             .order('created_at', { ascending: true })
         : { data: [] }
 
-      const senderIds = [...new Set((allFilmInvites || []).map((i) => i.sender_id).filter(Boolean))]
-      const { data: senderRows } = senderIds.length
-        ? await supabase.from('users').select('id, name, email').in('id', senderIds)
-        : { data: [] }
+      // One users query resolves names AND (Piece E) the unified wallet for
+      // the admin table: senders plus silent-account claimants (claimed_by).
+      const senderIds = [
+        ...new Set(
+          (allFilmInvites || [])
+            .flatMap((i) => [i.sender_id, i.claimed_by])
+            .filter(Boolean)
+        ),
+      ]
+      let senderRows = []
+      if (senderIds.length) {
+        // RLS reality (verified 2026-07-17): users SELECT policies are
+        // row-level — the creator reads only their own row and team members'
+        // rows; everyone else's rows are silently filtered out, wallet
+        // columns and all. So tickets-left resolves for team members and
+        // stays the em dash for other account holders (kept by decision —
+        // no client workaround). The error fallback below only guards a
+        // hypothetical column-privilege config.
+        const wide = await supabase
+          .from('users')
+          .select('id, name, email, role, team_creator_id, unlimited_shares, invite_allocation')
+          .in('id', senderIds)
+        if (wide.error) {
+          console.warn('users wallet columns unreadable — narrow select fallback:', wide.error.message)
+          ;({ data: senderRows } = await supabase.from('users').select('id, name, email').in('id', senderIds))
+        } else {
+          senderRows = wide.data
+        }
+        senderRows = senderRows || []
+      }
       const senderById = new Map((senderRows || []).map((u) => [u.id, u]))
 
       for (const film of creatorFilms || []) {
@@ -629,7 +666,9 @@ export default function Dashboard() {
             id: inv.id,
             sender: sender?.name || sender?.email || 'Anonymous',
             senderId: inv.sender_id,
-            recipient: inv.recipient_email,
+            // Claim-link rows carry the address in claimed_email (Piece E) —
+            // this feeds the unlimited-status lookup, so both count.
+            recipient: inv.claimed_email || inv.recipient_email,
             recipientName: inv.recipient_name,
             status: inv.status,
           }
@@ -1080,24 +1119,28 @@ export default function Dashboard() {
                       // status + the saved resume position. Claim-flow keys
                       // are slug-scoped; the legacy flow stores seconds only
                       // (no fraction → no bar).
-                      const claimKeys = isClaimant && claimStash?.slug
-                      const posKey = claimKeys
-                        ? `screening_position_slug_${claimStash.slug}`
+                      // Claim-flow films route by slug: the stash for a
+                      // claimant, or the invite's own link_slug for a
+                      // signed-in silent-account holder (Piece E).
+                      const claimSlug =
+                        (isClaimant && claimStash?.slug) || film.linkSlug || null
+                      const posKey = claimSlug
+                        ? `screening_position_slug_${claimSlug}`
                         : `screening_position_${film.token}`
                       const card = screeningCardState({
                         status: film.status,
                         savedSeconds: Number(safeLocalStorage.getItem(posKey)) || 0,
-                        progressFraction: claimKeys
-                          ? Number(safeLocalStorage.getItem(`screening_progress_slug_${claimStash.slug}`)) || null
+                        progressFraction: claimSlug
+                          ? Number(safeLocalStorage.getItem(`screening_progress_slug_${claimSlug}`)) || null
                           : null,
                       })
                       // The ENTIRE card is one clickable target → the watch page.
                       const goWatch = () => {
-                        if (claimKeys) {
+                        if (claimSlug) {
                           navigate(
                             card.mode === 'again'
-                              ? `/watch/${claimStash.slug}?again=1`
-                              : `/watch/${claimStash.slug}`
+                              ? `/watch/${claimSlug}?again=1`
+                              : `/watch/${claimSlug}`
                           )
                           return
                         }
@@ -1155,7 +1198,7 @@ export default function Dashboard() {
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:ml-auto">
-                          {(film.token || claimKeys) && (
+                          {(film.token || claimSlug) && (
                             <button
                               type="button"
                               onClick={(e) => {
@@ -1891,12 +1934,16 @@ export default function Dashboard() {
                                     <td className="py-2 pr-4">{person.ticketsGenerated}</td>
                                     <td className="py-2 pr-4">{person.ticketsClaimed}</td>
                                     <td className="py-2 pr-4">
-                                      {person.claimTicketsLeft != null
-                                        ? /* accountless claimant — balance on their claimed row */
-                                          person.claimTicketsLeft
+                                      {person.ticketsLeft != null
+                                        ? /* unified wallet (Piece E): the account
+                                             allocation, or the invite wallet for
+                                             accountless rows; ∞ = unlimited */
+                                          Number.isFinite(person.ticketsLeft)
+                                          ? person.ticketsLeft
+                                          : '∞'
                                         : status?.unlimited || teamMemberIdSet.has(String(person.userId ?? ''))
                                           ? '∞'
-                                          : /* account holders' allocation isn't in this page's data */
+                                          : /* wallet not readable from this page */
                                             dash}
                                     </td>
                                     <td className="py-2 pr-4">{person.reach}</td>
