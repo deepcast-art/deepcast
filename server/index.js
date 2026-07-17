@@ -10,6 +10,12 @@ import { createEmailDispatcher } from './emailDelivery.js'
 import { isInviteUsable } from './inviteValidation.js'
 import { CREATOR_SHARE_BLOCK_REASON, isShareToFilmCreator } from './shareRules.js'
 import { adminAuthDecision, ticketControlTargetDecision } from './adminAuth.js'
+import {
+  deletePersonTargetDecision,
+  deleteConfirmDecision,
+  deleteTicketTargetDecision,
+} from './deleteRules.js'
+import { buildDeletePlan, executeDeletePlan } from './deleteSplice.js'
 import { removeTeammateDecision } from './teamRules.js'
 import { generateUniqueSlug } from './inviteSlug.js'
 import { resolveAccountlessSharerIdentity } from './claimIdentity.js'
@@ -2694,6 +2700,116 @@ app.post('/api/admin/ticket-controls', async (req, res) => {
   } catch (err) {
     console.error('admin ticket-controls error:', err)
     return res.status(500).json({ error: 'Could not update tickets' })
+  }
+})
+
+/**
+ * Delete-with-splice (Piece C, 2026-07-17): remove a TEST person from a
+ * film's network; their claimed children re-point to the target's own
+ * parent (the chain splices around the deleted node). Engine and ordering
+ * in server/deleteSplice.js; refusals in server/deleteRules.js — evaluated
+ * independently by BOTH routes (execute never trusts a preview). Unclaimed
+ * links delete by invite id (no splice — a dead end has no children).
+ */
+async function resolveDeleteRequest(req, res, caller) {
+  const { filmId, email, inviteId } = req.body || {}
+  if (!filmId) {
+    res.status(400).json({ error: 'A film id is required' })
+    return null
+  }
+
+  if (inviteId) {
+    const { data: invite } = await supabase
+      .from('invites')
+      .select('id, film_id, status, recipient_name, claimed_email, claimed_by, link_slug')
+      .eq('id', String(inviteId).trim())
+      .maybeSingle()
+    const decision = deleteTicketTargetDecision({ invite, filmId })
+    if (!decision.ok) {
+      res.status(decision.status).json({ error: decision.error })
+      return null
+    }
+    return { kind: 'ticket', invite }
+  }
+
+  const { plan, targetUser, ownsAnyFilm } = await buildDeletePlan(supabase, { filmId, email })
+  const decision = deletePersonTargetDecision({
+    email,
+    targetUser,
+    ownsAnyFilm,
+    callerId: caller.id,
+    hasAnyRows: plan.hasAnyRows,
+  })
+  if (!decision.ok) {
+    res.status(decision.status).json({ error: decision.error })
+    return null
+  }
+  return { kind: 'person', plan }
+}
+
+app.post('/api/admin/delete-person/preview', async (req, res) => {
+  try {
+    const caller = await requireAdminCaller(req, res)
+    if (!caller) return
+    const resolved = await resolveDeleteRequest(req, res, caller)
+    if (!resolved) return
+
+    if (resolved.kind === 'ticket') {
+      return res.json({
+        kind: 'ticket',
+        name: resolved.invite.recipient_name || 'invite',
+        slug: resolved.invite.link_slug || null,
+        summary: `This deletes the unclaimed link for ${resolved.invite.recipient_name || 'this invite'}. Nothing else is touched.`,
+      })
+    }
+
+    const { plan } = resolved
+    return res.json({
+      kind: 'person',
+      email: plan.email,
+      name: plan.targetName,
+      repoint: plan.repoint.map((r) => ({ child: r.childName, toParentId: r.toParentId })),
+      inviteCount: plan.deleteInvites.length,
+      watchSessionCount: plan.watchSessionIds.length,
+      accountDeleted: plan.deleteAccount,
+      accountKeptReason: plan.accountKeptReason,
+    })
+  } catch (err) {
+    console.error('admin delete preview error:', err)
+    return res.status(500).json({ error: 'Could not build the preview' })
+  }
+})
+
+app.post('/api/admin/delete-person', async (req, res) => {
+  try {
+    const caller = await requireAdminCaller(req, res)
+    if (!caller) return
+    // Every refusal re-verified from scratch — never trusts the preview.
+    const resolved = await resolveDeleteRequest(req, res, caller)
+    if (!resolved) return
+
+    if (resolved.kind === 'ticket') {
+      const { error } = await supabase.from('invites').delete().eq('id', resolved.invite.id)
+      if (error) throw error
+      console.log(`[admin] deleted unclaimed link ${resolved.invite.link_slug || resolved.invite.id}`)
+      return res.json({ deleted: true, kind: 'ticket' })
+    }
+
+    const confirm = deleteConfirmDecision({
+      email: req.body?.email,
+      confirmEmail: req.body?.confirmEmail,
+    })
+    if (!confirm.ok) return res.status(confirm.status).json({ error: confirm.error })
+
+    const result = await executeDeletePlan(supabase, resolved.plan)
+    console.log(
+      `[admin] delete-with-splice ${resolved.plan.email}: repointed ${result.repointed}, ` +
+        `invites ${result.invitesDeleted}, sessions ${result.watchSessionsDeleted}, account ${result.accountDeleted}`
+    )
+    return res.json({ deleted: true, kind: 'person', ...result })
+  } catch (err) {
+    console.error('admin delete error:', err)
+    return res.status(500).json({ error: 'Could not complete the deletion' })
   }
 })
 
