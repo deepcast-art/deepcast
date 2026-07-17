@@ -33,7 +33,13 @@ export default function TicketControlsPopover({
     const away = (e) => {
       if (ref.current && !ref.current.contains(e.target)) onClose()
     }
-    const anyScroll = () => onClose()
+    // Scroll closes the popover (its fixed anchor would drift) — but trailing
+    // scroll events from the click that OPENED it can arrive asynchronously
+    // (momentum / scroll-into-view), so the first beat after mount is ignored.
+    const openedAt = Date.now()
+    const anyScroll = () => {
+      if (Date.now() - openedAt > 300) onClose()
+    }
     document.addEventListener('pointerdown', away)
     window.addEventListener('scroll', anyScroll, true)
     return () => {

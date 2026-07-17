@@ -528,9 +528,11 @@ export default function Dashboard() {
   }, [profile?.id, profile?.role])
 
   /** ONE batched ticket-status fetch per dashboard load (Piece B): the union
-   *  of every film's person user-ids in a single call. The server is the gate
+   *  of every film's person user-ids in a single call, deduped by content so
+   *  a reload with the same people never refetches. The server is the gate
    *  (ADMIN_USER_ID pin) — a 403/503 simply leaves the map empty and no
    *  controls render. Read-only; the popover's actions do the writing. */
+  const lastTicketFetchKey = useRef('')
   useEffect(() => {
     if (profile?.role !== 'creator') return
     const ids = new Set()
@@ -544,20 +546,23 @@ export default function Dashboard() {
       }
     }
     if (!ids.size) return
-    let cancelled = false
+    const fetchKey = [...ids].sort().join(',')
+    if (fetchKey === lastTicketFetchKey.current) return
+    lastTicketFetchKey.current = fetchKey
     ;(async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession()
         if (!session?.access_token) return
         const { statuses } = await api.adminTicketStatuses([...ids], session.access_token)
-        if (!cancelled && statuses) setTicketStatuses(statuses)
+        // Apply only while this id-set is still the current one — a reload
+        // with the SAME people may cancel-and-skip (the dedupe), so the
+        // in-flight result must land; a reload with DIFFERENT people bumps
+        // the key and this stale result is dropped.
+        if (statuses && lastTicketFetchKey.current === fetchKey) setTicketStatuses(statuses)
       } catch {
         /* not the owner account (or not configured) — no controls shown */
       }
     })()
-    return () => {
-      cancelled = true
-    }
   }, [profile?.id, profile?.role, filmInvitesRaw, filmSenderUsers])
 
   /** One server call per committed popover action; fresh state comes back and
@@ -1958,14 +1963,14 @@ export default function Dashboard() {
                                             <button
                                               type="button"
                                               onClick={(e) => {
+                                                // Read the anchor NOW — currentTarget is
+                                                // null by the time the updater runs.
+                                                const rect = e.currentTarget.getBoundingClientRect()
                                                 setControlsError('')
                                                 setControlsOpenFor((open) =>
                                                   open?.userId === person.userId
                                                     ? null
-                                                    : {
-                                                        userId: person.userId,
-                                                        rect: e.currentTarget.getBoundingClientRect(),
-                                                      }
+                                                    : { userId: person.userId, rect }
                                                 )
                                               }}
                                               className="cursor-pointer rounded-full border border-border px-2.5 py-0.5 text-[9px] uppercase tracking-[0.18em] text-text-muted transition-colors hover:border-text-muted hover:text-text"
