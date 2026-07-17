@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import CreatorLinkPanel from '../components/CreatorLinkPanel'
+import TicketControlsPopover from '../components/TicketControlsPopover'
 import DeepcastLogo from '../components/DeepcastLogo'
 import MvpVersionLabel from '../components/MvpVersionLabel'
 import NetworkGraph from '../components/NetworkGraph'
@@ -144,7 +145,6 @@ export default function Dashboard() {
     : null
   const [films, setFilms] = useState([])
   const [filmStats, setFilmStats] = useState({})
-  const [inviteTree, setInviteTree] = useState({})
   const [loading, setLoading] = useState(() => !profileLoaded || Boolean(readClaimStash()))
   const [inviteFilmId, setInviteFilmId] = useState(null)
   const [copiedTicketId, setCopiedTicketId] = useState(null)
@@ -215,15 +215,15 @@ export default function Dashboard() {
   const [modalError, setModalError] = useState('')
 
   const [visibleSentCount, setVisibleSentCount] = useState(SENT_LIST_PAGE_SIZE)
-  /** Owner-only unlimited-shares toggle: per-email status from the admin endpoint
-   *  ({ invitedByYou, hasAccount, eligible, unlimited }). Stays empty for anyone
-   *  the server rejects (the endpoint is pinned to ADMIN_USER_ID server-side),
-   *  so no toggles render for non-owner accounts. */
-  const [unlimitedStatuses, setUnlimitedStatuses] = useState({})
-  const [unlimitedBusy, setUnlimitedBusy] = useState({})
-  const [unlimitedError, setUnlimitedError] = useState({})
-  /** Per-email inline confirm (the pill never flips without one). */
-  const [unlimitedConfirm, setUnlimitedConfirm] = useState({})
+  /** Owner-only ticket controls (Piece B): per-USER-ID wallet state from the
+   *  batched admin endpoint ({ name, unlimited, ticketsLeft, controllable,
+   *  reason }). Stays empty for anyone the server rejects (pinned to
+   *  ADMIN_USER_ID server-side), so no controls render for non-owner accounts. */
+  const [ticketStatuses, setTicketStatuses] = useState({})
+  /** Which person's popover is open: { userId, rect } (fixed-position anchor). */
+  const [controlsOpenFor, setControlsOpenFor] = useState(null)
+  const [controlsBusy, setControlsBusy] = useState(false)
+  const [controlsError, setControlsError] = useState('')
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [nameBusy, setNameBusy] = useState(false)
@@ -527,54 +527,59 @@ export default function Dashboard() {
     if (profile?.role === 'creator') void loadTeamSection()
   }, [profile?.id, profile?.role])
 
-  /** Load unlimited-shares statuses for the people the creator invited. The server
-   *  is the gate (ADMIN_USER_ID pin) — a 403/503 here simply leaves the map empty
-   *  and no toggle UI renders. Read-only; never touches gating or quotas itself. */
+  /** ONE batched ticket-status fetch per dashboard load (Piece B): the union
+   *  of every film's person user-ids in a single call. The server is the gate
+   *  (ADMIN_USER_ID pin) — a 403/503 simply leaves the map empty and no
+   *  controls render. Read-only; the popover's actions do the writing. */
   useEffect(() => {
     if (profile?.role !== 'creator') return
-    const emails = [
-      ...new Set(
-        Object.values(inviteTree)
-          .flat()
-          .filter((n) => n.senderId === profile.id)
-          .map((n) => (n.recipient || '').trim().toLowerCase())
-          .filter(Boolean)
-      ),
-    ]
-    if (!emails.length) return
+    const ids = new Set()
+    for (const filmId of Object.keys(filmInvitesRaw)) {
+      for (const row of buildNetworkPeople({
+        filmInvites: filmInvitesRaw[filmId] || [],
+        users: filmSenderUsers,
+        creatorId: profile.id,
+      })) {
+        if (row.kind === 'person' && row.userId) ids.add(row.userId)
+      }
+    }
+    if (!ids.size) return
     let cancelled = false
     ;(async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession()
         if (!session?.access_token) return
-        const { statuses } = await api.adminUnlimitedSharesStatus(emails, session.access_token)
-        if (!cancelled && statuses) setUnlimitedStatuses(statuses)
+        const { statuses } = await api.adminTicketStatuses([...ids], session.access_token)
+        if (!cancelled && statuses) setTicketStatuses(statuses)
       } catch {
-        /* not the owner account (or not configured) — no toggles shown */
+        /* not the owner account (or not configured) — no controls shown */
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [profile?.id, profile?.role, inviteTree])
+  }, [profile?.id, profile?.role, filmInvitesRaw, filmSenderUsers])
 
-  async function handleToggleUnlimited(rawEmail) {
-    const email = (rawEmail || '').trim().toLowerCase()
-    const current = unlimitedStatuses[email]
-    if (!current?.eligible || unlimitedBusy[email]) return
-    setUnlimitedBusy((prev) => ({ ...prev, [email]: true }))
-    setUnlimitedError((prev) => ({ ...prev, [email]: '' }))
+  /** One server call per committed popover action; fresh state comes back and
+   *  updates both the cell and the Tickets-left column live. Returns whether
+   *  the action applied (the popover keeps pending state on failure). */
+  async function handleTicketControl(userId, payload) {
+    setControlsBusy(true)
+    setControlsError('')
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const result = await api.adminSetUnlimitedShares(email, !current.unlimited, session?.access_token)
-      setUnlimitedStatuses((prev) => ({
-        ...prev,
-        [email]: { ...prev[email], unlimited: Boolean(result.unlimited) },
-      }))
+      const result = await api.adminTicketControl({ userId, ...payload }, session?.access_token)
+      if (result?.applied) {
+        setTicketStatuses((prev) => ({ ...prev, [userId]: { ...prev[userId], ...result } }))
+        return true
+      }
+      setControlsError(result?.reason || 'Could not update')
+      return false
     } catch (err) {
-      setUnlimitedError((prev) => ({ ...prev, [email]: err.message || 'Could not update' }))
+      setControlsError(err.message || 'Could not update')
+      return false
     } finally {
-      setUnlimitedBusy((prev) => ({ ...prev, [email]: false }))
+      setControlsBusy(false)
     }
   }
 
@@ -584,7 +589,6 @@ export default function Dashboard() {
         await loadViewerDashboard()
         setFilms([])
         setFilmStats({})
-        setInviteTree({})
         setFilmSenderUsers([])
         return
       }
@@ -592,7 +596,6 @@ export default function Dashboard() {
       if (isTeamMember && !filmOwnerId) {
         setFilms([])
         setFilmStats({})
-        setInviteTree({})
         setFilmSenderUsers([])
         return
       }
@@ -608,7 +611,6 @@ export default function Dashboard() {
       setFilms(creatorFilms || [])
 
       const stats = {}
-      const trees = {}
       const rawInvites = {}
 
       // One query for every film's invites and one for every sender's profile, instead of a
@@ -653,30 +655,13 @@ export default function Dashboard() {
         }
         senderRows = senderRows || []
       }
-      const senderById = new Map((senderRows || []).map((u) => [u.id, u]))
-
       for (const film of creatorFilms || []) {
         const all = (allFilmInvites || []).filter((i) => i.film_id === film.id)
         rawInvites[film.id] = all
         stats[film.id] = computeTicketFunnel(all)
-
-        trees[film.id] = all.map((inv) => {
-          const sender = inv.sender_id ? senderById.get(inv.sender_id) : null
-          return {
-            id: inv.id,
-            sender: sender?.name || sender?.email || 'Anonymous',
-            senderId: inv.sender_id,
-            // Claim-link rows carry the address in claimed_email (Piece E) —
-            // this feeds the unlimited-status lookup, so both count.
-            recipient: inv.claimed_email || inv.recipient_email,
-            recipientName: inv.recipient_name,
-            status: inv.status,
-          }
-        })
       }
 
       setFilmStats(stats)
-      setInviteTree(trees)
       setFilmInvitesRaw(rawInvites)
       setFilmSenderUsers(senderRows || [])
     } finally {
@@ -1921,7 +1906,7 @@ export default function Dashboard() {
                                 }
                                 const person = row
                                 const email = person.email
-                                const status = unlimitedStatuses[email]
+                                const status = person.userId ? ticketStatuses[person.userId] : null
                                 return (
                                   <tr key={email} className="border-b border-border/60 last:border-b-0">
                                     <td className="py-2 pr-4 text-text">{person.name}</td>
@@ -1934,91 +1919,80 @@ export default function Dashboard() {
                                     <td className="py-2 pr-4">{person.ticketsGenerated}</td>
                                     <td className="py-2 pr-4">{person.ticketsClaimed}</td>
                                     <td className="py-2 pr-4">
-                                      {person.ticketsLeft != null
-                                        ? /* unified wallet (Piece E): the account
-                                             allocation, or the invite wallet for
-                                             accountless rows; ∞ = unlimited */
-                                          Number.isFinite(person.ticketsLeft)
-                                          ? person.ticketsLeft
-                                          : '∞'
-                                        : status?.unlimited || teamMemberIdSet.has(String(person.userId ?? ''))
+                                      {status
+                                        ? /* the batched admin fetch is the truth (Piece B) */
+                                          status.unlimited
                                           ? '∞'
-                                          : /* wallet not readable from this page */
-                                            dash}
+                                          : status.ticketsLeft ?? 0
+                                        : person.ticketsLeft != null
+                                          ? Number.isFinite(person.ticketsLeft)
+                                            ? person.ticketsLeft
+                                            : '∞'
+                                          : teamMemberIdSet.has(String(person.userId ?? ''))
+                                            ? '∞'
+                                            : /* wallet not readable without the admin fetch */
+                                              dash}
                                     </td>
                                     <td className="py-2 pr-4">{person.reach}</td>
                                     <td className="py-2">
                                       {(() => {
-                                        /* The unlimited-shares pill, carried over with its
-                                           behavior unchanged: it appears exactly where it was
-                                           eligible before (owner-sent invitees with accounts —
-                                           the status map only ever contains those), "No account
-                                           yet" for owner-sent people without one, "—" elsewhere.
-                                           Universal coverage is a later piece. */
-                                        if (!status || (!status.eligible && status.hasAccount)) {
-                                          return <span className="text-text-muted/50">&mdash;</span>
-                                        }
-                                        if (!status.eligible) {
+                                        /* Ticket controls (Piece B): state as text, click
+                                           opens the popover. Only the owner ever has
+                                           statuses (server-pinned); everyone else sees
+                                           quiet state. */
+                                        if (!person.userId) {
                                           return (
                                             <span className="text-[10px] uppercase tracking-wider text-text-muted/50">
                                               No account yet
                                             </span>
                                           )
                                         }
+                                        if (!status) {
+                                          return <span className="text-text-muted/50">&mdash;</span>
+                                        }
                                         const first =
                                           (person.name || '').trim().split(/\s+/)[0] ||
                                           email.split('@')[0]
-                                        if (unlimitedConfirm[email]) {
-                                          return (
-                                            <span className="flex flex-wrap items-center gap-2 normal-case">
-                                              <span className="text-[11px] text-text">
-                                                {status.unlimited
-                                                  ? `Return ${first} to the standard share count?`
-                                                  : `Give ${first} unlimited shares?`}
-                                              </span>
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  setUnlimitedConfirm((p) => ({ ...p, [email]: false }))
-                                                  handleToggleUnlimited(email)
-                                                }}
-                                                className="text-[10px] uppercase tracking-wider text-accent transition-colors hover:text-accent-hover"
-                                              >
-                                                Confirm
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={() => setUnlimitedConfirm((p) => ({ ...p, [email]: false }))}
-                                                className="text-[10px] uppercase tracking-wider text-text-muted transition-colors hover:text-text"
-                                              >
-                                                Cancel
-                                              </button>
-                                            </span>
-                                          )
-                                        }
                                         return (
                                           <>
                                             <button
                                               type="button"
-                                              onClick={() => setUnlimitedConfirm((p) => ({ ...p, [email]: true }))}
-                                              disabled={Boolean(unlimitedBusy[email])}
-                                              aria-pressed={status.unlimited}
-                                              className={`rounded-full border px-2.5 py-0.5 text-[9px] uppercase tracking-[0.18em] transition-colors disabled:opacity-50 ${
-                                                status.unlimited
-                                                  ? 'border-accent/50 text-accent hover:border-accent'
-                                                  : 'border-border text-text-muted hover:border-text-muted hover:text-text'
-                                              }`}
+                                              onClick={(e) => {
+                                                setControlsError('')
+                                                setControlsOpenFor((open) =>
+                                                  open?.userId === person.userId
+                                                    ? null
+                                                    : {
+                                                        userId: person.userId,
+                                                        rect: e.currentTarget.getBoundingClientRect(),
+                                                      }
+                                                )
+                                              }}
+                                              className="cursor-pointer rounded-full border border-border px-2.5 py-0.5 text-[9px] uppercase tracking-[0.18em] text-text-muted transition-colors hover:border-text-muted hover:text-text"
                                             >
-                                              {unlimitedBusy[email]
-                                                ? 'Saving…'
-                                                : status.unlimited
-                                                  ? 'Unlimited shares'
-                                                  : 'Standard · 5 shares'}
+                                              {status.unlimited ? '∞' : `${status.ticketsLeft ?? 0} left`}
                                             </button>
-                                            {unlimitedError[email] && (
-                                              <span className="ml-2 text-[10px] normal-case text-error">
-                                                {unlimitedError[email]}
-                                              </span>
+                                            {controlsOpenFor?.userId === person.userId && (
+                                              <TicketControlsPopover
+                                                anchorRect={controlsOpenFor.rect}
+                                                firstName={first}
+                                                status={status}
+                                                busy={controlsBusy}
+                                                error={controlsError}
+                                                onGrant={(amount) =>
+                                                  handleTicketControl(person.userId, {
+                                                    action: 'grant',
+                                                    amount,
+                                                  })
+                                                }
+                                                onSetUnlimited={(unlimited) =>
+                                                  handleTicketControl(person.userId, {
+                                                    action: 'set_unlimited',
+                                                    unlimited,
+                                                  })
+                                                }
+                                                onClose={() => setControlsOpenFor(null)}
+                                              />
                                             )}
                                           </>
                                         )
