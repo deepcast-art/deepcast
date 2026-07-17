@@ -19,6 +19,7 @@ import {
 // Canonical share quota + per-film stats — same single-source rule as reach.
 import { invitationsRemaining } from '../lib/shares.js'
 import { computeTicketFunnel } from '../lib/ticketFunnel.js'
+import { buildNetworkPeople } from '../lib/networkPeople.js'
 import { safeLocalStorage, safeSessionStorage } from '../lib/safeStorage.js'
 import { readClaimStash } from '../lib/claimStash.js'
 import { screeningCardState } from '../lib/screeningCard.js'
@@ -146,9 +147,10 @@ export default function Dashboard() {
   const [inviteTree, setInviteTree] = useState({})
   const [loading, setLoading] = useState(() => !profileLoaded || Boolean(readClaimStash()))
   const [inviteFilmId, setInviteFilmId] = useState(null)
-  const [resendStatusByInvite, setResendStatusByInvite] = useState({})
-  const resendInviteTimeouts = useRef({})
   const [filmInvitesRaw, setFilmInvitesRaw] = useState({})
+  // The users rows already loaded for the films' senders — the admin table
+  // resolves names/accounts from these (no extra queries).
+  const [filmSenderUsers, setFilmSenderUsers] = useState([])
 
   const [leadCreatorName, setLeadCreatorName] = useState('')
   const [teamEmail, setTeamEmail] = useState('')
@@ -571,6 +573,7 @@ export default function Dashboard() {
         setFilms([])
         setFilmStats({})
         setInviteTree({})
+        setFilmSenderUsers([])
         return
       }
 
@@ -578,6 +581,7 @@ export default function Dashboard() {
         setFilms([])
         setFilmStats({})
         setInviteTree({})
+        setFilmSenderUsers([])
         return
       }
 
@@ -634,18 +638,12 @@ export default function Dashboard() {
       setFilmStats(stats)
       setInviteTree(trees)
       setFilmInvitesRaw(rawInvites)
+      setFilmSenderUsers(senderRows || [])
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => {
-    return () => {
-      Object.values(resendInviteTimeouts.current).forEach((timeoutId) => {
-        clearTimeout(timeoutId)
-      })
-    }
-  }, [])
 
   /* ── Identity gate. RULE (2026-07-16): no identity state may ever render a
      blank page. The old `return null` here relied on ProtectedRoute
@@ -685,39 +683,6 @@ export default function Dashboard() {
   const statusBadge = {
     processing: 'bg-accent/20 text-accent',
     ready: 'bg-success/20 text-success',
-  }
-
-  const handleResendInvite = async (inviteId) => {
-    setResendStatusByInvite((prev) => ({ ...prev, [inviteId]: 'sending' }))
-    try {
-      await api.resendInviteById(inviteId, window?.location?.origin || null)
-      setResendStatusByInvite((prev) => ({ ...prev, [inviteId]: 'sent' }))
-      if (resendInviteTimeouts.current[inviteId]) {
-        clearTimeout(resendInviteTimeouts.current[inviteId])
-      }
-      resendInviteTimeouts.current[inviteId] = setTimeout(() => {
-        setResendStatusByInvite((prev) => {
-          if (!prev[inviteId]) return prev
-          const next = { ...prev }
-          delete next[inviteId]
-          return next
-        })
-      }, 4000)
-    } catch (err) {
-      console.error('Resend invite error:', err)
-      setResendStatusByInvite((prev) => ({ ...prev, [inviteId]: 'error' }))
-      if (resendInviteTimeouts.current[inviteId]) {
-        clearTimeout(resendInviteTimeouts.current[inviteId])
-      }
-      resendInviteTimeouts.current[inviteId] = setTimeout(() => {
-        setResendStatusByInvite((prev) => {
-          if (!prev[inviteId]) return prev
-          const next = { ...prev }
-          delete next[inviteId]
-          return next
-        })
-      }, 4000)
-    }
   }
 
   const openShareModal = () => {
@@ -1711,7 +1676,6 @@ export default function Dashboard() {
           <div className="animate-fade-in space-y-8 animate-delay-200">
             {films.map((film) => {
               const stats = filmStats[film.id] || {}
-              const tree = inviteTree[film.id] || []
               const isInviteOpen = inviteFilmId === film.id
 
               return (
@@ -1824,126 +1788,150 @@ export default function Dashboard() {
                     ) : null
                   })()}
 
-                  {!isTeamMember && tree.length > 0 && (
-                    <div>
-                      <p className="mb-3 text-xs uppercase tracking-wider text-text-muted">
-                        Invite chain
-                      </p>
-                      <div className="space-y-2">
-                        {tree.map((node, i) => (
-                          <div
-                            key={node.id || i}
-                            className="flex flex-wrap items-center gap-2 text-xs text-text-muted"
-                          >
-                            <span className="text-text">{node.sender}</span>
-                            <span>&rarr;</span>
-                            <span>{node.recipient}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleResendInvite(node.id)}
-                              className="text-[10px] uppercase tracking-wider text-text-muted transition-colors hover:text-text disabled:opacity-50"
-                              disabled={resendStatusByInvite[node.id] === 'sending'}
-                            >
-                              {resendStatusByInvite[node.id] === 'sending'
-                                ? 'Resending...'
-                                : 'Resend'}
-                            </button>
-                            {resendStatusByInvite[node.id] === 'sent' && (
-                              <span className="text-[10px] uppercase tracking-wider text-success">
-                                Sent
-                              </span>
-                            )}
-                            {resendStatusByInvite[node.id] === 'error' && (
-                              <span className="text-[10px] uppercase tracking-wider text-error">
-                                Failed
-                              </span>
-                            )}
-                            {node.senderId === profile.id &&
-                              (() => {
-                                const email = (node.recipient || '').trim().toLowerCase()
+                  {!isTeamMember && (() => {
+                    /* One row per PERSON (account holders + accountless
+                       claimants together) — src/lib/networkPeople.js is the
+                       single computation behind every number here. Computed
+                       from the already-loaded invite rows on each render;
+                       fine at the current network size. */
+                    const people = buildNetworkPeople({
+                      filmInvites: filmInvitesRaw[film.id] || [],
+                      users: filmSenderUsers,
+                      creatorId: profile.id,
+                    })
+                    if (!people.length) return null
+                    const stageLabel = {
+                      signed_up: 'Signed up',
+                      watched: 'Watched',
+                      claimed: 'Claimed',
+                      invited: 'Invited',
+                    }
+                    const stageClass = {
+                      signed_up: 'text-success',
+                      watched: 'text-success',
+                      claimed: 'text-accent',
+                      invited: '',
+                    }
+                    return (
+                      <div>
+                        <p className="mb-3 text-xs uppercase tracking-wider text-text-muted">
+                          People in this network
+                        </p>
+                        <div className="overflow-x-auto">
+                          <table className="w-full min-w-[680px] text-left text-xs text-text-muted">
+                            <thead>
+                              <tr className="border-b border-border text-[10px] uppercase tracking-wider">
+                                <th className="py-2 pr-4 font-medium">Name</th>
+                                <th className="py-2 pr-4 font-medium">Email</th>
+                                <th className="py-2 pr-4 font-medium">Status</th>
+                                <th className="py-2 pr-4 font-medium">Tickets generated</th>
+                                <th className="py-2 pr-4 font-medium">Claimed</th>
+                                <th className="py-2 pr-4 font-medium">Reach</th>
+                                <th className="py-2 font-medium">Ticket controls</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {people.map((person) => {
+                                const email = person.email
                                 const status = unlimitedStatuses[email]
-                                if (!status) return null
-                                if (!status.eligible) {
-                                  return status.hasAccount ? null : (
-                                    <span className="text-[10px] uppercase tracking-wider text-text-muted/50">
-                                      No account yet
-                                    </span>
-                                  )
-                                }
-                                const first =
-                                  (node.recipientName || '').trim().split(/\s+/)[0] ||
-                                  email.split('@')[0]
-                                if (unlimitedConfirm[email]) {
-                                  return (
-                                    <span className="flex flex-wrap items-center gap-2 normal-case">
-                                      <span className="text-[11px] text-text">
-                                        {status.unlimited
-                                          ? `Return ${first} to the standard share count?`
-                                          : `Give ${first} unlimited shares?`}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setUnlimitedConfirm((p) => ({ ...p, [email]: false }))
-                                          handleToggleUnlimited(email)
-                                        }}
-                                        className="text-[10px] uppercase tracking-wider text-accent transition-colors hover:text-accent-hover"
-                                      >
-                                        Confirm
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => setUnlimitedConfirm((p) => ({ ...p, [email]: false }))}
-                                        className="text-[10px] uppercase tracking-wider text-text-muted transition-colors hover:text-text"
-                                      >
-                                        Cancel
-                                      </button>
-                                    </span>
-                                  )
-                                }
                                 return (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => setUnlimitedConfirm((p) => ({ ...p, [email]: true }))}
-                                      disabled={Boolean(unlimitedBusy[email])}
-                                      aria-pressed={status.unlimited}
-                                      className={`rounded-full border px-2.5 py-0.5 text-[9px] uppercase tracking-[0.18em] transition-colors disabled:opacity-50 ${
-                                        status.unlimited
-                                          ? 'border-accent/50 text-accent hover:border-accent'
-                                          : 'border-border text-text-muted hover:border-text-muted hover:text-text'
-                                      }`}
+                                  <tr key={email} className="border-b border-border/60 last:border-b-0">
+                                    <td className="py-2 pr-4 text-text">{person.name}</td>
+                                    <td className="py-2 pr-4">{email}</td>
+                                    <td
+                                      className={`py-2 pr-4 uppercase tracking-wider ${stageClass[person.stage] || ''}`}
                                     >
-                                      {unlimitedBusy[email]
-                                        ? 'Saving…'
-                                        : status.unlimited
-                                          ? 'Unlimited shares'
-                                          : 'Standard · 5 shares'}
-                                    </button>
-                                    {unlimitedError[email] && (
-                                      <span className="text-[10px] normal-case text-error">
-                                        {unlimitedError[email]}
-                                      </span>
-                                    )}
-                                  </>
+                                      {stageLabel[person.stage] || person.stage}
+                                    </td>
+                                    <td className="py-2 pr-4">{person.ticketsGenerated}</td>
+                                    <td className="py-2 pr-4">{person.ticketsClaimed}</td>
+                                    <td className="py-2 pr-4">{person.reach}</td>
+                                    <td className="py-2">
+                                      {(() => {
+                                        /* The unlimited-shares pill, carried over with its
+                                           behavior unchanged: it appears exactly where it was
+                                           eligible before (owner-sent invitees with accounts —
+                                           the status map only ever contains those), "No account
+                                           yet" for owner-sent people without one, "—" elsewhere.
+                                           Universal coverage is a later piece. */
+                                        if (!status || (!status.eligible && status.hasAccount)) {
+                                          return <span className="text-text-muted/50">&mdash;</span>
+                                        }
+                                        if (!status.eligible) {
+                                          return (
+                                            <span className="text-[10px] uppercase tracking-wider text-text-muted/50">
+                                              No account yet
+                                            </span>
+                                          )
+                                        }
+                                        const first =
+                                          (person.name || '').trim().split(/\s+/)[0] ||
+                                          email.split('@')[0]
+                                        if (unlimitedConfirm[email]) {
+                                          return (
+                                            <span className="flex flex-wrap items-center gap-2 normal-case">
+                                              <span className="text-[11px] text-text">
+                                                {status.unlimited
+                                                  ? `Return ${first} to the standard share count?`
+                                                  : `Give ${first} unlimited shares?`}
+                                              </span>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setUnlimitedConfirm((p) => ({ ...p, [email]: false }))
+                                                  handleToggleUnlimited(email)
+                                                }}
+                                                className="text-[10px] uppercase tracking-wider text-accent transition-colors hover:text-accent-hover"
+                                              >
+                                                Confirm
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => setUnlimitedConfirm((p) => ({ ...p, [email]: false }))}
+                                                className="text-[10px] uppercase tracking-wider text-text-muted transition-colors hover:text-text"
+                                              >
+                                                Cancel
+                                              </button>
+                                            </span>
+                                          )
+                                        }
+                                        return (
+                                          <>
+                                            <button
+                                              type="button"
+                                              onClick={() => setUnlimitedConfirm((p) => ({ ...p, [email]: true }))}
+                                              disabled={Boolean(unlimitedBusy[email])}
+                                              aria-pressed={status.unlimited}
+                                              className={`rounded-full border px-2.5 py-0.5 text-[9px] uppercase tracking-[0.18em] transition-colors disabled:opacity-50 ${
+                                                status.unlimited
+                                                  ? 'border-accent/50 text-accent hover:border-accent'
+                                                  : 'border-border text-text-muted hover:border-text-muted hover:text-text'
+                                              }`}
+                                            >
+                                              {unlimitedBusy[email]
+                                                ? 'Saving…'
+                                                : status.unlimited
+                                                  ? 'Unlimited shares'
+                                                  : 'Standard · 5 shares'}
+                                            </button>
+                                            {unlimitedError[email] && (
+                                              <span className="ml-2 text-[10px] normal-case text-error">
+                                                {unlimitedError[email]}
+                                              </span>
+                                            )}
+                                          </>
+                                        )
+                                      })()}
+                                    </td>
+                                  </tr>
                                 )
-                              })()}
-                            <span
-                              className={`ml-auto uppercase tracking-wider ${
-                                node.status === 'watched' || node.status === 'signed_up'
-                                  ? 'text-success'
-                                  : node.status === 'opened'
-                                    ? 'text-accent'
-                                    : ''
-                              }`}
-                            >
-                              {node.status}
-                            </span>
-                          </div>
-                        ))}
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )
+                  })()}
                 </div>
               )
             })}
