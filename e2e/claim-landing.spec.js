@@ -89,7 +89,7 @@ test.describe('three-page claim arc', () => {
     await expect(page.getByRole('button', { name: /Accept your invite/i })).toBeVisible()
     await expect(page.getByText('This invitation admits one person, once.')).toBeVisible()
     // NOT on this page: concept line, ordinal, conditions line.
-    await expect(page.getByText(/can’t be searched, streamed, or subscribed to/)).toHaveCount(0)
+    await expect(page.getByText(/human hands only/)).toHaveCount(0)
     await expect(page.getByText(/person to be invited to watch this film/)).toHaveCount(0)
     await expect(page.getByText('14 minutes. Headphones recommended.')).toHaveCount(0)
 
@@ -125,7 +125,7 @@ test.describe('three-page claim arc', () => {
     const panelToggle = page.getByRole('button', { name: /Who is this film for\?/i })
     await expect(panelToggle).toBeVisible()
     await panelToggle.click()
-    await expect(page.getByText(/can’t be searched, streamed, or subscribed to/)).toBeVisible()
+    await expect(page.getByText(/No algorithm, no feed/)).toBeVisible()
     await expect(page.getByText(/You have 5 tickets for this film/)).toBeVisible()
 
     // Generate a second-generation link — visible ticket decrement.

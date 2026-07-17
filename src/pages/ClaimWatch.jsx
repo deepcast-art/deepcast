@@ -1,10 +1,19 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { useParams, Link, Navigate } from 'react-router-dom'
+import { useParams, useSearchParams, Link, Navigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import { FILM_CONDITIONS_LINE } from '../lib/screeningConditions'
 import { readClaimStash, isClaimOwner } from '../lib/claimStash'
 import { INITIAL_CLAIMANT_TICKETS } from '../lib/ticketRules'
+import { resumePositionToSave } from '../lib/resumePosition'
+import { safeLocalStorage } from '../lib/safeStorage'
+
+/** Claim-flow resume keys (slug-scoped — the claimant's public token is never
+ *  exposed client-side). Seconds feed the resume; the fraction feeds the
+ *  dashboard card's thin progress bar. Same completion-zone rule as the
+ *  legacy flow: inside the final 5% the position is ERASED, never saved. */
+const positionKey = (slug) => `screening_position_slug_${slug}`
+const progressKey = (slug) => `screening_progress_slug_${slug}`
 
 const MuxPlayer = lazy(() => import('@mux/mux-player-react').then((m) => ({ default: m.default })))
 
@@ -24,8 +33,22 @@ const MuxPlayer = lazy(() => import('@mux/mux-player-react').then((m) => ({ defa
  */
 export default function ClaimWatch() {
   const { slug } = useParams()
+  const [searchParams] = useSearchParams()
   const stash = readClaimStash()
   const owner = isClaimOwner(stash, slug)
+
+  /** Start position, resolved once at mount: "Watch again" (?again=1) starts
+   *  clean and clears the saved spot; otherwise resume where they left off. */
+  const [startSeconds] = useState(() => {
+    if (searchParams.get('again')) {
+      safeLocalStorage.removeItem(positionKey(slug))
+      safeLocalStorage.removeItem(progressKey(slug))
+      return 0
+    }
+    const saved = Number(safeLocalStorage.getItem(positionKey(slug)))
+    return Number.isFinite(saved) && saved > 0 ? saved : 0
+  })
+  const lastSavedSecond = useRef(-1)
 
   const [link, setLink] = useState(null)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -61,12 +84,32 @@ export default function ClaimWatch() {
 
   if (!owner) return <Navigate to={`/${slug}`} replace />
 
-  /** ≥70% playback marks the invite watched — same threshold and direct
-   *  update pattern as the legacy screening page (InviteScreening.jsx). */
+  /** ≥70% playback marks the invite watched (same threshold and update
+   *  pattern as the legacy screening page), and every whole second the
+   *  resume position is saved through resumePositionToSave — the ONE
+   *  completion-zone rule (src/lib/resumePosition.js), so a near-end
+   *  position is erased, never stored. */
   const handleTimeUpdate = async (e) => {
     const el = e?.target
-    if (!el || hasMarkedWatched.current || !stash?.inviteId) return
-    const pct = el.duration > 0 ? (el.currentTime / el.duration) * 100 : 0
+    if (!el) return
+    const t = el.currentTime || 0
+    const d = el.duration || 0
+
+    const second = Math.floor(t)
+    if (d > 0 && second !== lastSavedSecond.current) {
+      lastSavedSecond.current = second
+      const pos = resumePositionToSave(t, d)
+      if (pos == null) {
+        safeLocalStorage.removeItem(positionKey(slug))
+        safeLocalStorage.removeItem(progressKey(slug))
+      } else {
+        safeLocalStorage.setItem(positionKey(slug), String(pos))
+        safeLocalStorage.setItem(progressKey(slug), String(Math.min(t / d, 1)))
+      }
+    }
+
+    if (hasMarkedWatched.current || !stash?.inviteId) return
+    const pct = d > 0 ? (t / d) * 100 : 0
     if (pct >= 70) {
       hasMarkedWatched.current = true
       await supabase.from('invites').update({ status: 'watched' }).eq('id', stash.inviteId)
@@ -135,6 +178,7 @@ export default function ClaimWatch() {
             <MuxPlayer
               streamType="on-demand"
               playbackId={link?.muxPlaybackId || undefined}
+              startTime={startSeconds}
               metadata={{ video_title: title }}
               accentColor="#b1a180"
               onTimeUpdate={handleTimeUpdate}
@@ -163,10 +207,11 @@ export default function ClaimWatch() {
           </button>
         ) : (
           <div className="px-6 py-6 text-center dc-fade-in">
-            {/* 1. The constraint line — this panel is its home. Verbatim copy. */}
+            {/* 1. The constraint line — this panel is its home.
+                Founder-approved verbatim (2026-07-16). Do not edit. */}
             <p className="mx-auto max-w-md font-serif-v3 text-base leading-relaxed text-warm/80">
-              Films here can’t be searched, streamed, or subscribed to. They can only be passed
-              from one person to another.
+              This film reached you because someone thought of you. No algorithm, no feed. Films
+              here pass through human hands only.
             </p>
 
             {outOfTickets ? (

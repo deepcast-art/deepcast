@@ -21,6 +21,7 @@ import { invitationsRemaining } from '../lib/shares.js'
 import { computeFilmStats } from '../lib/filmStats.js'
 import { safeLocalStorage, safeSessionStorage } from '../lib/safeStorage.js'
 import { readClaimStash } from '../lib/claimStash.js'
+import { screeningCardState } from '../lib/screeningCard.js'
 import { INITIAL_CLAIMANT_TICKETS } from '../lib/ticketRules.js'
 import { formatOrdinal } from '../lib/ordinal.js'
 
@@ -132,6 +133,8 @@ export default function Dashboard() {
       claim_ordinal: claimantInvite.claim_ordinal ?? null,
       tickets_remaining: claimantInvite.tickets_remaining ?? null,
       claimedFilmId: claimantInvite.film_id,
+      claimedStatus: claimantInvite.status || null,
+      claimedSlug: claimStash.slug,
     }
   }, [authProfile, claimStash, claimantInvite])
   const isClaimant = Boolean(profile?.isClaimant)
@@ -351,12 +354,18 @@ export default function Dashboard() {
             .order('created_at', { ascending: false }),
       profile.isClaimant
         ? Promise.resolve({
-            data: [{ film_id: profile.claimedFilmId, token: profile.claimedInviteToken }],
+            data: [
+              {
+                film_id: profile.claimedFilmId,
+                token: profile.claimedInviteToken,
+                status: profile.claimedStatus,
+              },
+            ],
           })
         : email
           ? supabase
               .from('invites')
-              .select('film_id, token')
+              .select('film_id, token, status')
               .ilike('recipient_email', email)
               .order('created_at', { ascending: false })
           : Promise.resolve({ data: null }),
@@ -398,6 +407,9 @@ export default function Dashboard() {
               title: filmsMap.get(r.film_id)?.title || '',
               thumbnail_url: filmsMap.get(r.film_id)?.thumbnail_url || null,
               token: r.token,
+              // Received-invite status — drives the screening card's
+              // Resume film / Watch again state (screeningCard.js).
+              status: r.status || null,
             }
           })
           .filter(f => f.id)
@@ -662,7 +674,7 @@ export default function Dashboard() {
         </div>
       )
     }
-    /* Draft copy — voice-pass pending. */
+    /* Founder-approved verbatim (2026-07-16). Do not edit. */
     return (
       <div className="min-h-dvh flex flex-col items-center justify-center bg-bg-page px-6 text-center text-warm">
         <DeepcastLogo variant="wordmark" size="text-4xl" className="text-warm opacity-90" />
@@ -952,10 +964,13 @@ export default function Dashboard() {
                 this film.
               </p>
             )}
-            {/* The platform-concept line, quietly (its primary home is the share panel). */}
+            {/* The platform-concept line, quietly (its primary home is the
+                share panel). Founder-approved verbatim (2026-07-16) — kept
+                unmodified here too: the dashboard always has a selected film
+                in frame, so the sentence reads correctly as-is. */}
             <p className="font-serif-v3 text-xs italic leading-relaxed text-warm/45">
-              Films here can’t be searched, streamed, or subscribed to. They can only be passed
-              from one person to another.
+              This film reached you because someone thought of you. No algorithm, no feed. Films
+              here pass through human hands only.
             </p>
           </div>
 
@@ -1138,22 +1153,63 @@ export default function Dashboard() {
                   <div className="flex flex-col gap-3">
                     {viewerAllFilms.map((film) => {
                       const isSelected = film.id === viewerFilmId
+                      // State-aware card (screeningCard.js): surfaces invite
+                      // status + the saved resume position. Claim-flow keys
+                      // are slug-scoped; the legacy flow stores seconds only
+                      // (no fraction → no bar).
+                      const claimKeys = isClaimant && claimStash?.slug
+                      const posKey = claimKeys
+                        ? `screening_position_slug_${claimStash.slug}`
+                        : `screening_position_${film.token}`
+                      const card = screeningCardState({
+                        status: film.status,
+                        savedSeconds: Number(safeLocalStorage.getItem(posKey)) || 0,
+                        progressFraction: claimKeys
+                          ? Number(safeLocalStorage.getItem(`screening_progress_slug_${claimStash.slug}`)) || null
+                          : null,
+                      })
+                      // The ENTIRE card is one clickable target → the watch page.
+                      const goWatch = () => {
+                        if (claimKeys) {
+                          navigate(
+                            card.mode === 'again'
+                              ? `/watch/${claimStash.slug}?again=1`
+                              : `/watch/${claimStash.slug}`
+                          )
+                          return
+                        }
+                        if (!film.token) return
+                        navigate(
+                          card.mode === 'resume' && card.resumeSeconds > 0
+                            ? `/i/${film.token}?play=1&t=${card.resumeSeconds}`
+                            : `/i/${film.token}?play=1`
+                        )
+                      }
                       return (
                       <div
                         key={film.id}
                         role="button"
                         tabIndex={0}
-                        onClick={() => { if (!isSelected) selectViewerFilm(film.id) }}
+                        onClick={goWatch}
                         onKeyDown={(e) => {
-                          if ((e.key === 'Enter' || e.key === ' ') && !isSelected) {
+                          if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault()
-                            selectViewerFilm(film.id)
+                            goWatch()
                           }
                         }}
-                        className={`flex cursor-pointer flex-col gap-4 border bg-[#0a0f1a] p-4 transition-colors sm:flex-row sm:items-center sm:gap-5 ${
+                        className={`relative flex cursor-pointer flex-col gap-4 border bg-[#0a0f1a] p-4 transition-colors sm:flex-row sm:items-center sm:gap-5 ${
                           isSelected ? 'border-accent/60' : 'border-faint/20 hover:border-faint/40'
                         }`}
                       >
+                        {/* Thin, quiet progress indicator (in-progress cards only). */}
+                        {card.progress != null && (
+                          <div aria-hidden className="absolute bottom-0 left-0 right-0 h-[2px] bg-warm/10">
+                            <div
+                              className="h-full bg-accent/70"
+                              style={{ width: `${Math.round(card.progress * 100)}%` }}
+                            />
+                          </div>
+                        )}
                         <div className="flex items-center gap-4 min-w-0 sm:gap-5">
                           {film.thumbnail_url ? (
                             <img
@@ -1176,33 +1232,26 @@ export default function Dashboard() {
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:ml-auto">
-                          {film.token && (() => {
-                            const savedPos = safeLocalStorage.getItem(`screening_position_${film.token}`)
-                            const resume = savedPos && parseInt(savedPos, 10) > 0
-                            return (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  // Claimants watch on the claim-flow page, never the
-                                  // legacy /i/:token screening (their token is internal).
-                                  if (isClaimant && claimStash?.slug) {
-                                    navigate(`/watch/${claimStash.slug}`)
-                                    return
-                                  }
-                                  const n = parseInt(safeLocalStorage.getItem(`screening_position_${film.token}`) || '0', 10)
-                                  navigate(n > 0 ? `/i/${film.token}?play=1&t=${n}` : `/i/${film.token}?play=1`)
-                                }}
-                                className="flex items-center gap-1.5 border border-warm/20 px-4 py-2 font-sans text-[10px] uppercase tracking-[0.25em] text-warm/60 transition-colors hover:border-warm/40 hover:text-warm"
-                              >
-                                <svg className="h-2.5 w-2.5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                                {resume ? 'Resume' : 'Watch again'}
-                              </button>
-                            )
-                          })()}
+                          {(film.token || claimKeys) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                goWatch()
+                              }}
+                              className="flex items-center gap-1.5 border border-warm/20 px-4 py-2 font-sans text-[10px] uppercase tracking-[0.25em] text-warm/60 transition-colors hover:border-warm/40 hover:text-warm"
+                            >
+                              <svg className="h-2.5 w-2.5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                              {card.label}
+                            </button>
+                          )}
                           {canShareMore && film.id === viewerFilmId && (
                             <button
                               type="button"
-                              onClick={openShareModal}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openShareModal()
+                              }}
                               disabled={shareDisabled}
                               className="flex items-center gap-1.5 border border-accent/40 px-4 py-2 font-sans text-[10px] uppercase tracking-[0.25em] text-accent/70 transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-accent/40 disabled:hover:text-accent/70"
                             >
