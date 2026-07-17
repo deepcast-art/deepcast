@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { adminAuthDecision, unlimitedToggleTargetDecision } from './adminAuth.js'
+import {
+  adminAuthDecision,
+  unlimitedToggleTargetDecision,
+  ticketControlTargetDecision,
+} from './adminAuth.js'
 
 const ADMIN_ID = '67b6d7aa-3438-4be5-b317-7556b7cac193'
 
@@ -87,5 +91,58 @@ describe('unlimitedToggleTargetDecision', () => {
 
   it('allows a viewer the caller invited', () => {
     expect(unlimitedToggleTargetDecision({ targetUser: viewer, invitedByCaller: true }).ok).toBe(true)
+  })
+})
+
+describe('ticketControlTargetDecision', () => {
+  const viewer = { id: 'v1', role: 'viewer', team_creator_id: null, unlimited_shares: false }
+
+  it('no users row → graceful "No account yet", never an error', () => {
+    const d = ticketControlTargetDecision({ targetUser: null, action: 'grant', amount: 3 })
+    expect(d).toEqual({ ok: true, applied: false, reason: 'No account yet' })
+  })
+
+  it('role-unlimited people → graceful "Already unlimited" (creator, team member, team-linked viewer)', () => {
+    for (const target of [
+      { role: 'creator' },
+      { role: 'team_member' },
+      { role: 'viewer', team_creator_id: 'c-1' },
+    ]) {
+      const d = ticketControlTargetDecision({ targetUser: target, action: 'grant', amount: 3 })
+      expect(d).toEqual({ ok: true, applied: false, reason: 'Already unlimited' })
+    }
+  })
+
+  it('a viewer whose unlimited comes from the FLAG stays controllable (that is what the toggle turns off)', () => {
+    const flagged = { ...viewer, unlimited_shares: true }
+    const d = ticketControlTargetDecision({ targetUser: flagged, action: 'set_unlimited', unlimited: false })
+    expect(d).toMatchObject({ ok: true, applied: true, action: 'set_unlimited', unlimited: false })
+  })
+
+  it('grant validates the amount: positive whole number, capped at 100', () => {
+    for (const amount of [0, -1, 1.5, 'x', null, 101]) {
+      const d = ticketControlTargetDecision({ targetUser: viewer, action: 'grant', amount })
+      expect(d.ok).toBe(false)
+      expect(d.status).toBe(400)
+    }
+    const d = ticketControlTargetDecision({ targetUser: viewer, action: 'grant', amount: 4 })
+    expect(d).toMatchObject({ ok: true, applied: true, action: 'grant', amount: 4 })
+  })
+
+  it('set_unlimited requires a real boolean', () => {
+    for (const unlimited of ['true', 1, null, undefined]) {
+      const d = ticketControlTargetDecision({ targetUser: viewer, action: 'set_unlimited', unlimited })
+      expect(d.ok).toBe(false)
+      expect(d.status).toBe(400)
+    }
+    expect(
+      ticketControlTargetDecision({ targetUser: viewer, action: 'set_unlimited', unlimited: true })
+    ).toMatchObject({ ok: true, applied: true, unlimited: true })
+  })
+
+  it('unknown actions are rejected', () => {
+    const d = ticketControlTargetDecision({ targetUser: viewer, action: 'revoke_all' })
+    expect(d.ok).toBe(false)
+    expect(d.status).toBe(400)
   })
 })

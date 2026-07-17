@@ -9,7 +9,7 @@ import { buildGraphLayout } from '../src/lib/graphLayout.js'
 import { createEmailDispatcher } from './emailDelivery.js'
 import { isInviteUsable } from './inviteValidation.js'
 import { CREATOR_SHARE_BLOCK_REASON, isShareToFilmCreator } from './shareRules.js'
-import { adminAuthDecision, unlimitedToggleTargetDecision } from './adminAuth.js'
+import { adminAuthDecision, unlimitedToggleTargetDecision, ticketControlTargetDecision } from './adminAuth.js'
 import { removeTeammateDecision } from './teamRules.js'
 import { generateUniqueSlug } from './inviteSlug.js'
 import { resolveAccountlessSharerIdentity } from './claimIdentity.js'
@@ -2667,6 +2667,123 @@ app.post('/api/admin/unlimited-shares/status', async (req, res) => {
   } catch (err) {
     console.error('admin unlimited-shares status error:', err)
     return res.status(500).json({ error: 'Could not load share statuses' })
+  }
+})
+
+/**
+ * Ticket controls (Piece B, 2026-07-17): top-ups and unlimited for ANY person
+ * in the film's network, targeted by USER ID (claimed_by / sender lineage) —
+ * never by legacy email matching. Same owner pin as every admin route.
+ *
+ * The batched status route is also how the admin table shows REAL balances
+ * for every row: client RLS can't read other users' wallets, so the numbers
+ * come from here (this retires the tickets-left em dash for account rows).
+ */
+const SELECT_TICKET_TARGET = 'id, name, email, role, team_creator_id, unlimited_shares, invite_allocation'
+
+/** One person's wallet as the admin table displays it. */
+function ticketControlStatus(u) {
+  const remaining = invitationsRemaining(u)
+  const probe = ticketControlTargetDecision({ targetUser: u, action: 'grant', amount: 1 })
+  return {
+    name: u.name || null,
+    email: u.email || null,
+    role: u.role || null,
+    unlimited: !Number.isFinite(remaining),
+    ticketsLeft: Number.isFinite(remaining) ? remaining : null,
+    controllable: Boolean(probe.applied),
+    reason: probe.applied ? null : probe.reason || null,
+  }
+}
+
+app.post('/api/admin/ticket-controls/status', async (req, res) => {
+  try {
+    const caller = await requireAdminCaller(req, res)
+    if (!caller) return
+
+    const userIds = Array.isArray(req.body?.userIds)
+      ? [...new Set(req.body.userIds.map((v) => String(v || '').trim()).filter(Boolean))].slice(0, 200)
+      : []
+    if (!userIds.length) return res.json({ statuses: {} })
+
+    const { data: rows, error } = await supabase
+      .from('users')
+      .select(SELECT_TICKET_TARGET)
+      .in('id', userIds)
+    if (error) throw error
+
+    const statuses = {}
+    for (const u of rows || []) statuses[u.id] = ticketControlStatus(u)
+    return res.json({ statuses })
+  } catch (err) {
+    console.error('admin ticket-controls status error:', err)
+    return res.status(500).json({ error: 'Could not load ticket statuses' })
+  }
+})
+
+app.post('/api/admin/ticket-controls', async (req, res) => {
+  try {
+    const caller = await requireAdminCaller(req, res)
+    if (!caller) return
+
+    const { userId, action, amount, unlimited } = req.body || {}
+    const targetId = String(userId || '').trim()
+    if (!targetId) return res.status(400).json({ error: 'A target user id is required' })
+
+    const { data: targetUser } = await supabase
+      .from('users')
+      .select(SELECT_TICKET_TARGET)
+      .eq('id', targetId)
+      .maybeSingle()
+
+    const decision = ticketControlTargetDecision({ targetUser, action, amount, unlimited })
+    if (!decision.ok) return res.status(decision.status).json({ error: decision.error })
+    if (!decision.applied) {
+      // Graceful refusal ("No account yet" / "Already unlimited") — state the
+      // UI displays quietly, not an error.
+      return res.json({ applied: false, reason: decision.reason })
+    }
+
+    if (decision.action === 'grant') {
+      // CAS with retries: concurrent grants can never lose an increment.
+      let landed = false
+      for (let attempt = 0; attempt < 3 && !landed; attempt++) {
+        const { data: fresh } =
+          attempt === 0
+            ? { data: targetUser }
+            : await supabase.from('users').select('invite_allocation').eq('id', targetId).maybeSingle()
+        const current = fresh?.invite_allocation
+        const next = Math.max(0, current ?? 0) + decision.amount
+        const cas = supabase.from('users').update({ invite_allocation: next }).eq('id', targetId)
+        const { data: row, error: casErr } =
+          current == null
+            ? await cas.is('invite_allocation', null).select('id').maybeSingle()
+            : await cas.eq('invite_allocation', current).select('id').maybeSingle()
+        if (casErr) throw casErr
+        if (row) landed = true
+      }
+      if (!landed) {
+        return res.status(409).json({ error: 'Please try again — the balance was updating.' })
+      }
+    } else {
+      const { error: flagErr } = await supabase
+        .from('users')
+        .update({ unlimited_shares: decision.unlimited })
+        .eq('id', targetId)
+      if (flagErr) throw flagErr
+    }
+
+    // Fresh state back so the cell updates live without a refetch.
+    const { data: after } = await supabase
+      .from('users')
+      .select(SELECT_TICKET_TARGET)
+      .eq('id', targetId)
+      .maybeSingle()
+    if (!after) return res.status(500).json({ error: 'Could not reload the account' })
+    return res.json({ applied: true, ...ticketControlStatus(after) })
+  } catch (err) {
+    console.error('admin ticket-controls error:', err)
+    return res.status(500).json({ error: 'Could not update tickets' })
   }
 })
 
