@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
-import InviteForm from '../components/InviteForm'
+import CreatorLinkPanel from '../components/CreatorLinkPanel'
 import DeepcastLogo from '../components/DeepcastLogo'
 import MvpVersionLabel from '../components/MvpVersionLabel'
 import NetworkGraph from '../components/NetworkGraph'
@@ -18,7 +18,7 @@ import {
 } from '../lib/reach.js'
 // Canonical share quota + per-film stats — same single-source rule as reach.
 import { invitationsRemaining } from '../lib/shares.js'
-import { computeFilmStats } from '../lib/filmStats.js'
+import { computeTicketFunnel } from '../lib/ticketFunnel.js'
 import { safeLocalStorage, safeSessionStorage } from '../lib/safeStorage.js'
 import { readClaimStash } from '../lib/claimStash.js'
 import { screeningCardState } from '../lib/screeningCard.js'
@@ -146,10 +146,6 @@ export default function Dashboard() {
   const [inviteTree, setInviteTree] = useState({})
   const [loading, setLoading] = useState(() => !profileLoaded || Boolean(readClaimStash()))
   const [inviteFilmId, setInviteFilmId] = useState(null)
-  const [inviteSentByFilm, setInviteSentByFilm] = useState({})
-  const inviteSentTimeouts = useRef({})
-  const [resendStatusByFilm, setResendStatusByFilm] = useState({})
-  const resendStatusTimeouts = useRef({})
   const [resendStatusByInvite, setResendStatusByInvite] = useState({})
   const resendInviteTimeouts = useRef({})
   const [filmInvitesRaw, setFilmInvitesRaw] = useState({})
@@ -620,7 +616,7 @@ export default function Dashboard() {
       for (const film of creatorFilms || []) {
         const all = (allFilmInvites || []).filter((i) => i.film_id === film.id)
         rawInvites[film.id] = all
-        stats[film.id] = computeFilmStats(all)
+        stats[film.id] = computeTicketFunnel(all)
 
         trees[film.id] = all.map((inv) => {
           const sender = inv.sender_id ? senderById.get(inv.sender_id) : null
@@ -645,12 +641,6 @@ export default function Dashboard() {
 
   useEffect(() => {
     return () => {
-      Object.values(inviteSentTimeouts.current).forEach((timeoutId) => {
-        clearTimeout(timeoutId)
-      })
-      Object.values(resendStatusTimeouts.current).forEach((timeoutId) => {
-        clearTimeout(timeoutId)
-      })
       Object.values(resendInviteTimeouts.current).forEach((timeoutId) => {
         clearTimeout(timeoutId)
       })
@@ -695,39 +685,6 @@ export default function Dashboard() {
   const statusBadge = {
     processing: 'bg-accent/20 text-accent',
     ready: 'bg-success/20 text-success',
-  }
-
-  const handleResendLastInvite = async (filmId) => {
-    setResendStatusByFilm((prev) => ({ ...prev, [filmId]: 'sending' }))
-    try {
-      await api.resendLastInvite(filmId, profile.id, window?.location?.origin || null)
-      setResendStatusByFilm((prev) => ({ ...prev, [filmId]: 'sent' }))
-      if (resendStatusTimeouts.current[filmId]) {
-        clearTimeout(resendStatusTimeouts.current[filmId])
-      }
-      resendStatusTimeouts.current[filmId] = setTimeout(() => {
-        setResendStatusByFilm((prev) => {
-          if (!prev[filmId]) return prev
-          const next = { ...prev }
-          delete next[filmId]
-          return next
-        })
-      }, 4000)
-    } catch (err) {
-      console.error('Resend invite error:', err)
-      setResendStatusByFilm((prev) => ({ ...prev, [filmId]: 'error' }))
-      if (resendStatusTimeouts.current[filmId]) {
-        clearTimeout(resendStatusTimeouts.current[filmId])
-      }
-      resendStatusTimeouts.current[filmId] = setTimeout(() => {
-        setResendStatusByFilm((prev) => {
-          if (!prev[filmId]) return prev
-          const next = { ...prev }
-          delete next[filmId]
-          return next
-        })
-      }, 4000)
-    }
   }
 
   const handleResendInvite = async (inviteId) => {
@@ -878,7 +835,7 @@ export default function Dashboard() {
     }
   }
 
-  const creatorTotalInvites = Object.values(filmStats).reduce((a, s) => a + (s.sent || 0), 0)
+  const creatorTotalTickets = Object.values(filmStats).reduce((a, s) => a + (s.generated || 0), 0)
 
   /* ===================== VIEWER V3 DIPTYCH ===================== */
   if (isViewer) {
@@ -1546,11 +1503,11 @@ export default function Dashboard() {
             <span className="font-display text-2xl font-light text-warm">{films.length}</span>
           </div>
           <div>
-            <span className="block text-warm/50">Invites (all films)</span>
-            <span className="font-display text-2xl font-light text-warm">{creatorTotalInvites}</span>
+            <span className="block text-warm/50">Tickets generated (all films)</span>
+            <span className="font-display text-2xl font-light text-warm">{creatorTotalTickets}</span>
           </div>
           {(profile.role === 'creator' || isTeamMember) && (
-            <p className="normal-case text-warm/45">Unlimited invites</p>
+            <p className="normal-case text-warm/45">Unlimited tickets</p>
           )}
         </div>
         <div className="hidden h-[0.5px] w-full bg-accent/20 lg:block" />
@@ -1595,11 +1552,11 @@ export default function Dashboard() {
             <span className="font-display text-2xl font-light text-warm">{films.length}</span>
           </div>
           <div>
-            <span className="block text-warm/50">Invites (all films)</span>
-            <span className="font-display text-2xl font-light text-warm">{creatorTotalInvites}</span>
+            <span className="block text-warm/50">Tickets generated (all films)</span>
+            <span className="font-display text-2xl font-light text-warm">{creatorTotalTickets}</span>
           </div>
           {(profile.role === 'creator' || isTeamMember) && (
-            <p className="self-end normal-case text-warm/45">Unlimited invites</p>
+            <p className="self-end normal-case text-warm/45">Unlimited tickets</p>
           )}
         </div>
         {profile.role === 'creator' && (
@@ -1793,33 +1750,8 @@ export default function Dashboard() {
                         onClick={() => setInviteFilmId(isInviteOpen ? null : film.id)}
                         className="cursor-pointer text-xs uppercase tracking-wider text-accent transition-colors hover:text-accent-hover"
                       >
-                        {isInviteOpen ? 'Close' : 'Invite friends'}
+                        {isInviteOpen ? 'Close' : 'Create an invitation'}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => handleResendLastInvite(film.id)}
-                        className="text-xs uppercase tracking-wider text-text-muted transition-colors hover:text-text disabled:opacity-50"
-                        disabled={resendStatusByFilm[film.id] === 'sending'}
-                      >
-                        {resendStatusByFilm[film.id] === 'sending'
-                          ? 'Resending...'
-                          : 'Resend last invite'}
-                      </button>
-                      {inviteSentByFilm[film.id] && (
-                        <span className="text-xs uppercase tracking-wider text-success">
-                          Invitations sent
-                        </span>
-                      )}
-                      {resendStatusByFilm[film.id] === 'sent' && (
-                        <span className="text-xs uppercase tracking-wider text-success">
-                          Invite resent
-                        </span>
-                      )}
-                      {resendStatusByFilm[film.id] === 'error' && (
-                        <span className="text-xs uppercase tracking-wider text-error">
-                          Resend failed
-                        </span>
-                      )}
                       <span
                         className={`rounded-none px-3 py-1 text-xs uppercase tracking-wider ${statusBadge[film.status]}`}
                       >
@@ -1830,38 +1762,14 @@ export default function Dashboard() {
 
                   {isInviteOpen && (
                     <div className="mb-6">
-                      <InviteForm
-                        filmId={film.id}
-                        senderName={profile.name}
-                        senderEmail={profile.email}
-                        senderId={profile.id}
-                        maxInvites={10}
-                        unlimited
-                        onInviteSent={() => {
-                          fetchProfile(profile.id)
-                          loadDashboard()
-                          setInviteFilmId(null)
-                          setInviteSentByFilm((prev) => ({ ...prev, [film.id]: true }))
-                          if (inviteSentTimeouts.current[film.id]) {
-                            clearTimeout(inviteSentTimeouts.current[film.id])
-                          }
-                          inviteSentTimeouts.current[film.id] = setTimeout(() => {
-                            setInviteSentByFilm((prev) => {
-                              if (!prev[film.id]) return prev
-                              const next = { ...prev }
-                              delete next[film.id]
-                              return next
-                            })
-                          }, 4000)
-                        }}
-                      />
+                      <CreatorLinkPanel filmId={film.id} onCreated={() => loadDashboard()} />
                     </div>
                   )}
 
                   <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
                     {[
-                      { label: 'Invited', value: stats.sent || 0 },
-                      { label: 'Opened', value: stats.opened || 0 },
+                      { label: 'Tickets generated', value: stats.generated || 0 },
+                      { label: 'Claimed', value: stats.claimed || 0 },
                       { label: 'Watched', value: stats.watched || 0 },
                       { label: 'Signed up', value: stats.signedUp || 0 },
                     ].map((stat) => (
