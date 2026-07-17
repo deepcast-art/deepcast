@@ -14,6 +14,8 @@ import { removeTeammateDecision } from './teamRules.js'
 import { generateUniqueSlug } from './inviteSlug.js'
 import { resolveAccountlessSharerIdentity } from './claimIdentity.js'
 import { INITIAL_CLAIMANT_TICKETS, ticketSpendDecision } from '../src/lib/ticketRules.js'
+import { invitationsRemaining } from '../src/lib/shares.js'
+import { claimedSharerSpendDecision, claimedInviteTicketsDisplay } from './claimantWallet.js'
 
 const app = express()
 app.use(cors())
@@ -746,6 +748,9 @@ app.post('/api/invites/create-link', async (req, res) => {
     // link creation itself fails (a failed generation is not a spent ticket).
     let accountlessTicketsRemaining = null
     let accountlessClaimId = null
+    // Account balance after a stash-based claimant's unified-wallet spend
+    // (Piece E) — reported back so the watch panel shows the true number.
+    let claimedSharerBalance = null
 
     if (jwt) {
       // ── Account-holder sharer. Identity comes ONLY from the verified token —
@@ -877,45 +882,85 @@ app.post('/api/invites/create-link', async (req, res) => {
       senderName = identity.senderName
       senderEmail = identity.senderEmail
 
-      // Ticket economy (2026-07-16): accountless sharers spend from their own
-      // claimed invite's tickets_remaining — spent at link GENERATION, no
-      // refunds. Optimistic CAS with retries: the conditional UPDATE only
-      // lands if the balance is still what we read, so two concurrent
-      // generates can never spend the same ticket. NULL balance = claimed
-      // before the tickets migration → healed to the initial grant here.
-      let spent = false
-      for (let attempt = 0; attempt < 3 && !spent; attempt++) {
-        const { data: fresh } =
-          attempt === 0
-            ? { data: claimedInvite }
-            : await supabase.from('invites').select('*').eq('id', claimId).maybeSingle()
-        const decision = ticketSpendDecision(fresh?.tickets_remaining)
-        if (!decision.ok) {
-          return res.status(400).json({ error: decision.reason })
+      // ── Unified wallet (Piece E, 2026-07-17): a claimant with a silent
+      // account spends users.invite_allocation like every account holder,
+      // resolved server-side via claimed_by — no browser session required
+      // (possession of the claimed invite id remains the auth factor,
+      // unchanged). This is what makes a double balance impossible: the fork
+      // keys on account existence, never on whether a session was sent. The
+      // invite wallet below survives only for rows with no account. ──
+      const { data: walletUser } = claimedInvite?.claimed_by
+        ? await supabase
+            .from('users')
+            .select('id, name, email, role, team_creator_id, unlimited_shares, invite_allocation')
+            .eq('id', claimedInvite.claimed_by)
+            .maybeSingle()
+        : { data: null }
+
+      const spendPlan = claimedSharerSpendDecision(claimedInvite, walletUser)
+      if (spendPlan.wallet === 'account') {
+        if (!spendPlan.ok) {
+          return res.status(400).json({ error: spendPlan.reason })
         }
-        const cas = supabase.from('invites').update({ tickets_remaining: decision.next }).eq('id', claimId)
-        const { data: updated, error: spendError } =
-          fresh?.tickets_remaining == null
-            ? await cas.is('tickets_remaining', null).select('id').maybeSingle()
-            : await cas.eq('tickets_remaining', fresh.tickets_remaining).select('id').maybeSingle()
-        if (spendError) {
-          if (/tickets_remaining/.test(spendError.message || '')) {
-            // Pre-migration deploy: column missing — degrade to the legacy
-            // no-quota behavior rather than blocking sharing.
-            console.warn('[create-link] tickets_remaining column missing — no-quota fallback (apply the 20260716 migration)')
-            spent = true
-            break
+        // Lineage unifies too: the claimant's sends now carry their user id
+        // (parent_invite_id stays their claimed invite, as always).
+        senderId = spendPlan.userId
+        senderName = walletUser.name || senderName
+        senderEmail = walletUser.email || senderEmail
+        if (!spendPlan.unlimited) {
+          const { error: decErr } = await supabase
+            .from('users')
+            .update({ invite_allocation: spendPlan.next })
+            .eq('id', spendPlan.userId)
+          if (decErr) {
+            console.error('Claimant allocation decrement error:', decErr.message || decErr)
+            return res.status(500).json({ error: 'Unable to update tickets' })
           }
-          throw spendError
+          previousAllocation = spendPlan.previous
+          allocationDecremented = true
+          claimedSharerBalance = spendPlan.next
         }
-        if (updated) {
-          spent = true
-          accountlessTicketsRemaining = decision.next
-          accountlessClaimId = claimId
+      } else {
+        // Ticket economy (2026-07-16): sharers with no account spend from
+        // their claimed invite's tickets_remaining — spent at link
+        // GENERATION, no refunds. Optimistic CAS with retries: the
+        // conditional UPDATE only lands if the balance is still what we
+        // read, so two concurrent generates can never spend the same ticket.
+        // NULL balance = never initialized → healed to the initial grant.
+        let spent = false
+        for (let attempt = 0; attempt < 3 && !spent; attempt++) {
+          const { data: fresh } =
+            attempt === 0
+              ? { data: claimedInvite }
+              : await supabase.from('invites').select('*').eq('id', claimId).maybeSingle()
+          const decision = ticketSpendDecision(fresh?.tickets_remaining)
+          if (!decision.ok) {
+            return res.status(400).json({ error: decision.reason })
+          }
+          const cas = supabase.from('invites').update({ tickets_remaining: decision.next }).eq('id', claimId)
+          const { data: updated, error: spendError } =
+            fresh?.tickets_remaining == null
+              ? await cas.is('tickets_remaining', null).select('id').maybeSingle()
+              : await cas.eq('tickets_remaining', fresh.tickets_remaining).select('id').maybeSingle()
+          if (spendError) {
+            if (/tickets_remaining/.test(spendError.message || '')) {
+              // Pre-migration deploy: column missing — degrade to the legacy
+              // no-quota behavior rather than blocking sharing.
+              console.warn('[create-link] tickets_remaining column missing — no-quota fallback (apply the 20260716 migration)')
+              spent = true
+              break
+            }
+            throw spendError
+          }
+          if (updated) {
+            spent = true
+            accountlessTicketsRemaining = decision.next
+            accountlessClaimId = claimId
+          }
         }
-      }
-      if (!spent) {
-        return res.status(409).json({ error: 'Please try again — your tickets were updating.' })
+        if (!spent) {
+          return res.status(409).json({ error: 'Please try again — your tickets were updating.' })
+        }
       }
     }
 
@@ -979,9 +1024,11 @@ app.post('/api/invites/create-link', async (req, res) => {
       success: true,
       slug: created.link_slug,
       url: `${baseUrl}/${created.link_slug}`,
-      // Balance after this spend — null on the account path (accounts surface
-      // quota via the existing invitationsRemaining machinery).
-      ticketsRemaining: accountlessTicketsRemaining,
+      // Balance after this spend: the invite wallet's, or the unified account
+      // balance for a stash-based claimant (Piece E). Null on the session
+      // path (those surfaces use the existing invitationsRemaining machinery)
+      // and for unlimited sharers.
+      ticketsRemaining: accountlessTicketsRemaining ?? claimedSharerBalance,
     })
   } catch (err) {
     console.error('Invite create-link error:', err)
@@ -1021,13 +1068,22 @@ app.get('/api/invites/link/:slug', async (req, res) => {
     // One film-scoped query powers BOTH the lineage thread and the invite
     // ordinal — an in-memory walk over ≤ a few hundred rows, cheap enough for
     // this public route (the graph surfaces already fetch the same set).
-    const [{ data: filmInvites }, { data: creatorUser }] = await Promise.all([
+    const [{ data: filmInvites }, { data: creatorUser }, { data: claimAccount }] = await Promise.all([
       supabase
         .from('invites')
         .select('id, parent_invite_id, sender_id, sender_name, recipient_name, recipient_email, created_at')
         .eq('film_id', invite.film_id),
       invite.films?.creator_id
         ? supabase.from('users').select('name').eq('id', invite.films.creator_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+      // Unified wallet (Piece E): an account-backed claim displays the
+      // account's balance, not the legacy invite wallet.
+      invite.claimed_by
+        ? supabase
+            .from('users')
+            .select('id, role, team_creator_id, unlimited_shares, invite_allocation')
+            .eq('id', invite.claimed_by)
+            .maybeSingle()
         : Promise.resolve({ data: null }),
     ])
     const rows = filmInvites || []
@@ -1097,7 +1153,7 @@ app.get('/api/invites/link/:slug', async (req, res) => {
       muxPlaybackId: invite.films?.mux_playback_id || null,
       inviteId: invite.id,
       claimOrdinal: invite.claim_ordinal ?? null,
-      ticketsRemaining: invite.tickets_remaining ?? null,
+      ticketsRemaining: claimedInviteTicketsDisplay(invite, claimAccount),
     })
   } catch (err) {
     console.error('Invite link lookup error:', err)
@@ -1187,17 +1243,17 @@ app.post('/api/invites/claim', async (req, res) => {
 
     // Atomic claim-bind: the conditional UPDATE decides the race — only one
     // concurrent claimant can match status='created' AND claimed_email IS NULL.
-    // claimed_by (the users.id reference) deliberately stays NULL in Phase 1.
-    // The same write stamps claim_ordinal and initializes tickets_remaining
-    // (the accountless ticket grant). Pre-migration fallback: if those columns
-    // don't exist yet, retry the legacy claim so production never breaks on a
-    // code-before-migration deploy.
+    // The same write stamps claim_ordinal. tickets_remaining is NOT stamped
+    // anymore (Piece E): the claimant's wallet is their account's
+    // invite_allocation; NULL tickets_remaining doubles as the full-grant
+    // state for the accountless degradation path. Pre-migration fallback: if
+    // claim_ordinal doesn't exist yet, retry the legacy claim so production
+    // never breaks on a code-before-migration deploy.
     const fullClaimUpdate = {
       claimed_email: emailNorm,
       claimed_at: new Date().toISOString(),
       status: 'claimed',
       claim_ordinal: claimOrdinal,
-      tickets_remaining: INITIAL_CLAIMANT_TICKETS,
     }
     let { data: claimedRow, error: claimError } = await supabase
       .from('invites')
@@ -1207,8 +1263,8 @@ app.post('/api/invites/claim', async (req, res) => {
       .is('claimed_email', null)
       .select('id')
       .maybeSingle()
-    if (claimError && /claim_ordinal|tickets_remaining/.test(claimError.message || '')) {
-      console.warn('[claim] tickets/ordinal columns missing — legacy claim (apply the 20260716 migration)')
+    if (claimError && /claim_ordinal/.test(claimError.message || '')) {
+      console.warn('[claim] ordinal column missing — legacy claim (apply the 20260716 migration)')
       ;({ data: claimedRow, error: claimError } = await supabase
         .from('invites')
         .update({ claimed_email: emailNorm, claimed_at: new Date().toISOString(), status: 'claimed' })
@@ -1223,6 +1279,40 @@ app.post('/api/invites/claim', async (req, res) => {
       return res.status(409).json({ error: 'This invitation has already been accepted.' })
     }
 
+    // ── Silent account (Piece E, 2026-07-17): the claim IS account creation.
+    // Runs only AFTER the CAS, so a losing claimant in a race never gets an
+    // account. An email that already has an account attaches (find, not
+    // create — claiming is never a top-up). Any failure degrades to the
+    // accountless claim exactly as before: claimed_by stays NULL and the
+    // invite wallet's NULL-equals-full-grant rule takes over. Zero claim UX
+    // either way — no password, no confirmation email, same response. ──
+    let accountBalance = null
+    try {
+      const firstName = (invite.recipient_name || '').trim() || emailNorm.split('@')[0]
+      const { userId, created: accountCreated } = await findOrCreatePasswordlessAccount(
+        emailNorm,
+        firstName,
+        undefined,
+        ''
+      )
+      await supabase.from('invites').update({ claimed_by: userId }).eq('id', invite.id)
+      const { data: acct } = await supabase
+        .from('users')
+        .select('id, role, team_creator_id, unlimited_shares, invite_allocation')
+        .eq('id', userId)
+        .maybeSingle()
+      const remaining = acct ? invitationsRemaining(acct) : null
+      accountBalance = Number.isFinite(remaining) ? remaining : null
+      console.log(
+        `[claim] silent account ${accountCreated ? 'created' : 'attached'} for ${emailNorm} (${userId})`
+      )
+    } catch (acctErr) {
+      console.warn(
+        '[claim] silent account creation failed — accountless claim stands:',
+        acctErr?.message || acctErr
+      )
+    }
+
     // Claim routes DIRECTLY to the watch page (final spec 2026-07-16) — no
     // reveal beat, so no graph payload here; the dashboard fetches its own.
     return res.json({
@@ -1231,7 +1321,7 @@ app.post('/api/invites/claim', async (req, res) => {
       slug,
       filmId: invite.film_id,
       claimOrdinal,
-      ticketsRemaining: INITIAL_CLAIMANT_TICKETS,
+      ticketsRemaining: accountBalance ?? INITIAL_CLAIMANT_TICKETS,
       film: {
         id: invite.films?.id || invite.film_id,
         title: invite.films?.title || null,
