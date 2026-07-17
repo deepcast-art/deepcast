@@ -138,6 +138,21 @@ export const api = {
     }),
 
   // Owner-only admin (server enforces the ADMIN_USER_ID pin; these just pass the session token)
+  adminTicketStatuses: (userIds, accessToken) =>
+    request('/admin/ticket-controls/status', {
+      method: 'POST',
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      body: JSON.stringify({ userIds }),
+    }),
+
+  // One mutating call: {userId, action:'grant', amount} or {userId, action:'set_unlimited', unlimited}
+  adminTicketControl: (payload, accessToken) =>
+    request('/admin/ticket-controls', {
+      method: 'POST',
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      body: JSON.stringify(payload),
+    }),
+
   adminUnlimitedSharesStatus: (emails, accessToken) =>
     request('/admin/unlimited-shares/status', {
       method: 'POST',

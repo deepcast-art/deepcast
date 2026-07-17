@@ -56,9 +56,10 @@ describe('buildNetworkPeople', () => {
       users: [{ id: 'user-ada', name: 'Ada Lovelace', email: 'ada@x.com' }],
       creatorId: CREATOR,
     })
-    expect(rows.map((r) => r.email)).toEqual(['ada@x.com', 'ben@x.com'])
+    // Flat chronological, newest first (Piece B): Ben's invite is newer.
+    expect(rows.map((r) => r.email)).toEqual(['ben@x.com', 'ada@x.com'])
 
-    const ada = rows[0]
+    const ada = rows[1]
     expect(ada.name).toBe('Ada Lovelace') // users row wins over recipient_name
     expect(ada.hasAccount).toBe(true)
     expect(ada.stage).toBe('watched') // account holders display as watched (A2)
@@ -67,7 +68,9 @@ describe('buildNetworkPeople', () => {
     expect(ada.ticketsLeft).toBe(null) // allocation lives on users, not here
     expect(ada.reach).toBe(1) // opened counts toward reach
 
-    const ben = rows[1]
+    expect(ada.userId).toBe('user-ada')
+
+    const ben = rows[0]
     expect(ben.hasAccount).toBe(false)
     expect(ben.stage).toBe('claimed') // legacy opened maps to the claimed stage
     expect(ben.ticketsGenerated).toBe(0)
@@ -93,8 +96,7 @@ describe('buildNetworkPeople', () => {
       users: [{ id: 'user-ada', name: 'Ada', email: 'ada@x.com' }],
       creatorId: CREATOR,
     })
-    const ada = persons(rows)[0]
-    expect(ada.email).toBe('ada@x.com')
+    const ada = rows.find((r) => r.email === 'ada@x.com')
     expect(ada.ticketsGenerated).toBe(1)
   })
 
@@ -169,6 +171,7 @@ describe('buildNetworkPeople', () => {
       creatorId: CREATOR,
     })
     expect(clara.hasAccount).toBe(true)
+    expect(clara.userId).toBe('user-clara')
     expect(clara.name).toBe('Clara N')
     // Having an account no longer implies watched — status rules the stage.
     expect(clara.stage).toBe('claimed')
@@ -198,15 +201,14 @@ describe('buildNetworkPeople', () => {
     expect(rows.find((r) => r.email === 'tom@x.com').ticketsLeft).toBe(null)
   })
 
-  it('outstanding tickets sort to the top, newest first, above person rows', () => {
-    const toAda = inv({ sender_id: CREATOR, recipient_email: 'ada@x.com', status: 'opened' })
+  it('ONE flat chronological list, newest first — tickets and people interleaved (Piece B)', () => {
     const olderTicket = inv({ recipient_name: 'Old', status: 'created', link_slug: 'old-1111' })
+    const toAda = inv({ sender_id: CREATOR, recipient_email: 'ada@x.com', status: 'opened' })
     const newerTicket = inv({ recipient_name: 'New', status: 'created', link_slug: 'new-2222' })
-    const rows = buildNetworkPeople({ filmInvites: [toAda, olderTicket, newerTicket], users: [], creatorId: CREATOR })
-    expect(rows.map((r) => r.name)).toEqual(['New', 'Old', 'ada'])
-    expect(rows[0].kind).toBe('ticket')
-    expect(rows[1].kind).toBe('ticket')
-    expect(rows[2].kind).toBe('person')
+    const rows = buildNetworkPeople({ filmInvites: [olderTicket, toAda, newerTicket], users: [], creatorId: CREATOR })
+    // Creation order was Old → ada → New; newest first interleaves them.
+    expect(rows.map((r) => r.name)).toEqual(['New', 'ada', 'Old'])
+    expect(rows.map((r) => r.kind)).toEqual(['ticket', 'person', 'ticket'])
   })
 
   it('once the recipient claims, the ticket row becomes a person row and the sharer’s claimed count moves', () => {
@@ -220,8 +222,8 @@ describe('buildNetworkPeople', () => {
     })
     const rows = buildNetworkPeople({ filmInvites: [claraClaim, danClaim], users: [], creatorId: CREATOR })
     expect(tickets(rows)).toHaveLength(0)
-    expect(rows.map((r) => r.email)).toEqual(['clara@x.com', 'dan@x.com'])
-    const clara = rows[0]
+    expect(rows.map((r) => r.email)).toEqual(['dan@x.com', 'clara@x.com']) // newest first
+    const clara = rows[1]
     expect(clara.ticketsGenerated).toBe(1)
     expect(clara.ticketsClaimed).toBe(1)
     // Claimed-but-unwatched does NOT count toward reach (decision 2026-07-16).
@@ -247,7 +249,7 @@ describe('buildNetworkPeople', () => {
       users: [{ id: 'user-ada', name: 'Ada', email: 'ada@x.com' }],
       creatorId: CREATOR,
     })
-    expect(persons(rows)[0].reach).toBe(2) // Ben + Cy
+    expect(rows.find((r) => r.email === 'ada@x.com').reach).toBe(2) // Ben + Cy
   })
 
   it('the creator never gets a row', () => {
@@ -260,7 +262,7 @@ describe('buildNetworkPeople', () => {
     expect(rows.map((r) => r.email)).toEqual(['ada@x.com'])
   })
 
-  it('a team member who only sends still gets a row, sorted after the chain', () => {
+  it('a team member who only sends slots into the timeline by their first sent invite', () => {
     const toAda = inv({ sender_id: CREATOR, recipient_email: 'ada@x.com', status: 'opened' })
     const teamSend = inv({ sender_id: 'user-team', recipient_email: 'eve@x.com', status: 'pending' })
     const rows = buildNetworkPeople({
@@ -268,8 +270,10 @@ describe('buildNetworkPeople', () => {
       users: [{ id: 'user-team', name: 'Tess', email: 'tess@x.com' }],
       creatorId: CREATOR,
     })
-    expect(rows.map((r) => r.email)).toEqual(['ada@x.com', 'eve@x.com', 'tess@x.com'])
-    const tess = rows[2]
+    // Eve and Tess share the teamSend timestamp (newer than Ada's invite);
+    // Ada sorts last. Ties keep insertion order.
+    expect(rows.map((r) => r.email)).toEqual(['eve@x.com', 'tess@x.com', 'ada@x.com'])
+    const tess = rows[1]
     expect(tess.hasAccount).toBe(true)
     expect(tess.stage).toBe('watched') // account holders display as watched (A2)
     expect(tess.ticketsGenerated).toBe(1)

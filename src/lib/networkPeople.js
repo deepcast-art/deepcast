@@ -12,8 +12,12 @@
  * A generated-but-unclaimed link (status 'created', no email yet) is an
  * outstanding TICKET row (kind 'ticket', keyed by invite id since no email
  * exists): first name, the claim link's slug for recovery, and nothing else.
- * Ticket rows sort to the top, newest first, so outstanding links are
- * immediately visible; person rows keep chain order below.
+ *
+ * SORT (Piece B, 2026-07-17 — supersedes A2's pin-to-top): ONE flat
+ * chronological list, newest first, every row ordered by invite creation
+ * time — ticket rows by their own invite, person rows by their first
+ * received invite, sender-only rows (team members) by their first sent
+ * invite. No grouping, no pinning.
  * The film's creator never gets a row (they are the graph root, not a member
  * of their own audience).
  *
@@ -99,6 +103,7 @@ export function buildNetworkPeople({ filmInvites, users, creatorId } = {}) {
         claimTickets: undefined, // tickets_remaining on their claimed row
         hasClaimRow: false,
         firstReceivedAt: null,
+        firstSentAt: null,
       })
     }
     return people.get(email)
@@ -117,9 +122,6 @@ export function buildNetworkPeople({ filmInvites, users, creatorId } = {}) {
       })
     }
   }
-  ticketRows.sort((a, b) =>
-    (b.createdAt || '') < (a.createdAt || '') ? -1 : (b.createdAt || '') > (a.createdAt || '') ? 1 : 0
-  )
 
   // 1) Recipients and claimants — one accumulator per email.
   for (const inv of invites) {
@@ -150,6 +152,8 @@ export function buildNetworkPeople({ filmInvites, users, creatorId } = {}) {
     p.userId = p.userId || senderId
     if (u?.name) p.userName = u.name
     else if (!p.userName && inv.sender_name) p.userName = inv.sender_name
+    const at = inv.created_at || null
+    if (at && (!p.firstSentAt || at < p.firstSentAt)) p.firstSentAt = at
   }
 
   // 3) Resolve accounts by email for people who only received.
@@ -192,6 +196,7 @@ export function buildNetworkPeople({ filmInvites, users, creatorId } = {}) {
     personRows.push({
       kind: 'person',
       email: p.email,
+      userId: p.userId || null,
       name: p.userName || p.inviteName || p.email.split('@')[0],
       hasAccount,
       stage: personStage({ hasAccount, receivedStatuses: p.receivedStatuses }),
@@ -201,19 +206,21 @@ export function buildNetworkPeople({ filmInvites, users, creatorId } = {}) {
       reach: computeUserReach(generated, childrenByParentId),
       receivedInviteIds: [...p.receivedInviteIds],
       firstReceivedAt: p.firstReceivedAt,
+      sortAt: p.firstReceivedAt || p.firstSentAt || null,
     })
   }
 
-  // Chain order (first invite received); senders with no received invite
-  // (team members) sort after, by name.
-  personRows.sort((a, b) => {
-    if (a.firstReceivedAt && b.firstReceivedAt) {
-      return a.firstReceivedAt < b.firstReceivedAt ? -1 : a.firstReceivedAt > b.firstReceivedAt ? 1 : 0
-    }
-    if (a.firstReceivedAt) return -1
-    if (b.firstReceivedAt) return 1
+  // ONE flat chronological list, newest first (Piece B): every row by its
+  // invite's creation time. Rows with no timestamp sort last, by name.
+  const rows = [
+    ...ticketRows.map((t) => ({ at: t.createdAt, name: t.name, row: t })),
+    ...personRows.map((p) => ({ at: p.sortAt, name: p.name, row: p })),
+  ]
+  rows.sort((a, b) => {
+    if (a.at && b.at) return a.at < b.at ? 1 : a.at > b.at ? -1 : 0
+    if (a.at) return -1
+    if (b.at) return 1
     return a.name.localeCompare(b.name)
   })
-
-  return [...ticketRows, ...personRows]
+  return rows.map((r) => r.row)
 }
