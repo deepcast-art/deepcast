@@ -49,9 +49,14 @@ export default function TicketControlsPopover({
   }, [onClose])
 
   if (!anchorRect) return null
+  // Open below the anchor, or flip above it when the viewport bottom is
+  // close — a fixed element below the fold can never be scrolled into view.
+  const spaceBelow = window.innerHeight - anchorRect.bottom
   const style = {
     position: 'fixed',
-    top: anchorRect.bottom + 6,
+    ...(spaceBelow < 220
+      ? { bottom: window.innerHeight - anchorRect.top + 6 }
+      : { top: anchorRect.bottom + 6 }),
     left: Math.max(8, Math.min(anchorRect.right - 232, window.innerWidth - 240)),
     width: 232,
     zIndex: 40,

@@ -153,6 +153,22 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  // Delete-with-splice (Piece C): preview = {filmId, email} or {filmId, inviteId};
+  // execute additionally carries confirmEmail (person targets).
+  adminDeletePreview: (payload, accessToken) =>
+    request('/admin/delete-person/preview', {
+      method: 'POST',
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      body: JSON.stringify(payload),
+    }),
+
+  adminDeleteExecute: (payload, accessToken) =>
+    request('/admin/delete-person', {
+      method: 'POST',
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      body: JSON.stringify(payload),
+    }),
+
   sendSignInLink: (email, appUrl = null, redirectPath = '/dashboard') =>
     request('/auth/signin-link', {
       method: 'POST',

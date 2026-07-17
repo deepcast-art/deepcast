@@ -142,14 +142,20 @@ export function buildNetworkPeople({ filmInvites, users, creatorId } = {}) {
     if (at && (!p.firstReceivedAt || at < p.firstReceivedAt)) p.firstReceivedAt = at
   }
 
-  // 2) Non-creator senders — covers team members who never received an invite.
+  // 2) Non-creator senders — covers team members who never received an
+  // invite. A sender may only CREATE a row when their users row is actually
+  // present (team members' are; a DELETED person's is not — their surviving
+  // children's sender fields must never resurrect them as a ghost row).
+  // Senders who already have a row (recipients/claimants) are enriched
+  // either way.
   for (const inv of invites) {
     const senderId = inv?.sender_id != null ? String(inv.sender_id) : ''
     if (!senderId || senderId === creatorKey) continue
     const u = userById.get(senderId)
     const email = normEmail(u?.email) || normEmail(inv.sender_email)
     if (!email) continue
-    const p = ensurePerson(email)
+    const p = people.get(email) || (u ? ensurePerson(email) : null)
+    if (!p) continue
     p.userId = p.userId || senderId
     if (u?.name) p.userName = u.name
     else if (!p.userName && inv.sender_name) p.userName = inv.sender_name

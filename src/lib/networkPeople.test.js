@@ -279,6 +279,24 @@ describe('buildNetworkPeople', () => {
     expect(tess.ticketsGenerated).toBe(1)
   })
 
+  it('a deleted sender never resurrects from their surviving children’s sender fields', () => {
+    // Jane was deleted with splice: her claim row is gone, but John's
+    // surviving invite still names her as sender. No users row for her →
+    // no ghost row.
+    const johnSurvivor = inv({
+      sender_id: 'user-jane',
+      sender_name: 'Jane',
+      sender_email: 'jane@x.com',
+      recipient_name: 'John',
+      claimed_email: 'john@x.com',
+      claimed_by: 'user-john',
+      status: 'claimed',
+      parent_invite_id: null,
+    })
+    const rows = buildNetworkPeople({ filmInvites: [johnSurvivor], users: [], creatorId: CREATOR })
+    expect(rows.map((r) => r.email)).toEqual(['john@x.com'])
+  })
+
   it('merges multiple invites to the same email into one row at the highest stage', () => {
     const first = inv({ recipient_email: 'ada@x.com', status: 'opened' })
     const second = inv({ recipient_email: 'ada@x.com', status: 'watched' })

@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import CreatorLinkPanel from '../components/CreatorLinkPanel'
 import TicketControlsPopover from '../components/TicketControlsPopover'
+import RemovePersonPopover from '../components/RemovePersonPopover'
 import DeepcastLogo from '../components/DeepcastLogo'
 import MvpVersionLabel from '../components/MvpVersionLabel'
 import NetworkGraph from '../components/NetworkGraph'
@@ -222,6 +223,8 @@ export default function Dashboard() {
   const [ticketStatuses, setTicketStatuses] = useState({})
   /** Which person's popover is open: { userId, rect } (fixed-position anchor). */
   const [controlsOpenFor, setControlsOpenFor] = useState(null)
+  /** Delete-with-splice confirm surface: { key, rect, filmId, target }. */
+  const [removeOpenFor, setRemoveOpenFor] = useState(null)
   const [controlsBusy, setControlsBusy] = useState(false)
   const [controlsError, setControlsError] = useState('')
   const [editingName, setEditingName] = useState(false)
@@ -1867,6 +1870,39 @@ export default function Dashboard() {
                             </thead>
                             <tbody>
                               {people.map((row) => {
+                                /* Quiet delete-with-splice affordance (Piece C):
+                                   muted until hover, opens the server-preview
+                                   confirm surface. */
+                                const removeAffordance = (key, target) => (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        const rect = e.currentTarget.getBoundingClientRect()
+                                        setRemoveOpenFor((open) =>
+                                          open?.key === key
+                                            ? null
+                                            : { key, rect, filmId: film.id, target }
+                                        )
+                                      }}
+                                      className="ml-2 cursor-pointer text-[9px] uppercase tracking-wider text-text-muted/40 transition-colors hover:text-error"
+                                    >
+                                      Remove
+                                    </button>
+                                    {removeOpenFor?.key === key && (
+                                      <RemovePersonPopover
+                                        anchorRect={removeOpenFor.rect}
+                                        filmId={removeOpenFor.filmId}
+                                        target={removeOpenFor.target}
+                                        onDeleted={() => {
+                                          setRemoveOpenFor(null)
+                                          loadDashboard()
+                                        }}
+                                        onClose={() => setRemoveOpenFor(null)}
+                                      />
+                                    )}
+                                  </>
+                                )
                                 if (row.kind === 'ticket') {
                                   /* Outstanding link: recoverable from the table.
                                      Same copy interaction as the link panel. */
@@ -1905,7 +1941,14 @@ export default function Dashboard() {
                                       <td className="py-2 pr-4">{dash}</td>
                                       <td className="py-2 pr-4">{dash}</td>
                                       <td className="py-2 pr-4">{dash}</td>
-                                      <td className="py-2">{dash}</td>
+                                      <td className="py-2">
+                                        {dash}
+                                        {removeAffordance(`ticket-${row.id}`, {
+                                          kind: 'ticket',
+                                          inviteId: row.id,
+                                          name: row.name,
+                                        })}
+                                      </td>
                                     </tr>
                                   )
                                 }
@@ -2002,6 +2045,11 @@ export default function Dashboard() {
                                           </>
                                         )
                                       })()}
+                                      {removeAffordance(`person-${email}`, {
+                                        kind: 'person',
+                                        email,
+                                        name: person.name,
+                                      })}
                                     </td>
                                   </tr>
                                 )
