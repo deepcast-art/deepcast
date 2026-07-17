@@ -14,11 +14,14 @@
  *     account or any real production user — see PROTECTED_EMAILS).
  *   - Reads (never modifies/deletes) the filmmaker account and the film row.
  *   - Aborts if a NON-target invite depends on a target invite (so it never touches other data).
- *   - --dry-run prints exactly what it WOULD delete/create and changes nothing.
+ *   - DRY-RUN BY DEFAULT (destructive-data doctrine, aligned 2026-07-17):
+ *     without --execute it prints exactly what it WOULD delete/create and
+ *     changes nothing; --execute additionally requires typing the
+ *     confirmation phrase.
  *
  * Usage:
- *   node server/reset-test-data.js --dry-run     # preview, no writes
- *   node server/reset-test-data.js               # execute
+ *   node server/reset-test-data.js               # preview, no writes (default)
+ *   node server/reset-test-data.js --execute     # apply, after typed confirmation
  *
  * Requires SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in the environment (.env is loaded).
  */
@@ -43,7 +46,10 @@ const FILM_TITLE = 'The New Narrative'
 // Informational only — invite links never expire in the MVP (see server/inviteValidation.js).
 const INVITE_EXPIRY_DAYS = 3650
 
-const DRY_RUN = process.argv.includes('--dry-run')
+// Dry-run by default; writing requires the explicit flag AND the typed phrase.
+// (--dry-run is still accepted for muscle memory; it simply matches the default.)
+const DRY_RUN = !process.argv.includes('--execute')
+const CONFIRM_PHRASE = 'RESET TEST DATA'
 const BASE_URL = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '')
 const PROD_BASE_URL = 'https://deepcast.art'
 
@@ -106,6 +112,17 @@ async function main() {
   // Allowlist sanity: never allow a protected email through.
   for (const e of TARGET_EMAILS) {
     if (PROTECTED_EMAILS.includes(e)) fail(`Allowlist contains a protected email (${e}). Aborting.`)
+  }
+
+  // LIVE runs must be typed-confirmed by the owner (destructive-data doctrine).
+  if (!DRY_RUN) {
+    const readline = await import('readline')
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+    const answer = await new Promise((resolve) =>
+      rl.question(`\nType "${CONFIRM_PHRASE}" to delete and recreate the test data above: `, resolve)
+    )
+    rl.close()
+    if (answer.trim() !== CONFIRM_PHRASE) fail('Confirmation phrase did not match.')
   }
 
   const url = process.env.SUPABASE_URL
