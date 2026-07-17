@@ -14,9 +14,14 @@ const inv = (over = {}) => ({
   recipient_email: null,
   claimed_email: null,
   parent_invite_id: null,
+  tickets_remaining: null,
+  link_slug: null,
   created_at: `2026-07-${String(seq).padStart(2, '0')}T00:00:00Z`,
   ...over,
 })
+
+const persons = (rows) => rows.filter((r) => r.kind === 'person')
+const tickets = (rows) => rows.filter((r) => r.kind === 'ticket')
 
 describe('inviteRecipientEmail', () => {
   it('prefers the claim email, falls back to the legacy address, else empty', () => {
@@ -32,7 +37,7 @@ describe('buildNetworkPeople', () => {
     expect(buildNetworkPeople({ filmInvites: [], users: [], creatorId: CREATOR })).toEqual([])
   })
 
-  it('legacy chain: account holder counts sends by sender_id; recipient stages map to ticket language', () => {
+  it('legacy chain: account holder counts sends by sender_id; three-status display mapping', () => {
     const toAda = inv({
       sender_id: CREATOR,
       recipient_name: 'Ada',
@@ -56,15 +61,23 @@ describe('buildNetworkPeople', () => {
     const ada = rows[0]
     expect(ada.name).toBe('Ada Lovelace') // users row wins over recipient_name
     expect(ada.hasAccount).toBe(true)
-    expect(ada.stage).toBe('signed_up')
+    expect(ada.stage).toBe('watched') // account holders display as watched (A2)
     expect(ada.ticketsGenerated).toBe(1)
     expect(ada.ticketsClaimed).toBe(1) // legacy opened = claimed stage
+    expect(ada.claimTicketsLeft).toBe(null) // allocation lives on users, not here
     expect(ada.reach).toBe(1) // opened counts toward reach
 
     const ben = rows[1]
     expect(ben.hasAccount).toBe(false)
     expect(ben.stage).toBe('claimed') // legacy opened maps to the claimed stage
     expect(ben.ticketsGenerated).toBe(0)
+  })
+
+  it('legacy pending recipients display as unclaimed (A2 three-status mapping)', () => {
+    const toEve = inv({ sender_id: CREATOR, recipient_email: 'eve@x.com', status: 'pending' })
+    const [eve] = buildNetworkPeople({ filmInvites: [toEve], users: [], creatorId: CREATOR })
+    expect(eve.stage).toBe('unclaimed')
+    expect(eve.claimTicketsLeft).toBe(null)
   })
 
   it('a send matching both sender_id and the parent pointer is counted once', () => {
@@ -75,21 +88,23 @@ describe('buildNetworkPeople', () => {
       status: 'pending',
       parent_invite_id: toAda.id, // both back-links present
     })
-    const [ada] = buildNetworkPeople({
+    const rows = buildNetworkPeople({
       filmInvites: [toAda, adaSend],
       users: [{ id: 'user-ada', name: 'Ada', email: 'ada@x.com' }],
       creatorId: CREATOR,
     })
+    const ada = persons(rows)[0]
     expect(ada.email).toBe('ada@x.com')
     expect(ada.ticketsGenerated).toBe(1)
   })
 
-  it('accountless claimant: identity is the claimed invite; sends link back only via parent_invite_id', () => {
+  it('accountless claimant: identity is the claimed invite; tickets left comes from tickets_remaining', () => {
     const claraClaim = inv({
       sender_id: CREATOR,
       recipient_name: 'Clara',
       claimed_email: 'clara@x.com',
       status: 'claimed',
+      tickets_remaining: 4,
     })
     const unclaimedTicket = inv({
       sender_id: null, // accountless generation — no users row
@@ -97,6 +112,7 @@ describe('buildNetworkPeople', () => {
       sender_email: 'clara@x.com',
       recipient_name: 'Dan',
       status: 'created',
+      link_slug: 'dan-x4k2',
       parent_invite_id: claraClaim.id,
     })
     const rows = buildNetworkPeople({
@@ -104,19 +120,43 @@ describe('buildNetworkPeople', () => {
       users: [],
       creatorId: CREATOR,
     })
-    // Dan has no email yet — a ticket, not a person row.
-    expect(rows.map((r) => r.email)).toEqual(['clara@x.com'])
 
-    const clara = rows[0]
+    // Dan is an outstanding-ticket row at the top, keyed by invite id.
+    expect(rows[0]).toMatchObject({
+      kind: 'ticket',
+      id: unclaimedTicket.id,
+      name: 'Dan',
+      slug: 'dan-x4k2',
+    })
+
+    const clara = persons(rows)[0]
     expect(clara.name).toBe('Clara')
     expect(clara.hasAccount).toBe(false)
     expect(clara.stage).toBe('claimed')
     expect(clara.ticketsGenerated).toBe(1)
     expect(clara.ticketsClaimed).toBe(0)
+    expect(clara.claimTicketsLeft).toBe(4)
     expect(clara.reach).toBe(0)
   })
 
-  it('once the recipient claims, they become a row and the sharer’s claimed count moves', () => {
+  it('a pre-migration claimant (tickets_remaining NULL) reads as the full grant', () => {
+    const claim = inv({ claimed_email: 'clara@x.com', status: 'claimed', tickets_remaining: null })
+    const [clara] = buildNetworkPeople({ filmInvites: [claim], users: [], creatorId: CREATOR })
+    expect(clara.claimTicketsLeft).toBe(5)
+  })
+
+  it('outstanding tickets sort to the top, newest first, above person rows', () => {
+    const toAda = inv({ sender_id: CREATOR, recipient_email: 'ada@x.com', status: 'opened' })
+    const olderTicket = inv({ recipient_name: 'Old', status: 'created', link_slug: 'old-1111' })
+    const newerTicket = inv({ recipient_name: 'New', status: 'created', link_slug: 'new-2222' })
+    const rows = buildNetworkPeople({ filmInvites: [toAda, olderTicket, newerTicket], users: [], creatorId: CREATOR })
+    expect(rows.map((r) => r.name)).toEqual(['New', 'Old', 'ada'])
+    expect(rows[0].kind).toBe('ticket')
+    expect(rows[1].kind).toBe('ticket')
+    expect(rows[2].kind).toBe('person')
+  })
+
+  it('once the recipient claims, the ticket row becomes a person row and the sharer’s claimed count moves', () => {
     const claraClaim = inv({ claimed_email: 'clara@x.com', recipient_name: 'Clara', status: 'claimed' })
     const danClaim = inv({
       sender_name: 'Clara',
@@ -126,6 +166,7 @@ describe('buildNetworkPeople', () => {
       parent_invite_id: claraClaim.id,
     })
     const rows = buildNetworkPeople({ filmInvites: [claraClaim, danClaim], users: [], creatorId: CREATOR })
+    expect(tickets(rows)).toHaveLength(0)
     expect(rows.map((r) => r.email)).toEqual(['clara@x.com', 'dan@x.com'])
     const clara = rows[0]
     expect(clara.ticketsGenerated).toBe(1)
@@ -148,12 +189,12 @@ describe('buildNetworkPeople', () => {
       status: 'watched',
       parent_invite_id: adaToBen.id,
     })
-    const [ada] = buildNetworkPeople({
+    const rows = buildNetworkPeople({
       filmInvites: [toAda, adaToBen, benToCy],
       users: [{ id: 'user-ada', name: 'Ada', email: 'ada@x.com' }],
       creatorId: CREATOR,
     })
-    expect(ada.reach).toBe(2) // Ben + Cy
+    expect(persons(rows)[0].reach).toBe(2) // Ben + Cy
   })
 
   it('the creator never gets a row', () => {
@@ -177,7 +218,7 @@ describe('buildNetworkPeople', () => {
     expect(rows.map((r) => r.email)).toEqual(['ada@x.com', 'eve@x.com', 'tess@x.com'])
     const tess = rows[2]
     expect(tess.hasAccount).toBe(true)
-    expect(tess.stage).toBe('signed_up')
+    expect(tess.stage).toBe('watched') // account holders display as watched (A2)
     expect(tess.ticketsGenerated).toBe(1)
   })
 

@@ -10,36 +10,35 @@ const inv = (status) => ({ id: Math.random().toString(36), status })
 
 describe('computeTicketFunnel', () => {
   it('returns zeros for an empty or missing list', () => {
-    expect(computeTicketFunnel([])).toEqual({ generated: 0, claimed: 0, watched: 0, signedUp: 0 })
-    expect(computeTicketFunnel(null)).toEqual({ generated: 0, claimed: 0, watched: 0, signedUp: 0 })
+    expect(computeTicketFunnel([])).toEqual({ generated: 0, claimed: 0, watched: 0 })
+    expect(computeTicketFunnel(null)).toEqual({ generated: 0, claimed: 0, watched: 0 })
   })
 
-  it('counts cumulative stages across claim-link and legacy statuses', () => {
+  it('counts the three cumulative stages across claim-link and legacy statuses', () => {
     const invites = [
       inv('created'), // link generated, not yet claimed
       inv('pending'), // legacy email sent, not yet opened
       inv('claimed'), // claim-link accepted
       inv('opened'), // legacy opened = claimed stage (approved 2026-07-17)
       inv('watched'),
-      inv('signed_up'),
+      inv('signed_up'), // legacy signed_up still counts inside watched (A2)
     ]
     expect(computeTicketFunnel(invites)).toEqual({
       generated: 6,
       claimed: 4, // claimed + opened + watched + signed_up
       watched: 2, // watched + signed_up
-      signedUp: 1,
     })
   })
 
   it('keeps the funnel monotonic (each stage ≤ the one before)', () => {
-    const { generated, claimed, watched, signedUp } = computeTicketFunnel([
+    const { generated, claimed, watched } = computeTicketFunnel([
       inv('created'),
       inv('claimed'),
       inv('opened'),
       inv('watched'),
       inv('signed_up'),
     ])
-    expect(generated >= claimed && claimed >= watched && watched >= signedUp).toBe(true)
+    expect(generated >= claimed && claimed >= watched).toBe(true)
   })
 
   it('counts unknown statuses only under generated', () => {
@@ -47,7 +46,6 @@ describe('computeTicketFunnel', () => {
       generated: 2,
       claimed: 0,
       watched: 0,
-      signedUp: 0,
     })
   })
 })

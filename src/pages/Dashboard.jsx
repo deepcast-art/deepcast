@@ -147,6 +147,7 @@ export default function Dashboard() {
   const [inviteTree, setInviteTree] = useState({})
   const [loading, setLoading] = useState(() => !profileLoaded || Boolean(readClaimStash()))
   const [inviteFilmId, setInviteFilmId] = useState(null)
+  const [copiedTicketId, setCopiedTicketId] = useState(null)
   const [filmInvitesRaw, setFilmInvitesRaw] = useState({})
   // The users rows already loaded for the films' senders — the admin table
   // resolves names/accounts from these (no extra queries).
@@ -1730,12 +1731,11 @@ export default function Dashboard() {
                     </div>
                   )}
 
-                  <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <div className="mb-6 grid grid-cols-3 gap-4">
                     {[
                       { label: 'Tickets generated', value: stats.generated || 0 },
                       { label: 'Claimed', value: stats.claimed || 0 },
                       { label: 'Watched', value: stats.watched || 0 },
-                      { label: 'Signed up', value: stats.signedUp || 0 },
                     ].map((stat) => (
                       <div key={stat.label} className="text-center">
                         <p className="text-xl font-light text-accent">{stat.value}</p>
@@ -1800,25 +1800,26 @@ export default function Dashboard() {
                       creatorId: profile.id,
                     })
                     if (!people.length) return null
+                    /* Exactly three display statuses (founder-approved A2). */
                     const stageLabel = {
-                      signed_up: 'Signed up',
                       watched: 'Watched',
                       claimed: 'Claimed',
-                      invited: 'Invited',
+                      unclaimed: 'Unclaimed',
                     }
                     const stageClass = {
-                      signed_up: 'text-success',
                       watched: 'text-success',
                       claimed: 'text-accent',
-                      invited: '',
+                      unclaimed: '',
                     }
+                    const teamMemberIdSet = new Set(teamMembers.map((m) => String(m.id)))
+                    const dash = <span className="text-text-muted/50">&mdash;</span>
                     return (
                       <div>
                         <p className="mb-3 text-xs uppercase tracking-wider text-text-muted">
                           People in this network
                         </p>
                         <div className="overflow-x-auto">
-                          <table className="w-full min-w-[680px] text-left text-xs text-text-muted">
+                          <table className="w-full min-w-[760px] text-left text-xs text-text-muted">
                             <thead>
                               <tr className="border-b border-border text-[10px] uppercase tracking-wider">
                                 <th className="py-2 pr-4 font-medium">Name</th>
@@ -1826,12 +1827,56 @@ export default function Dashboard() {
                                 <th className="py-2 pr-4 font-medium">Status</th>
                                 <th className="py-2 pr-4 font-medium">Tickets generated</th>
                                 <th className="py-2 pr-4 font-medium">Claimed</th>
+                                <th className="py-2 pr-4 font-medium">Tickets left</th>
                                 <th className="py-2 pr-4 font-medium">Reach</th>
                                 <th className="py-2 font-medium">Ticket controls</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {people.map((person) => {
+                              {people.map((row) => {
+                                if (row.kind === 'ticket') {
+                                  /* Outstanding link: recoverable from the table.
+                                     Same copy interaction as the link panel. */
+                                  const url = row.slug
+                                    ? `${window.location.origin}/${row.slug}`
+                                    : null
+                                  return (
+                                    <tr key={row.id} className="border-b border-border/60 last:border-b-0">
+                                      <td className="py-2 pr-4 text-text">
+                                        {row.name}
+                                        {url && (
+                                          <span className="mt-1 flex flex-wrap items-center gap-2">
+                                            <span className="break-all text-[11px] text-text-muted">{url}</span>
+                                            <button
+                                              type="button"
+                                              onClick={async () => {
+                                                try {
+                                                  await navigator.clipboard.writeText(
+                                                    `I watched this and thought of you — ${url}`
+                                                  )
+                                                  setCopiedTicketId(row.id)
+                                                } catch {
+                                                  setCopiedTicketId(null)
+                                                }
+                                              }}
+                                              className="cursor-pointer rounded-none border border-border px-2 py-0.5 text-[9px] uppercase tracking-wider text-text-muted transition-colors hover:border-text-muted hover:text-text"
+                                            >
+                                              {copiedTicketId === row.id ? 'Copied' : 'Copy the message'}
+                                            </button>
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="py-2 pr-4">{dash}</td>
+                                      <td className="py-2 pr-4 uppercase tracking-wider">Unclaimed</td>
+                                      <td className="py-2 pr-4">{dash}</td>
+                                      <td className="py-2 pr-4">{dash}</td>
+                                      <td className="py-2 pr-4">{dash}</td>
+                                      <td className="py-2 pr-4">{dash}</td>
+                                      <td className="py-2">{dash}</td>
+                                    </tr>
+                                  )
+                                }
+                                const person = row
                                 const email = person.email
                                 const status = unlimitedStatuses[email]
                                 return (
@@ -1845,6 +1890,15 @@ export default function Dashboard() {
                                     </td>
                                     <td className="py-2 pr-4">{person.ticketsGenerated}</td>
                                     <td className="py-2 pr-4">{person.ticketsClaimed}</td>
+                                    <td className="py-2 pr-4">
+                                      {person.claimTicketsLeft != null
+                                        ? /* accountless claimant — balance on their claimed row */
+                                          person.claimTicketsLeft
+                                        : status?.unlimited || teamMemberIdSet.has(String(person.userId ?? ''))
+                                          ? '∞'
+                                          : /* account holders' allocation isn't in this page's data */
+                                            dash}
+                                    </td>
                                     <td className="py-2 pr-4">{person.reach}</td>
                                     <td className="py-2">
                                       {(() => {
