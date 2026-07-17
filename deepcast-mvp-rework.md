@@ -81,12 +81,12 @@ Tracker for the invite/share overhaul. Work top to bottom within each phase; Pha
   ~~Plainspoken, warm, brief. No ceremony, no manifesto. Philosophy is discovered through the films, not announced.~~
   There is NO welcome beat on the claim path at all — claiming routes DIRECTLY to the watch page. The full-graph payoff lives on the dashboard (existing Dashboard.jsx adapted for claimed-invite identity), reached via "See where your ticket went →" after generating a link, plus a persistent quiet link on the watch page. Viewer's own path highlighted amber, including branches they created; frozen `claim_ordinal` line; tickets language; name-edit/sign-out/About hidden for accountless claimants. The interim post-claim reveal beat (built earlier the same day) is retired from the codebase.
 
-- [ ] **D4. Clean test/seed accounts from the production graph before the graph-reveal welcome ships** — the wide shot only works if the network looks real.
+- [x] **D4. Clean test/seed accounts from the production graph before the graph-reveal welcome ships** *(done 2026-07-16 — executed with owner approval; test nodes removed, 49 ghosts + Jon Bregel + filmmaker rows intact; deleted rows backed up to `~/deepcast-backups/2026-07-16-d4/`)* — the wide shot only works if the network looks real.
 
 - [x] **D2. First-touch copy audit** *(done 2026-07-16 — the copy layer is closed; all live strings founder-approved verbatim; future changes come as explicit one-line requests)*
   Landing page + all claim-flow copy: exclusivity framed as gift-from-a-friend, not institution-granting-access. Kill anything that "announces the sacred."
 
-- [ ] **D3. Update CLAUDE.md**
+- [x] **D3. Update CLAUDE.md** *(done 2026-07-16 — rewritten for the claim-link era, committed as `b6841ef`)*
   Rewrite the invite-flow sections to reflect the new design: link-based claim flow, first-name-only, email demoted to post-claim. Remove/revise the "last name required on every send path" rule. Stale conventions get faithfully rebuilt by future sessions — this doc is load-bearing.
 
 ---
