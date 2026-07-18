@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { Fragment, useEffect, useState } from 'react'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import DeepcastLogo from '../components/DeepcastLogo'
-import { buildLineageThread } from '../lib/lineageThread'
+import { buildLineageChain } from '../lib/lineageThread'
 import { saveClaimStash, readClaimStash, isClaimOwner } from '../lib/claimStash'
 
 /** The wordmark variant sizes via its `size` prop (a text-* class), NOT via
@@ -93,35 +93,119 @@ function StateShell({ children }) {
   )
 }
 
-/** The lineage thread — the whisper of the network idea: a quiet one-line
- *  chain of first names inside the letter, never a feature block. */
-function LineageThread({ names }) {
-  const items = buildLineageThread(names)
+/** Collapse thresholds (fixed counts, decided 2026-07-18): the full chain
+ *  shows up to 5 names on wide screens, 3 on phones; past that the middle
+ *  folds into a tappable "⋯ N others ⋯" that expands in place. The 640px
+ *  breakpoint only picks WHICH fixed threshold applies — nothing measures
+ *  what fits. Mobile started at 4 per spec, but a measured full 4-name
+ *  vertical chain overflowed 390×844 by ~69px even with tightened gaps, so
+ *  it dropped to 3 per the agreed fallback (2026-07-18). */
+const CHAIN_THRESHOLD_WIDE = 5
+const CHAIN_THRESHOLD_NARROW = 3
+const CHAIN_MEDIA_QUERY = '(min-width: 640px)'
+
+/** The lineage chain — the network idea at a whisper: first names joined by
+ *  arrows (→ on wide screens, ↓ stacked on phones), the film's creator
+ *  first with a small "filmmaker" caption, ending in "you". */
+function LineageChain({ names }) {
+  const [expanded, setExpanded] = useState(false)
+  const [wide, setWide] = useState(() => window.matchMedia(CHAIN_MEDIA_QUERY).matches)
+
+  useEffect(() => {
+    const mq = window.matchMedia(CHAIN_MEDIA_QUERY)
+    const onChange = (e) => setWide(e.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+
+  const items = buildLineageChain(names, {
+    collapseAfter: wide ? CHAIN_THRESHOLD_WIDE : CHAIN_THRESHOLD_NARROW,
+    expanded,
+  })
   if (!items.length) return null
+
   return (
-    <>
-      {/* The one line of context a first-time invitee needs — nothing more. */}
-      <p className="mt-6 font-sans text-[10px] uppercase tracking-[0.22em] text-warm/45">
+    <div className="mt-[clamp(1.25rem,3svh,2rem)]">
+      <span className="block font-sans text-[10px] uppercase tracking-[0.3em] text-muted">
         How this reached you
-      </p>
-      <p className="mt-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 font-sans text-[10px] uppercase tracking-[0.22em] text-warm/60">
-      {items.map((item, i) => (
-        <span key={i} className="flex items-center gap-x-2">
-          {i > 0 && <span aria-hidden className="text-warm/30">——</span>}
-          {item.type === 'collapsed' ? (
-            <span className="normal-case italic tracking-normal text-warm/50">
-              ⋯ {item.count} hands ⋯
-            </span>
-          ) : item.type === 'you' ? (
-            <span className="text-accent/90">you</span>
-          ) : (
-            <span>{item.label}</span>
-          )}
-        </span>
-      ))}
-      </p>
-    </>
+      </span>
+      <div
+        className={`mt-3 flex items-center justify-center font-sans text-[0.8125rem] uppercase leading-none tracking-[0.2em] text-accent ${
+          wide ? 'flex-row flex-wrap gap-x-[1.125rem] gap-y-5' : 'flex-col gap-1.5'
+        }`}
+      >
+        {items.map((item, i) => (
+          <Fragment key={i}>
+            {i > 0 && (
+              <span aria-hidden className="font-light tracking-normal text-accent/65">
+                {wide ? '→' : '↓'}
+              </span>
+            )}
+            {item.type === 'collapsed' ? (
+              /* Expanding may push content below the fold — acceptable only
+                 after this deliberate tap, never in the default state. */
+              <button
+                type="button"
+                onClick={() => setExpanded(true)}
+                className="cursor-pointer border-none bg-transparent p-0 font-sans text-[0.8125rem] uppercase tracking-[0.2em] text-muted transition-colors hover:text-warm focus-visible:text-warm focus-visible:outline-none"
+                aria-label={`Show all ${item.count} people this film passed through`}
+              >
+                ⋯ {item.count} others ⋯
+              </button>
+            ) : item.type === 'you' ? (
+              <span className="text-paper/90">you</span>
+            ) : item.filmmaker ? (
+              /* Horizontal rows: the caption hangs below (absolute) so the
+                 name stays on the row's shared baseline. Vertical stacks:
+                 in-flow, so the ↓ beneath moves down to make room. */
+              wide ? (
+                <span className="relative inline-block">
+                  <span>{item.label}</span>
+                  <span
+                    aria-hidden
+                    className="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap text-[0.5625rem] tracking-[0.3em] text-muted"
+                  >
+                    filmmaker
+                  </span>
+                </span>
+              ) : (
+                <span className="inline-flex flex-col items-center gap-1">
+                  <span>{item.label}</span>
+                  <span aria-hidden className="text-[0.5625rem] tracking-[0.3em] text-muted">
+                    filmmaker
+                  </span>
+                </span>
+              )
+            ) : (
+              <span>{item.label}</span>
+            )}
+          </Fragment>
+        ))}
+      </div>
+    </div>
   )
+}
+
+/** DEV-ONLY long-chain preview: open any unclaimed slug with
+ *  `?previewChain=12` on localhost to see the collapsed chain and the
+ *  tap-to-expand with 12 stand-in names. Display-only — nothing is written
+ *  anywhere. The entire branch is gated on import.meta.env.DEV, which a
+ *  production build replaces with a literal `false`, so this code does not
+ *  exist in the deployed bundle; the localhost check is belt and braces. */
+const PREVIEW_NAMES = [
+  'Ien', 'Alex', 'Mina', 'Jordan', 'Sofia', 'Marcus', 'Elena', 'Noah',
+  'Priya', 'Tomas', 'Grace', 'Leo', 'Amara', 'Felix', 'Nina', 'Oscar',
+]
+function devPreviewChain(searchParams) {
+  if (!import.meta.env.DEV) return null
+  if (!['localhost', '127.0.0.1'].includes(window.location.hostname)) return null
+  const n = parseInt(searchParams.get('previewChain') || '', 10)
+  if (!Number.isFinite(n) || n < 1) return null
+  const count = Math.min(n, 50)
+  return Array.from({ length: count }, (_, i) => {
+    const cycle = Math.floor(i / PREVIEW_NAMES.length)
+    return PREVIEW_NAMES[i % PREVIEW_NAMES.length] + (cycle > 0 ? String(cycle + 1) : '')
+  })
 }
 
 /**
@@ -142,6 +226,7 @@ export default function ClaimLanding() {
   const { slug } = useParams()
   const navigate = useNavigate()
   const { session } = useAuth()
+  const [searchParams] = useSearchParams()
   const [state, setState] = useState({ phase: 'loading', invite: null })
   const [email, setEmail] = useState('')
   const [claimBusy, setClaimBusy] = useState(false)
@@ -238,6 +323,7 @@ export default function ClaimLanding() {
 
   const { inviteeFirstName, sharerName, filmTitle, transmissionHook, lineageNames, posterUrl } =
     state.invite || {}
+  const chainNames = devPreviewChain(searchParams) ?? lineageNames
   const hook = (transmissionHook || '').trim()
   const firstName = (inviteeFirstName || '').trim() || 'friend'
   // First word only, on this page only — legacy accounts may store full names
@@ -267,26 +353,26 @@ export default function ClaimLanding() {
         <DeepcastLogo variant="wordmark" size="text-2xl" className="text-warm opacity-90" />
       </header>
 
-      <main className="relative z-10 mx-auto flex min-h-svh w-full max-w-2xl flex-col items-center justify-center px-6 pb-[max(clamp(2rem,5svh,4rem),env(safe-area-inset-bottom,0px))] pt-[clamp(4.75rem,9svh,7rem)] text-center">
+      <main className="relative z-10 mx-auto flex min-h-svh w-full max-w-2xl flex-col items-center justify-center px-6 pb-[max(clamp(1.5rem,3.5svh,4rem),env(safe-area-inset-bottom,0px))] pt-[clamp(4.5rem,8svh,7rem)] text-center">
         {/* 1. Greeting — the letter's opening, kept as the page heading. */}
         <h1 className="font-sans text-xs font-normal uppercase tracking-[0.32em] text-accent dc-rise dc-rise-2">
           Dear {firstName},
         </h1>
 
         {/* 2. Sharer line — one clean italic line in the brand serif. */}
-        <p className="mt-4 max-w-[15em] font-serif-v3 text-[clamp(2.125rem,5.5vw,3.25rem)] leading-[1.16] dc-rise dc-rise-2">
+        <p className="mt-3 max-w-[15em] font-serif-v3 text-[clamp(2.125rem,5.5vw,3.25rem)] leading-[1.16] dc-rise dc-rise-2">
           <strong className="font-semibold">{sharer}</strong> watched this and thought of you.
         </p>
 
-        {/* 3. Lineage thread — the whisper. */}
+        {/* 3. Lineage chain — the whisper. */}
         <div className="dc-rise dc-rise-3">
-          <LineageThread names={lineageNames} />
+          <LineageChain names={chainNames} />
         </div>
 
-        <LetterDivider className="mt-[clamp(1.75rem,4.5svh,3.25rem)] dc-rise dc-rise-3" />
+        <LetterDivider className="mt-[clamp(1.75rem,3.5svh,3.25rem)] dc-rise dc-rise-3" />
 
         {/* 4. Film title + 5. transmission hook (per-film data; nothing when NULL) */}
-        <div className="mt-[clamp(1.5rem,4svh,2.75rem)] w-full">
+        <div className="mt-[clamp(1.5rem,3.5svh,2.75rem)] w-full">
           <h2 className="font-serif-v3 text-[clamp(1.75rem,4vw,2.375rem)] leading-tight dc-rise dc-rise-4">
             {filmTitle || 'a film'}
           </h2>
@@ -298,7 +384,7 @@ export default function ClaimLanding() {
         </div>
 
         {/* 6. Inline email + CTA — visible immediately, no click-to-reveal. */}
-        <div className="mt-[clamp(2rem,5.5svh,3.75rem)] w-full max-w-[26rem] dc-rise dc-rise-6">
+        <div className="mt-[clamp(2rem,5svh,3.75rem)] w-full max-w-[26rem] dc-rise dc-rise-6">
           {sharerView ? (
             <p className="font-serif-v3 text-sm italic text-warm/60">
               This invitation is waiting for {firstName} — it can’t be accepted by the person
