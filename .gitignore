@@ -42,3 +42,6 @@ dist-ssr
 playwright-report/
 test-results/
 blob-report/
+
+# Design reference mockups (local only)
+design-refs/
