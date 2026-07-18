@@ -8,7 +8,7 @@ import crypto from 'crypto'
 import { buildGraphLayout } from '../src/lib/graphLayout.js'
 import { createEmailDispatcher } from './emailDelivery.js'
 import { isInviteUsable } from './inviteValidation.js'
-import { CREATOR_SHARE_BLOCK_REASON, isShareToFilmCreator } from './shareRules.js'
+import { CREATOR_SHARE_BLOCK_REASON, isShareToFilmCreator, isSenderFilmCreator } from './shareRules.js'
 import { adminAuthDecision, ticketControlTargetDecision } from './adminAuth.js'
 import {
   deletePersonTargetDecision,
@@ -1173,6 +1173,14 @@ app.get('/api/invites/link/:slug', async (req, res) => {
       status: invite.status,
       inviteOrdinal,
       lineageNames,
+      // Id-truth for the chain's originator==sender collapse (2026-07-19):
+      // true only when the direct sharer's ACCOUNT is the film's creator.
+      // The frontend collapses a two-entry chain on this flag alone — never
+      // on name comparison.
+      senderIsCreator: isSenderFilmCreator({
+        senderId: invite.sender_id,
+        filmCreatorId: creatorId,
+      }),
       posterUrl,
       // Watch-page needs on revisit (playback is public-policy; invites are
       // world-readable under RLS, so none of this is a new exposure class).

@@ -27,6 +27,7 @@ const LINK_CREATED = {
   status: 'created',
   inviteOrdinal: 57,
   lineageNames: ['Ien Chi'],
+  senderIsCreator: true, // creator-sent, id-verified server-side
   posterUrl: 'https://image.mux.com/fake-playback/thumbnail.jpg',
   muxPlaybackId: 'e2e-fake-playback-id',
   inviteId: 'inv-you',

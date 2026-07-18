@@ -56,24 +56,26 @@ describe('buildLineageChain (invite-v2 grammar)', () => {
     expect(expanded[12]).toEqual({ type: 'you' })
   })
 
-  it('originator == sender (same first name) collapses to a single node with the caption', () => {
-    // The common real case: the filmmaker sharing directly through a second
-    // account — "Ien Chi" (creator) then "Ien" (their claimed viewer row).
-    expect(buildLineageChain(['Ien Chi', 'Ien'])).toEqual([
+  it('originator == sender collapses to a single node ONLY on the id-verified flag', () => {
+    expect(buildLineageChain(['Ien Chi', 'Ien Chi'], { senderIsCreator: true })).toEqual([
       { type: 'name', label: 'Ien', origin: true, filmmaker: true },
-      { type: 'you' },
-    ])
-    // Case-insensitive.
-    expect(buildLineageChain(['IEN', 'ien'])).toEqual([
-      { type: 'name', label: 'IEN', origin: true, filmmaker: true },
       { type: 'you' },
     ])
   })
 
-  it('two DIFFERENT first names never collapse, and first==last with people between stays intact', () => {
-    expect(buildLineageChain(['Ien Chi', 'Dan Roberts'])).toHaveLength(3)
-    // A same-named first/last with a person between is not the originator==sender case.
-    expect(buildLineageChain(['Ien', 'Alex', 'Ien'])).toHaveLength(4)
+  it('matching names NEVER collapse without the flag — two people can share a first name', () => {
+    // Two different accounts both named Ien (id-truth: not the same person).
+    expect(buildLineageChain(['Ien Chi', 'Ien'])).toHaveLength(3)
+    expect(buildLineageChain(['Alex', 'Alex'], { senderIsCreator: false })).toHaveLength(3)
+    // A missing/absent flag means no collapse — never guess.
+    expect(buildLineageChain(['Alex', 'Alex'], { senderIsCreator: undefined })).toHaveLength(3)
+  })
+
+  it('the flag only ever collapses a TWO-entry chain', () => {
+    // First==last with people between is not the originator==sender case.
+    expect(buildLineageChain(['Ien', 'Alex', 'Ien'], { senderIsCreator: true })).toHaveLength(4)
+    // A single-entry chain (creator-sent) needs no collapse and is untouched.
+    expect(buildLineageChain(['Ien Chi'], { senderIsCreator: true })).toHaveLength(2)
   })
 
   it('the "The filmmaker" origin fallback stays whole and suppresses the caption', () => {

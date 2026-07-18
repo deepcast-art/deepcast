@@ -108,7 +108,7 @@ const CHAIN_MEDIA_QUERY = '(min-width: 640px)'
 /** The lineage chain — the network idea at a whisper: first names joined by
  *  arrows (→ on wide screens, ↓ stacked on phones), the film's creator
  *  first with a small "filmmaker" caption, ending in "you". */
-function LineageChain({ names }) {
+function LineageChain({ names, senderIsCreator }) {
   const [expanded, setExpanded] = useState(false)
   const [wide, setWide] = useState(() => window.matchMedia(CHAIN_MEDIA_QUERY).matches)
 
@@ -122,6 +122,7 @@ function LineageChain({ names }) {
   const items = buildLineageChain(names, {
     collapseAfter: wide ? CHAIN_THRESHOLD_WIDE : CHAIN_THRESHOLD_NARROW,
     expanded,
+    senderIsCreator,
   })
   if (!items.length) return null
 
@@ -331,7 +332,11 @@ export default function ClaimLanding() {
     posterUrl,
     durationSeconds,
   } = state.invite || {}
-  const chainNames = devPreviewChain(searchParams) ?? lineageNames
+  const previewNames = devPreviewChain(searchParams)
+  const chainNames = previewNames ?? lineageNames
+  // The collapse flag is id-truth about THIS invite — never applied to a
+  // dev preview's stand-in names.
+  const chainSenderIsCreator = previewNames ? false : state.invite?.senderIsCreator === true
   const hook = (transmissionHook || '').trim()
   const runtimeLabel = formatRuntimeMinutes(durationSeconds)
   const firstName = (inviteeFirstName || '').trim() || 'friend'
@@ -375,7 +380,7 @@ export default function ClaimLanding() {
 
         {/* 3. Lineage chain — the whisper. */}
         <div className="dc-rise dc-rise-3">
-          <LineageChain names={chainNames} />
+          <LineageChain names={chainNames} senderIsCreator={chainSenderIsCreator} />
         </div>
 
         <LetterDivider className="mt-[clamp(1.75rem,3.5svh,3.25rem)] dc-rise dc-rise-3" />

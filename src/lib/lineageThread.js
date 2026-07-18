@@ -31,7 +31,10 @@ const ORIGIN_FALLBACK = /^the filmmaker$/i
  * {type:'you'}. `filmmaker` is true only on an origin whose name resolved for
  * real — the caption never renders over the "The filmmaker" fallback.
  */
-export function buildLineageChain(names, { collapseAfter = 5, expanded = false } = {}) {
+export function buildLineageChain(
+  names,
+  { collapseAfter = 5, expanded = false, senderIsCreator = false } = {}
+) {
   const raw = (Array.isArray(names) ? names : []).map((n) => String(n || '').trim())
   if (raw.length === 0) return []
 
@@ -45,13 +48,13 @@ export function buildLineageChain(names, { collapseAfter = 5, expanded = false }
     }
   })
 
-  // Originator == direct sharer (decided 2026-07-18): a two-entry chain whose
-  // first names match collapses to the single origin node — [Ien] → [you],
-  // filmmaker caption kept. Chain entries carry no user ids, so this is a
-  // FIRST-NAME match by explicit decision: the app already accepts
-  // same-first-name merges (graph nodes), and an id comparison would keep the
-  // filmmaker-shares-through-their-own-viewer-account case split in two.
-  if (nodes.length === 2 && nodes[0].label.toLowerCase() === nodes[1].label.toLowerCase()) {
+  // Originator == direct sharer (id-verified, decided 2026-07-19): a
+  // two-entry chain collapses to the single origin node — [Ien] → [you],
+  // filmmaker caption kept — ONLY when the server confirmed by account id
+  // that the direct sharer IS the film's creator (`senderIsCreator` in the
+  // link payload). Names are never compared (two different people can share
+  // a first name), and a missing flag means no collapse.
+  if (nodes.length === 2 && senderIsCreator === true) {
     return [nodes[0], { type: 'you' }]
   }
 
