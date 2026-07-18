@@ -217,6 +217,10 @@ app.get('/api/mux/asset/:id', async (req, res) => {
       status: asset.status,
       playbackId,
       assetId: asset.id,
+      // Runtime in seconds (fractional), present once the asset is ready.
+      // The upload flow stores this in films.duration_seconds at the same
+      // moment it stores the ids — display pages read only our database.
+      duration: asset.duration ?? null,
     })
   } catch (err) {
     console.error('Mux asset status error:', err)
@@ -1162,6 +1166,10 @@ app.get('/api/invites/link/:slug', async (req, res) => {
       // Per-film C1 hook — null until the filmmaker authors one; the landing
       // page renders nothing at all for null (no box, no placeholder).
       transmissionHook: invite.films?.transmission_hook || null,
+      // Runtime from OUR database only (captured once from Mux by the
+      // backfill / upload flow) — never a Mux call at page-view time. NULL
+      // renders nothing.
+      durationSeconds: invite.films?.duration_seconds ?? null,
       status: invite.status,
       inviteOrdinal,
       lineageNames,

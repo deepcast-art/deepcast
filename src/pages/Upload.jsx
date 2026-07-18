@@ -174,7 +174,7 @@ export default function Upload() {
 
         const pollInterval = setInterval(async () => {
           try {
-            const { status, playbackId } = await api.getAssetStatus(assetId)
+            const { status, playbackId, duration } = await api.getAssetStatus(assetId)
 
             if (status === 'ready' && playbackId) {
               clearInterval(pollInterval)
@@ -184,6 +184,9 @@ export default function Upload() {
                 .update({
                   mux_asset_id: assetId,
                   mux_playback_id: playbackId,
+                  // Captured ONCE at readiness — pages read the database,
+                  // never Mux (a replaced video re-captures here too).
+                  duration_seconds: duration ?? null,
                   status: 'ready',
                 })
                 .eq('id', editFilmId)
@@ -266,7 +269,7 @@ export default function Upload() {
 
       const pollInterval = setInterval(async () => {
         try {
-          const { status, playbackId } = await api.getAssetStatus(assetId)
+          const { status, playbackId, duration } = await api.getAssetStatus(assetId)
 
           if (status === 'ready' && playbackId) {
             clearInterval(pollInterval)
@@ -276,6 +279,9 @@ export default function Upload() {
               .update({
                 mux_asset_id: assetId,
                 mux_playback_id: playbackId,
+                // Captured ONCE at readiness — pages read the database,
+                // never Mux at view time.
+                duration_seconds: duration ?? null,
                 status: 'ready',
               })
               .eq('id', filmData.id)
