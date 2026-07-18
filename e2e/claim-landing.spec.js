@@ -32,6 +32,7 @@ const LINK_CREATED = {
   inviteId: 'inv-you',
   claimOrdinal: null,
   ticketsRemaining: null,
+  durationSeconds: 1932.5983, // floors to "32 minutes" on the landing letter
 }
 
 const LINK_CLAIMED = { ...LINK_CREATED, status: 'claimed', claimOrdinal: 57, ticketsRemaining: 5 }
@@ -82,6 +83,8 @@ test.describe('three-page claim arc', () => {
     await expect(page.getByText('you', { exact: true })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'A Sacred Pause' })).toBeVisible()
     await expect(page.getByText('A one-line hook about why this film exists.')).toBeVisible()
+    // Runtime floors to whole minutes, from database data only.
+    await expect(page.getByText('32 minutes')).toBeVisible()
     // The film still is present.
     await expect(page.locator('img[src*="image.mux.com"]')).toBeAttached()
     // Inline email — visible immediately, no click-to-reveal.
@@ -181,14 +184,17 @@ test.describe('three-page claim arc', () => {
     expect(jsErrors).toEqual([])
   })
 
-  test('a film with no transmission hook renders nothing in that slot', async ({ page }) => {
+  test('a film with no transmission hook, no still, and no duration renders nothing in those slots', async ({ page }) => {
     await page.route('**/api/invites/link/**', (route) =>
-      route.fulfill({ json: { ...LINK_CREATED, transmissionHook: null, posterUrl: null } })
+      route.fulfill({
+        json: { ...LINK_CREATED, transmissionHook: null, posterUrl: null, durationSeconds: null },
+      })
     )
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('heading', { name: 'A Sacred Pause' })).toBeVisible()
     await expect(page.getByText(/placeholder/i)).toHaveCount(0)
     await expect(page.getByText('A one-line hook about why this film exists.')).toHaveCount(0)
+    await expect(page.getByText(/\d+ minutes?/)).toHaveCount(0)
     expect(jsErrors).toEqual([])
   })
 

@@ -4,6 +4,7 @@ import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import DeepcastLogo from '../components/DeepcastLogo'
 import { buildLineageChain } from '../lib/lineageThread'
+import { formatRuntimeMinutes } from '../lib/runtime'
 import { saveClaimStash, readClaimStash, isClaimOwner } from '../lib/claimStash'
 
 /** The wordmark variant sizes via its `size` prop (a text-* class), NOT via
@@ -125,7 +126,7 @@ function LineageChain({ names }) {
   if (!items.length) return null
 
   return (
-    <div className="mt-[clamp(1.25rem,3svh,2rem)]">
+    <div className="mt-[clamp(1.25rem,2.5svh,2rem)]">
       <span className="block font-sans text-[10px] uppercase tracking-[0.3em] text-muted">
         How this reached you
       </span>
@@ -321,10 +322,18 @@ export default function ClaimLanding() {
     )
   }
 
-  const { inviteeFirstName, sharerName, filmTitle, transmissionHook, lineageNames, posterUrl } =
-    state.invite || {}
+  const {
+    inviteeFirstName,
+    sharerName,
+    filmTitle,
+    transmissionHook,
+    lineageNames,
+    posterUrl,
+    durationSeconds,
+  } = state.invite || {}
   const chainNames = devPreviewChain(searchParams) ?? lineageNames
   const hook = (transmissionHook || '').trim()
+  const runtimeLabel = formatRuntimeMinutes(durationSeconds)
   const firstName = (inviteeFirstName || '').trim() || 'friend'
   // First word only, on this page only — legacy accounts may store full names
   // ("Ien Chi"), but the letter register is first-name-only (decided 2026-07-16).
@@ -372,7 +381,7 @@ export default function ClaimLanding() {
         <LetterDivider className="mt-[clamp(1.75rem,3.5svh,3.25rem)] dc-rise dc-rise-3" />
 
         {/* 4. Film title + 5. transmission hook (per-film data; nothing when NULL) */}
-        <div className="mt-[clamp(1.5rem,3.5svh,2.75rem)] w-full">
+        <div className="mt-[clamp(1.5rem,3svh,2.75rem)] w-full">
           <h2 className="font-serif-v3 text-[clamp(1.75rem,4vw,2.375rem)] leading-tight dc-rise dc-rise-4">
             {filmTitle || 'a film'}
           </h2>
@@ -381,10 +390,28 @@ export default function ClaimLanding() {
               {hook}
             </p>
           )}
+          {/* Runtime — database-only data; renders nothing when null. */}
+          {runtimeLabel && (
+            <p className="mt-[clamp(0.75rem,1.5svh,1.25rem)] inline-flex items-center justify-center gap-2.5 font-sans text-[11px] uppercase tracking-[0.28em] text-accent dc-rise dc-rise-5">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                aria-hidden
+                className="h-[0.9375rem] w-[0.9375rem]"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3.2 2" />
+              </svg>
+              {runtimeLabel}
+            </p>
+          )}
         </div>
 
         {/* 6. Inline email + CTA — visible immediately, no click-to-reveal. */}
-        <div className="mt-[clamp(2rem,5svh,3.75rem)] w-full max-w-[26rem] dc-rise dc-rise-6">
+        <div className="mt-[clamp(2rem,4.5svh,3.75rem)] w-full max-w-[26rem] dc-rise dc-rise-6">
           {sharerView ? (
             <p className="font-serif-v3 text-sm italic text-warm/60">
               This invitation is waiting for {firstName} — it can’t be accepted by the person
