@@ -1,7 +1,15 @@
 /**
- * B2 (deepcast-mvp-rework.md): the one length/conditions line, shown on the
- * claim landing page and the film page. One constant so the two surfaces can
- * never drift (same doctrine as the canonical stats modules). Nothing more
- * is ever added around it — "Nothing more" is the product decision.
+ * The one length/conditions line for the watch page (B2 lineage; per-film
+ * since 2026-07-19, superseding the hardcoded "14 minutes" constant). The
+ * runtime comes from films.duration_seconds through the shared floor-rounding
+ * formatter — the same number the landing page shows — and the
+ * "Headphones recommended." tail is constant. A film with no stored duration
+ * gets the tail alone: never a wrong or placeholder number. One function so
+ * no surface can drift (canonical-stats doctrine).
  */
-export const FILM_CONDITIONS_LINE = '14 minutes. Headphones recommended.'
+import { formatRuntimeMinutes } from './runtime.js'
+
+export function filmConditionsLine(durationSeconds) {
+  const runtime = formatRuntimeMinutes(durationSeconds)
+  return runtime ? `${runtime}. Headphones recommended.` : 'Headphones recommended.'
+}

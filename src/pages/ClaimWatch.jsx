@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams, Link, Navigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { supabase } from '../lib/supabase'
-import { FILM_CONDITIONS_LINE } from '../lib/screeningConditions'
+import { filmConditionsLine } from '../lib/screeningConditions'
 import { readClaimStash, isClaimOwner } from '../lib/claimStash'
 import { INITIAL_CLAIMANT_TICKETS } from '../lib/ticketRules'
 import { resumePositionToSave } from '../lib/resumePosition'
@@ -217,7 +217,7 @@ export default function ClaimWatch() {
       {/* Threshold: title + conditions line. */}
       <h1 className="font-serif-v3 text-2xl">{title}</h1>
       <p className="mt-2 font-sans text-xs uppercase tracking-[0.2em] text-warm/60">
-        {FILM_CONDITIONS_LINE}
+        {filmConditionsLine(link?.durationSeconds)}
       </p>
 
       <div className="mt-6 w-full max-w-4xl dc-fade-in">

@@ -95,7 +95,7 @@ test.describe('three-page claim arc', () => {
     // NOT on this page: concept line, ordinal, conditions line.
     await expect(page.getByText(/human hands only/)).toHaveCount(0)
     await expect(page.getByText(/person to be invited to watch this film/)).toHaveCount(0)
-    await expect(page.getByText('14 minutes. Headphones recommended.')).toHaveCount(0)
+    await expect(page.getByText(/Headphones recommended/)).toHaveCount(0)
 
     expect(jsErrors).toEqual([])
   })
@@ -121,7 +121,8 @@ test.describe('three-page claim arc', () => {
     // PAGE 2: routed DIRECTLY to the watch page — no reveal beat.
     await expect(page).toHaveURL(/\/watch\/alex-h4k2$/)
     await expect(page.getByRole('heading', { name: 'A Sacred Pause' })).toBeVisible()
-    await expect(page.getByText('14 minutes. Headphones recommended.')).toBeVisible()
+    // Per-film runtime (fixture duration 1932.6s) + the constant tail.
+    await expect(page.getByText('32 minutes. Headphones recommended.')).toBeVisible()
     await expect(page.locator('mux-player')).toBeAttached({ timeout: 20_000 })
 
     // The docked panel, collapsed by default; expanding shows the constraint
