@@ -23,9 +23,9 @@ const MuxPlayer = lazy(() => import('@mux/mux-player-react').then((m) => ({ defa
  * line's permanent home (the ask).
  *
  * Threshold: title + conditions line, then the player. The share panel is
- * permanently docked BELOW the player (never an overlay), collapsed by
- * default, expandable by tap at any time; pausing nudges it; credits end
- * auto-opens it. Tickets spend at link generation, no refunds.
+ * permanently docked BELOW the player (never an overlay) and ALWAYS OPEN
+ * (decided 2026-07-19 — no toggle, no pause-nudge, no credits auto-open).
+ * Tickets spend at link generation, no refunds.
  *
  * Only the claimant (recognized by the safeStorage stash) lands here;
  * anyone else is bounced to the landing route, which shows the dead-link
@@ -84,8 +84,6 @@ export default function ClaimWatch() {
 
   const [link, setLink] = useState(null)
   const [loadFailed, setLoadFailed] = useState(false)
-  const [expanded, setExpanded] = useState(false)
-  const [nudge, setNudge] = useState(false)
   const [tickets, setTickets] = useState(null)
   const [shareName, setShareName] = useState('')
   const [shareBusy, setShareBusy] = useState(false)
@@ -240,31 +238,17 @@ export default function ClaimWatch() {
               metadata={{ video_title: title }}
               accentColor="#b1a180"
               onTimeUpdate={handleTimeUpdate}
-              onPause={() => setNudge(true)}
-              onPlay={() => setNudge(false)}
-              onEnded={() => setExpanded(true)}
               className="aspect-video w-full"
             />
           </Suspense>
         )}
       </div>
 
-      {/* Share panel — permanently docked below the player, never an overlay. */}
-      <div
-        className={`mt-6 w-full max-w-4xl border transition-colors ${
-          nudge && !expanded ? 'border-accent/70' : 'border-warm/20'
-        }`}
-      >
-        {!expanded ? (
-          <button
-            type="button"
-            onClick={() => setExpanded(true)}
-            className="w-full min-h-[48px] touch-manipulation px-6 py-3 text-center font-sans text-sm uppercase tracking-[0.18em] text-warm/80 transition-colors hover:text-accent cursor-pointer"
-          >
-            Who is this film for?
-          </button>
-        ) : (
-          <div className="px-6 py-6 text-center dc-fade-in">
+      {/* Share panel — permanently docked below the player, never an overlay.
+          Always open (decided 2026-07-19): no toggle, no collapsed state, no
+          pause-nudge, no credits auto-open. */}
+      <div className="mt-6 w-full max-w-4xl border border-warm/20">
+        <div className="px-6 py-6 text-center">
             {/* 1. The constraint line — this panel is its home.
                 Founder-approved verbatim (2026-07-16). Do not edit. */}
             <p className="mx-auto max-w-md font-serif-v3 text-base leading-relaxed text-warm/80">
@@ -334,7 +318,6 @@ export default function ClaimWatch() {
               </div>
             )}
           </div>
-        )}
       </div>
 
       {/* Persistent quiet dashboard link — for claimants who haven't shared. */}

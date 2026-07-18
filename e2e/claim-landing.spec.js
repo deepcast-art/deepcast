@@ -125,11 +125,10 @@ test.describe('three-page claim arc', () => {
     await expect(page.getByText('32 minutes. Headphones recommended.')).toBeVisible()
     await expect(page.locator('mux-player')).toBeAttached({ timeout: 20_000 })
 
-    // The docked panel, collapsed by default; expanding shows the constraint
-    // line (its home), the tickets line, and the first-name form.
-    const panelToggle = page.getByRole('button', { name: /Who is this film for\?/i })
-    await expect(panelToggle).toBeVisible()
-    await panelToggle.click()
+    // The docked panel is ALWAYS OPEN (2026-07-19): no toggle exists, and the
+    // constraint line (its home), tickets line, and first-name form show
+    // without any interaction.
+    await expect(page.getByRole('button', { name: /Who is this film for\?/i })).toHaveCount(0)
     await expect(page.getByText(/No algorithm, no feed/)).toBeVisible()
     await expect(page.getByText(/You have 5 tickets for this film/)).toBeVisible()
 
@@ -164,7 +163,7 @@ test.describe('three-page claim arc', () => {
     )
     await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
 
-    await page.getByRole('button', { name: /Who is this film for\?/i }).click()
+    // Panel is always open — the zero-tickets state shows with no interaction.
     await expect(page.getByText('You’ve given all your tickets for this film.')).toBeVisible()
     await expect(page.getByPlaceholder('Their first name')).toHaveCount(0)
     expect(jsErrors).toEqual([])
