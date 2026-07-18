@@ -19,8 +19,15 @@ import { buildDeletePlan, executeDeletePlan } from './deleteSplice.js'
 import { removeTeammateDecision } from './teamRules.js'
 import { generateUniqueSlug } from './inviteSlug.js'
 import { resolveAccountlessSharerIdentity } from './claimIdentity.js'
-import { INITIAL_CLAIMANT_TICKETS, ticketSpendDecision } from '../src/lib/ticketRules.js'
-import { invitationsRemaining } from '../src/lib/shares.js'
+import { INITIAL_CLAIMANT_TICKETS, ticketSpendDecision, NO_TICKETS_MESSAGE } from '../src/lib/ticketRules.js'
+import { invitationsRemaining, isRoleUnlimitedSharer, filmTicketsRemaining } from '../src/lib/shares.js'
+import {
+  readFilmWallet,
+  initFilmWallet,
+  spendFilmTicket,
+  refundFilmTicket,
+  grantFilmTickets,
+} from './filmWallet.js'
 import { claimedSharerSpendDecision, claimedInviteTicketsDisplay } from './claimantWallet.js'
 
 const app = express()
@@ -415,8 +422,11 @@ app.post('/api/invites/send', async (req, res) => {
       return res.status(400).json({ error: "Recipient last name is required" })
     }
 
-    let previousAllocation = null
-    let allocationDecremented = false
+    // Per-film wallet state (Piece F): the sender's film_tickets row (null =
+    // virtual full grant) and whether this request spent a ticket (refunded
+    // on any failure after the spend — a failed send is not a spent ticket).
+    let senderWallet = null
+    let walletSpent = false
 
     // ── Phase 1: parallel lookups ──────────────────────────────────────────
     // film + sender + parent-invite claim + invite count all fly at once.
@@ -501,17 +511,21 @@ app.post('/api/invites/send', async (req, res) => {
         }
       }
 
-      /* Teammates use invite_allocation 0 + unlimited; stale role "viewer" with team_creator_id must not hit "No invites remaining". */
+      /* Role-based unlimited stays GLOBAL (creator / team / team-linked). */
       unlimitedInvites =
         role === 'creator' ||
         role === 'team_member' ||
         (role === 'viewer' && onCreatorTeam)
 
-      unlimitedQuota = unlimitedInvites || sender.unlimited_shares === true
+      // Per-film wallet (Piece F): the unlimited FLAG and the balance live on
+      // film_tickets(user, film). A missing row is the virtual full grant of
+      // 5; the definitive balance check is the race-safe spend below.
+      senderWallet = unlimitedInvites ? null : await readFilmWallet(supabase, senderId, filmId)
+      unlimitedQuota = unlimitedInvites || senderWallet?.unlimited === true
 
-      if (!unlimitedQuota && sender.invite_allocation <= 0) {
-        console.warn('No invites remaining for sender:', senderId, sender)
-        return res.status(400).json({ error: 'No invites remaining' })
+      if (!unlimitedQuota && Math.max(0, senderWallet?.balance ?? 5) <= 0) {
+        console.warn('No tickets remaining for sender:', senderId, filmId)
+        return res.status(400).json({ error: NO_TICKETS_MESSAGE })
       }
     }
 
@@ -533,8 +547,6 @@ app.post('/api/invites/send', async (req, res) => {
     const needsFallbacks = !parentInviteId && !unlimitedInvites
 
     if (needsDecrement || needsFallbacks) {
-      if (needsDecrement) previousAllocation = sender.invite_allocation
-
       // Email candidates for fallback 1 — reuse sender.email from Phase 1, no extra query
       const candidates = new Set()
       if (needsFallbacks) {
@@ -543,14 +555,14 @@ app.post('/api/invites/send', async (req, res) => {
       }
 
       const [
-        { error: decrementError },
+        spendResult,
         { data: fb1 },
         { data: fb2 },
         { data: fb3a },
       ] = await Promise.all([
         needsDecrement
-          ? supabase.from('users').update({ invite_allocation: sender.invite_allocation - 1 }).eq('id', senderId)
-          : Promise.resolve({ error: null }),
+          ? spendFilmTicket(supabase, senderId, filmId)
+          : Promise.resolve({ ok: true }),
         // Fallback 1: push email filter to Postgres (.in) instead of fetching 200 rows and filtering in JS
         needsFallbacks && candidates.size > 0
           ? supabase.from('invites').select('id').eq('film_id', filmId).in('recipient_email', [...candidates]).order('created_at', { ascending: true }).limit(1).maybeSingle()
@@ -566,11 +578,10 @@ app.post('/api/invites/send', async (req, res) => {
       ])
 
       if (needsDecrement) {
-        if (decrementError) {
-          console.error('Invite allocation decrement error:', decrementError.message || decrementError)
-          return res.status(500).json({ error: 'Unable to update invites' })
+        if (!spendResult.ok) {
+          return res.status(400).json({ error: spendResult.reason })
         }
-        allocationDecremented = true
+        walletSpent = true
       }
 
       if (needsFallbacks) {
@@ -613,12 +624,10 @@ app.post('/api/invites/send', async (req, res) => {
       })
 
     if (inviteError) {
-      if (allocationDecremented && previousAllocation !== null && senderId) {
-        const { error: rollbackErr } = await supabase
-          .from('users')
-          .update({ invite_allocation: previousAllocation })
-          .eq('id', senderId)
-        if (rollbackErr) console.error('Failed to rollback invite_allocation:', rollbackErr)
+      if (walletSpent && senderId) {
+        await refundFilmTicket(supabase, senderId, filmId).catch((e) =>
+          console.error('Failed to refund film ticket:', e?.message || e)
+        )
       }
       throw inviteError
     }
@@ -691,12 +700,10 @@ app.post('/api/invites/send', async (req, res) => {
       // Undo everything this request created so a retry starts clean.
       const { error: deleteErr } = await supabase.from('invites').delete().eq('token', token)
       if (deleteErr) console.error('Failed to rollback invite row:', deleteErr)
-      if (allocationDecremented && previousAllocation !== null && senderId) {
-        const { error: rollbackErr } = await supabase
-          .from('users')
-          .update({ invite_allocation: previousAllocation })
-          .eq('id', senderId)
-        if (rollbackErr) console.error('Failed to rollback invite_allocation:', rollbackErr)
+      if (walletSpent && senderId) {
+        await refundFilmTicket(supabase, senderId, filmId).catch((e) =>
+          console.error('Failed to refund film ticket:', e?.message || e)
+        )
       }
       return res.status(502).json({
         error: `The invitation email to ${recipientEmailNorm} could not be sent. Nothing was used up — please try again.`,
@@ -747,15 +754,14 @@ app.post('/api/invites/create-link', async (req, res) => {
     let senderName = null
     let senderEmail = null
     let parentInviteId = null
-    let previousAllocation = null
-    let allocationDecremented = false
-    // Accountless ticket spend: balance after a successful CAS decrement
-    // (null on the account path), plus what's needed to refund a spend if
-    // link creation itself fails (a failed generation is not a spent ticket).
+    // Per-film wallet spend state (Piece F): whether a film ticket was spent
+    // (refunded on any later failure) and the balance after the spend for
+    // the response. The legacy invite wallet remains only for accountless
+    // rows (claimed_by NULL).
+    let walletSpent = false
+    let sessionBalanceAfterSpend = null
     let accountlessTicketsRemaining = null
     let accountlessClaimId = null
-    // Account balance after a stash-based claimant's unified-wallet spend
-    // (Piece E) — reported back so the watch panel shows the true number.
     let claimedSharerBalance = null
 
     if (jwt) {
@@ -793,13 +799,17 @@ app.post('/api/invites/create-link', async (req, res) => {
         }
       }
 
-      // Same unlimited-sender rule as /api/invites/send.
+      // Same unlimited-sender rule as /api/invites/send: role-based stays
+      // GLOBAL; the flag and balance live on film_tickets (Piece F).
       const unlimitedInvites =
         role === 'creator' || role === 'team_member' || (role === 'viewer' && onCreatorTeam)
-      const unlimitedQuota = unlimitedInvites || sender.unlimited_shares === true
+      const senderWallet = unlimitedInvites
+        ? null
+        : await readFilmWallet(supabase, senderId, filmId)
+      const unlimitedQuota = unlimitedInvites || senderWallet?.unlimited === true
 
-      if (!unlimitedQuota && sender.invite_allocation <= 0) {
-        return res.status(400).json({ error: 'No invites remaining' })
+      if (!unlimitedQuota && Math.max(0, senderWallet?.balance ?? 5) <= 0) {
+        return res.status(400).json({ error: NO_TICKETS_MESSAGE })
       }
 
       senderName = sender.name || null
@@ -818,17 +828,15 @@ app.post('/api/invites/create-link', async (req, res) => {
       const needsDecrement = !unlimitedQuota
       const needsFallbacks = !parentInviteId && !unlimitedInvites
 
-      if (needsDecrement) previousAllocation = sender.invite_allocation
-
       if (needsDecrement || needsFallbacks) {
         const candidates = new Set()
         if (needsFallbacks && sender.email) candidates.add(normalizeEmail(sender.email))
 
-        const [{ error: decrementError }, { data: fb1 }, { data: fb2 }, { data: fb3a }] =
+        const [spendResult, { data: fb1 }, { data: fb2 }, { data: fb3a }] =
           await Promise.all([
             needsDecrement
-              ? supabase.from('users').update({ invite_allocation: sender.invite_allocation - 1 }).eq('id', senderId)
-              : Promise.resolve({ error: null }),
+              ? spendFilmTicket(supabase, senderId, filmId)
+              : Promise.resolve({ ok: true }),
             needsFallbacks && candidates.size > 0
               ? supabase.from('invites').select('id').eq('film_id', filmId).in('recipient_email', [...candidates]).order('created_at', { ascending: true }).limit(1).maybeSingle()
               : Promise.resolve({ data: null }),
@@ -841,11 +849,11 @@ app.post('/api/invites/create-link', async (req, res) => {
           ])
 
         if (needsDecrement) {
-          if (decrementError) {
-            console.error('Invite allocation decrement error:', decrementError.message || decrementError)
-            return res.status(500).json({ error: 'Unable to update invites' })
+          if (!spendResult.ok) {
+            return res.status(400).json({ error: spendResult.reason })
           }
-          allocationDecremented = true
+          walletSpent = true
+          sessionBalanceAfterSpend = spendResult.next ?? null
         }
 
         if (needsFallbacks) {
@@ -888,43 +896,36 @@ app.post('/api/invites/create-link', async (req, res) => {
       senderName = identity.senderName
       senderEmail = identity.senderEmail
 
-      // ── Unified wallet (Piece E, 2026-07-17): a claimant with a silent
-      // account spends users.invite_allocation like every account holder,
-      // resolved server-side via claimed_by — no browser session required
-      // (possession of the claimed invite id remains the auth factor,
-      // unchanged). This is what makes a double balance impossible: the fork
-      // keys on account existence, never on whether a session was sent. The
+      // ── Unified wallet (Piece E), per-film since Piece F: a claimant with
+      // a silent account spends film_tickets(user, THIS film), resolved
+      // server-side via claimed_by — no browser session required (possession
+      // of the claimed invite id remains the auth factor, unchanged). The
       // invite wallet below survives only for rows with no account. ──
       const { data: walletUser } = claimedInvite?.claimed_by
         ? await supabase
             .from('users')
-            .select('id, name, email, role, team_creator_id, unlimited_shares, invite_allocation')
+            .select('id, name, email, role, team_creator_id')
             .eq('id', claimedInvite.claimed_by)
             .maybeSingle()
         : { data: null }
+      const claimantFilmWallet = walletUser
+        ? await readFilmWallet(supabase, walletUser.id, filmId)
+        : null
 
-      const spendPlan = claimedSharerSpendDecision(claimedInvite, walletUser)
+      const spendPlan = claimedSharerSpendDecision(claimedInvite, walletUser, claimantFilmWallet)
       if (spendPlan.wallet === 'account') {
-        if (!spendPlan.ok) {
-          return res.status(400).json({ error: spendPlan.reason })
-        }
         // Lineage unifies too: the claimant's sends now carry their user id
         // (parent_invite_id stays their claimed invite, as always).
         senderId = spendPlan.userId
         senderName = walletUser.name || senderName
         senderEmail = walletUser.email || senderEmail
         if (!spendPlan.unlimited) {
-          const { error: decErr } = await supabase
-            .from('users')
-            .update({ invite_allocation: spendPlan.next })
-            .eq('id', spendPlan.userId)
-          if (decErr) {
-            console.error('Claimant allocation decrement error:', decErr.message || decErr)
-            return res.status(500).json({ error: 'Unable to update tickets' })
+          const spend = await spendFilmTicket(supabase, spendPlan.userId, filmId)
+          if (!spend.ok) {
+            return res.status(400).json({ error: spend.reason })
           }
-          previousAllocation = spendPlan.previous
-          allocationDecremented = true
-          claimedSharerBalance = spendPlan.next
+          walletSpent = true
+          claimedSharerBalance = spend.next
         }
       } else {
         // Ticket economy (2026-07-16): sharers with no account spend from
@@ -985,8 +986,9 @@ app.post('/api/invites/create-link', async (req, res) => {
         return Boolean(data)
       })
     } catch (slugErr) {
-      if (allocationDecremented && previousAllocation !== null && senderId) {
-        await supabase.from('users').update({ invite_allocation: previousAllocation }).eq('id', senderId)
+      if (walletSpent && senderId) {
+        // A failed generation is not a spent ticket — refund (best effort).
+        await refundFilmTicket(supabase, senderId, filmId).catch(() => {})
       }
       if (accountlessClaimId != null && accountlessTicketsRemaining != null) {
         // A failed generation is not a spent ticket — refund (best effort).
@@ -1015,8 +1017,9 @@ app.post('/api/invites/create-link', async (req, res) => {
       .single()
 
     if (insertError) {
-      if (allocationDecremented && previousAllocation !== null && senderId) {
-        await supabase.from('users').update({ invite_allocation: previousAllocation }).eq('id', senderId)
+      if (walletSpent && senderId) {
+        // A failed generation is not a spent ticket — refund (best effort).
+        await refundFilmTicket(supabase, senderId, filmId).catch(() => {})
       }
       if (accountlessClaimId != null && accountlessTicketsRemaining != null) {
         // A failed generation is not a spent ticket — refund (best effort).
@@ -1030,11 +1033,11 @@ app.post('/api/invites/create-link', async (req, res) => {
       success: true,
       slug: created.link_slug,
       url: `${baseUrl}/${created.link_slug}`,
-      // Balance after this spend: the invite wallet's, or the unified account
-      // balance for a stash-based claimant (Piece E). Null on the session
-      // path (those surfaces use the existing invitationsRemaining machinery)
-      // and for unlimited sharers.
-      ticketsRemaining: accountlessTicketsRemaining ?? claimedSharerBalance,
+      // Balance after this spend, per-film (Piece F): the legacy invite
+      // wallet's, the stash-based claimant's, or the session sharer's film
+      // balance. Null for unlimited sharers.
+      ticketsRemaining:
+        accountlessTicketsRemaining ?? claimedSharerBalance ?? sessionBalanceAfterSpend,
     })
   } catch (err) {
     console.error('Invite create-link error:', err)
@@ -1074,7 +1077,7 @@ app.get('/api/invites/link/:slug', async (req, res) => {
     // One film-scoped query powers BOTH the lineage thread and the invite
     // ordinal — an in-memory walk over ≤ a few hundred rows, cheap enough for
     // this public route (the graph surfaces already fetch the same set).
-    const [{ data: filmInvites }, { data: creatorUser }, { data: claimAccount }] = await Promise.all([
+    const [{ data: filmInvites }, { data: creatorUser }, { data: claimAccount }, { data: claimFilmWallet }] = await Promise.all([
       supabase
         .from('invites')
         .select('id, parent_invite_id, sender_id, sender_name, recipient_name, recipient_email, created_at')
@@ -1082,13 +1085,21 @@ app.get('/api/invites/link/:slug', async (req, res) => {
       invite.films?.creator_id
         ? supabase.from('users').select('name').eq('id', invite.films.creator_id).maybeSingle()
         : Promise.resolve({ data: null }),
-      // Unified wallet (Piece E): an account-backed claim displays the
-      // account's balance, not the legacy invite wallet.
+      // Per-film wallet (Piece F): an account-backed claim displays the
+      // (person, film) balance, not the legacy invite wallet.
       invite.claimed_by
         ? supabase
             .from('users')
-            .select('id, role, team_creator_id, unlimited_shares, invite_allocation')
+            .select('id, role, team_creator_id')
             .eq('id', invite.claimed_by)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+      invite.claimed_by
+        ? supabase
+            .from('film_tickets')
+            .select('user_id, film_id, balance, unlimited')
+            .eq('user_id', invite.claimed_by)
+            .eq('film_id', invite.film_id)
             .maybeSingle()
         : Promise.resolve({ data: null }),
     ])
@@ -1159,7 +1170,7 @@ app.get('/api/invites/link/:slug', async (req, res) => {
       muxPlaybackId: invite.films?.mux_playback_id || null,
       inviteId: invite.id,
       claimOrdinal: invite.claim_ordinal ?? null,
-      ticketsRemaining: claimedInviteTicketsDisplay(invite, claimAccount),
+      ticketsRemaining: claimedInviteTicketsDisplay(invite, claimAccount, claimFilmWallet),
     })
   } catch (err) {
     console.error('Invite link lookup error:', err)
@@ -1302,12 +1313,15 @@ app.post('/api/invites/claim', async (req, res) => {
         ''
       )
       await supabase.from('invites').update({ claimed_by: userId }).eq('id', invite.id)
-      const { data: acct } = await supabase
-        .from('users')
-        .select('id, role, team_creator_id, unlimited_shares, invite_allocation')
-        .eq('id', userId)
-        .maybeSingle()
-      const remaining = acct ? invitationsRemaining(acct) : null
+      // Per-film wallet (Piece F): claiming THIS film initializes THIS film's
+      // wallet at the standard grant — never resetting an existing row, and
+      // never touching any other film's balance.
+      await initFilmWallet(supabase, userId, invite.film_id)
+      const [{ data: acct }, wallet] = await Promise.all([
+        supabase.from('users').select('id, role, team_creator_id').eq('id', userId).maybeSingle(),
+        readFilmWallet(supabase, userId, invite.film_id),
+      ])
+      const remaining = filmTicketsRemaining(acct, wallet)
       accountBalance = Number.isFinite(remaining) ? remaining : null
       console.log(
         `[claim] silent account ${accountCreated ? 'created' : 'attached'} for ${emailNorm} (${userId})`
@@ -1452,6 +1466,45 @@ app.post('/api/invites/resend-last', async (req, res) => {
   } catch (err) {
     console.error('Invite resend error:', err)
     res.status(500).json({ error: 'Failed to resend invite' })
+  }
+})
+
+/**
+ * Per-film replenish (Piece F, 2026-07-17): +3 tickets to a sharer each time
+ * their watched count on a film reaches a multiple of 3 — the legacy
+ * client-side rule (InviteScreening's checkReplenish) moved server-side,
+ * where it can actually write (the old client update of another user's row
+ * was RLS-dead) and where no browser ever writes wallets. The count is
+ * recomputed here from invite rows; the caller only points at the pair.
+ * Role-unlimited senders have nothing to replenish.
+ */
+app.post('/api/invites/replenish-check', async (req, res) => {
+  try {
+    const { senderId, filmId } = req.body || {}
+    if (!senderId || !filmId) {
+      return res.status(400).json({ error: 'senderId and filmId are required' })
+    }
+    const { data: sender } = await supabase
+      .from('users')
+      .select('id, role, team_creator_id')
+      .eq('id', senderId)
+      .maybeSingle()
+    if (!sender || isRoleUnlimitedSharer(sender)) return res.json({ replenished: false })
+
+    const { count } = await supabase
+      .from('invites')
+      .select('id', { count: 'exact', head: true })
+      .eq('sender_id', senderId)
+      .eq('film_id', filmId)
+      .eq('status', 'watched')
+    if (!count || count % 3 !== 0) return res.json({ replenished: false })
+
+    const next = await grantFilmTickets(supabase, senderId, filmId, 3)
+    console.log(`[replenish] +3 film tickets for ${senderId} on ${filmId} (watched ${count}) → ${next}`)
+    return res.json({ replenished: true })
+  } catch (err) {
+    console.error('replenish-check error:', err)
+    return res.status(500).json({ error: 'Could not check replenish' })
   }
 })
 

@@ -130,6 +130,13 @@ export const api = {
       body: JSON.stringify({ token, email, appUrl }),
     }),
 
+  // Per-film replenish check (Piece F) — the server recounts and applies.
+  replenishCheck: (senderId, filmId) =>
+    request('/invites/replenish-check', {
+      method: 'POST',
+      body: JSON.stringify({ senderId, filmId }),
+    }),
+
   relinkInvite: (token, accessToken) =>
     request('/invites/relink', {
       method: 'POST',

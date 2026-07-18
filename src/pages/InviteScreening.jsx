@@ -1180,23 +1180,14 @@ export default function InviteScreening() {
     }
   }
 
+  /** Per-film replenish (Piece F): the rule moved server-side — the server
+   *  recounts watched invites for (sender, THIS film) and applies +3 to the
+   *  film wallet itself. The old client-side users update was RLS-dead. */
   async function checkReplenish(senderId) {
-    const { count } = await supabase
-      .from('invites')
-      .select('*', { count: 'exact', head: true })
-      .eq('sender_id', senderId)
-      .eq('status', 'watched')
-    if (count && count % 3 === 0) {
-      const { data } = await supabase
-        .from('users')
-        .select('invite_allocation')
-        .eq('id', senderId)
-        .single()
-      if (data)
-        await supabase
-          .from('users')
-          .update({ invite_allocation: data.invite_allocation + 3 })
-          .eq('id', senderId)
+    try {
+      await api.replenishCheck(senderId, invite.film_id)
+    } catch {
+      /* best-effort, same as the legacy behavior */
     }
   }
 

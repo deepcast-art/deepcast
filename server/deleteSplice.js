@@ -176,6 +176,8 @@ export async function buildDeletePlan(supabase, { filmId, email }) {
     watchSessions,
     otherFilmCount,
   })
+  // Per-film wallet cleanup (Piece F) needs the film in the plan.
+  plan.filmId = filmId
   return { plan, targetUser, ownsAnyFilm: (ownedFilms || []).length > 0 }
 }
 
@@ -212,13 +214,23 @@ export async function executeDeletePlan(supabase, plan) {
     result.invitesDeleted += ids.length
   }
 
-  // 5) The account — only when nothing remains anywhere else.
+  // 5) The account — only when nothing remains anywhere else. Deleting the
+  // users row CASCADE-removes every film_tickets wallet.
   if (plan.deleteAccount && plan.userId) {
     const { error: userErr } = await supabase.from('users').delete().eq('id', plan.userId)
     if (userErr) throw new Error(`users delete failed: ${userErr.message}`)
     const { error: authErr } = await supabase.auth.admin.deleteUser(plan.userId)
     if (authErr) throw new Error(`auth delete failed: ${authErr.message}`)
     result.accountDeleted = true
+  } else if (plan.userId && plan.filmId) {
+    // Account kept (they exist on other films) — but THIS film's wallet row
+    // goes with their membership here (Piece F).
+    const { error: walletErr } = await supabase
+      .from('film_tickets')
+      .delete()
+      .eq('user_id', plan.userId)
+      .eq('film_id', plan.filmId)
+    if (walletErr) throw new Error(`film wallet delete failed: ${walletErr.message}`)
   }
   return result
 }
