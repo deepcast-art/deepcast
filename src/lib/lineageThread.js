@@ -45,6 +45,16 @@ export function buildLineageChain(names, { collapseAfter = 5, expanded = false }
     }
   })
 
+  // Originator == direct sharer (decided 2026-07-18): a two-entry chain whose
+  // first names match collapses to the single origin node — [Ien] → [you],
+  // filmmaker caption kept. Chain entries carry no user ids, so this is a
+  // FIRST-NAME match by explicit decision: the app already accepts
+  // same-first-name merges (graph nodes), and an id comparison would keep the
+  // filmmaker-shares-through-their-own-viewer-account case split in two.
+  if (nodes.length === 2 && nodes[0].label.toLowerCase() === nodes[1].label.toLowerCase()) {
+    return [nodes[0], { type: 'you' }]
+  }
+
   if (!expanded && nodes.length > collapseAfter) {
     return [
       nodes[0],

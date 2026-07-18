@@ -56,6 +56,26 @@ describe('buildLineageChain (invite-v2 grammar)', () => {
     expect(expanded[12]).toEqual({ type: 'you' })
   })
 
+  it('originator == sender (same first name) collapses to a single node with the caption', () => {
+    // The common real case: the filmmaker sharing directly through a second
+    // account — "Ien Chi" (creator) then "Ien" (their claimed viewer row).
+    expect(buildLineageChain(['Ien Chi', 'Ien'])).toEqual([
+      { type: 'name', label: 'Ien', origin: true, filmmaker: true },
+      { type: 'you' },
+    ])
+    // Case-insensitive.
+    expect(buildLineageChain(['IEN', 'ien'])).toEqual([
+      { type: 'name', label: 'IEN', origin: true, filmmaker: true },
+      { type: 'you' },
+    ])
+  })
+
+  it('two DIFFERENT first names never collapse, and first==last with people between stays intact', () => {
+    expect(buildLineageChain(['Ien Chi', 'Dan Roberts'])).toHaveLength(3)
+    // A same-named first/last with a person between is not the originator==sender case.
+    expect(buildLineageChain(['Ien', 'Alex', 'Ien'])).toHaveLength(4)
+  })
+
   it('the "The filmmaker" origin fallback stays whole and suppresses the caption', () => {
     expect(buildLineageChain(['The filmmaker', 'Dan Roberts'], { collapseAfter: 5 })).toEqual([
       { type: 'name', label: 'The filmmaker', origin: true, filmmaker: false },
