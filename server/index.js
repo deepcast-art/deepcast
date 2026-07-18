@@ -20,13 +20,14 @@ import { removeTeammateDecision } from './teamRules.js'
 import { generateUniqueSlug } from './inviteSlug.js'
 import { resolveAccountlessSharerIdentity } from './claimIdentity.js'
 import { INITIAL_CLAIMANT_TICKETS, ticketSpendDecision, NO_TICKETS_MESSAGE } from '../src/lib/ticketRules.js'
-import { invitationsRemaining, isRoleUnlimitedSharer, filmTicketsRemaining } from '../src/lib/shares.js'
+import { isRoleUnlimitedSharer, filmTicketsRemaining } from '../src/lib/shares.js'
 import {
   readFilmWallet,
   initFilmWallet,
   spendFilmTicket,
   refundFilmTicket,
   grantFilmTickets,
+  setFilmUnlimited,
 } from './filmWallet.js'
 import { claimedSharerSpendDecision, claimedInviteTicketsDisplay } from './claimantWallet.js'
 
@@ -2640,19 +2641,17 @@ async function requireAdminCaller(req, res) {
 }
 
 /**
- * Ticket controls (Piece B, 2026-07-17): top-ups and unlimited for ANY person
- * in the film's network, targeted by USER ID (claimed_by / sender lineage) —
- * never by legacy email matching. Same owner pin as every admin route.
- *
- * The batched status route is also how the admin table shows REAL balances
- * for every row: client RLS can't read other users' wallets, so the numbers
- * come from here (this retires the tickets-left em dash for account rows).
+ * Ticket controls (Piece B, PER-FILM since Piece F 2026-07-17): top-ups and
+ * unlimited for ANY person in the film's network, targeted by USER ID +
+ * FILM ID. Same owner pin as every admin route. The batched status route is
+ * how each film's table shows that film's true balances (client RLS can't
+ * read other users' wallets).
  */
-const SELECT_TICKET_TARGET = 'id, name, email, role, team_creator_id, unlimited_shares, invite_allocation'
+const SELECT_TICKET_TARGET = 'id, name, email, role, team_creator_id'
 
-/** One person's wallet as the admin table displays it. */
-function ticketControlStatus(u) {
-  const remaining = invitationsRemaining(u)
+/** One person's per-film wallet state as the admin table displays it. */
+function ticketControlStatus(u, wallet) {
+  const remaining = filmTicketsRemaining(u, wallet)
   const probe = ticketControlTargetDecision({ targetUser: u, action: 'grant', amount: 1 })
   return {
     name: u.name || null,
@@ -2670,19 +2669,27 @@ app.post('/api/admin/ticket-controls/status', async (req, res) => {
     const caller = await requireAdminCaller(req, res)
     if (!caller) return
 
+    const filmId = String(req.body?.filmId || '').trim()
+    if (!filmId) return res.status(400).json({ error: 'A film id is required' })
     const userIds = Array.isArray(req.body?.userIds)
       ? [...new Set(req.body.userIds.map((v) => String(v || '').trim()).filter(Boolean))].slice(0, 200)
       : []
     if (!userIds.length) return res.json({ statuses: {} })
 
-    const { data: rows, error } = await supabase
-      .from('users')
-      .select(SELECT_TICKET_TARGET)
-      .in('id', userIds)
+    const [{ data: rows, error }, { data: wallets, error: walletErr }] = await Promise.all([
+      supabase.from('users').select(SELECT_TICKET_TARGET).in('id', userIds),
+      supabase
+        .from('film_tickets')
+        .select('user_id, balance, unlimited')
+        .eq('film_id', filmId)
+        .in('user_id', userIds),
+    ])
     if (error) throw error
+    if (walletErr) throw walletErr
+    const walletByUser = new Map((wallets || []).map((w) => [String(w.user_id), w]))
 
     const statuses = {}
-    for (const u of rows || []) statuses[u.id] = ticketControlStatus(u)
+    for (const u of rows || []) statuses[u.id] = ticketControlStatus(u, walletByUser.get(String(u.id)))
     return res.json({ statuses })
   } catch (err) {
     console.error('admin ticket-controls status error:', err)
@@ -2695,9 +2702,11 @@ app.post('/api/admin/ticket-controls', async (req, res) => {
     const caller = await requireAdminCaller(req, res)
     if (!caller) return
 
-    const { userId, action, amount, unlimited } = req.body || {}
+    const { userId, filmId: filmIdInput, action, amount, unlimited } = req.body || {}
     const targetId = String(userId || '').trim()
+    const filmId = String(filmIdInput || '').trim()
     if (!targetId) return res.status(400).json({ error: 'A target user id is required' })
+    if (!filmId) return res.status(400).json({ error: 'A film id is required' })
 
     const { data: targetUser } = await supabase
       .from('users')
@@ -2713,43 +2722,16 @@ app.post('/api/admin/ticket-controls', async (req, res) => {
       return res.json({ applied: false, reason: decision.reason })
     }
 
+    // Per-film wallet writes (Piece F) — race-safe inside filmWallet.js.
     if (decision.action === 'grant') {
-      // CAS with retries: concurrent grants can never lose an increment.
-      let landed = false
-      for (let attempt = 0; attempt < 3 && !landed; attempt++) {
-        const { data: fresh } =
-          attempt === 0
-            ? { data: targetUser }
-            : await supabase.from('users').select('invite_allocation').eq('id', targetId).maybeSingle()
-        const current = fresh?.invite_allocation
-        const next = Math.max(0, current ?? 0) + decision.amount
-        const cas = supabase.from('users').update({ invite_allocation: next }).eq('id', targetId)
-        const { data: row, error: casErr } =
-          current == null
-            ? await cas.is('invite_allocation', null).select('id').maybeSingle()
-            : await cas.eq('invite_allocation', current).select('id').maybeSingle()
-        if (casErr) throw casErr
-        if (row) landed = true
-      }
-      if (!landed) {
-        return res.status(409).json({ error: 'Please try again — the balance was updating.' })
-      }
+      await grantFilmTickets(supabase, targetId, filmId, decision.amount)
     } else {
-      const { error: flagErr } = await supabase
-        .from('users')
-        .update({ unlimited_shares: decision.unlimited })
-        .eq('id', targetId)
-      if (flagErr) throw flagErr
+      await setFilmUnlimited(supabase, targetId, filmId, decision.unlimited)
     }
 
-    // Fresh state back so the cell updates live without a refetch.
-    const { data: after } = await supabase
-      .from('users')
-      .select(SELECT_TICKET_TARGET)
-      .eq('id', targetId)
-      .maybeSingle()
-    if (!after) return res.status(500).json({ error: 'Could not reload the account' })
-    return res.json({ applied: true, ...ticketControlStatus(after) })
+    // Fresh per-film state back so the cell updates live without a refetch.
+    const wallet = await readFilmWallet(supabase, targetId, filmId)
+    return res.json({ applied: true, ...ticketControlStatus(targetUser, wallet) })
   } catch (err) {
     console.error('admin ticket-controls error:', err)
     return res.status(500).json({ error: 'Could not update tickets' })

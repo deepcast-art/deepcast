@@ -530,16 +530,17 @@ export default function Dashboard() {
     if (profile?.role === 'creator') void loadTeamSection()
   }, [profile?.id, profile?.role])
 
-  /** ONE batched ticket-status fetch per dashboard load (Piece B): the union
-   *  of every film's person user-ids in a single call, deduped by content so
-   *  a reload with the same people never refetches. The server is the gate
-   *  (ADMIN_USER_ID pin) — a 403/503 simply leaves the map empty and no
-   *  controls render. Read-only; the popover's actions do the writing. */
+  /** Ticket-status fetch (Piece B, per-film since Piece F): ONE batched call
+   *  PER FILM — each film's table shows that film's true balances. Deduped by
+   *  content so a reload with the same people never refetches. The server is
+   *  the gate (ADMIN_USER_ID pin) — a 403/503 simply leaves the map empty
+   *  and no controls render. Read-only; the popover's actions do the writing. */
   const lastTicketFetchKey = useRef('')
   useEffect(() => {
     if (profile?.role !== 'creator') return
-    const ids = new Set()
+    const idsByFilm = new Map()
     for (const filmId of Object.keys(filmInvitesRaw)) {
+      const ids = new Set()
       for (const row of buildNetworkPeople({
         filmInvites: filmInvitesRaw[filmId] || [],
         users: filmSenderUsers,
@@ -547,38 +548,55 @@ export default function Dashboard() {
       })) {
         if (row.kind === 'person' && row.userId) ids.add(row.userId)
       }
+      if (ids.size) idsByFilm.set(filmId, [...ids].sort())
     }
-    if (!ids.size) return
-    const fetchKey = [...ids].sort().join(',')
+    if (!idsByFilm.size) return
+    const fetchKey = [...idsByFilm.entries()]
+      .map(([f, ids]) => `${f}:${ids.join(',')}`)
+      .sort()
+      .join('|')
     if (fetchKey === lastTicketFetchKey.current) return
     lastTicketFetchKey.current = fetchKey
     ;(async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession()
         if (!session?.access_token) return
-        const { statuses } = await api.adminTicketStatuses([...ids], session.access_token)
-        // Apply only while this id-set is still the current one — a reload
-        // with the SAME people may cancel-and-skip (the dedupe), so the
-        // in-flight result must land; a reload with DIFFERENT people bumps
-        // the key and this stale result is dropped.
-        if (statuses && lastTicketFetchKey.current === fetchKey) setTicketStatuses(statuses)
+        const results = await Promise.all(
+          [...idsByFilm.entries()].map(async ([filmId, ids]) => {
+            const { statuses } = await api.adminTicketStatuses(filmId, ids, session.access_token)
+            return [filmId, statuses || {}]
+          })
+        )
+        // Apply only while this set is still current — a reload with the
+        // SAME people may cancel-and-skip (the dedupe), so the in-flight
+        // result must land; a different set bumps the key and this stale
+        // result is dropped.
+        if (lastTicketFetchKey.current === fetchKey) {
+          setTicketStatuses(Object.fromEntries(results))
+        }
       } catch {
         /* not the owner account (or not configured) — no controls shown */
       }
     })()
   }, [profile?.id, profile?.role, filmInvitesRaw, filmSenderUsers])
 
-  /** One server call per committed popover action; fresh state comes back and
-   *  updates both the cell and the Tickets-left column live. Returns whether
-   *  the action applied (the popover keeps pending state on failure). */
-  async function handleTicketControl(userId, payload) {
+  /** One server call per committed popover action; fresh per-film state comes
+   *  back and updates both the cell and the Tickets-left column live. Returns
+   *  whether the action applied (the popover keeps pending state on failure). */
+  async function handleTicketControl(filmId, userId, payload) {
     setControlsBusy(true)
     setControlsError('')
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const result = await api.adminTicketControl({ userId, ...payload }, session?.access_token)
+      const result = await api.adminTicketControl(
+        { userId, filmId, ...payload },
+        session?.access_token
+      )
       if (result?.applied) {
-        setTicketStatuses((prev) => ({ ...prev, [userId]: { ...prev[userId], ...result } }))
+        setTicketStatuses((prev) => ({
+          ...prev,
+          [filmId]: { ...prev[filmId], [userId]: { ...prev[filmId]?.[userId], ...result } },
+        }))
         return true
       }
       setControlsError(result?.reason || 'Could not update')
@@ -1954,7 +1972,9 @@ export default function Dashboard() {
                                 }
                                 const person = row
                                 const email = person.email
-                                const status = person.userId ? ticketStatuses[person.userId] : null
+                                const status = person.userId
+                                  ? ticketStatuses[film.id]?.[person.userId]
+                                  : null
                                 return (
                                   <tr key={email} className="border-b border-border/60 last:border-b-0">
                                     <td className="py-2 pr-4 text-text">{person.name}</td>
@@ -2028,13 +2048,13 @@ export default function Dashboard() {
                                                 busy={controlsBusy}
                                                 error={controlsError}
                                                 onGrant={(amount) =>
-                                                  handleTicketControl(person.userId, {
+                                                  handleTicketControl(film.id, person.userId, {
                                                     action: 'grant',
                                                     amount,
                                                   })
                                                 }
                                                 onSetUnlimited={(unlimited) =>
-                                                  handleTicketControl(person.userId, {
+                                                  handleTicketControl(film.id, person.userId, {
                                                     action: 'set_unlimited',
                                                     unlimited,
                                                   })

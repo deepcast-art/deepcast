@@ -175,10 +175,12 @@ describe('buildNetworkPeople', () => {
     expect(clara.name).toBe('Clara N')
     // Having an account no longer implies watched — status rules the stage.
     expect(clara.stage).toBe('claimed')
-    expect(clara.ticketsLeft).toBe(3)
+    // Per-film (Piece F): account balances come from the admin status
+    // endpoint, never computed here.
+    expect(clara.ticketsLeft).toBe(null)
   })
 
-  it('unlimited account holders read Infinity; narrow users rows stay unknown', () => {
+  it('account holders never compute tickets-left here — per-film balances are the server’s (Piece F)', () => {
     const toAda = inv({ sender_id: CREATOR, recipient_email: 'ada@x.com', status: 'signed_up' })
     const toTom = inv({ sender_id: CREATOR, recipient_email: 'tom@x.com', status: 'signed_up' })
     const rows = buildNetworkPeople({
@@ -190,14 +192,14 @@ describe('buildNetworkPeople', () => {
           email: 'ada@x.com',
           role: 'viewer',
           team_creator_id: null,
-          unlimited_shares: true,
-          invite_allocation: 0,
+          unlimited_shares: true, // dormant global flag — ignored
+          invite_allocation: 0, // dormant global balance — ignored
         },
-        { id: 'user-tom', name: 'Tom', email: 'tom@x.com' }, // no wallet columns loaded
+        { id: 'user-tom', name: 'Tom', email: 'tom@x.com' },
       ],
       creatorId: CREATOR,
     })
-    expect(rows.find((r) => r.email === 'ada@x.com').ticketsLeft).toBe(Infinity)
+    expect(rows.find((r) => r.email === 'ada@x.com').ticketsLeft).toBe(null)
     expect(rows.find((r) => r.email === 'tom@x.com').ticketsLeft).toBe(null)
   })
 

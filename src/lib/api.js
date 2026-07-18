@@ -144,15 +144,17 @@ export const api = {
       body: JSON.stringify({ token }),
     }),
 
-  // Owner-only admin (server enforces the ADMIN_USER_ID pin; these just pass the session token)
-  adminTicketStatuses: (userIds, accessToken) =>
+  // Owner-only admin (server enforces the ADMIN_USER_ID pin; these just pass
+  // the session token). Per-film since Piece F: one batched call per film.
+  adminTicketStatuses: (filmId, userIds, accessToken) =>
     request('/admin/ticket-controls/status', {
       method: 'POST',
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-      body: JSON.stringify({ userIds }),
+      body: JSON.stringify({ filmId, userIds }),
     }),
 
-  // One mutating call: {userId, action:'grant', amount} or {userId, action:'set_unlimited', unlimited}
+  // One mutating call: {userId, filmId, action:'grant', amount} or
+  // {userId, filmId, action:'set_unlimited', unlimited}
   adminTicketControl: (payload, accessToken) =>
     request('/admin/ticket-controls', {
       method: 'POST',

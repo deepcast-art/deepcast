@@ -32,11 +32,11 @@
  * claimed invite is the only back-link. "Tickets generated" is therefore the
  * union of both matches, counted once per invite row.
  *
- * Tickets left (unified wallet, Piece E): account holders read the canonical
- * invitationsRemaining off their users row when the caller loaded it with its
- * wallet columns (Infinity for unlimited sharers); claim rows with no account
- * read tickets_remaining (NULL = never initialized = full grant); null means
- * unknown and the display layer decides (∞ or em dash).
+ * Tickets left (per-film since Piece F): account holders' balances live on
+ * film_tickets and are shown from the batched admin status endpoint, never
+ * computed here; claim rows with no account read the legacy tickets_remaining
+ * (NULL = never initialized = full grant); null means unknown and the display
+ * layer decides (∞ or em dash).
  *
  * Reach is the canonical stat from src/lib/reach.js, unchanged: claimed-but-
  * unwatched people do NOT count toward reach (decision 2026-07-16), even
@@ -46,7 +46,6 @@ import { buildChildrenByParentId, computeUserReach } from './reach.js'
 import { isInviteClaimedStage } from './ticketFunnel.js'
 import { isInviteWatched } from './filmStats.js'
 import { INITIAL_CLAIMANT_TICKETS } from './ticketRules.js'
-import { invitationsRemaining } from './shares.js'
 
 const normEmail = (e) => (typeof e === 'string' ? e.trim().toLowerCase() : '')
 
@@ -188,16 +187,14 @@ export function buildNetworkPeople({ filmInvites, users, creatorId } = {}) {
         (inv.parent_invite_id != null && p.receivedInviteIds.has(inv.parent_invite_id))
     )
     const hasAccount = Boolean(p.userId) || p.receivedStatuses.includes('signed_up')
-    // Unified tickets-left (Piece E): the account wallet when the person's
-    // users row (with its allocation) is loaded — Infinity for unlimited
-    // sharers; the invite wallet only for claim rows with no account (NULL
-    // there means never initialized → full grant); null = unknown (the
-    // display layer decides between ∞ and an em dash).
-    const acct = p.userId ? userById.get(p.userId) : null
+    // Tickets-left (per-film since Piece F): account holders' balances live
+    // on film_tickets and reach the admin table ONLY via the batched status
+    // endpoint — no client-side account fallback (the retired global column
+    // would show the wrong film's number). The legacy invite wallet remains
+    // for claim rows with no account (NULL = never initialized = full
+    // grant); null = unknown (the display layer decides ∞ vs em dash).
     let ticketsLeft = null
-    if (acct && 'invite_allocation' in acct) {
-      ticketsLeft = invitationsRemaining(acct)
-    } else if (!hasAccount && p.hasClaimRow) {
+    if (!hasAccount && p.hasClaimRow) {
       ticketsLeft = p.claimTickets ?? INITIAL_CLAIMANT_TICKETS
     }
     personRows.push({
