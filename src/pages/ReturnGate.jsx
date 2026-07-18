@@ -29,30 +29,29 @@ export default function ReturnGate() {
     ;(async () => {
       try {
         const email = (user.email || '').trim()
+        // Plural claims (founder rule, 2026-07-17): route to the most
+        // recently claimed UNWATCHED film; when every claim is watched (or
+        // none exist) → the dashboard. Owner rows win; the email match is
+        // only the attach-failed/pre-backfill fallback, as before.
         const byOwner = supabase
           .from('invites')
           .select('link_slug, status, claimed_at')
           .eq('claimed_by', user.id)
           .order('claimed_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
+          .limit(25)
         const byEmail = email
           ? supabase
               .from('invites')
               .select('link_slug, status, claimed_at')
               .ilike('claimed_email', email)
               .order('claimed_at', { ascending: false })
-              .limit(1)
-              .maybeSingle()
+              .limit(25)
           : Promise.resolve({ data: null })
         const [{ data: owned }, { data: emailed }] = await Promise.all([byOwner, byEmail])
-        const claim = owned || emailed
+        const claims = owned?.length ? owned : emailed || []
         if (cancelled) return
-        if (claim?.link_slug && !isInviteWatched(claim)) {
-          setDestination(`/watch/${claim.link_slug}`)
-        } else {
-          setDestination('/dashboard')
-        }
+        const unwatched = claims.find((c) => c?.link_slug && !isInviteWatched(c))
+        setDestination(unwatched ? `/watch/${unwatched.link_slug}` : '/dashboard')
       } catch {
         if (!cancelled) setDestination('/dashboard')
       }

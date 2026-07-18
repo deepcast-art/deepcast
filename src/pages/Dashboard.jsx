@@ -19,7 +19,7 @@ import {
   computeUserReach,
 } from '../lib/reach.js'
 // Canonical share quota + per-film stats — same single-source rule as reach.
-import { invitationsRemaining } from '../lib/shares.js'
+import { filmTicketsRemaining } from '../lib/shares.js'
 import { computeTicketFunnel } from '../lib/ticketFunnel.js'
 import { buildNetworkPeople } from '../lib/networkPeople.js'
 import { safeLocalStorage, safeSessionStorage } from '../lib/safeStorage.js'
@@ -237,20 +237,43 @@ export default function Dashboard() {
     profile?.role === 'team_member' ? profile?.team_creator_id : profile?.id
   const isViewer = profile?.role === 'viewer'
 
-  /** Canonical quota, surfaced as TICKETS (2026-07-16). Claimants spend from
-   *  their claimed invite's tickets_remaining (NULL = claimed pre-migration →
-   *  full grant, healed server-side on first spend); accounts keep the
-   *  invitationsRemaining machinery (src/lib/shares.js) unchanged. */
+  /** Canonical quota, surfaced as TICKETS — PER-FILM since Piece F: the
+   *  sidebar shows the SELECTED film's wallet (own film_tickets row, readable
+   *  under RLS; a missing row is the virtual full grant), finally matching
+   *  "Tickets given" which was always per-film. Claimants keep their claimed
+   *  invite's legacy tickets_remaining (accountless degradation path). */
+  const [viewerFilmWallet, setViewerFilmWallet] = useState(null)
+  useEffect(() => {
+    if (!isViewer || isClaimant || !profile?.id || !viewerFilmId) {
+      setViewerFilmWallet(null)
+      return
+    }
+    let cancelled = false
+    supabase
+      .from('film_tickets')
+      .select('balance, unlimited')
+      .eq('user_id', profile.id)
+      .eq('film_id', viewerFilmId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setViewerFilmWallet(data ?? null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isViewer, isClaimant, profile?.id, viewerFilmId])
+
   const invitesLeft = !isViewer
     ? null
     : isClaimant
       ? profile.tickets_remaining ?? INITIAL_CLAIMANT_TICKETS
-      : invitationsRemaining(profile)
+      : filmTicketsRemaining(profile, viewerFilmWallet)
   const sentCount = isViewer ? viewerSentInvites.length : 0
   // The dashboard's email share modal is an account-flow surface — claimants
   // share from the watch page's panel instead (flagged, per the final spec).
   const canShareMore = isViewer && viewerFilmId && !isClaimant
-  const shareDisabled = isViewer && !isClaimant && invitationsRemaining(profile) <= 0
+  const shareDisabled =
+    isViewer && !isClaimant && filmTicketsRemaining(profile, viewerFilmWallet) <= 0
 
   // Shared focus resolution (same helper every graph surface uses): email match first,
   // then invite-token match, then the common parent of the viewer's sent invites.
