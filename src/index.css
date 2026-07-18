@@ -294,6 +294,12 @@ img {
   animation: dc-rise 1s cubic-bezier(0.2, 0.6, 0.2, 1) both;
 }
 
+/* Watch-page result reveal: same rise, quicker; reduced-motion users get a
+   plain fade instead (not nothing) — see the media block below. */
+.dc-result-rise {
+  animation: dc-rise 0.7s cubic-bezier(0.2, 0.6, 0.2, 1) both;
+}
+
 .dc-rise-1 { animation-delay: 0.15s; }
 .dc-rise-2 { animation-delay: 0.4s; }
 .dc-rise-3 { animation-delay: 0.62s; }
@@ -395,6 +401,10 @@ img {
   .dc-rise {
     animation: none;
     opacity: 1;
+    transform: none;
+  }
+  .dc-result-rise {
+    animation: dc-fade-in var(--duration-load) var(--ease-default) both;
     transform: none;
   }
   .slow-fade-text {
