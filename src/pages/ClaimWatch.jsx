@@ -19,6 +19,46 @@ const progressKey = (slug) => `screening_progress_slug_${slug}`
 const MuxPlayer = lazy(() => import('@mux/mux-player-react').then((m) => ({ default: m.default })))
 
 /**
+ * Decorative ticket stubs (reference motif, adopted 2026-07-19): one outlined
+ * stub per granted ticket, spent ones dimmed newest-first — the same live
+ * wallet values the text line shows, no extra fetching. `remaining` is the
+ * RAW server balance: a non-finite value (unlimited sharer, or a legacy
+ * uninitialized wallet) renders NO stubs — stubs imply a finite count; the
+ * text line keeps its existing presentation either way. The used count is
+ * clamped into [0, granted] so historical wallets can never overflow or go
+ * negative. Purely decorative (aria-hidden); the text line is the accessible
+ * count. Dimming transitions 400ms; reduced-motion dims instantly.
+ */
+function TicketStubs({ granted, remaining }) {
+  if (!Number.isFinite(remaining)) return null
+  const used = Math.min(Math.max(granted - remaining, 0), granted)
+  return (
+    <div aria-hidden className="mt-8 flex items-center justify-center gap-3 min-[540px]:gap-3.5">
+      {Array.from({ length: granted }, (_, i) => {
+        const isUsed = i >= granted - used
+        return (
+          <svg
+            key={i}
+            viewBox="0 0 32 20"
+            data-stub={isUsed ? 'used' : 'unused'}
+            className={`h-5 w-8 text-accent transition-opacity duration-[400ms] ease-out motion-reduce:transition-none ${
+              isUsed ? 'opacity-[0.22]' : 'opacity-100'
+            }`}
+          >
+            <path
+              d="M2 2 h28 v5 a3 3 0 0 0 0 6 v5 h-28 v-5 a3 3 0 0 0 0-6 z"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.2"
+            />
+          </svg>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
  * PAGE 2 of the three-page structure (final spec 2026-07-16): the watch page.
  * One job: the film — plus the share panel, which is the platform-concept
  * line's permanent home (the ask).
@@ -86,6 +126,12 @@ export default function ClaimWatch() {
   const [link, setLink] = useState(null)
   const [loadFailed, setLoadFailed] = useState(false)
   const [tickets, setTickets] = useState(null)
+  /** The RAW server balance, kept apart from the healed `tickets` display:
+   *  the stubs render only for a finite server number. NULL means unlimited
+   *  (no finite count exists — text-only presentation stays) or a legacy
+   *  uninitialized wallet (unknown until its first spend) — no stubs either
+   *  way, and the text line keeps its existing healed behavior untouched. */
+  const [stubBalance, setStubBalance] = useState(null)
   const [shareName, setShareName] = useState('')
   const [shareBusy, setShareBusy] = useState(false)
   const [shareError, setShareError] = useState('')
@@ -104,6 +150,7 @@ export default function ClaimWatch() {
         // Server value wins; NULL (claimed pre-migration) reads as the full
         // grant — the server heals it on first spend.
         setTickets(data.ticketsRemaining ?? INITIAL_CLAIMANT_TICKETS)
+        setStubBalance(Number.isFinite(data.ticketsRemaining) ? data.ticketsRemaining : null)
       } catch {
         if (!cancelled) setLoadFailed(true)
       }
@@ -189,6 +236,8 @@ export default function ClaimWatch() {
       })
       setGenerated({ url: result.url, name })
       if (result.ticketsRemaining != null) setTickets(result.ticketsRemaining)
+      // Same moment the text count decrements, the newest-used stub dims.
+      if (Number.isFinite(result.ticketsRemaining)) setStubBalance(result.ticketsRemaining)
       setShareName('')
       setCopied(false)
     } catch (err) {
@@ -284,14 +333,23 @@ export default function ClaimWatch() {
             here pass through human hands only.
           </p>
 
+          {/* Stubs sit above the tickets/zero line — in the zero state they
+              remain, all dimmed (the emptied ticket book reads better than a
+              bare sentence; decided 2026-07-19). */}
+          <TicketStubs granted={INITIAL_CLAIMANT_TICKETS} remaining={stubBalance} />
+
           {outOfTickets ? (
-            <p className="mt-8 font-sans text-xs uppercase tracking-[0.24em] text-muted">
+            <p
+              className={`${Number.isFinite(stubBalance) ? 'mt-3.5' : 'mt-8'} font-sans text-xs uppercase tracking-[0.24em] text-muted`}
+            >
               You’ve given all your tickets for this film.
             </p>
           ) : (
             <>
               {/* Tickets line — live per-film wallet value. */}
-              <p className="mt-8 font-sans text-xs uppercase tracking-[0.24em] text-muted">
+              <p
+                className={`${Number.isFinite(stubBalance) ? 'mt-3.5' : 'mt-8'} font-sans text-xs uppercase tracking-[0.24em] text-muted`}
+              >
                 You have {tickets ?? '…'} ticket{tickets === 1 ? '' : 's'} for this film. Each
                 admits one person, once.
               </p>

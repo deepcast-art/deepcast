@@ -131,6 +131,9 @@ test.describe('three-page claim arc', () => {
     await expect(page.getByRole('button', { name: /Who is this film for\?/i })).toHaveCount(0)
     await expect(page.getByText(/No algorithm, no feed/)).toBeVisible()
     await expect(page.getByText(/You have 5 tickets for this film/)).toBeVisible()
+    // Ticket stubs: one per granted ticket, none spent yet.
+    await expect(page.locator('[data-stub]')).toHaveCount(5)
+    await expect(page.locator('[data-stub="used"]')).toHaveCount(0)
 
     // Generate a second-generation link — visible ticket decrement.
     await page.getByPlaceholder('Their first name').fill('Jordan')
@@ -139,6 +142,8 @@ test.describe('three-page claim arc', () => {
     await expect(page.getByText(/I watched this and thought of you —/)).toBeVisible()
     await expect(page.getByRole('button', { name: /Copy the message/i })).toBeVisible()
     await expect(page.getByText(/You have 4 tickets for this film/)).toBeVisible()
+    // The newest-used stub dims in sync with the text count.
+    await expect(page.locator('[data-stub="used"]')).toHaveCount(1)
     await expect(page.getByRole('link', { name: /See where your ticket went/i })).toBeVisible()
     // Persistent quiet dashboard link exists too.
     await expect(page.getByRole('link', { name: /Your dashboard/i })).toBeVisible()
@@ -166,6 +171,8 @@ test.describe('three-page claim arc', () => {
     // Panel is always open — the zero-tickets state shows with no interaction.
     await expect(page.getByText('You’ve given all your tickets for this film.')).toBeVisible()
     await expect(page.getByPlaceholder('Their first name')).toHaveCount(0)
+    // The emptied ticket book stays visible: all five stubs, all dimmed.
+    await expect(page.locator('[data-stub="used"]')).toHaveCount(5)
     expect(jsErrors).toEqual([])
   })
 
