@@ -25,7 +25,6 @@ import { buildNetworkPeople } from '../lib/networkPeople.js'
 import { safeLocalStorage, safeSessionStorage } from '../lib/safeStorage.js'
 import { readClaimStash } from '../lib/claimStash.js'
 import { screeningCardState } from '../lib/screeningCard.js'
-import { INITIAL_CLAIMANT_TICKETS } from '../lib/ticketRules.js'
 import { formatOrdinal } from '../lib/ordinal.js'
 
 /** Sent-invitations list renders in pages so an unlimited sharer with hundreds of
@@ -134,7 +133,6 @@ export default function Dashboard() {
       claimedInviteId: claimantInvite.id,
       claimedInviteToken: claimantInvite.token || null,
       claim_ordinal: claimantInvite.claim_ordinal ?? null,
-      tickets_remaining: claimantInvite.tickets_remaining ?? null,
       claimedFilmId: claimantInvite.film_id,
       claimedStatus: claimantInvite.status || null,
       claimedSlug: claimStash.slug,
@@ -240,9 +238,35 @@ export default function Dashboard() {
   /** Canonical quota, surfaced as TICKETS — PER-FILM since Piece F: the
    *  sidebar shows the SELECTED film's wallet (own film_tickets row, readable
    *  under RLS; a missing row is the virtual full grant), finally matching
-   *  "Tickets given" which was always per-film. Claimants keep their claimed
-   *  invite's legacy tickets_remaining (accountless degradation path). */
+   *  "Tickets given" which was always per-film. */
   const [viewerFilmWallet, setViewerFilmWallet] = useState(null)
+
+  /** Sessionless claimants (fix 2026-07-19): the balance comes from the SAME
+   *  server-computed source the watch page trusts — the public link route,
+   *  which resolves the per-film wallet for account-backed claims and the
+   *  legacy invite wallet for accountless ones. The old read of the invite
+   *  row's tickets_remaining showed a stale "5" for every account-backed
+   *  claimant (their spends debit film_tickets, never that column). A failed
+   *  lookup displays NOTHING — never a wrong number. */
+  const [claimantTicketsLeft, setClaimantTicketsLeft] = useState(null)
+  useEffect(() => {
+    if (!isClaimant || !claimStash?.slug) {
+      setClaimantTicketsLeft(null)
+      return
+    }
+    let cancelled = false
+    api
+      .getLinkInvite(claimStash.slug)
+      .then((data) => {
+        if (!cancelled) setClaimantTicketsLeft(data?.ticketsRemaining ?? null)
+      })
+      .catch(() => {
+        if (!cancelled) setClaimantTicketsLeft(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isClaimant, claimStash?.slug])
   useEffect(() => {
     if (!isViewer || isClaimant || !profile?.id || !viewerFilmId) {
       setViewerFilmWallet(null)
@@ -266,7 +290,7 @@ export default function Dashboard() {
   const invitesLeft = !isViewer
     ? null
     : isClaimant
-      ? profile.tickets_remaining ?? INITIAL_CLAIMANT_TICKETS
+      ? claimantTicketsLeft
       : filmTicketsRemaining(profile, viewerFilmWallet)
   const sentCount = isViewer ? viewerSentInvites.length : 0
   // The dashboard's email share modal is an account-flow surface — claimants
