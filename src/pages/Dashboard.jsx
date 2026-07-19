@@ -133,6 +133,10 @@ export default function Dashboard() {
       claimedInviteId: claimantInvite.id,
       claimedInviteToken: claimantInvite.token || null,
       claim_ordinal: claimantInvite.claim_ordinal ?? null,
+      /** The silent account behind this claim (Piece E) — the id today's link
+       *  generations stamp into sender_id. NULL only for legacy accountless
+       *  claims, whose sends really do carry a NULL sender_id. */
+      claimedBy: claimantInvite.claimed_by ?? null,
       claimedFilmId: claimantInvite.film_id,
       claimedStatus: claimantInvite.status || null,
       claimedSlug: claimStash.slug,
@@ -385,15 +389,21 @@ export default function Dashboard() {
     const email = (profile.email || '').trim()
 
     // Sent and received invites depend only on the identity — fetch together.
-    // Claimants: their sent links carry sender_email = claimed email (and no
-    // sender_id); their one "received" film IS their claimed invite — the
-    // claimed row has recipient_email NULL, so the email lookup can't find it.
+    // Claimants (fix 2026-07-19): their sends are found by sender_id = the
+    // claim's silent account (claimed_by — Piece E stamps it on every
+    // generation; the old sender_email + sender_id IS NULL query matched
+    // nothing for account-backed claimants and showed '0 given'). Legacy
+    // accountless claims (claimed_by NULL) keep the NULL-sender email match —
+    // for them it is still the truth. Their one "received" film IS their
+    // claimed invite — the claimed row has recipient_email NULL, so the email
+    // lookup can't find it.
+    const senderId = uid || profile.claimedBy || null
     const [{ data: sent, error: sentErr }, { data: allRecvd }] = await Promise.all([
-      uid
+      senderId
         ? supabase
             .from('invites')
             .select('*')
-            .eq('sender_id', uid)
+            .eq('sender_id', senderId)
             .order('created_at', { ascending: false })
         : supabase
             .from('invites')
@@ -529,7 +539,7 @@ export default function Dashboard() {
     setViewerCreatorName(cname)
 
     return sentList[0]?.id ?? null
-  }, [profile?.id, profile?.role, profile?.email, profile?.isClaimant, profile?.claimedFilmId, profile?.claimedInviteToken, selectViewerFilm])
+  }, [profile?.id, profile?.role, profile?.email, profile?.isClaimant, profile?.claimedBy, profile?.claimedFilmId, profile?.claimedInviteToken, selectViewerFilm])
 
   useEffect(() => {
     if (profile) loadDashboard()
