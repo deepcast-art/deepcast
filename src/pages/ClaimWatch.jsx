@@ -211,25 +211,14 @@ export default function ClaimWatch() {
   const title = link?.filmTitle || 'a film'
   const outOfTickets = tickets != null && tickets <= 0
 
-  /* Invite-v2 look (2026-07-19): the marquee, the film, the ask — over the
-     landing page's ink-gradient + grain atmosphere. On phones (<540px) the
-     player and the panel break out of the centered column to true
-     edge-to-edge (reference layout); wider screens keep the shadowed
-     centered column. MuxPlayer props/behavior unchanged. */
+  /* Invite-v2 look (2026-07-19): the marquee, the film, the ask. On phones
+     (<540px) the player and the panel break out of the centered column to
+     true edge-to-edge (reference layout); wider screens keep the shadowed
+     centered column. MuxPlayer props/behavior unchanged. Background: the
+     one solid page token the dashboard uses (bg-bg-page) — uniform, no
+     gradient, no grain (decided 2026-07-19). */
   return (
-    <div className="relative min-h-dvh text-warm">
-      {/* Atmosphere — the landing page's gradient pattern in the ink family
-          (quiet top/bottom radials; the player is the image on this page). */}
-      <div
-        aria-hidden
-        className="fixed inset-0"
-        style={{
-          background:
-            'radial-gradient(90% 55% at 50% 0%, #10172b 0%, transparent 65%), radial-gradient(70% 50% at 50% 100%, #0c1224 0%, transparent 70%), #080c18',
-        }}
-      />
-      <div className="dc-tactile-grain" aria-hidden />
-
+    <div className="relative min-h-dvh bg-bg-page text-warm">
       {/* Wordmark: top-left on wide screens, centered on phones (landing convention). */}
       <header className="relative z-10 flex justify-center px-[clamp(1.5rem,4vw,3rem)] pt-[max(1.75rem,env(safe-area-inset-top,0px))] sm:justify-start">
         <DeepcastLogo variant="wordmark" size="text-2xl" className="text-warm opacity-90" />
