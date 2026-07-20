@@ -6,6 +6,7 @@ import DeepcastLogo from '../components/DeepcastLogo'
 import { filmConditionsLine } from '../lib/screeningConditions'
 import { readClaimStash, isClaimOwner } from '../lib/claimStash'
 import { INITIAL_CLAIMANT_TICKETS } from '../lib/ticketRules'
+import { firstNameInputError } from '../lib/firstNameRule'
 import { resumePositionToSave } from '../lib/resumePosition'
 import { safeLocalStorage } from '../lib/safeStorage'
 import { fullscreenPlayDecision, isIOSDevice } from '../lib/playbackFullscreen'
@@ -330,8 +331,9 @@ export default function ClaimWatch() {
   const handleGenerate = async (e) => {
     e.preventDefault()
     const name = shareName.trim()
-    if (!name) {
-      setShareError('Enter their first name.')
+    const nameError = firstNameInputError(name)
+    if (nameError) {
+      setShareError(nameError)
       return
     }
     setShareBusy(true)

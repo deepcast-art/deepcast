@@ -11,6 +11,7 @@
 import { useState } from 'react'
 import { api } from '../lib/api'
 import { supabase } from '../lib/supabase'
+import { firstNameInputError } from '../lib/firstNameRule'
 
 export default function ShareLinkModal({
   open,
@@ -39,8 +40,9 @@ export default function ShareLinkModal({
   const handleGenerate = async (e) => {
     e.preventDefault()
     const first = name.trim()
-    if (!first) {
-      setError('Enter their first name.')
+    const nameError = firstNameInputError(first)
+    if (nameError) {
+      setError(nameError)
       return
     }
     setBusy(true)

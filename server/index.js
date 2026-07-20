@@ -31,6 +31,7 @@ import {
 } from './filmWallet.js'
 import { claimedSharerSpendDecision, claimedInviteTicketsDisplay } from './claimantWallet.js'
 import { nextTicketNo } from './ticketNumbers.js'
+import { firstNameInputError } from '../src/lib/firstNameRule.js'
 
 const app = express()
 app.use(cors())
@@ -757,6 +758,12 @@ app.post('/api/invites/create-link', async (req, res) => {
       typeof inviteeFirstNameInput === 'string' ? inviteeFirstNameInput.trim() : ''
     if (!inviteeFirstName) {
       return res.status(400).json({ error: "The invitee's first name is required" })
+    }
+    // Same rule as every client form (src/lib/firstNameRule.js): the first
+    // name is never an email — server-side so no client can bypass it.
+    const inviteeNameError = firstNameInputError(inviteeFirstName)
+    if (inviteeNameError) {
+      return res.status(400).json({ error: inviteeNameError })
     }
 
     const authHeader = req.get('authorization') || ''

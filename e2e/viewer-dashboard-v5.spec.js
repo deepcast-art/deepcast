@@ -217,6 +217,10 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     const dialog = page.getByRole('dialog')
     await expect(dialog.getByText('Who is this film for?')).toBeVisible()
     await expect(dialog.locator('input[type="email"]')).toHaveCount(0)
+    // Typing an email into the first-name box is gently refused, client-side.
+    await dialog.getByPlaceholder('Their first name').fill('noa@example.com')
+    await dialog.getByRole('button', { name: 'Create their invitation' }).click()
+    await expect(dialog.getByText('Just their first name — no email needed.')).toBeVisible()
     await dialog.getByPlaceholder('Their first name').fill('Noa')
     await dialog.getByRole('button', { name: 'Create their invitation' }).click()
     await expect(dialog.getByText('https://deepcast.art/noa-x9y2').first()).toBeVisible()
