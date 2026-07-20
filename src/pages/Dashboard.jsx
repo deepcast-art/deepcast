@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import CreatorLinkPanel from '../components/CreatorLinkPanel'
@@ -11,83 +11,17 @@ import NetworkGraph from '../components/NetworkGraph'
 import { buildGraphLayout, resolveViewerFocus } from '../lib/graphLayout'
 import { api } from '../lib/api'
 import { ensureHttpsUrl } from '../lib/httpsUrl.js'
-// Canonical reach stat — every reach count on every surface comes from here.
-import {
-  isInviteOpened as isOpened,
-  buildChildrenByParentId,
-  reachBelowInvite,
-  computeUserReach,
-} from '../lib/reach.js'
-// Canonical share quota + per-film stats — same single-source rule as reach.
+// Canonical share quota + per-film stats — one shared computation per stat.
 import { filmTicketsRemaining } from '../lib/shares.js'
 import { computeTicketFunnel } from '../lib/ticketFunnel.js'
 import { buildNetworkPeople } from '../lib/networkPeople.js'
 import { safeLocalStorage, safeSessionStorage } from '../lib/safeStorage.js'
 import { readClaimStash } from '../lib/claimStash.js'
-import { screeningCardState } from '../lib/screeningCard.js'
-import { formatOrdinal } from '../lib/ordinal.js'
-
-/** Sent-invitations list renders in pages so an unlimited sharer with hundreds of
- *  shares can see them ALL without slowing the dashboard down. Normal users never
- *  exceed one page, so their behavior is unchanged. */
-const SENT_LIST_PAGE_SIZE = 25
-
-function formatNamesList(names) {
-  const filtered = names.filter(Boolean)
-  if (filtered.length === 0) return ''
-  if (filtered.length === 1) return filtered[0]
-  if (filtered.length === 2) return `${filtered[0]} and ${filtered[1]}`
-  return `${filtered.slice(0, -1).join(', ')}, and ${filtered[filtered.length - 1]}`
-}
-
-/** "People you've reached" label with its explainer. Hover opens it on desktop;
- *  on touch screens (no hover) tapping the ? toggles it and tapping anywhere
- *  else closes it. `tipBelow` flips the bubble under the label for spots where
- *  above would clip (the mobile stats strip sits at the top of the scroll area). */
-function ReachExplainer({ tipBelow = false }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef(null)
-  useEffect(() => {
-    if (!open) return
-    const close = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
-    }
-    document.addEventListener('pointerdown', close)
-    return () => document.removeEventListener('pointerdown', close)
-  }, [open])
-  return (
-    <span
-      ref={ref}
-      className="group relative inline-flex w-fit cursor-help font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45"
-    >
-      People you&apos;ve reached
-      <button
-        type="button"
-        aria-label="What does this number mean?"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        className={`ml-1.5 inline-flex h-3.5 w-3.5 shrink-0 cursor-help touch-manipulation items-center justify-center self-start rounded-full border text-[8px] font-medium leading-none tracking-normal transition-colors duration-200 group-hover:border-warm/60 group-hover:text-warm/75 ${
-          open ? 'border-warm/60 text-warm/75' : 'border-warm/30 text-warm/45'
-        }`}
-      >
-        ?
-      </button>
-      <span
-        role="tooltip"
-        className={`pointer-events-none absolute left-0 z-20 w-60 border border-faint/40 bg-[#05070a] px-3 py-2 text-sm font-normal normal-case leading-relaxed tracking-normal text-warm/80 shadow-lg transition-opacity duration-200 group-hover:opacity-100 ${
-          tipBelow ? 'top-full mt-2' : 'bottom-full mb-2'
-        } ${open ? 'opacity-100' : 'opacity-0'}`}
-      >
-        Everyone who&apos;s opened an invite because of you — the people you shared with, plus everyone they passed it on to.
-      </span>
-    </span>
-  )
-}
+import ViewerDashboardV5 from './ViewerDashboardV5'
 
 export default function Dashboard() {
   const { profile: authProfile, signOut, fetchProfile, profileLoaded } = useAuth()
   const location = useLocation()
-  const navigate = useNavigate()
 
   /* ── Claimant mode (final spec 2026-07-16): an accountless claimant's
      identity is their claimed invite (safeStorage stash → invite row). We
@@ -166,48 +100,29 @@ export default function Dashboard() {
   const [teamRemoveBusyId, setTeamRemoveBusyId] = useState(null)
   /** Mobile menus always START closed and never auto-open — the dashboard's main
    *  page is the initial view (key stats live in the mobile strip; the menu is
-   *  navigation only). Desktop sidebars are always visible and unaffected. */
+   *  navigation only). Desktop sidebars are always visible and unaffected.
+   *  (The viewer V5 shell owns its own mobile-menu state internally.) */
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [viewerSidebarOpen, setViewerSidebarOpen] = useState(false)
 
-  const [newestInviteId, setNewestInviteId] = useState(null)
   const [allViewerSentInvites, setAllViewerSentInvites] = useState([])
   const [viewerFilmId, setViewerFilmId] = useState(
     () => safeSessionStorage.getItem('dash_viewer_film_id') || null
   )
-  const [viewerFilmTitle, setViewerFilmTitle] = useState('')
-  const [viewerFilmCreatorId, setViewerFilmCreatorId] = useState(null)
+  // Values re-surface with the constellation phase (film title, creator id/name
+  // feed the layout); until then only the setters are read — the loaders keep
+  // the state warm so that phase is a render-side change only.
+  const [, setViewerFilmTitle] = useState('')
+  const [, setViewerFilmCreatorId] = useState(null)
   const [viewerInviteToken, setViewerInviteToken] = useState(null)
   const [viewerFilmInvites, setViewerFilmInvites] = useState([])
   const [viewerAllFilms, setViewerAllFilms] = useState([])
-  const [viewerCreatorName, setViewerCreatorName] = useState('')
+  const [, setViewerCreatorName] = useState('')
   const [viewerTokenByFilmId, setViewerTokenByFilmId] = useState({})
 
   const viewerSentInvites = useMemo(
     () => allViewerSentInvites.filter((inv) => inv.film_id === viewerFilmId),
     [allViewerSentInvites, viewerFilmId]
   )
-
-  // parent_invite_id -> child invites, across the film's entire invite tree.
-  const childrenByParentId = useMemo(
-    () => buildChildrenByParentId(viewerFilmInvites),
-    [viewerFilmInvites]
-  )
-
-  // "People you've reached": the canonical reach stat (src/lib/reach.js) —
-  // everyone in the viewer's downstream branch whose invite is OPENED.
-  const viewerReachedCount = useMemo(
-    () => computeUserReach(viewerSentInvites, childrenByParentId),
-    [viewerSentInvites, childrenByParentId]
-  )
-
-  // Per direct invitee: how many people THEY have reached (their opened
-  // descendants, not counting themselves). Same canonical computation.
-  const reachByInvite = useMemo(() => {
-    const counts = {}
-    for (const inv of viewerSentInvites) counts[inv.id] = reachBelowInvite(childrenByParentId, inv.id)
-    return counts
-  }, [viewerSentInvites, childrenByParentId])
 
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
   const [modalFirst, setModalFirst] = useState('')
@@ -217,7 +132,6 @@ export default function Dashboard() {
   const [modalBusy, setModalBusy] = useState(false)
   const [modalError, setModalError] = useState('')
 
-  const [visibleSentCount, setVisibleSentCount] = useState(SENT_LIST_PAGE_SIZE)
   /** Owner-only ticket controls (Piece B): per-USER-ID wallet state from the
    *  batched admin endpoint ({ name, unlimited, ticketsLeft, controllable,
    *  reason }). Stays empty for anyone the server rejects (pinned to
@@ -305,7 +219,8 @@ export default function Dashboard() {
 
   // Shared focus resolution (same helper every graph surface uses): email match first,
   // then invite-token match, then the common parent of the viewer's sent invites.
-  const { viewerRecipientKey, focusInviteId: viewerFocusInviteId } = useMemo(
+  // (The constellation phase will also read viewerRecipientKey from this memo.)
+  const { focusInviteId: viewerFocusInviteId } = useMemo(
     () =>
       resolveViewerFocus(viewerFilmInvites, profile?.email, {
         // Claimants: their claimed invite's token is the reliable focus key —
@@ -315,25 +230,6 @@ export default function Dashboard() {
       }),
     [viewerFilmInvites, profile?.email, profile?.claimedInviteToken, viewerInviteToken, profile?.id]
   )
-
-  const graphLayout = useMemo(() => {
-    if (!viewerFilmInvites?.length) return null
-    return buildGraphLayout({
-      filmInvites: viewerFilmInvites,
-      filmTitle: viewerFilmTitle || 'Film',
-      creatorName: viewerCreatorName,
-      creatorId: viewerFilmCreatorId,
-      viewerRecipientKey,
-      focusInviteId: viewerFocusInviteId,
-    })
-  }, [viewerFilmInvites, viewerFilmTitle, viewerCreatorName, viewerFilmCreatorId, viewerRecipientKey, viewerFocusInviteId])
-
-  const formattedRecipientNames = useMemo(() => {
-    const names = viewerSentInvites.map(
-      (inv) => inv.recipient_name?.trim() || inv.recipient_email?.split('@')[0] || 'Friend'
-    )
-    return formatNamesList(names)
-  }, [viewerSentInvites])
 
   const selectViewerFilm = useCallback(async (filmId) => {
     if (!filmId) {
@@ -898,8 +794,7 @@ export default function Dashboard() {
         modalLast.trim()
       )
       await fetchProfile(profile.id)
-      const newId = await loadViewerDashboard()
-      setNewestInviteId(newId)
+      await loadViewerDashboard()
       setIsShareModalOpen(false)
     } catch (e) {
       setModalError(e.message || 'Could not send invitation.')
@@ -910,542 +805,39 @@ export default function Dashboard() {
 
   const creatorTotalTickets = Object.values(filmStats).reduce((a, s) => a + (s.generated || 0), 0)
 
-  /* ===================== VIEWER V3 DIPTYCH ===================== */
+  /* ===================== VIEWER V5 (design-refs/deepcast-dashboard-v5.html) ===================== */
   if (isViewer) {
-    // Show the account holder's name whole (no split). Names are first-name-only now; for
-    // legacy accounts the full stored name shows, which is an acceptable cosmetic effect.
-    const firstNameDisplay = profile.name?.trim() || 'there'
-
     return (
-      <div className="relative z-10 flex min-h-dvh w-full flex-col overflow-hidden bg-bg-page text-warm md:flex-row">
-        {/* Mobile top bar — viewer */}
-        <div className="flex items-center justify-between border-b border-faint/30 bg-ink/80 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))] lg:hidden">
-          <Link to="/" className="inline-block opacity-90 hover:opacity-100">
-            <DeepcastLogo variant="wordmark" className="h-5 w-auto text-warm" />
-          </Link>
-          <button
-            type="button"
-            onClick={() => setViewerSidebarOpen((v) => !v)}
-            className="flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center text-warm/70"
-            aria-label="Toggle menu"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-              {viewerSidebarOpen ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h16" />
-              )}
-            </svg>
-          </button>
-        </div>
-
-        <aside className={`${viewerSidebarOpen ? 'flex' : 'hidden'} lg:flex w-full min-h-0 shrink-0 flex-col gap-6 overflow-y-auto border-b border-faint/30 bg-ink/80 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] pt-4 sm:px-6 sm:py-10 panel-scroll lg:max-h-[100dvh] lg:w-[22%] lg:min-h-screen lg:border-b-0 lg:border-r lg:px-6 lg:py-10`}>
-          {/* Mobile menu = navigation only (About / Edit your first name / Sign out).
-              Stats + share live on the main page's strip; everything below that's
-              hidden on mobile stays exactly as-is on desktop (lg:). */}
-          <div className="hidden shrink-0 animate-fade-in lg:block">
-            <Link to="/" className="hidden lg:inline-block">
-              <DeepcastLogo variant="wordmark" className="!text-4xl sm:!text-5xl text-warm" />
-            </Link>
-            <h2 className="font-serif-v3 lg:mt-3 text-xl text-warm">{profile.name}</h2>
-          </div>
-
-          <div
-            className="hidden h-px w-full shrink-0 bg-warm/[0.08] animate-fade-in lg:block"
-            style={{ animationDelay: '60ms' }}
-          />
-
-          <div
-            className="hidden shrink-0 flex-col gap-7 animate-fade-in lg:flex"
-            style={{ animationDelay: '100ms' }}
-          >
-            <div className="flex flex-col gap-1.5">
-              <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
-                Tickets given
-              </span>
-              <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-warm md:text-[2.5rem]">
-                {sentCount}
-              </span>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
-                Tickets left
-              </span>
-              {invitesLeft === Infinity ? (
-                <span className="font-display text-2xl font-normal leading-none tracking-tight text-accent">
-                  Unlimited
-                </span>
-              ) : (
-                <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-accent md:text-[2.5rem]">
-                  {invitesLeft}
-                </span>
-              )}
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <ReachExplainer />
-              <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-warm md:text-[2.5rem]">
-                {viewerReachedCount}
-              </span>
-            </div>
-            {/* Frozen at claim time (claim_ordinal) — never recomputed. */}
-            {isClaimant && formatOrdinal(profile.claim_ordinal) && (
-              <p className="font-sans text-[10px] uppercase tracking-[0.2em] text-warm/50">
-                You are the {formatOrdinal(profile.claim_ordinal)} person to be invited to watch
-                this film.
-              </p>
-            )}
-            {/* The platform-concept line, quietly (its primary home is the
-                share panel). Founder-approved verbatim (2026-07-16) — kept
-                unmodified here too: the dashboard always has a selected film
-                in frame, so the sentence reads correctly as-is. */}
-            <p className="font-serif-v3 text-xs italic leading-relaxed text-warm/45">
-              This film reached you because someone thought of you. No algorithm, no feed. Films
-              here pass through human hands only.
-            </p>
-          </div>
-
-          <div
-            className="hidden h-[0.5px] w-full shrink-0 bg-accent/20 animate-fade-in lg:block"
-            style={{ animationDelay: '140ms' }}
-          />
-
-          <div
-            className="flex shrink-0 flex-col gap-3 animate-fade-in"
-            style={{ animationDelay: '160ms' }}
-          >
-            {canShareMore && (
-              <button
-                type="button"
-                onClick={openShareModal}
-                disabled={shareDisabled}
-                className="hidden w-full bg-accent px-4 py-4 text-center font-sans text-[11px] font-semibold uppercase tracking-[0.28em] text-ink transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 lg:block"
-              >
-                Share this film
-              </button>
-            )}
-            {/* Account-only affordances — hidden for accountless claimants:
-                /about is ProtectedRoute-gated, the name edit writes the users
-                row (RLS self-only), and there is no session to sign out of. */}
-            {!isClaimant && (
-            <Link
-              to="/about"
-              className="text-left font-sans text-[10px] uppercase tracking-[0.22em] text-warm/35 transition-colors hover:text-warm/70"
-            >
-              About
-            </Link>
-            )}
-            {isClaimant ? null : !editingName ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setNameDraft(profile.name || '')
-                  setNameError('')
-                  setEditingName(true)
-                }}
-                className="text-left font-sans text-[10px] uppercase tracking-[0.22em] text-warm/35 transition-colors hover:text-warm/70"
-              >
-                Edit your first name
-              </button>
-            ) : (
-              <div className="flex flex-col gap-2.5">
-                <span className="font-sans text-[9px] uppercase tracking-[0.22em] text-warm/50">
-                  First name
-                </span>
-                <input
-                  type="text"
-                  value={nameDraft}
-                  onChange={(e) => setNameDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleSaveName()
-                    if (e.key === 'Escape') setEditingName(false)
-                  }}
-                  maxLength={50}
-                  autoFocus
-                  aria-label="First name"
-                  className="w-full border-b border-warm/20 bg-transparent pb-1 font-serif-v3 text-base text-warm placeholder-warm/30 focus:border-accent/60 focus:outline-none"
-                  placeholder="First name"
-                />
-                <p className="font-serif-v3 text-xs italic text-warm/45">
-                  This is how your name appears on the network.
-                </p>
-                {nameError && (
-                  <p className="font-sans text-[9px] uppercase tracking-[0.18em] text-error/90">{nameError}</p>
-                )}
-                <div className="flex items-center gap-4">
-                  <button
-                    type="button"
-                    onClick={handleSaveName}
-                    disabled={nameBusy}
-                    className="font-sans text-[10px] uppercase tracking-[0.22em] text-accent transition-colors hover:text-accent-hover disabled:opacity-50"
-                  >
-                    {nameBusy ? 'Saving…' : 'Save'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingName(false)}
-                    disabled={nameBusy}
-                    className="font-sans text-[10px] uppercase tracking-[0.22em] text-warm/35 transition-colors hover:text-warm/70 disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-            {!isClaimant && (
-            <button
-              type="button"
-              onClick={() => signOut()}
-              className="text-left font-sans text-[10px] uppercase tracking-[0.28em] text-warm/50 transition-colors hover:text-warm"
-            >
-              Sign out
-            </button>
-            )}
-          </div>
-        </aside>
-
-        <main className="flex w-full min-h-0 flex-1 flex-col overflow-y-auto bg-[#0c1225] px-4 py-8 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] panel-scroll sm:px-6 sm:py-10 md:px-12 lg:flex-1 lg:py-14 lg:pl-14 lg:pr-16">
-          {inviteSentConfirmation && (
-            <div className="mb-8 w-full max-w-6xl border border-[#5b8a5e]/30 bg-[#5b8a5e]/10 px-6 py-4 animate-fade-in">
-              <p className="font-sans text-[11px] uppercase tracking-[0.25em] text-[#5b8a5e]">
-                Invitation sent to {inviteSentConfirmation} — they&apos;ll receive a private screening link.
-              </p>
-            </div>
-          )}
-          {loading ? (
-            <div className="flex flex-1 items-center justify-center py-24">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-            </div>
-          ) : !viewerFilmId ? (
-            <div className="mx-auto max-w-lg py-20 text-center animate-fade-in">
-              <p className="text-sm text-text-muted">
-                You’re signed in. Open a screening link from your email to connect a film to this
-                dashboard; then you can track shares and send invitations.
-              </p>
-              <Link
-                to="/profile"
-                className="mt-8 inline-block text-xs uppercase tracking-widest text-accent hover:text-accent-hover"
-              >
-                Profile
-              </Link>
-            </div>
-          ) : (
-            <>
-              {/* Mobile-only stats strip (lg:hidden — desktop keeps the always-visible
-                  sidebar untouched): the SAME key numbers as the sidebar, same canonical
-                  values and styling, visible immediately without opening the hamburger. */}
-              <section
-                aria-label="Your stats"
-                className="mb-10 grid w-full max-w-6xl grid-cols-2 gap-x-8 gap-y-7 animate-fade-in lg:hidden"
-              >
-                <div className="flex flex-col gap-1.5">
-                  <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
-                    Tickets given
-                  </span>
-                  <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-warm">
-                    {sentCount}
-                  </span>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <span className="font-sans text-[10px] font-medium uppercase tracking-[0.22em] text-warm/45">
-                    Tickets left
-                  </span>
-                  {invitesLeft === Infinity ? (
-                    <span className="font-display text-2xl font-normal leading-none tracking-tight text-accent">
-                      Unlimited
-                    </span>
-                  ) : (
-                    <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-accent">
-                      {invitesLeft}
-                    </span>
-                  )}
-                </div>
-                <div className="col-span-2 flex flex-col gap-1.5">
-                  <ReachExplainer tipBelow />
-                  <span className="font-display text-[2.35rem] font-normal leading-none tracking-tight text-warm">
-                    {viewerReachedCount}
-                  </span>
-                </div>
-                {/* Frozen at claim time (claim_ordinal) — never recomputed. */}
-                {isClaimant && formatOrdinal(profile.claim_ordinal) && (
-                  <p className="col-span-2 font-sans text-[10px] uppercase tracking-[0.2em] text-warm/50">
-                    You are the {formatOrdinal(profile.claim_ordinal)} person to be invited to
-                    watch this film.
-                  </p>
-                )}
-              </section>
-
-              {/* ── Your screenings ── */}
-              {viewerAllFilms.length > 0 && (
-                <section className="mb-10 w-full max-w-6xl animate-fade-in" style={{ animationDelay: '40ms' }}>
-                  <h3 className="mb-5 font-sans text-[10px] font-medium uppercase tracking-[0.32em] text-warm/50">
-                    Your screenings
-                  </h3>
-                  <div className="flex flex-col gap-3">
-                    {viewerAllFilms.map((film) => {
-                      const isSelected = film.id === viewerFilmId
-                      // State-aware card (screeningCard.js): surfaces invite
-                      // status + the saved resume position. Claim-flow keys
-                      // are slug-scoped; the legacy flow stores seconds only
-                      // (no fraction → no bar).
-                      // Claim-flow films route by slug: the stash for a
-                      // claimant, or the invite's own link_slug for a
-                      // signed-in silent-account holder (Piece E).
-                      const claimSlug =
-                        (isClaimant && claimStash?.slug) || film.linkSlug || null
-                      const posKey = claimSlug
-                        ? `screening_position_slug_${claimSlug}`
-                        : `screening_position_${film.token}`
-                      const card = screeningCardState({
-                        status: film.status,
-                        savedSeconds: Number(safeLocalStorage.getItem(posKey)) || 0,
-                        progressFraction: claimSlug
-                          ? Number(safeLocalStorage.getItem(`screening_progress_slug_${claimSlug}`)) || null
-                          : null,
-                      })
-                      // The ENTIRE card is one clickable target → the watch page.
-                      const goWatch = () => {
-                        if (claimSlug) {
-                          navigate(
-                            card.mode === 'again'
-                              ? `/watch/${claimSlug}?again=1`
-                              : `/watch/${claimSlug}`
-                          )
-                          return
-                        }
-                        if (!film.token) return
-                        navigate(
-                          card.mode === 'resume' && card.resumeSeconds > 0
-                            ? `/i/${film.token}?play=1&t=${card.resumeSeconds}`
-                            : `/i/${film.token}?play=1`
-                        )
-                      }
-                      return (
-                      <div
-                        key={film.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={goWatch}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            goWatch()
-                          }
-                        }}
-                        className={`relative flex cursor-pointer flex-col gap-4 border bg-[#0a0f1a] p-4 transition-colors sm:flex-row sm:items-center sm:gap-5 ${
-                          isSelected ? 'border-accent/60' : 'border-faint/20 hover:border-faint/40'
-                        }`}
-                      >
-                        {/* Thin, quiet progress indicator (in-progress cards only). */}
-                        {card.progress != null && (
-                          <div aria-hidden className="absolute bottom-0 left-0 right-0 h-[2px] bg-warm/10">
-                            <div
-                              className="h-full bg-accent/70"
-                              style={{ width: `${Math.round(card.progress * 100)}%` }}
-                            />
-                          </div>
-                        )}
-                        <div className="flex items-center gap-4 min-w-0 sm:gap-5">
-                          {film.thumbnail_url ? (
-                            <img
-                              src={film.thumbnail_url}
-                              alt={film.title}
-                              className="h-16 w-28 shrink-0 object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-16 w-28 shrink-0 items-center justify-center bg-faint/10">
-                              <svg className="h-5 w-5 text-warm/20 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                            </div>
-                          )}
-                          <div className="flex flex-1 flex-col gap-1 min-w-0">
-                            <p className="font-serif-v3 text-base italic leading-snug text-warm truncate">{film.title}</p>
-                            {isSelected && (
-                              <span className="font-sans text-[9px] uppercase tracking-[0.25em] text-accent/70">
-                                Viewing
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:ml-auto">
-                          {(film.token || claimSlug) && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                goWatch()
-                              }}
-                              className="flex items-center gap-1.5 border border-warm/20 px-4 py-2 font-sans text-[10px] uppercase tracking-[0.25em] text-warm/60 transition-colors hover:border-warm/40 hover:text-warm"
-                            >
-                              <svg className="h-2.5 w-2.5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                              {card.label}
-                            </button>
-                          )}
-                          {canShareMore && film.id === viewerFilmId && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                openShareModal()
-                              }}
-                              disabled={shareDisabled}
-                              className="flex items-center gap-1.5 border border-accent/40 px-4 py-2 font-sans text-[10px] uppercase tracking-[0.25em] text-accent/70 transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-accent/40 disabled:hover:text-accent/70"
-                            >
-                              <svg className="h-2.5 w-2.5 fill-current" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11A2.99 2.99 0 0 0 18 8a3 3 0 1 0-3-3c0 .24.04.47.09.7L8.04 9.81A2.99 2.99 0 0 0 6 9a3 3 0 1 0 0 6c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65a3 3 0 1 0 3-3z"/></svg>
-                              Share more
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      )
-                    })}
-                  </div>
-                </section>
-              )}
-
-              <section
-                className="mb-14 w-full max-w-6xl animate-fade-in"
-                style={{ animationDelay: '80ms' }}
-              >
-                {sentCount > 0 ? (
-                  <>
-                    <p className="font-serif-v3 mb-5 text-[1.55rem] leading-[1.25] italic text-warm sm:text-[1.85rem] md:text-[2.05rem]">
-                      Your shares have been sent, {firstNameDisplay}.
-                    </p>
-                    <p className="mb-12 max-w-2xl font-body text-[0.95rem] font-light leading-[1.75] text-warm/65 md:text-base">
-                      {formattedRecipientNames}{' '}
-                      {sentCount === 1 ? 'has' : 'have'} been brought into the fold, growing the
-                      network. Come back to watch your impact spread.
-                      <span className="hidden lg:inline"> Your full network map is below.</span>
-                      <span className="lg:hidden"> Scroll for your impact map.</span>
-                    </p>
-                  </>
-                ) : (
-                  <p className="mb-12 max-w-2xl font-body text-[0.95rem] font-light leading-[1.75] text-warm/70 md:text-base">
-                    You’re connected to <span className="italic">{viewerFilmTitle}</span>.
-                    <span className="hidden lg:inline">
-                      {' '}
-                      Your live invitation map is below — scroll and drag to explore.
-                    </span>
-                    <span className="lg:hidden"> Scroll down for your live invitation map.</span>
-                    <br />
-                    <span className="text-warm/55">
-                      When you send invitations, the map and list below update together.
-                    </span>
-                  </p>
-                )}
-
-                {graphLayout ? (
-                  <div className="mb-12 flex w-full flex-col animate-fade-in">
-                    <div className="mb-5 flex flex-row items-baseline justify-between gap-4">
-                      <h3 className="font-sans text-[10px] font-medium uppercase tracking-[0.32em] text-warm/50">
-                        My network impact
-                      </h3>
-                      <span className="max-w-[min(100%,14rem)] text-right font-serif-v3 text-[12px] italic leading-snug tracking-wide text-warm/65 sm:max-w-[20rem] sm:text-[13px]">
-                        {viewerFilmTitle}
-                      </span>
-                    </div>
-                    <div className="relative flex h-[850px] w-full overflow-hidden bg-[#121a33]">
-                      <NetworkGraph
-                        fillHeight
-                        pannable
-                        showZoomControls
-                        showLegend
-                        hideSectionLabels
-                        transparentSurface
-                        edgeFadeColor="#121a33"
-                        nodesData={graphLayout.nodesData}
-                        linksData={graphLayout.linksData}
-                        viewBoxH={graphLayout.viewBoxH}
-                        viewBoxW={graphLayout.viewBoxW}
-                        ringRadii={graphLayout.ringRadii}
-                        sectionLabels={graphLayout.sectionLabels}
-                        rootNode={graphLayout.rootNode}
-                        defaultActiveNodes={graphLayout.defaultActiveNodes}
-                        defaultActiveLinks={graphLayout.defaultActiveLinks}
-                        focusNodeId={newestInviteId}
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <p className="mb-10 font-sans text-[10px] uppercase tracking-widest text-warm/35">
-                    Your network map will appear here after invitations are sent.
-                  </p>
-                )}
-              </section>
-
-              <section
-                className="mb-24 w-full max-w-6xl animate-fade-in"
-                style={{ animationDelay: '120ms' }}
-              >
-                <h3 className="mb-6 border-b border-faint/25 pb-4 font-sans text-[10px] font-medium uppercase tracking-[0.32em] text-warm/50">
-                  Sent invitations
-                </h3>
-                <div className="flex flex-col gap-4">
-                  {viewerSentInvites.length === 0 ? (
-                    <div className="border border-dashed border-faint/25 bg-[#0a0f1a]/40 p-8 text-center font-sans text-[10px] uppercase tracking-widest text-warm/25">
-                      No active invitations
-                    </div>
-                  ) : (
-                    viewerSentInvites.slice(0, visibleSentCount).map((inv, index) => {
-                      const displayName =
-                        inv.recipient_name?.trim() ||
-                        inv.recipient_email?.split('@')[0] ||
-                        'Recipient'
-                      const reached = reachByInvite[inv.id] || 0
-                      const opened = isOpened(inv)
-                      return (
-                        <div
-                          key={inv.id}
-                          className="flex flex-col items-stretch justify-between gap-4 border border-faint/30 bg-[#0a0f1a]/50 p-6 transition-colors hover:border-faint/45 sm:flex-row sm:items-center md:p-8"
-                        >
-                          <div className="flex flex-col gap-4">
-                            <div>
-                              <span className="mb-1 block font-sans text-[9px] font-medium uppercase tracking-[0.35em] text-warm/35">
-                                Invitation {String(index + 1).padStart(2, '0')}
-                              </span>
-                              <h4 className="font-serif-v3 text-2xl italic leading-tight text-warm md:text-[1.65rem]">
-                                {displayName}
-                              </h4>
-                            </div>
-                            <div className="flex flex-wrap gap-10">
-                              <div className="flex flex-col gap-0.5">
-                                <span className="font-sans text-[9px] uppercase tracking-[0.2em] text-warm/40">
-                                  People they&apos;ve reached
-                                </span>
-                                <span className="font-display text-xl font-normal text-accent">{reached}</span>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-2.5 self-start border border-warm/15 bg-[#05070a]/80 px-5 py-2 sm:self-center">
-                            <div className={`h-1.5 w-1.5 shrink-0 rounded-full ${opened ? 'bg-accent' : 'bg-warm/25'}`} />
-                            <span className={`font-sans text-[10px] font-medium uppercase tracking-[0.22em] ${opened ? 'text-warm/85' : 'text-warm/45'}`}>
-                              {opened ? 'Invite opened' : 'Invite unopened'}
-                            </span>
-                          </div>
-                        </div>
-                      )
-                    })
-                  )}
-                  {viewerSentInvites.length > visibleSentCount && (
-                    <button
-                      type="button"
-                      onClick={() => setVisibleSentCount((n) => n + SENT_LIST_PAGE_SIZE)}
-                      className="w-full border border-faint/30 bg-[#0a0f1a]/40 py-4 text-center font-sans text-[10px] uppercase tracking-[0.25em] text-warm/50 transition-colors hover:border-faint/50 hover:text-warm/80"
-                    >
-                      Show more ({viewerSentInvites.length - visibleSentCount} remaining)
-                    </button>
-                  )}
-                </div>
-              </section>
-
-              <footer className="w-full py-12 text-center font-sans text-[10px] uppercase tracking-widest text-warm/40">
-                &copy; {new Date().getFullYear()}{' '}
-                <span className="font-sans font-semibold normal-case">Deepcast</span>.
-                <MvpVersionLabel className="mt-2" />
-              </footer>
-            </>
-          )}
-        </main>
-
+      <>
+        <ViewerDashboardV5
+          profile={profile}
+          isClaimant={isClaimant}
+          loading={loading}
+          inviteSentConfirmation={inviteSentConfirmation}
+          films={viewerAllFilms}
+          selectedFilmId={viewerFilmId}
+          claimStashSlug={claimStash?.slug || null}
+          ticketsRemaining={invitesLeft}
+          ticketsGiven={sentCount}
+          canShare={canShareMore}
+          shareDisabled={shareDisabled}
+          onShare={openShareModal}
+          nameEditor={{
+            editing: editingName,
+            draft: nameDraft,
+            setDraft: setNameDraft,
+            busy: nameBusy,
+            error: nameError,
+            start: () => {
+              setNameDraft(profile.name || '')
+              setNameError('')
+              setEditingName(true)
+            },
+            cancel: () => setEditingName(false),
+            save: handleSaveName,
+          }}
+          onSignOut={() => signOut()}
+        />
         {isShareModalOpen && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center bg-ink/90 p-4 backdrop-blur-lg sm:p-8">
             <div
@@ -1534,7 +926,7 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-      </div>
+      </>
     )
   }
 

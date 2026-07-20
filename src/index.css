@@ -34,6 +34,15 @@
   --color-error: #b84233;
   --color-success: #5b8a5e;
 
+  /* Viewer-dashboard V5 palette (design-refs/deepcast-dashboard-v5.html).
+     The page background is NOT here on purpose — the dashboard shares
+     --color-bg-page with the watch page so the two can never drift. */
+  --color-ink-2: #0d1322;
+  --color-gold: #c7a96b;
+  --color-gold-soft: #d8c79a;
+  --color-mist: #eae7e0;
+  --color-smoke: #9a9890;
+
   /* Semantic aliases */
   --color-bg-page: var(--color-ink);
   --color-bg-surface: var(--color-paper);
