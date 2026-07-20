@@ -355,20 +355,20 @@ export function resolveViewerFocus(filmInvites, viewerEmail, { inviteToken = nul
   return result
 }
 
-export function buildGraphLayout({
+/**
+ * Canonical parent resolution — ONE model shared by the legacy graph
+ * (buildGraphLayout) and the V5 constellation (constellationLayout.js):
+ * creator-sent invites attach to the film root regardless of stored parent;
+ * team-member senders become ring-1 "member" nodes; everyone else chains by
+ * parent_invite_id, with an email-match repair for lost linkage.
+ */
+export function resolveInviteParents({
   filmInvites,
-  filmTitle = 'Film',
-  creatorName = '',
   creatorId = null,
+  creatorName = '',
   teamMemberIds = null,
-  viewerRecipientKey: viewerRKey = null,
-  focusInviteId = null,
-  viewerUserId = null,
   rootId = 'film-root',
-  creatorNodeId: _creatorNodeId = 'creator-root',
 }) {
-  if (!filmInvites?.length) return null
-
   const inviteById = new Map(filmInvites.map((r) => [r.id, r]))
 
   /* --- Canonical sender classification --- */
@@ -426,6 +426,31 @@ export function buildGraphLayout({
     }
     parentByInviteId.set(inv.id, parent)
   }
+
+  return { parentByInviteId, memberNodes, isCreatorSender }
+}
+
+export function buildGraphLayout({
+  filmInvites,
+  filmTitle = 'Film',
+  creatorName = '',
+  creatorId = null,
+  teamMemberIds = null,
+  viewerRecipientKey: viewerRKey = null,
+  focusInviteId = null,
+  viewerUserId = null,
+  rootId = 'film-root',
+  creatorNodeId: _creatorNodeId = 'creator-root',
+}) {
+  if (!filmInvites?.length) return null
+
+  const { parentByInviteId, memberNodes, isCreatorSender } = resolveInviteParents({
+    filmInvites,
+    creatorId,
+    creatorName,
+    teamMemberIds,
+    rootId,
+  })
 
   const memberNodeIds = new Set([...memberNodes.values()].map((m) => m.id))
 
