@@ -192,12 +192,8 @@ export default function ViewerDashboardV5({
 
   return (
     <div className="relative min-h-dvh bg-bg-page font-serif-v3 text-mist">
-      {/* Film grain, per the V5 design (the watch page stays grain-free). */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0 z-[1] opacity-80"
-        style={{ backgroundImage: 'var(--grain)' }}
-      />
+      {/* No grain overlay (owner decision 2026-07-21): the solid --color-bg-page
+          token everywhere, matching the watch page. */}
 
       {/* ── Mobile top bar ── */}
       <div className="sticky top-0 z-20 flex items-center justify-between border-b border-mist/[0.12] bg-bg-page/90 px-5 py-4 pt-[max(1rem,env(safe-area-inset-top,0px))] backdrop-blur-md md:hidden">
