@@ -118,18 +118,23 @@ describe('buildTicketRows', () => {
     expect(rows.map((r) => r.id)).toEqual(['old', 'new'])
   })
 
-  it('falls back through name → email local-part → "Someone", and passes ticket_no through', () => {
+  it('display rule: an email (or fragment) is NEVER a name — placeholder instead; ticket_no passes through', () => {
     const rows = buildTicketRows({
       sentInvites: [
+        // Blank name + an email on the row: the email must NOT leak into the
+        // display, not even its local part.
         row({ id: 'a', recipient_name: null, recipient_email: 'pat@x.com', ticket_no: 7 }),
         row({ id: 'b', recipient_name: '  ', recipient_email: null, created_at: '2026-07-19T00:00:00Z' }),
+        // An email typed INTO the name field (the 2026-07-18 bad test row).
+        row({ id: 'c', recipient_name: 'deepcast@theinsight.art', created_at: '2026-07-20T00:00:00Z' }),
       ],
       filmInvites: [],
       origin: ORIGIN,
     })
-    expect(rows[0].name).toBe('pat')
+    expect(rows[0].name).toBe('Someone')
     expect(rows[0].ticketNo).toBe(7)
     expect(rows[1].name).toBe('Someone')
     expect(rows[1].ticketNo).toBeNull()
+    expect(rows[2].name).toBe('Someone')
   })
 })

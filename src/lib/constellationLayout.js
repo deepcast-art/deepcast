@@ -25,6 +25,7 @@
 import { resolveInviteParents } from './graphLayout.js'
 import { withoutDemoGhosts } from './demoGhosts.js'
 import { isInviteWatched } from './filmStats.js'
+import { safeFirstName } from './displayName.js'
 
 export const ROOT_ID = 'film-root'
 const TWO_PI = Math.PI * 2
@@ -38,11 +39,6 @@ const EDGE_PAD = 58
 const MIN_RSTEP = 46
 const FAN_ARC_PX = 66
 const FAN_ARC_PX_DOWNSTREAM = 56
-
-const firstWord = (v, fallback = '') => {
-  const s = String(v || '').trim()
-  return s ? s.split(/\s+/)[0] : fallback
-}
 
 /** Deterministic per-id twinkle delay (no Math.random — stable renders). */
 const twinkleDelay = (id) => {
@@ -77,17 +73,16 @@ export function buildConstellationLayout({
     nodes.set(id, n)
     return n
   }
+  // Display rule (2026-07-21): never an email or fragment of one as a name —
+  // blank/@-containing values render the neutral placeholder instead, and
+  // nothing is ever derived from an email field.
   addNode(ROOT_ID, '', 'film')
   for (const m of memberNodes.values()) {
-    const n = addNode(m.id, firstWord(m.label, 'Member'), 'other')
+    const n = addNode(m.id, safeFirstName(m.label, 'Member'), 'other')
     n.parentId = ROOT_ID
   }
   for (const inv of invites) {
-    addNode(
-      inv.id,
-      firstWord(inv.recipient_name) || firstWord(inv.recipient_email?.split('@')[0]) || 'Someone',
-      'other'
-    )
+    addNode(inv.id, safeFirstName(inv.recipient_name), 'other')
   }
   // Parent wiring with cycle guard: anything whose chain doesn't reach the
   // root attaches to the root rather than orbiting a cycle.
@@ -292,8 +287,11 @@ export function buildConstellationLayout({
   // Filmmaker label on the central node — caller-supplied name first, then
   // the sender name on a creator-sent invite (RLS can hide the users row).
   const creatorLabel =
-    firstWord(creatorName) ||
-    firstWord(invites.find((inv) => isCreatorSender(inv) && (inv.sender_name || '').trim())?.sender_name) ||
+    safeFirstName(creatorName, '') ||
+    safeFirstName(
+      invites.find((inv) => isCreatorSender(inv) && (inv.sender_name || '').trim())?.sender_name,
+      ''
+    ) ||
     ''
 
   const rings = []

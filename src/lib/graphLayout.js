@@ -403,7 +403,9 @@ export function resolveInviteParents({
     if (!memberNodes.has(sk)) {
       memberNodes.set(sk, {
         id: `member:${sk}`,
-        label: toFirstName(inv.sender_name || inv.sender_email, 'Member'),
+        // Display rule (2026-07-21): never derive a label from an email —
+        // a nameless sender renders as 'Member', not their address fragment.
+        label: toFirstName(inv.sender_name, 'Member'),
         senderId: inv.sender_id != null ? String(inv.sender_id) : null,
       })
     }

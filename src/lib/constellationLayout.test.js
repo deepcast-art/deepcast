@@ -176,6 +176,30 @@ describe('buildConstellationLayout', () => {
     expect(layout.nodes.filter((n) => n.kind === 'other')).toHaveLength(2)
   })
 
+  it('display rule: emails never render as names — placeholder / Member instead', () => {
+    const layout = buildConstellationLayout({
+      filmInvites: [
+        // Email typed into the name field → placeholder.
+        inv('bad', CREATOR, null, { recipient_name: 'deepcast@theinsight.art' }),
+        // Blank name + email on the row → placeholder, never the local part.
+        inv('blank', CREATOR, null, { recipient_name: '', recipient_email: 'pat@x.com' }),
+        // Nameless sender with only an email → 'Member' node, never 'ghost'.
+        inv('orphan', 'u-stray', null, {
+          sender_id: null,
+          sender_name: null,
+          sender_email: 'ghost@x.com',
+        }),
+      ],
+      creatorId: CREATOR,
+    })
+    const names = layout.nodes.map((n) => n.name)
+    expect(names).not.toEqual(expect.arrayContaining([expect.stringContaining('@')]))
+    expect(layout.nodes.find((n) => n.id === 'bad')?.name).toBe('Someone')
+    expect(layout.nodes.find((n) => n.id === 'blank')?.name).toBe('Someone')
+    expect(names).toContain('Member')
+    expect(names.some((n) => n === 'ghost' || n === 'pat' || n === 'deepcast')).toBe(false)
+  })
+
   it('deep chains keep a minimum ring step by growing the canvas', () => {
     const rows = [inv('n0', CREATOR)]
     for (let i = 1; i < 10; i++) rows.push(inv(`n${i}`, `user-${i}`, `n${i - 1}`))

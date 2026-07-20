@@ -12,6 +12,7 @@
  */
 import { isInviteWatched } from './filmStats.js'
 import { withoutDemoGhosts } from './demoGhosts.js'
+import { safeFirstName } from './displayName.js'
 
 /** Onward links per invite id (children by parent_invite_id, ghosts excluded). */
 export function countChildrenByParentId(filmInvites = []) {
@@ -47,7 +48,9 @@ export function buildTicketRows({ sentInvites = [], filmInvites = [], origin = '
             : 'Unopened'
     return {
       id: inv.id,
-      name: inv.recipient_name?.trim() || inv.recipient_email?.split('@')[0] || 'Someone',
+      // Display rule (2026-07-21): never an email or fragment of one — a
+      // blank or @-containing name renders the neutral placeholder.
+      name: safeFirstName(inv.recipient_name),
       statusKind,
       statusLabel,
       sharedCount,
