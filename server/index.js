@@ -1380,6 +1380,7 @@ app.post('/api/invites/claim', async (req, res) => {
     // invite wallet's NULL-equals-full-grant rule takes over. Zero claim UX
     // either way — no password, no confirmation email, same response. ──
     let accountBalance = null
+    let sessionTokenHash = null
     try {
       const firstName = (invite.recipient_name || '').trim() || emailNorm.split('@')[0]
       const { userId, created: accountCreated } = await findOrCreatePasswordlessAccount(
@@ -1399,6 +1400,23 @@ app.post('/api/invites/claim', async (req, res) => {
       ])
       const remaining = filmTicketsRemaining(acct, wallet)
       accountBalance = Number.isFinite(remaining) ? remaining : null
+      // ── Fix A (2026-07-21): the claim also SIGNS THE PERSON IN — but only
+      // when the account was CREATED by this very claim (same in-band
+      // pattern as /api/invites/session: generateLink → client verifyOtp,
+      // no email sent). An ATTACHED (pre-existing) account never gets an
+      // in-band session: typing an email must never open someone's
+      // account; those people sign in via the normal magic-link flow. ──
+      if (accountCreated) {
+        const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
+          type: 'magiclink',
+          email: emailNorm,
+        })
+        if (!linkErr && linkData?.properties?.hashed_token) {
+          sessionTokenHash = linkData.properties.hashed_token
+        } else if (linkErr) {
+          console.warn('[claim] in-band session mint failed (claim stands):', linkErr.message)
+        }
+      }
       console.log(
         `[claim] silent account ${accountCreated ? 'created' : 'attached'} for ${emailNorm} (${userId})`
       )
@@ -1417,6 +1435,9 @@ app.post('/api/invites/claim', async (req, res) => {
       slug,
       filmId: invite.film_id,
       claimOrdinal,
+      // Fix A: single-use in-band sign-in for a freshly created account
+      // (null for attached accounts — they use the normal sign-in flow).
+      sessionTokenHash,
       ticketsRemaining: accountBalance ?? INITIAL_CLAIMANT_TICKETS,
       film: {
         id: invite.films?.id || invite.film_id,

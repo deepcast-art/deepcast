@@ -16,7 +16,6 @@ import { filmTicketsRemaining } from '../lib/shares.js'
 import { computeTicketFunnel } from '../lib/ticketFunnel.js'
 import { buildNetworkPeople } from '../lib/networkPeople.js'
 import { safeLocalStorage, safeSessionStorage } from '../lib/safeStorage.js'
-import { readClaimStash } from '../lib/claimStash.js'
 import { countTicketsGiven } from '../lib/inviteExistence.js'
 import ViewerDashboardV5 from './ViewerDashboardV5'
 import ShareLinkModal from '../components/ShareLinkModal'
@@ -25,67 +24,17 @@ export default function Dashboard() {
   const { profile: authProfile, signOut, fetchProfile, profileLoaded } = useAuth()
   const location = useLocation()
 
-  /* ── Claimant mode (final spec 2026-07-16): an accountless claimant's
-     identity is their claimed invite (safeStorage stash → invite row). We
-     synthesize a viewer-shaped pseudo-profile so the whole viewer path below
-     works unchanged; account-only affordances (name edit, sign out, About,
-     the email share modal) are hidden for claimants further down. ── */
-  const claimStash = useMemo(() => (authProfile ? null : readClaimStash()), [authProfile])
-  const [claimantInvite, setClaimantInvite] = useState(null)
-  /** true once the claimant-invite lookup has settled (found OR missing) —
-   *  the render gate below needs to tell "still resolving" from "no such
-   *  invite" so no identity state can ever render a blank page. */
-  const [claimantLookupDone, setClaimantLookupDone] = useState(false)
-  useEffect(() => {
-    if (!claimStash?.inviteId) return
-    let cancelled = false
-    supabase
-      .from('invites')
-      .select('*')
-      .eq('id', claimStash.inviteId)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (cancelled) return
-        setClaimantInvite(data || null)
-        setClaimantLookupDone(true)
-      })
-      .catch(() => {
-        if (!cancelled) setClaimantLookupDone(true)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [claimStash?.inviteId])
-
-  const profile = useMemo(() => {
-    if (authProfile) return authProfile
-    if (!claimStash || !claimantInvite) return null
-    return {
-      id: null,
-      email: claimStash.claimedEmail || claimantInvite.claimed_email || '',
-      name: claimantInvite.recipient_name || '',
-      role: 'viewer',
-      isClaimant: true,
-      claimedInviteId: claimantInvite.id,
-      claimedInviteToken: claimantInvite.token || null,
-      claim_ordinal: claimantInvite.claim_ordinal ?? null,
-      /** The silent account behind this claim (Piece E) — the id today's link
-       *  generations stamp into sender_id. NULL only for legacy accountless
-       *  claims, whose sends really do carry a NULL sender_id. */
-      claimedBy: claimantInvite.claimed_by ?? null,
-      claimedFilmId: claimantInvite.film_id,
-      claimedStatus: claimantInvite.status || null,
-      claimedSlug: claimStash.slug,
-      claimedTicketNo: claimantInvite.ticket_no ?? null,
-    }
-  }, [authProfile, claimStash, claimantInvite])
-  const isClaimant = Boolean(profile?.isClaimant)
+  /* ── One tier only (Fix A, 2026-07-21): every dashboard visitor is a
+     signed-in user — the claim itself signs new claimants in, so the old
+     stash-based pseudo-profile is gone. ProtectedRoute guarantees a
+     profile before this component renders. ── */
+  const profile = authProfile
   const inviteSentConfirmation = location.state?.inviteSent
     ? location.state.recipientName || 'your invitee'
     : null
   const [films, setFilms] = useState([])
   const [filmStats, setFilmStats] = useState({})
-  const [loading, setLoading] = useState(() => !profileLoaded || Boolean(readClaimStash()))
+  const [loading, setLoading] = useState(() => !profileLoaded)
   const [inviteFilmId, setInviteFilmId] = useState(null)
   const [copiedTicketId, setCopiedTicketId] = useState(null)
   const [filmInvitesRaw, setFilmInvitesRaw] = useState({})
@@ -127,9 +76,6 @@ export default function Dashboard() {
   )
 
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
-  /** Bumped after a claimant generates a link so their server-computed
-   *  balance refetches (the effect below keys on it). */
-  const [claimantBalanceVersion, setClaimantBalanceVersion] = useState(0)
 
   /** Owner-only ticket controls (Piece B): per-USER-ID wallet state from the
    *  batched admin endpoint ({ name, unlimited, ticketsLeft, controllable,
@@ -158,34 +104,8 @@ export default function Dashboard() {
    *  "Tickets given" which was always per-film. */
   const [viewerFilmWallet, setViewerFilmWallet] = useState(null)
 
-  /** Sessionless claimants (fix 2026-07-19): the balance comes from the SAME
-   *  server-computed source the watch page trusts — the public link route,
-   *  which resolves the per-film wallet for account-backed claims and the
-   *  legacy invite wallet for accountless ones. The old read of the invite
-   *  row's tickets_remaining showed a stale "5" for every account-backed
-   *  claimant (their spends debit film_tickets, never that column). A failed
-   *  lookup displays NOTHING — never a wrong number. */
-  const [claimantTicketsLeft, setClaimantTicketsLeft] = useState(null)
   useEffect(() => {
-    if (!isClaimant || !claimStash?.slug) {
-      setClaimantTicketsLeft(null)
-      return
-    }
-    let cancelled = false
-    api
-      .getLinkInvite(claimStash.slug)
-      .then((data) => {
-        if (!cancelled) setClaimantTicketsLeft(data?.ticketsRemaining ?? null)
-      })
-      .catch(() => {
-        if (!cancelled) setClaimantTicketsLeft(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [isClaimant, claimStash?.slug, claimantBalanceVersion])
-  useEffect(() => {
-    if (!isViewer || isClaimant || !profile?.id || !viewerFilmId) {
+    if (!isViewer || !profile?.id || !viewerFilmId) {
       setViewerFilmWallet(null)
       return
     }
@@ -202,21 +122,15 @@ export default function Dashboard() {
     return () => {
       cancelled = true
     }
-  }, [isViewer, isClaimant, profile?.id, viewerFilmId])
+  }, [isViewer, profile?.id, viewerFilmId])
 
-  const invitesLeft = !isViewer
-    ? null
-    : isClaimant
-      ? claimantTicketsLeft
-      : filmTicketsRemaining(profile, viewerFilmWallet)
+  const invitesLeft = !isViewer ? null : filmTicketsRemaining(profile, viewerFilmWallet)
   // "Tickets given" — voided (refunded) duplicate links no longer count.
   const sentCount = isViewer ? countTicketsGiven(viewerSentInvites) : 0
   // V5 (owner decision 2026-07-20): the dashboard share button is the LINK
-  // flow for every viewer, claimants included — the email modal is gone.
+  // flow for every viewer — one tier, one wallet read (Fix A 2026-07-21).
   const canShareMore = Boolean(isViewer && viewerFilmId)
-  const shareDisabled = isClaimant
-    ? claimantTicketsLeft !== null && claimantTicketsLeft <= 0
-    : isViewer && filmTicketsRemaining(profile, viewerFilmWallet) <= 0
+  const shareDisabled = isViewer && filmTicketsRemaining(profile, viewerFilmWallet) <= 0
 
   // Shared focus resolution (same helper every graph surface uses): email match first,
   // then invite-token match, then the common parent of the viewer's sent invites.
@@ -225,10 +139,10 @@ export default function Dashboard() {
       resolveViewerFocus(viewerFilmInvites, profile?.email, {
         // Claimants: their claimed invite's token is the reliable focus key —
         // the claimed row has no recipient_email for the email match to find.
-        inviteToken: profile?.claimedInviteToken || viewerInviteToken,
+        inviteToken: viewerInviteToken,
         viewerUserId: profile?.id,
       }),
-    [viewerFilmInvites, profile?.email, profile?.claimedInviteToken, viewerInviteToken, profile?.id]
+    [viewerFilmInvites, profile?.email, viewerInviteToken, profile?.id]
   )
 
   const selectViewerFilm = useCallback(async (filmId) => {
@@ -280,58 +194,28 @@ export default function Dashboard() {
 
   const loadViewerDashboard = useCallback(async () => {
     if (profile?.role !== 'viewer') return
-    if (!profile.id && !profile.isClaimant) return
+    if (!profile.id) return
     const uid = profile.id
     const email = (profile.email || '').trim()
 
-    // Sent and received invites depend only on the identity — fetch together.
-    // Claimants (fix 2026-07-19): their sends are found by sender_id = the
-    // claim's silent account (claimed_by — Piece E stamps it on every
-    // generation; the old sender_email + sender_id IS NULL query matched
-    // nothing for account-backed claimants and showed '0 given'). Legacy
-    // accountless claims (claimed_by NULL) keep the NULL-sender email match —
-    // for them it is still the truth. Their one "received" film IS their
-    // claimed invite — the claimed row has recipient_email NULL, so the email
-    // lookup can't find it.
-    const senderId = uid || profile.claimedBy || null
+    // One tier (Fix A, 2026-07-21): every viewer is a signed-in user, so
+    // sends are found by sender_id and claimed films by claimed_by
+    // (primary; exact) or claimed_email / recipient_email (legacy rows).
     const [{ data: sent, error: sentErr }, { data: allRecvd }] = await Promise.all([
-      senderId
+      supabase
+        .from('invites')
+        .select('*')
+        .eq('sender_id', uid)
+        .order('created_at', { ascending: false }),
+      email
         ? supabase
             .from('invites')
-            .select('*')
-            .eq('sender_id', senderId)
+            .select('film_id, token, status, link_slug, claimed_by, ticket_no')
+            .or(
+              `recipient_email.ilike.${email},claimed_by.eq.${uid},claimed_email.ilike.${email}`
+            )
             .order('created_at', { ascending: false })
-        : supabase
-            .from('invites')
-            .select('*')
-            .ilike('sender_email', email)
-            .is('sender_id', null)
-            .order('created_at', { ascending: false }),
-      profile.isClaimant
-        ? Promise.resolve({
-            data: [
-              {
-                film_id: profile.claimedFilmId,
-                token: profile.claimedInviteToken,
-                status: profile.claimedStatus,
-              },
-            ],
-          })
-        : email
-          ? supabase
-              .from('invites')
-              .select('film_id, token, status, link_slug, claimed_by, ticket_no')
-              // Silent accounts (Piece E): claim-link rows keep recipient_email
-              // NULL — an account holder's claimed films are found by
-              // claimed_by (primary; exact) or claimed_email (attach-failed /
-              // pre-backfill fallback).
-              .or(
-                uid
-                  ? `recipient_email.ilike.${email},claimed_by.eq.${uid},claimed_email.ilike.${email}`
-                  : `recipient_email.ilike.${email},claimed_email.ilike.${email}`
-              )
-              .order('created_at', { ascending: false })
-          : Promise.resolve({ data: null }),
+        : Promise.resolve({ data: null }),
     ])
 
     if (sentErr) console.error(sentErr)
@@ -438,7 +322,7 @@ export default function Dashboard() {
     setViewerCreatorName(cname)
 
     return sentList[0]?.id ?? null
-  }, [profile?.id, profile?.role, profile?.email, profile?.isClaimant, profile?.claimedBy, profile?.claimedFilmId, profile?.claimedInviteToken, selectViewerFilm])
+  }, [profile?.id, profile?.role, profile?.email, selectViewerFilm])
 
   useEffect(() => {
     if (profile) loadDashboard()
@@ -652,37 +536,13 @@ export default function Dashboard() {
   }
 
 
-  /* ── Identity gate. RULE (2026-07-16): no identity state may ever render a
-     blank page. The old `return null` here relied on ProtectedRoute
-     guaranteeing a profile — but profileLoaded stays FALSE forever for
-     visitors with no session (auth.jsx resets it on signed-out state), so a
-     claimant or stray visitor rendered nothing at all. Three explicit
-     states instead: still-resolving → spinner; claimant stash whose invite
-     can't be found (or any other unidentified arrival) → a graceful
-     visitor screen; identified → the dashboard. ── */
+  /* ── Identity gate (Fix A, 2026-07-21): ProtectedRoute guarantees a
+     signed-in user with a profile before this renders; the defensive
+     spinner below keeps the no-blank-page rule for any transient gap. ── */
   if (!profile) {
-    const stillResolving = claimStash ? !claimantLookupDone : !profileLoaded
-    if (stillResolving) {
-      return (
-        <div className="min-h-dvh flex items-center justify-center bg-bg-page">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" aria-hidden />
-        </div>
-      )
-    }
-    /* Founder-approved verbatim (2026-07-16). Do not edit. */
     return (
-      <div className="min-h-dvh flex flex-col items-center justify-center bg-bg-page px-6 text-center text-warm">
-        <DeepcastLogo variant="wordmark" size="text-4xl" className="text-warm opacity-90" />
-        <p className="mt-10 font-serif-v3 text-xl">This page belongs to invited viewers.</p>
-        <p className="mt-3 max-w-sm font-serif-v3 text-sm italic text-warm/60">
-          If someone passed you a film, open the link they sent — it&apos;s your way in.
-        </p>
-        <Link
-          to="/login"
-          className="mt-8 font-sans text-[10px] uppercase tracking-[0.22em] text-warm/40 transition-colors hover:text-warm/70"
-        >
-          Sign in →
-        </Link>
+      <div className="min-h-dvh flex items-center justify-center bg-bg-page">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" aria-hidden />
       </div>
     )
   }
@@ -694,10 +554,9 @@ export default function Dashboard() {
 
   const openShareModal = () => setIsShareModalOpen(true)
 
-  /** After a link is generated in the share modal: refresh the sent list /
-   *  graph, and a claimant's server-computed balance. */
+  /** After a link is generated in the share modal: refresh the sent list,
+   *  graph, and wallet-fed stats. */
   const handleLinkCreated = async () => {
-    if (isClaimant) setClaimantBalanceVersion((v) => v + 1)
     await loadViewerDashboard()
   }
 
@@ -753,17 +612,11 @@ export default function Dashboard() {
       <>
         <ViewerDashboardV5
           profile={profile}
-          isClaimant={isClaimant}
           loading={loading}
           inviteSentConfirmation={inviteSentConfirmation}
           films={viewerAllFilms}
           selectedFilmId={viewerFilmId}
-          claimStashSlug={claimStash?.slug || null}
-          ticketNo={
-            isClaimant
-              ? profile.claimedTicketNo
-              : viewerAllFilms.find((f) => f.id === viewerFilmId)?.ticketNo ?? null
-          }
+          ticketNo={viewerAllFilms.find((f) => f.id === viewerFilmId)?.ticketNo ?? null}
           sentInvites={viewerSentInvites}
           filmInvites={viewerFilmInvites}
           creatorId={viewerFilmCreatorId}
@@ -794,8 +647,6 @@ export default function Dashboard() {
           open={isShareModalOpen}
           onClose={() => setIsShareModalOpen(false)}
           filmId={viewerFilmId}
-          isClaimant={isClaimant}
-          claimedInviteId={profile.claimedInviteId || null}
           parentInviteId={viewerFocusInviteId || null}
           onCreated={handleLinkCreated}
         />

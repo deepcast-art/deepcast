@@ -2,9 +2,8 @@
  * Viewer dashboard V5 — the redesign from design-refs/deepcast-dashboard-v5.html.
  *
  * Presentational only: Dashboard.jsx keeps every query, gate, and handler and
- * hands this component plain values. The identity gate (spinner / visitor
- * screen) also stays in Dashboard.jsx — by the time this renders, a profile
- * (real or claimant pseudo-profile) always exists.
+ * hands this component plain values. By the time this renders, a signed-in
+ * profile always exists (one tier — Fix A, 2026-07-21).
  *
  * Phase 1 = the shell: sidebar, mobile bar + menu, screening cards, share CTA.
  * The journey line, constellation, ticket rows, and ticket numbers arrive in
@@ -87,12 +86,10 @@ function NameEditor({ editor }) {
 
 export default function ViewerDashboardV5({
   profile,
-  isClaimant,
   loading,
   inviteSentConfirmation,
   films,
   selectedFilmId,
-  claimStashSlug,
   ticketNo,
   sentInvites,
   filmInvites,
@@ -171,22 +168,20 @@ export default function ViewerDashboardV5({
   const shareCtaClass =
     'w-full border border-gold bg-gold px-4 py-[1.125rem] text-center font-sans text-[0.8125rem] uppercase tracking-[0.26em] text-ink transition-colors duration-300 hover:bg-transparent hover:text-gold-soft focus-visible:bg-transparent focus-visible:text-gold-soft focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-gold disabled:hover:text-ink'
 
+  // One tier (Fix A, 2026-07-21): every viewer is a signed-in user — the
+  // four links show for everyone, desktop and mobile.
   const menuLinks = (
     <>
-      {!isClaimant && (
-        <Link to="/about" className={sideLinkClass} onClick={() => setMenuOpen(false)}>
-          About Deepcast
-        </Link>
-      )}
+      <Link to="/about" className={sideLinkClass} onClick={() => setMenuOpen(false)}>
+        About Deepcast
+      </Link>
       <a href={`mailto:${CONTACT_EMAIL}`} className={sideLinkClass}>
         Contact
       </a>
-      {!isClaimant && <NameEditor editor={nameEditor} />}
-      {!isClaimant && (
-        <button type="button" onClick={onSignOut} className={sideLinkClass}>
-          Sign out
-        </button>
-      )}
+      <NameEditor editor={nameEditor} />
+      <button type="button" onClick={onSignOut} className={sideLinkClass}>
+        Sign out
+      </button>
     </>
   )
 
@@ -332,11 +327,10 @@ export default function ViewerDashboardV5({
                   </p>
                   <div className="mt-5 flex flex-col gap-3">
                     {films.map((film) => {
-                      // Claim-flow films route by slug (the stash for a claimant,
-                      // the invite's own link_slug for a signed-in claim holder);
-                      // legacy email invites route by token. Same rules as before
-                      // the redesign — resume keys are slug- or token-scoped.
-                      const claimSlug = (isClaimant && claimStashSlug) || film.linkSlug || null
+                      // Claim-flow films route by their invite's link_slug;
+                      // legacy email invites route by token. Resume keys are
+                      // slug- or token-scoped, unchanged.
+                      const claimSlug = film.linkSlug || null
                       const posKey = claimSlug
                         ? `screening_position_slug_${claimSlug}`
                         : `screening_position_${film.token}`

@@ -3,7 +3,6 @@ import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-
 import { useAuth } from './lib/auth'
 import { supabase } from './lib/supabase'
 import { DEV_HARNESS_ENABLED } from './lib/devHarness'
-import { readClaimStash } from './lib/claimStash'
 
 // DEV-ONLY harness page. Gated on import.meta.env.DEV so the import() lives in dead code in a
 // production build — Rollup drops the chunk entirely (no DevHarness chunk ships to production).
@@ -165,31 +164,18 @@ function ViewerShareGate({ children }) {
 }
 
 /**
- * /dashboard authorization (final spec 2026-07-16): an authenticated account
- * takes the existing ProtectedRoute + ViewerShareGate path unchanged; an
- * accountless claimant (identity = their claimed invite, recognized via the
- * safeStorage stash) is admitted directly — no share gate, since claimants
- * reach the dashboard before ever sharing. No session AND no stash → /login.
- * Creator-only routes (/upload, /network) keep pure auth.
+ * /dashboard authorization (Fix A, 2026-07-21): everyone is a signed-in
+ * user — the claim itself signs new claimants in, so the stash-admission
+ * tier is gone. One path for all: ProtectedRoute + ViewerShareGate (which
+ * already admits never-shared claimants by claimed_by). A stash-only
+ * browser from before Fix A reaches the sign-in page, never a blank one.
  */
 function DashboardGate({ children }) {
-  const { user, loading } = useAuth()
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
-  if (user) {
-    return (
-      <ProtectedRoute requiredRoles={['creator', 'team_member', 'viewer']}>
-        <ViewerShareGate>{children}</ViewerShareGate>
-      </ProtectedRoute>
-    )
-  }
-  if (readClaimStash()) return children
-  return <Navigate to="/login" replace />
+  return (
+    <ProtectedRoute requiredRoles={['creator', 'team_member', 'viewer']}>
+      <ViewerShareGate>{children}</ViewerShareGate>
+    </ProtectedRoute>
+  )
 }
 
 export default function App() {

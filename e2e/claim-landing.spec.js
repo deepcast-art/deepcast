@@ -223,21 +223,20 @@ test.describe('three-page claim arc', () => {
     expect(jsErrors).toEqual([])
   })
 
-  test('dashboard never renders blank: a stash whose invite is gone gets the visitor screen', async ({ page }) => {
+  test('dashboard never renders blank: a stash-only browser (no session) reaches the sign-in page', async ({ page }) => {
+    // One tier (Fix A, 2026-07-21): the stash no longer admits anyone to the
+    // dashboard — a pre-Fix-A stash-only browser lands on sign-in, never a
+    // blank page.
     await page.addInitScript(() => {
       window.localStorage.setItem(
         'deepcast:claim',
         JSON.stringify({ slug: 'ghost-zz99', inviteId: 'gone-1', filmId: 'film-1', claimedEmail: 'x@example.com' })
       )
     })
-    // The claimant-invite lookup finds nothing (row deleted / bad stash).
-    await page.route('**/rest/v1/invites**', (route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: 'null' })
-    )
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
 
-    await expect(page.getByText('This page belongs to invited viewers.')).toBeVisible({ timeout: 15_000 })
-    await expect(page.getByRole('link', { name: /Sign in/i })).toBeVisible()
+    await page.waitForURL(/\/login/, { timeout: 15_000 })
+    await expect(page.getByPlaceholder(/email/i).or(page.getByRole('button', { name: /sign in/i })).first()).toBeVisible()
     expect(jsErrors).toEqual([])
   })
 

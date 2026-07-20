@@ -2,26 +2,17 @@
  * V5 dashboard share modal — the LINK flow (shares are links, not emails).
  * Same POST /api/invites/create-link as the watch page's panel and the
  * creator's link panel; the server applies identity, lineage, and per-film
- * ticket rules:
- *   - signed-in viewer → verified session token (+ parentInviteId lineage)
- *   - accountless claimant → their claimed invite id IS the identity
- * No email is ever entered here; the only email input in the product is the
- * claim moment. Founder-approved copy verbatim.
+ * ticket rules from the verified session token — one tier, everyone is
+ * signed in (Fix A, 2026-07-21). No email is ever entered here; the only
+ * email input in the product is the claim moment. Founder-approved copy
+ * verbatim.
  */
 import { useState } from 'react'
 import { api } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import { firstNameInputError } from '../lib/firstNameRule'
 
-export default function ShareLinkModal({
-  open,
-  onClose,
-  filmId,
-  isClaimant,
-  claimedInviteId,
-  parentInviteId,
-  onCreated,
-}) {
+export default function ShareLinkModal({ open, onClose, filmId, parentInviteId, onCreated }) {
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -48,19 +39,16 @@ export default function ShareLinkModal({
     setBusy(true)
     setError('')
     try {
-      let accessToken = null
-      if (!isClaimant) {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-        accessToken = session?.access_token || null
-      }
+      // One tier (Fix A, 2026-07-21): every dashboard visitor is signed in —
+      // the verified session is the identity, always.
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
       const result = await api.createInviteLink(first, {
         filmId,
-        claimedInviteId: isClaimant ? claimedInviteId : null,
-        accessToken,
+        accessToken: session?.access_token || null,
         appUrl: window.location.origin,
-        parentInviteId: !isClaimant ? parentInviteId || null : null,
+        parentInviteId: parentInviteId || null,
       })
       setGenerated({ url: result.url, name: first })
       setName('')

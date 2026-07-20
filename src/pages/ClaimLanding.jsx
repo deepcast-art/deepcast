@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { supabase } from '../lib/supabase'
 import DeepcastLogo from '../components/DeepcastLogo'
 import { buildLineageChain } from '../lib/lineageThread'
 import { formatRuntimeMinutes } from '../lib/runtime'
@@ -292,6 +293,19 @@ export default function ClaimLanding() {
       if (result.alreadyHeld) {
         setAlreadyHeld(true)
         return
+      }
+      // ── Fix A (2026-07-21): the claim signs the fresh account in, in-band
+      // (no email, no extra step) — the auth context picks the session up
+      // via onAuthStateChange. Non-fatal: a failed exchange still leaves a
+      // valid claim (the stash carries the visit; sign-in stays available).
+      if (result.sessionTokenHash && !session) {
+        const { error: otpError } = await supabase.auth.verifyOtp({
+          type: 'magiclink',
+          token_hash: result.sessionTokenHash,
+        })
+        if (otpError) {
+          console.warn('[claim] in-band sign-in failed (claim stands):', otpError.message)
+        }
       }
       saveClaimStash({
         slug,
