@@ -18,6 +18,7 @@ import { buildNetworkPeople } from '../lib/networkPeople.js'
 import { safeLocalStorage, safeSessionStorage } from '../lib/safeStorage.js'
 import { readClaimStash } from '../lib/claimStash.js'
 import ViewerDashboardV5 from './ViewerDashboardV5'
+import ShareLinkModal from '../components/ShareLinkModal'
 
 export default function Dashboard() {
   const { profile: authProfile, signOut, fetchProfile, profileLoaded } = useAuth()
@@ -124,12 +125,9 @@ export default function Dashboard() {
   )
 
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
-  const [modalFirst, setModalFirst] = useState('')
-  const [modalLast, setModalLast] = useState('')
-  const [modalEmail, setModalEmail] = useState('')
-  const [modalNote, setModalNote] = useState('')
-  const [modalBusy, setModalBusy] = useState(false)
-  const [modalError, setModalError] = useState('')
+  /** Bumped after a claimant generates a link so their server-computed
+   *  balance refetches (the effect below keys on it). */
+  const [claimantBalanceVersion, setClaimantBalanceVersion] = useState(0)
 
   /** Owner-only ticket controls (Piece B): per-USER-ID wallet state from the
    *  batched admin endpoint ({ name, unlimited, ticketsLeft, controllable,
@@ -183,7 +181,7 @@ export default function Dashboard() {
     return () => {
       cancelled = true
     }
-  }, [isClaimant, claimStash?.slug])
+  }, [isClaimant, claimStash?.slug, claimantBalanceVersion])
   useEffect(() => {
     if (!isViewer || isClaimant || !profile?.id || !viewerFilmId) {
       setViewerFilmWallet(null)
@@ -210,11 +208,12 @@ export default function Dashboard() {
       ? claimantTicketsLeft
       : filmTicketsRemaining(profile, viewerFilmWallet)
   const sentCount = isViewer ? viewerSentInvites.length : 0
-  // The dashboard's email share modal is an account-flow surface — claimants
-  // share from the watch page's panel instead (flagged, per the final spec).
-  const canShareMore = isViewer && viewerFilmId && !isClaimant
-  const shareDisabled =
-    isViewer && !isClaimant && filmTicketsRemaining(profile, viewerFilmWallet) <= 0
+  // V5 (owner decision 2026-07-20): the dashboard share button is the LINK
+  // flow for every viewer, claimants included — the email modal is gone.
+  const canShareMore = Boolean(isViewer && viewerFilmId)
+  const shareDisabled = isClaimant
+    ? claimantTicketsLeft !== null && claimantTicketsLeft <= 0
+    : isViewer && filmTicketsRemaining(profile, viewerFilmWallet) <= 0
 
   // Shared focus resolution (same helper every graph surface uses): email match first,
   // then invite-token match, then the common parent of the viewer's sent invites.
@@ -687,13 +686,13 @@ export default function Dashboard() {
     ready: 'bg-success/20 text-success',
   }
 
-  const openShareModal = () => {
-    setModalError('')
-    setModalFirst('')
-    setModalLast('')
-    setModalEmail('')
-    setModalNote('')
-    setIsShareModalOpen(true)
+  const openShareModal = () => setIsShareModalOpen(true)
+
+  /** After a link is generated in the share modal: refresh the sent list /
+   *  graph, and a claimant's server-computed balance. */
+  const handleLinkCreated = async () => {
+    if (isClaimant) setClaimantBalanceVersion((v) => v + 1)
+    await loadViewerDashboard()
   }
 
   /**
@@ -740,67 +739,6 @@ export default function Dashboard() {
     }
   }
 
-  const handleSendModalInvite = async () => {
-    setModalError('')
-    if (!viewerFilmId) {
-      setModalError('No film is linked to your account yet.')
-      return
-    }
-    if (!modalFirst.trim() || !modalLast.trim()) {
-      setModalError('Enter a first and last name.')
-      return
-    }
-    if (!modalEmail.trim() || !modalEmail.includes('@')) {
-      setModalError('Enter a valid email.')
-      return
-    }
-    // Personal notes are mandatory — the note is the gift, not the link.
-    if (!modalNote.trim()) {
-      setModalError('Add a personal note — even one warm sentence about why this film made you think of them.')
-      return
-    }
-    setModalBusy(true)
-    try {
-      const { data: existing } = await supabase
-        .from('invites')
-        .select('id')
-        .eq('film_id', viewerFilmId)
-        .ilike('recipient_email', modalEmail.trim())
-        .limit(1)
-        .maybeSingle()
-
-      if (existing) {
-        const name = modalFirst.trim() || modalEmail.trim().split('@')[0]
-        setModalError(`${name} has already received an invitation to this film. Try someone else.`)
-        setModalBusy(false)
-        return
-      }
-
-      // recipientName stays first-name only; the last name rides in its own column.
-      const recipientName = modalFirst.trim()
-      await api.sendInvite(
-        viewerFilmId,
-        modalEmail.trim(),
-        recipientName,
-        profile.name,
-        profile.id,
-        profile.email,
-        modalNote.trim() || null,
-        window.location.origin,
-        viewerFocusInviteId || null,
-        modalFirst.trim(),
-        modalLast.trim()
-      )
-      await fetchProfile(profile.id)
-      await loadViewerDashboard()
-      setIsShareModalOpen(false)
-    } catch (e) {
-      setModalError(e.message || 'Could not send invitation.')
-    } finally {
-      setModalBusy(false)
-    }
-  }
-
   const creatorTotalTickets = Object.values(filmStats).reduce((a, s) => a + (s.generated || 0), 0)
 
   /* ===================== VIEWER V5 (design-refs/deepcast-dashboard-v5.html) ===================== */
@@ -841,94 +779,15 @@ export default function Dashboard() {
           }}
           onSignOut={() => signOut()}
         />
-        {isShareModalOpen && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-ink/90 p-4 backdrop-blur-lg sm:p-8">
-            <div
-              className="relative flex w-full max-w-2xl flex-col items-center overflow-hidden p-10 shadow-2xl sm:p-12"
-              style={{
-                background:
-                  'linear-gradient(168deg, #e8e2d6 0%, #ddd8cc 30%, #d5cfc3 60%, #ddd7cb 100%)',
-                borderRadius: '8px',
-                boxShadow:
-                  '0 2px 30px rgba(0,0,0,0.25), 0 0 0 0.5px rgba(180,170,150,0.4)',
-              }}
-            >
-              <div
-                className="pointer-events-none absolute inset-0"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 300 300' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='paper'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23paper)'/%3E%3C/svg%3E")`,
-                  opacity: 0.08,
-                  mixBlendMode: 'multiply',
-                }}
-              />
-              <div
-                className="pointer-events-none absolute inset-0"
-                style={{
-                  boxShadow:
-                    'inset 0 0 60px rgba(0,0,0,0.06), inset 0 0 120px rgba(0,0,0,0.03)',
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => setIsShareModalOpen(false)}
-                className="absolute right-6 top-6 z-10 text-2xl text-[#2a2a2a]/40 transition-colors hover:text-[#2a2a2a]/70"
-                aria-label="Close"
-              >
-                &times;
-              </button>
-              <h3 className="relative z-10 mb-10 font-sans text-[10px] uppercase tracking-[0.4em] text-[#6b5d4a]">
-                New invitation
-              </h3>
-              {modalError && (
-                <p className="relative z-10 mb-4 text-center text-sm text-red-700">{modalError}</p>
-              )}
-              <div className="relative z-10 flex w-full flex-col items-center gap-4">
-                <div className="flex w-full flex-nowrap items-baseline justify-center gap-1 whitespace-nowrap font-serif-v3 text-xl italic text-[#2a2a2a] sm:gap-2">
-                  <span>Dear</span>
-                  <input
-                    type="text"
-                    placeholder="First name"
-                    value={modalFirst}
-                    onChange={(e) => setModalFirst(e.target.value)}
-                    className="min-w-0 flex-1 border-b border-[#6b5d4a]/40 bg-transparent text-center text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none"
-                    autoComplete="given-name"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Last name"
-                    value={modalLast}
-                    onChange={(e) => setModalLast(e.target.value)}
-                    className="min-w-0 flex-1 border-b border-[#6b5d4a]/40 bg-transparent text-center text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none"
-                    autoComplete="family-name"
-                  />
-                  <span>,</span>
-                </div>
-                <textarea
-                  rows={3}
-                  placeholder="Write your note here. Tell them why this film made you think of them specifically…"
-                  value={modalNote}
-                  onChange={(e) => setModalNote(e.target.value)}
-                  className="w-full resize-none border-none bg-transparent text-center font-serif-v3 text-xl italic text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none"
-                />
-                <input
-                  type="email"
-                  placeholder="Deliver to (email)"
-                  value={modalEmail}
-                  onChange={(e) => setModalEmail(e.target.value)}
-                  className="relative z-10 w-full max-w-xs border-b border-[#6b5d4a]/30 bg-transparent text-center text-[13px] text-[#2a2a2a] placeholder-[#2a2a2a]/30 focus:outline-none"
-                />
-                <button
-                  type="button"
-                  disabled={modalBusy}
-                  onClick={handleSendModalInvite}
-                  className="relative z-10 mt-4 w-full rounded py-4 font-sans text-[11px] uppercase tracking-widest text-[#e8e2d6] transition-colors bg-[#6b5d4a] hover:bg-[#5a4d3a] disabled:opacity-50"
-                >
-                  {modalBusy ? 'Sending…' : 'Send invitation'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <ShareLinkModal
+          open={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+          filmId={viewerFilmId}
+          isClaimant={isClaimant}
+          claimedInviteId={profile.claimedInviteId || null}
+          parentInviteId={viewerFocusInviteId || null}
+          onCreated={handleLinkCreated}
+        />
       </>
     )
   }

@@ -128,6 +128,9 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await page.route('**/rest/v1/films**', (route) =>
       route.fulfill({ json: [FILM], headers: { 'content-range': '0-0/1', 'access-control-expose-headers': 'Content-Range' } })
     )
+    await page.route('**/api/invites/create-link', (route) =>
+      route.fulfill({ json: { url: 'https://deepcast.art/noa-x9y2', slug: 'noa-x9y2' } })
+    )
     await page.route('**/rest/v1/invites**', (route) => {
       const url = route.request().url()
       let rows
@@ -201,6 +204,18 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     ).toBeVisible()
 
     await page.screenshot({ path: 'test-results/v5-desktop-account.png', fullPage: true })
+
+    // The share button opens the LINK flow (no email fields anywhere).
+    await aside.getByRole('button', { name: 'Share this film' }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.getByText('Who is this film for?')).toBeVisible()
+    await expect(dialog.locator('input[type="email"]')).toHaveCount(0)
+    await dialog.getByPlaceholder('Their first name').fill('Noa')
+    await dialog.getByRole('button', { name: 'Create their invitation' }).click()
+    await expect(dialog.getByText('https://deepcast.art/noa-x9y2').first()).toBeVisible()
+    await expect(dialog.getByText(/I watched this and thought of you/)).toBeVisible()
+    await dialog.getByRole('button', { name: 'Close' }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
   })
 
   test('zero-share state: the journey line names the waiting tickets', async ({ page }) => {
