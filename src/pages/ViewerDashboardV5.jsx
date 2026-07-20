@@ -265,10 +265,11 @@ export default function ViewerDashboardV5({
             </div>
           </div>
 
-          {/* Founder-approved verbatim — the dashboard's quiet constraint line. */}
-          <p className="mt-6 font-serif-v3 text-xs italic leading-relaxed text-smoke/80">
+          {/* Founder-approved verbatim (2026-07-21) — the sidebar's quiet aside.
+              (The share surfaces keep their own approved constraint line.) */}
+          <p className="mt-6 font-serif-v3 text-sm italic leading-relaxed text-smoke/80">
             This film reached you because someone thought of you. No algorithm, no feed. Films here
-            pass through human hands only.
+            spread by private invite &amp; real humans only.
           </p>
 
           {canShare && (
