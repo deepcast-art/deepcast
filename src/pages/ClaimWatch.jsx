@@ -8,6 +8,7 @@ import { readClaimStash, isClaimOwner } from '../lib/claimStash'
 import { INITIAL_CLAIMANT_TICKETS } from '../lib/ticketRules'
 import { resumePositionToSave } from '../lib/resumePosition'
 import { safeLocalStorage } from '../lib/safeStorage'
+import { fullscreenPlayDecision, isIOSDevice } from '../lib/playbackFullscreen'
 
 /** Claim-flow resume keys (slug-scoped — the claimant's public token is never
  *  exposed client-side). Seconds feed the resume; the fraction feeds the
@@ -138,6 +139,123 @@ export default function ClaimWatch() {
   const [generated, setGenerated] = useState(null)
   const [copied, setCopied] = useState(false)
   const hasMarkedWatched = useRef(false)
+
+  /* ── Phone fullscreen-landscape playback (2026-07-19; decisions in
+     src/lib/playbackFullscreen.js). Desktop/tablet: nothing here ever runs —
+     the decision returns 'none' for fine pointers and ≥540px viewports. ── */
+  const playerRef = useRef(null)
+  /** First user-initiated play per page load only — once attempted, a viewer
+   *  who exits fullscreen and keeps watching inline is never re-forced. */
+  const fsAttempted = useRef(false)
+  const [rotateHint, setRotateHint] = useState(false)
+
+  /** The hint retires itself: after a few seconds, or as soon as the phone
+   *  is actually rotated (legacy gotcha: some browsers fire only resize,
+   *  others only orientationchange — listen to both). */
+  useEffect(() => {
+    if (!rotateHint) return
+    const hideIfLandscape = () => {
+      if (window.matchMedia('(orientation: landscape)').matches) setRotateHint(false)
+    }
+    const timer = setTimeout(() => setRotateHint(false), 4000)
+    window.addEventListener('orientationchange', hideIfLandscape)
+    window.addEventListener('resize', hideIfLandscape)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('orientationchange', hideIfLandscape)
+      window.removeEventListener('resize', hideIfLandscape)
+    }
+  }, [rotateHint])
+
+  /** Whenever fullscreen exits — our own exit at credits, the browser's back
+   *  gesture, or Esc — release the orientation lock so the page isn't stuck
+   *  sideways (the lock can outlive fullscreen on some Androids). */
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      const fsEl = document.fullscreenElement || document.webkitFullscreenElement
+      if (!fsEl) {
+        try {
+          screen.orientation?.unlock?.()
+        } catch {
+          /* lock/unlock unsupported — nothing held */
+        }
+      }
+    }
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', onFullscreenChange)
+      document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
+    }
+  }, [])
+
+  /** ADDITIVE handler (rule: existing handlers unchanged — this prop did not
+   *  exist before this piece). Phones only, first play only. */
+  const handlePlay = () => {
+    const decision = fullscreenPlayDecision({
+      alreadyAttempted: fsAttempted.current,
+      coarsePointer: window.matchMedia('(pointer: coarse)').matches,
+      viewportMinPx: Math.min(window.innerWidth, window.innerHeight),
+      iOS: isIOSDevice(navigator),
+      portrait: window.matchMedia('(orientation: portrait)').matches,
+    })
+    if (decision.action === 'none') return
+    fsAttempted.current = true
+    const mp = playerRef.current
+    if (decision.action === 'ios-native') {
+      // iOS: only the NATIVE video fullscreen exists (no document fullscreen
+      // for this, no orientation lock) — it rotates with the device, hence
+      // the hint when the phone is still portrait. Feature-detected: the API
+      // exists only on iOS WebKit.
+      if (decision.rotateHint) setRotateHint(true)
+      const video = mp?.media?.nativeEl
+      if (typeof video?.webkitEnterFullscreen === 'function') {
+        try {
+          video.webkitEnterFullscreen()
+        } catch {
+          /* refused — playback continues inline */
+        }
+      }
+      return
+    }
+    // Android & other non-iOS phones: element fullscreen, then a best-effort
+    // landscape lock — some browsers refuse the lock; degrade to plain
+    // fullscreen (and to inline if even fullscreen is refused).
+    Promise.resolve()
+      .then(() => mp?.requestFullscreen?.({ navigationUI: 'hide' }))
+      .then(() => screen.orientation?.lock?.('landscape'))
+      .catch(() => {
+        /* lock or fullscreen refused — degrade silently */
+      })
+  }
+
+  /** ADDITIVE handler (this prop did not exist before this piece): at the
+   *  credits, leave every kind of fullscreen so the viewer lands back on the
+   *  page — the pass-it-on panel is the destination. */
+  const handleEnded = () => {
+    try {
+      screen.orientation?.unlock?.()
+    } catch {
+      /* unsupported */
+    }
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen
+      try {
+        const p = exit?.call(document)
+        p?.catch?.(() => {})
+      } catch {
+        /* already out */
+      }
+    }
+    const video = playerRef.current?.media?.nativeEl
+    if (typeof video?.webkitExitFullscreen === 'function') {
+      try {
+        video.webkitExitFullscreen()
+      } catch {
+        /* already out */
+      }
+    }
+  }
 
   useEffect(() => {
     if (!owner) return
@@ -293,6 +411,14 @@ export default function ClaimWatch() {
           {filmConditionsLine(link?.durationSeconds)}
         </p>
 
+        {/* Portrait-play hint (iOS native fullscreen rotates with the device;
+            approved three-word copy, nothing more). Self-dismisses. */}
+        {rotateHint && (
+          <p className="mt-3 font-sans text-[11px] uppercase tracking-[0.28em] text-accent dc-fade-in">
+            Rotate your phone
+          </p>
+        )}
+
         {/* Player: edge-to-edge on phones; centered shadowed column above 540px. */}
         <div className="mt-[clamp(1.75rem,4svh,2.5rem)] w-screen ml-[calc(50%-50vw)] bg-black dc-fade-in min-[540px]:ml-auto min-[540px]:mr-auto min-[540px]:w-full min-[540px]:max-w-[60rem] min-[540px]:shadow-[0_40px_90px_rgba(0,0,0,0.55)]">
           {loadFailed ? (
@@ -308,12 +434,15 @@ export default function ClaimWatch() {
               }
             >
               <MuxPlayer
+                ref={playerRef}
                 streamType="on-demand"
                 playbackId={link?.muxPlaybackId || undefined}
                 startTime={startSeconds}
                 metadata={{ video_title: title }}
                 accentColor="#b1a180"
                 onTimeUpdate={handleTimeUpdate}
+                onPlay={handlePlay}
+                onEnded={handleEnded}
                 className="aspect-video w-full"
               />
             </Suspense>
