@@ -467,12 +467,17 @@ export default function ViewerDashboardV5({
                 </section>
               )}
 
-              {/* ── Your tickets ── */}
-              {ticketRows.length > 0 && (
-                <section className="mt-12 md:mt-16">
-                  <p className="font-sans text-[0.625rem] uppercase tracking-[0.3em] text-smoke">
-                    Your tickets
+              {/* ── Your tickets (always present — the section is the home of
+                    the ask, even before the first link exists) ── */}
+              <section className="mt-12 md:mt-16">
+                <p className="font-sans text-[0.625rem] uppercase tracking-[0.3em] text-smoke">
+                  Your tickets
+                </p>
+                {ticketRows.length === 0 ? (
+                  <p className="mt-5 border-t border-mist/[0.12] pt-6 font-serif-v3 text-base italic text-smoke">
+                    No tickets given yet.
                   </p>
+                ) : (
                   <div className="mt-5 border-t border-mist/[0.12]">
                     {ticketRows.map((t) => (
                       <div
@@ -516,8 +521,8 @@ export default function ViewerDashboardV5({
                       </div>
                     ))}
                   </div>
-                </section>
-              )}
+                )}
+              </section>
 
               <footer className="mt-20 text-center font-sans text-[0.625rem] uppercase tracking-[0.22em] text-smoke/70">
                 &copy; {new Date().getFullYear()}{' '}

@@ -281,7 +281,9 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
         'This film has reached 1 person. Through your hands, no one yet — your 3 tickets are waiting.'
       )
     ).toBeVisible({ timeout: 15000 })
-    await expect(page.getByText('Your tickets')).toHaveCount(0)
+    // The section always renders — at zero links it shows the empty state.
+    await expect(page.getByText('Your tickets')).toBeVisible()
+    await expect(page.getByText('No tickets given yet.')).toBeVisible()
   })
 
   test('mobile: identity line, bottom share bar, menu overlay', async ({ page }) => {
