@@ -229,6 +229,31 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(page.getByRole('dialog')).toHaveCount(0)
   })
 
+  test('side links stay ON SCREEN without scrolling, even at short/zoomed heights', async ({ page }) => {
+    // 900 = the owner's stated bar; 660 ≈ a small laptop window or ~125%
+    // browser zoom, where the old sidebar buried the links under an
+    // invisible internal scroll. The links block is pinned, so the four
+    // links' boxes must sit fully inside the viewport at BOTH heights.
+    for (const h of [900, 660]) {
+      await page.setViewportSize({ width: 1440, height: h })
+      await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+      await expect(page.getByText('A Sacred Pause')).toBeVisible({ timeout: 15000 })
+      const aside = page.locator('aside')
+      const targets = [
+        aside.getByRole('link', { name: 'About Deepcast' }),
+        aside.getByRole('link', { name: 'Contact' }),
+        aside.getByRole('button', { name: 'Edit your first name' }),
+        aside.getByRole('button', { name: 'Sign out' }),
+      ]
+      for (const target of targets) {
+        const box = await target.boundingBox()
+        expect(box, `link box at ${h}px`).toBeTruthy()
+        expect(box.y, `top on screen at ${h}px`).toBeGreaterThanOrEqual(0)
+        expect(box.y + box.height, `bottom on screen at ${h}px`).toBeLessThanOrEqual(h + 1)
+      }
+    }
+  })
+
   test('zero-share state: the journey line names the waiting tickets', async ({ page }) => {
     // Same mocks, but this viewer has generated nothing yet.
     await page.route('**/rest/v1/invites**', (route) => {

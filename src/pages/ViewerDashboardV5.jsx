@@ -230,12 +230,12 @@ export default function ViewerDashboardV5({
 
       <div className="relative z-[2] mx-auto grid max-w-[90rem] md:min-h-dvh md:grid-cols-[18rem_1fr]">
         {/* ── Sidebar (desktop) ── */}
-        <aside className="sticky top-0 hidden h-dvh flex-col overflow-y-auto border-r border-mist/[0.12] px-8 py-10 md:flex">
+        <aside className="sticky top-0 hidden h-dvh flex-col overflow-y-auto border-r border-mist/[0.12] px-8 py-8 md:flex">
           <Link to="/" aria-label="Deepcast" className="opacity-90 hover:opacity-100">
             <DeepcastLogo size="text-2xl" className="text-mist" />
           </Link>
 
-          <div className="mt-10">
+          <div className="mt-8">
             <p className="font-serif-v3 text-[1.75rem] italic leading-tight text-mist">{name}</p>
             {ticketNo != null && (
               <p className="mt-2 font-sans text-[0.6875rem] uppercase tracking-[0.26em] text-gold">
@@ -244,7 +244,7 @@ export default function ViewerDashboardV5({
             )}
           </div>
 
-          <div className="mt-9 flex flex-col gap-5 border-t border-mist/[0.12] pt-7">
+          <div className="mt-7 flex flex-col gap-4 border-t border-mist/[0.12] pt-6">
             <div className="flex items-baseline gap-3">
               <p className="min-w-5 font-sans text-2xl font-light leading-none text-gold-soft">
                 {remainingDisplay}
@@ -264,18 +264,23 @@ export default function ViewerDashboardV5({
           </div>
 
           {/* Founder-approved verbatim — the dashboard's quiet constraint line. */}
-          <p className="mt-7 font-serif-v3 text-xs italic leading-relaxed text-smoke/80">
+          <p className="mt-6 font-serif-v3 text-xs italic leading-relaxed text-smoke/80">
             This film reached you because someone thought of you. No algorithm, no feed. Films here
             pass through human hands only.
           </p>
 
           {canShare && (
-            <button type="button" onClick={onShare} disabled={shareDisabled} className={`mt-8 ${shareCtaClass}`}>
+            <button type="button" onClick={onShare} disabled={shareDisabled} className={`mt-7 ${shareCtaClass}`}>
               Share this film
             </button>
           )}
 
-          <div className="mt-auto flex flex-col gap-4 pt-8">{menuLinks}</div>
+          {/* Pinned to the sidebar's bottom edge: even if the middle ever
+              overflows (short window, browser zoom), these links can never
+              slip below an invisible internal scroll. */}
+          <div className="sticky bottom-0 -mx-8 mt-auto flex flex-col gap-3.5 bg-bg-page px-8 pb-0.5 pt-6">
+            {menuLinks}
+          </div>
         </aside>
 
         {/* ── Main ── */}
