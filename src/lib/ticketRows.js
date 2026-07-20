@@ -12,12 +12,14 @@
  */
 import { isInviteWatched } from './filmStats.js'
 import { withoutDemoGhosts } from './demoGhosts.js'
+import { existingInvites, isVoidInvite, VOID_TICKET_LABEL } from './inviteExistence.js'
 import { safeFirstName } from './displayName.js'
 
-/** Onward links per invite id (children by parent_invite_id, ghosts excluded). */
+/** Onward links per invite id (children by parent_invite_id; ghosts and
+ *  voided links excluded — the shared existence rule). */
 export function countChildrenByParentId(filmInvites = []) {
   const counts = {}
-  for (const inv of withoutDemoGhosts(filmInvites)) {
+  for (const inv of existingInvites(filmInvites)) {
     if (!inv?.parent_invite_id) continue
     counts[inv.parent_invite_id] = (counts[inv.parent_invite_id] || 0) + 1
   }
@@ -31,21 +33,26 @@ export function countChildrenByParentId(filmInvites = []) {
  */
 export function buildTicketRows({ sentInvites = [], filmInvites = [], origin = '' } = {}) {
   const childCounts = countChildrenByParentId(filmInvites)
+  // Voided rows stay VISIBLE here (the sender's ledger) but are dead as
+  // people: special status, no copyable link, never counted anywhere else.
   const rows = withoutDemoGhosts(sentInvites).map((inv) => {
     const sharedCount = childCounts[inv.id] || 0
     let statusKind
-    if (sharedCount > 0) statusKind = 'shared'
+    if (isVoidInvite(inv)) statusKind = 'void'
+    else if (sharedCount > 0) statusKind = 'shared'
     else if (isInviteWatched(inv)) statusKind = 'watched'
     else if (inv.status === 'claimed' || inv.status === 'opened') statusKind = 'opened'
     else statusKind = 'unopened'
     const statusLabel =
-      statusKind === 'shared'
-        ? `Shared to ${sharedCount} ${sharedCount === 1 ? 'person' : 'people'}`
-        : statusKind === 'watched'
-          ? 'Watched'
-          : statusKind === 'opened'
-            ? 'Opened'
-            : 'Unopened'
+      statusKind === 'void'
+        ? VOID_TICKET_LABEL
+        : statusKind === 'shared'
+          ? `Shared to ${sharedCount} ${sharedCount === 1 ? 'person' : 'people'}`
+          : statusKind === 'watched'
+            ? 'Watched'
+            : statusKind === 'opened'
+              ? 'Opened'
+              : 'Unopened'
     return {
       id: inv.id,
       // Display rule (2026-07-21): never an email or fragment of one — a
@@ -54,11 +61,14 @@ export function buildTicketRows({ sentInvites = [], filmInvites = [], origin = '
       statusKind,
       statusLabel,
       sharedCount,
-      link: inv.link_slug
-        ? `${origin}/${inv.link_slug}`
-        : inv.token
-          ? `${origin}/i/${inv.token}`
-          : null,
+      link:
+        statusKind === 'void'
+          ? null
+          : inv.link_slug
+            ? `${origin}/${inv.link_slug}`
+            : inv.token
+              ? `${origin}/i/${inv.token}`
+              : null,
       // Stamped by the ticket-number phase; null renders no "Ticket No." line.
       ticketNo: inv.ticket_no ?? null,
       createdAt: inv.created_at || null,

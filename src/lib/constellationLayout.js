@@ -23,7 +23,7 @@
  *    rings compressing (zoom/pan absorbs the size).
  */
 import { resolveInviteParents } from './graphLayout.js'
-import { withoutDemoGhosts } from './demoGhosts.js'
+import { existingInvites } from './inviteExistence.js'
 import { isInviteWatched } from './filmStats.js'
 import { safeFirstName } from './displayName.js'
 
@@ -55,7 +55,8 @@ export function buildConstellationLayout({
   teamMemberIds = null,
   viewerInviteId = null,
 } = {}) {
-  const invites = withoutDemoGhosts(filmInvites)
+  // Shared existence rule: no ghosts, no voided links (inviteExistence.js).
+  const invites = existingInvites(filmInvites)
   if (!invites.length) return null
 
   const { parentByInviteId, memberNodes, isCreatorSender } = resolveInviteParents({

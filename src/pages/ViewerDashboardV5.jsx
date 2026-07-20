@@ -503,7 +503,9 @@ export default function ViewerDashboardV5({
                                   ? 'border-gold bg-gold'
                                   : t.statusKind === 'opened'
                                     ? 'border-smoke bg-smoke'
-                                    : 'border-gold/45'
+                                    : t.statusKind === 'void'
+                                      ? 'border-smoke/40'
+                                      : 'border-gold/45'
                             }`}
                           />
                           {t.statusLabel}

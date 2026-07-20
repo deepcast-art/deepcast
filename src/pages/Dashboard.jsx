@@ -17,6 +17,7 @@ import { computeTicketFunnel } from '../lib/ticketFunnel.js'
 import { buildNetworkPeople } from '../lib/networkPeople.js'
 import { safeLocalStorage, safeSessionStorage } from '../lib/safeStorage.js'
 import { readClaimStash } from '../lib/claimStash.js'
+import { countTicketsGiven } from '../lib/inviteExistence.js'
 import ViewerDashboardV5 from './ViewerDashboardV5'
 import ShareLinkModal from '../components/ShareLinkModal'
 
@@ -208,7 +209,8 @@ export default function Dashboard() {
     : isClaimant
       ? claimantTicketsLeft
       : filmTicketsRemaining(profile, viewerFilmWallet)
-  const sentCount = isViewer ? viewerSentInvites.length : 0
+  // "Tickets given" — voided (refunded) duplicate links no longer count.
+  const sentCount = isViewer ? countTicketsGiven(viewerSentInvites) : 0
   // V5 (owner decision 2026-07-20): the dashboard share button is the LINK
   // flow for every viewer, claimants included — the email modal is gone.
   const canShareMore = Boolean(isViewer && viewerFilmId)

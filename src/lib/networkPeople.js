@@ -43,6 +43,7 @@
  * though they DO count in this table's "claimed" column.
  */
 import { buildChildrenByParentId, computeUserReach } from './reach.js'
+import { isVoidInvite } from './inviteExistence.js'
 import { isInviteClaimedStage } from './ticketFunnel.js'
 import { isInviteWatched } from './filmStats.js'
 import { INITIAL_CLAIMANT_TICKETS } from './ticketRules.js'
@@ -78,7 +79,10 @@ function personStage({ hasAccount, receivedStatuses }) {
  * @param creatorId   the film's creator (excluded from the rows)
  */
 export function buildNetworkPeople({ filmInvites, users, creatorId } = {}) {
-  const invites = filmInvites || []
+  // Shared existence rule (Fix B, 2026-07-21): voided duplicate links are
+  // dead everywhere — not people, not outstanding tickets, not counts.
+  // (Ghosts stay on this admin surface by owner decision.)
+  const invites = (filmInvites || []).filter((inv) => !isVoidInvite(inv))
   const childrenByParentId = buildChildrenByParentId(invites)
   const creatorKey = creatorId ? String(creatorId) : null
 

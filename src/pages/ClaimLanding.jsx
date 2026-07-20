@@ -234,6 +234,18 @@ export default function ClaimLanding() {
   const [claimBusy, setClaimBusy] = useState(false)
   const [claimError, setClaimError] = useState('')
   const [sharerView, setSharerView] = useState(false)
+  /** Fix B (2026-07-21): this email already holds the film — the duplicate
+   *  link was voided server-side and the sender's ticket returned. */
+  const [alreadyHeld, setAlreadyHeld] = useState(false)
+
+  useEffect(() => {
+    if (!alreadyHeld) return undefined
+    // Recognition, then their existing dashboard (signed-in browsers land
+    // there directly; signed-out ones reach the sign-in page — typing an
+    // email is never a way into an existing account's session).
+    const t = setTimeout(() => navigate('/dashboard'), 2200)
+    return () => clearTimeout(t)
+  }, [alreadyHeld, navigate])
 
   useEffect(() => {
     let cancelled = false
@@ -275,6 +287,10 @@ export default function ClaimLanding() {
       const result = await api.claimLinkInvite(slug, trimmed, session?.access_token || null)
       if (result.sharerView) {
         setSharerView(true)
+        return
+      }
+      if (result.alreadyHeld) {
+        setAlreadyHeld(true)
         return
       }
       saveClaimStash({
@@ -417,7 +433,11 @@ export default function ClaimLanding() {
 
         {/* 6. Inline email + CTA — visible immediately, no click-to-reveal. */}
         <div className="mt-[clamp(2rem,4.5svh,3.75rem)] w-full max-w-[26rem] dc-rise dc-rise-6">
-          {sharerView ? (
+          {alreadyHeld ? (
+            <p className="font-serif-v3 text-lg italic text-warm">
+              You already hold this film.
+            </p>
+          ) : sharerView ? (
             <p className="font-serif-v3 text-sm italic text-warm/60">
               This invitation is waiting for {firstName} — it can’t be accepted by the person
               who sent it. Copy the link from your address bar and pass it along.
@@ -448,7 +468,7 @@ export default function ClaimLanding() {
             </form>
           )}
           {/* 7. The single-claim line. */}
-          {!sharerView && (
+          {!sharerView && !alreadyHeld && (
             <p className="mt-5 font-sans text-[10px] uppercase tracking-[0.24em] text-warm/45">
               This invitation admits one person, once.
             </p>

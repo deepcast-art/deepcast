@@ -100,6 +100,23 @@ test.describe('three-page claim arc', () => {
     expect(jsErrors).toEqual([])
   })
 
+  test('duplicate claim: recognition message, then routed toward the dashboard', async ({ page }) => {
+    await page.route('**/api/invites/link/**', (route) => route.fulfill({ json: LINK_CREATED }))
+    await page.route('**/api/invites/claim', (route) =>
+      route.fulfill({ json: { alreadyHeld: true, filmId: 'film-1' } })
+    )
+    await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
+    await page.getByPlaceholder('you@example.com').fill('returning@example.com')
+    await page.getByRole('button', { name: /Accept your invite/i }).click()
+    // Founder copy, verbatim — and the claim form is gone.
+    await expect(page.getByText('You already hold this film.')).toBeVisible()
+    await expect(page.getByPlaceholder('you@example.com')).toHaveCount(0)
+    // Lands on the existing dashboard (sign-in page when this browser has
+    // no session — typing an email never opens someone's account).
+    await page.waitForURL(/\/(dashboard|login)/, { timeout: 10000 })
+    expect(jsErrors).toEqual([])
+  })
+
   test('full arc: claim → watch → share panel → generate with ticket decrement → revisit', async ({ page }) => {
     let claimed = false
     await page.route('**/api/invites/link/**', (route) =>

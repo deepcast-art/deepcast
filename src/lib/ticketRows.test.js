@@ -106,6 +106,27 @@ describe('buildTicketRows', () => {
     expect(rows[2].link).toBeNull()
   })
 
+  it('voided rows: visible as ledger history, dead everywhere else', () => {
+    const voided = row({ id: 'v', status: 'void', link_slug: 'dupe-x1y2', ticket_no: 9 })
+    const kid = row({ id: 'k', parent_invite_id: 'v' })
+    const rows = buildTicketRows({
+      sentInvites: [voided],
+      filmInvites: [voided, kid],
+      origin: ORIGIN,
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0].statusKind).toBe('void')
+    expect(rows[0].statusLabel).toBe('Already held this film — ticket returned.')
+    // The dead link is never offered for copying…
+    expect(rows[0].link).toBeNull()
+    // …its number stays visible history (immutable, gap on deletion)…
+    expect(rows[0].ticketNo).toBe(9)
+    // …and a voided link can never be someone's "Shared to N" child.
+    expect(
+      countChildrenByParentId([kid, row({ id: 'vk', parent_invite_id: 'p', status: 'void' })])
+    ).toEqual({ v: 1 })
+  })
+
   it('orders OLDEST first (the order ticket numbers count in)', () => {
     const rows = buildTicketRows({
       sentInvites: [

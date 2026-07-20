@@ -16,13 +16,15 @@
  * (src/lib/reach.js) — "claimed" still never counts toward reach.
  */
 import { isInviteWatched } from './filmStats.js'
+import { isVoidInvite } from './inviteExistence.js'
 
 export const CLAIMED_STAGE_STATUSES = ['claimed', 'opened', 'watched', 'signed_up']
 export const isInviteClaimedStage = (inv) => CLAIMED_STAGE_STATUSES.includes(inv?.status)
 
-/** The three funnel numbers for one film's invite list. */
+/** The three funnel numbers for one film's invite list. Voided duplicate
+ *  links (Fix B, 2026-07-21) count nowhere — their ticket was returned. */
 export function computeTicketFunnel(invites) {
-  const list = invites || []
+  const list = (invites || []).filter((inv) => !isVoidInvite(inv))
   return {
     generated: list.length,
     claimed: list.filter(isInviteClaimedStage).length,

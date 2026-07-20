@@ -32,6 +32,8 @@ import {
 import { claimedSharerSpendDecision, claimedInviteTicketsDisplay } from './claimantWallet.js'
 import { nextTicketNo } from './ticketNumbers.js'
 import { firstNameInputError } from '../src/lib/firstNameRule.js'
+import { VOID_INVITE_STATUS } from '../src/lib/inviteExistence.js'
+import { refundOnVoidDecision } from './voidRules.js'
 
 const app = express()
 app.use(cors())
@@ -1282,6 +1284,41 @@ app.post('/api/invites/claim', async (req, res) => {
       return res.status(400).json({ error: `${creatorFirst} ${CREATOR_SHARE_BLOCK_REASON}` })
     }
 
+    // ── Duplicate-claim guard (Fix B + amendment, 2026-07-21): one claim per
+    // person per film. If this email already holds the film, the fresh link
+    // is VOIDED (no longer claimable, its ticket number dies with it — a
+    // permanent gap per the immutability rule), the sender's ticket comes
+    // back unless they're an unlimited sharer, and the claimer is
+    // recognized instead of re-claimed. ──
+    const { data: priorClaim } = await supabase
+      .from('invites')
+      .select('id')
+      .eq('film_id', invite.film_id)
+      .ilike('claimed_email', emailNorm)
+      .limit(1)
+      .maybeSingle()
+    if (priorClaim) {
+      // Void atomically — only a still-unclaimed row can void, so a race
+      // with a genuine claim can never destroy a real claim.
+      const { data: voidedRow } = await supabase
+        .from('invites')
+        .update({ status: VOID_INVITE_STATUS })
+        .eq('id', invite.id)
+        .eq('status', 'created')
+        .is('claimed_email', null)
+        .select('id')
+        .maybeSingle()
+      if (voidedRow) {
+        await refundVoidedSenderTicket(invite).catch((e) =>
+          console.error('[claim] void refund failed (void stands):', e?.message || e)
+        )
+      }
+      console.log(
+        `[claim] duplicate: ${emailNorm} already holds film ${invite.film_id} — link ${slug} voided`
+      )
+      return res.json({ alreadyHeld: true, filmId: invite.film_id })
+    }
+
     // Ordinal freeze: compute the invitee's position NOW and stamp it on the
     // claim — never recomputed afterward (the dashboard shows this value).
     const { data: ordinalRows } = await supabase
@@ -1395,6 +1432,30 @@ app.post('/api/invites/claim', async (req, res) => {
     }
   }
 })
+
+/** Fix B amendment: return a voided duplicate link's ticket to its sender.
+ *  Decision logic in server/voidRules.js (unit-tested); the wallet write is
+ *  the same best-effort refund used for failed generations. A missing wallet
+ *  row means the sender never spent from the per-film wallet (their balance
+ *  already reads as the full virtual grant) — refundFilmTicket no-ops. */
+async function refundVoidedSenderTicket(invite) {
+  const senderId = invite?.sender_id != null ? String(invite.sender_id) : null
+  if (!senderId) {
+    console.log('[claim] void refund skipped (no-sender-account)')
+    return
+  }
+  const [{ data: senderUser }, wallet] = await Promise.all([
+    supabase.from('users').select('id, role, team_creator_id').eq('id', senderId).maybeSingle(),
+    readFilmWallet(supabase, senderId, invite.film_id),
+  ])
+  const decision = refundOnVoidDecision({ senderUser, wallet })
+  if (!decision.refund) {
+    console.log(`[claim] void refund skipped (${decision.reason}) for sender ${senderId}`)
+    return
+  }
+  await refundFilmTicket(supabase, senderId, invite.film_id)
+  console.log(`[claim] void refund: +1 film ticket returned to sender ${senderId}`)
+}
 
 app.post('/api/invites/resend-last', async (req, res) => {
   try {
