@@ -169,13 +169,28 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
       )
     ).toBeVisible()
 
+    // The constellation: film at the center, YOU on the gold path, zoom works.
+    const map = page.locator('svg.dc-constellation')
+    await expect(map).toBeVisible()
+    await expect(map.getByText('YOU')).toBeVisible()
+    await expect(map.getByText('FILMMAKER')).toBeVisible()
+    await expect(map.getByText('Dan', { exact: true })).toBeVisible()
+    const vbBefore = await map.getAttribute('viewBox')
+    await page.getByRole('button', { name: 'Zoom in' }).click()
+    await expect
+      .poll(async () => map.getAttribute('viewBox'))
+      .not.toBe(vbBefore)
+    await page.getByRole('button', { name: 'Reset zoom' }).click()
+    await expect.poll(async () => map.getAttribute('viewBox')).toBe(vbBefore)
+
     // "Your tickets": one row per generated link, OLDEST first, with the
     // design's status vocabulary and a working copy affordance.
-    await expect(page.getByText('Your tickets')).toBeVisible()
-    await expect(page.getByText('Dan', { exact: true })).toBeVisible()
-    await expect(page.getByText('Unopened')).toBeVisible()
-    await expect(page.getByText('Maya', { exact: true })).toBeVisible()
-    await expect(page.getByText('Shared to 1 person')).toBeVisible()
+    const tickets = page.locator('section').filter({ hasText: 'Your tickets' })
+    await expect(tickets.getByText('Your tickets')).toBeVisible()
+    await expect(tickets.getByText('Dan', { exact: true })).toBeVisible()
+    await expect(tickets.getByText('Unopened')).toBeVisible()
+    await expect(tickets.getByText('Maya', { exact: true })).toBeVisible()
+    await expect(tickets.getByText('Shared to 1 person')).toBeVisible()
     const copyButtons = page.getByRole('button', { name: 'Copy invitation link' })
     await expect(copyButtons).toHaveCount(2)
     await copyButtons.first().click()

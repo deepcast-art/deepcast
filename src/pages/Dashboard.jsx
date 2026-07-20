@@ -108,15 +108,14 @@ export default function Dashboard() {
   const [viewerFilmId, setViewerFilmId] = useState(
     () => safeSessionStorage.getItem('dash_viewer_film_id') || null
   )
-  // Values re-surface with the constellation phase (film title, creator id/name
-  // feed the layout); until then only the setters are read — the loaders keep
-  // the state warm so that phase is a render-side change only.
+  // Film title is display-unused in the V5 design; the setter keeps the
+  // loaders unchanged. Creator id/name feed the constellation layout.
   const [, setViewerFilmTitle] = useState('')
-  const [, setViewerFilmCreatorId] = useState(null)
+  const [viewerFilmCreatorId, setViewerFilmCreatorId] = useState(null)
   const [viewerInviteToken, setViewerInviteToken] = useState(null)
   const [viewerFilmInvites, setViewerFilmInvites] = useState([])
   const [viewerAllFilms, setViewerAllFilms] = useState([])
-  const [, setViewerCreatorName] = useState('')
+  const [viewerCreatorName, setViewerCreatorName] = useState('')
   const [viewerTokenByFilmId, setViewerTokenByFilmId] = useState({})
 
   const viewerSentInvites = useMemo(
@@ -219,7 +218,6 @@ export default function Dashboard() {
 
   // Shared focus resolution (same helper every graph surface uses): email match first,
   // then invite-token match, then the common parent of the viewer's sent invites.
-  // (The constellation phase will also read viewerRecipientKey from this memo.)
   const { focusInviteId: viewerFocusInviteId } = useMemo(
     () =>
       resolveViewerFocus(viewerFilmInvites, profile?.email, {
@@ -819,6 +817,9 @@ export default function Dashboard() {
           claimStashSlug={claimStash?.slug || null}
           sentInvites={viewerSentInvites}
           filmInvites={viewerFilmInvites}
+          creatorId={viewerFilmCreatorId}
+          creatorName={viewerCreatorName}
+          viewerInviteId={viewerFocusInviteId}
           ticketsRemaining={invitesLeft}
           ticketsGiven={sentCount}
           canShare={canShareMore}

@@ -17,6 +17,8 @@ import MvpVersionLabel from '../components/MvpVersionLabel'
 import { screeningCardState } from '../lib/screeningCard.js'
 import { buildTicketRows } from '../lib/ticketRows.js'
 import { buildJourneyLine } from '../lib/journeyLine.js'
+import { buildConstellationLayout } from '../lib/constellationLayout.js'
+import ConstellationMap from '../components/ConstellationMap'
 import { safeLocalStorage } from '../lib/safeStorage.js'
 
 const CONTACT_EMAIL = 'hello@deepcast.art'
@@ -93,6 +95,9 @@ export default function ViewerDashboardV5({
   claimStashSlug,
   sentInvites,
   filmInvites,
+  creatorId,
+  creatorName,
+  viewerInviteId,
   ticketsRemaining,
   ticketsGiven,
   canShare,
@@ -125,6 +130,17 @@ export default function ViewerDashboardV5({
         ticketsRemaining,
       }),
     [filmInvites, sentInvites, ticketsRemaining]
+  )
+
+  const constellation = useMemo(
+    () =>
+      buildConstellationLayout({
+        filmInvites: filmInvites || [],
+        creatorId,
+        creatorName,
+        viewerInviteId,
+      }),
+    [filmInvites, creatorId, creatorName, viewerInviteId]
   )
 
   const copyTicketLink = async (ticketRow) => {
@@ -431,6 +447,12 @@ export default function ViewerDashboardV5({
                       )
                     )}
                   </p>
+                  {constellation && (
+                    <ConstellationMap
+                      key={`${constellation.width}x${constellation.height}`}
+                      layout={constellation}
+                    />
+                  )}
                 </section>
               )}
 
