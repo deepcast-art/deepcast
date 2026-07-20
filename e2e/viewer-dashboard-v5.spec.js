@@ -228,6 +228,32 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(page.getByRole('dialog')).toHaveCount(0)
   })
 
+  test('constellation: draggable immediately at 1:1, wheel zoom toward the pointer', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    const map = page.locator('svg.dc-constellation')
+    await expect(map).toBeVisible({ timeout: 15000 })
+    const box = await map.boundingBox()
+    const cx = box.x + box.width / 2
+    const cy = box.y + box.height / 2
+
+    // Drag works right away — no zooming in first.
+    const vbStart = await map.getAttribute('viewBox')
+    await page.mouse.move(cx, cy)
+    await page.mouse.down()
+    await page.mouse.move(cx + 80, cy + 50, { steps: 4 })
+    await page.mouse.up()
+    await expect.poll(async () => map.getAttribute('viewBox')).not.toBe(vbStart)
+
+    // Wheel over the map zooms (and must not scroll the page).
+    const scrollBefore = await page.evaluate(() => window.scrollY)
+    const vbBeforeWheel = await map.getAttribute('viewBox')
+    await page.mouse.move(cx + 100, cy - 60)
+    await page.mouse.wheel(0, -400)
+    await expect.poll(async () => map.getAttribute('viewBox')).not.toBe(vbBeforeWheel)
+    expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore)
+  })
+
   test('side links stay ON SCREEN without scrolling, even at short/zoomed heights', async ({ page }) => {
     // 900 = the owner's stated bar; 660 ≈ a small laptop window or ~125%
     // browser zoom, where the old sidebar buried the links under an

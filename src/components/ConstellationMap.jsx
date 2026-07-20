@@ -9,9 +9,12 @@
  *  - Zoom (+ / − / 1:1) and drag-to-pan, scoped to the map.
  *  - Web ("dim") labels hide on phones; the gold path keeps its names.
  */
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 const MIN_ZOOM_DIV = 4 // deepest zoom-in shows 1/4 of the canvas
+/** How far (as a fraction of the current view) the map may be dragged past
+ *  its edges — this is what makes dragging work immediately at 1:1. */
+const PAN_OVERSHOOT = 0.4
 
 const LABEL_FONT = "'Phoenix', system-ui, sans-serif"
 
@@ -26,15 +29,60 @@ export default function ConstellationMap({ layout }) {
     layout ? { x: 0, y: 0, w: layout.width, h: layout.height } : null
   )
   const dragRef = useRef(null)
+  /** Mirrors vb for the native wheel listener (kept out of render writes). */
+  const vbRef = useRef(vb)
+  useEffect(() => {
+    vbRef.current = vb
+  }, [vb])
+
+  const W = layout?.width ?? 0
+  const H = layout?.height ?? 0
+
+  /** Wheel/trackpad zoom, centered on the pointer. Registered natively with
+   *  passive:false — React's synthetic wheel can't preventDefault, and the
+   *  page must NOT scroll while the pointer is over the map (outside it,
+   *  normal page scrolling is untouched). Trackpad pinch arrives as a wheel
+   *  event with ctrlKey and fine deltas, hence the two sensitivities. */
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg || !W || !H) return
+    const onWheel = (e) => {
+      e.preventDefault()
+      const rect = svg.getBoundingClientRect()
+      if (!rect.width || !rect.height) return
+      const cur = vbRef.current
+      if (!cur) return
+      const factor = Math.exp((e.ctrlKey ? 0.01 : 0.002) * e.deltaY)
+      const nw = Math.min(Math.max(cur.w * factor, W / MIN_ZOOM_DIV), W)
+      const nh = nw * (H / W)
+      const fx = (e.clientX - rect.left) / rect.width
+      const fy = (e.clientY - rect.top) / rect.height
+      const px = cur.x + fx * cur.w
+      const py = cur.y + fy * cur.h
+      const ox = nw * PAN_OVERSHOOT
+      const oy = nh * PAN_OVERSHOOT
+      setVb({
+        w: nw,
+        h: nh,
+        x: Math.min(Math.max(px - fx * nw, -ox), W - nw + ox),
+        y: Math.min(Math.max(py - fy * nh, -oy), H - nh + oy),
+      })
+    }
+    svg.addEventListener('wheel', onWheel, { passive: false })
+    return () => svg.removeEventListener('wheel', onWheel)
+  }, [W, H])
 
   if (!layout || !vb) return null
-  const { width: W, height: H } = layout
 
-  const clampVb = (next) => ({
-    ...next,
-    x: Math.min(Math.max(next.x, 0), W - next.w),
-    y: Math.min(Math.max(next.y, 0), H - next.h),
-  })
+  const clampVb = (next) => {
+    const ox = next.w * PAN_OVERSHOOT
+    const oy = next.h * PAN_OVERSHOOT
+    return {
+      ...next,
+      x: Math.min(Math.max(next.x, -ox), W - next.w + ox),
+      y: Math.min(Math.max(next.y, -oy), H - next.h + oy),
+    }
+  }
 
   const zoom = (f) => {
     setVb((cur) => {
