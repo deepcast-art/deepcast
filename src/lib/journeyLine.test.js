@@ -1,64 +1,64 @@
 import { describe, it, expect } from 'vitest'
 import { buildJourneyLine } from './journeyLine.js'
+import { buildConstellationLayout } from './constellationLayout.js'
 
-const inv = (id, over = {}) => ({ id, recipient_email: null, ...over })
 const textOf = (r) => r.segments.map((s) => s.text).join('')
 
 describe('buildJourneyLine', () => {
-  it('shared state: numerals, bold on both counts', () => {
-    const r = buildJourneyLine({
-      filmInvites: [inv('a'), inv('b'), inv('c'), inv('d')],
-      sentInvites: [inv('b'), inv('c')],
-      ticketsRemaining: 3,
-    })
-    expect(textOf(r)).toBe(
-      'This film has reached 4 people. Through your hands, it has reached 2 more.'
-    )
-    expect(r.segments.filter((s) => s.bold).map((s) => s.text)).toEqual(['4 people', '2 more'])
-    // Numerals, never spelled-out words (numWord was NOT ported).
-    expect(textOf(r)).not.toMatch(/four|two/i)
+  it('downstream state: exact copy, numerals, bold on both counts', () => {
+    const r = buildJourneyLine({ reached: 4, downstream: 3 })
+    expect(textOf(r)).toBe('This film has reached 4 people. 3 of them received it because of you.')
+    expect(r.segments.filter((s) => s.bold).map((s) => s.text)).toEqual(['4 people', '3 of them'])
+    expect(textOf(r)).not.toMatch(/four|three/i)
   })
 
-  it('zero-share state names the finite waiting balance', () => {
-    const r = buildJourneyLine({
-      filmInvites: [inv('a')],
-      sentInvites: [],
-      ticketsRemaining: 5,
-    })
+  it('zero state: exact copy, no numbers beyond X', () => {
+    const r = buildJourneyLine({ reached: 58, downstream: 0 })
     expect(textOf(r)).toBe(
-      'This film has reached 1 person. Through your hands, no one yet — your 5 tickets are waiting.'
+      'This film has reached 58 people. Your shareable tickets are waiting to grow that number.'
     )
   })
 
-  it('zero-share with one ticket left is singular', () => {
-    const r = buildJourneyLine({ filmInvites: [inv('a')], sentInvites: [], ticketsRemaining: 1 })
-    expect(textOf(r)).toContain('your 1 ticket is waiting.')
+  it('singular X reads "1 person"', () => {
+    expect(textOf(buildJourneyLine({ reached: 1, downstream: 0 }))).toBe(
+      'This film has reached 1 person. Your shareable tickets are waiting to grow that number.'
+    )
+    expect(textOf(buildJourneyLine({ reached: 1, downstream: 1 }))).toBe(
+      'This film has reached 1 person. 1 of them received it because of you.'
+    )
   })
 
-  it('unlimited (and unknown) balances use the no-number copy', () => {
-    for (const balance of [Infinity, null]) {
-      const r = buildJourneyLine({
-        filmInvites: [inv('a'), inv('b')],
-        sentInvites: [],
-        ticketsRemaining: balance,
-      })
-      expect(textOf(r)).toBe(
-        'This film has reached 2 people. Through your hands, no one yet — your tickets are waiting.'
-      )
-    }
-  })
-
-  it('demo ghosts count nowhere', () => {
-    const r = buildJourneyLine({
-      filmInvites: [
-        inv('a'),
-        inv('g1', { recipient_email: 'x@demo.invalid' }),
-        inv('g2', { recipient_email: 'y@demo-deepcast.invalid' }),
-      ],
-      sentInvites: [inv('g1', { recipient_email: 'x@demo.invalid' })],
-      ticketsRemaining: 5,
+  it('Y counts the WHOLE downstream via the constellation tree — deeper shares raise Y beyond direct links', () => {
+    const CREATOR = 'creator-1'
+    const inv = (id, senderId, parentId = null) => ({
+      id,
+      sender_id: senderId,
+      parent_invite_id: parentId,
+      recipient_name: `P${id}`,
+      recipient_email: null,
+      status: 'created',
+      created_at: '2026-07-10T00:00:00Z',
     })
-    expect(r.reached).toBe(1)
-    expect(r.given).toBe(0)
+    // creator → you; you → a, b (2 direct); a → a1 (their share); a1 → a2.
+    const rows = [
+      inv('you', CREATOR),
+      inv('a', 'u-you', 'you'),
+      inv('b', 'u-you', 'you'),
+      inv('a1', 'u-a', 'a'),
+      inv('a2', 'u-a1', 'a1'),
+    ]
+    const layout = buildConstellationLayout({
+      filmInvites: rows,
+      creatorId: CREATOR,
+      viewerInviteId: 'you',
+    })
+    expect(layout.inviteCount).toBe(5)
+    // Direct links = 2, but the whole subtree beneath YOU = a, b, a1, a2.
+    expect(layout.viewerDownstreamCount).toBe(4)
+    const r = buildJourneyLine({
+      reached: layout.inviteCount,
+      downstream: layout.viewerDownstreamCount,
+    })
+    expect(textOf(r)).toBe('This film has reached 5 people. 4 of them received it because of you.')
   })
 })

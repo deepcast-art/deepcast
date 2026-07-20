@@ -157,6 +157,13 @@ describe('buildConstellationLayout', () => {
     expect(layout.creatorLabel).toBe('Ien')
   })
 
+  it('journey counts: film-wide invites and the viewer\'s whole subtree', () => {
+    const layout = fixture()
+    expect(layout.inviteCount).toBe(11)
+    // YOU's subtree at all depths: c1–c4 + d1 + d2 = 6 (direct links are 4).
+    expect(layout.viewerDownstreamCount).toBe(6)
+  })
+
   it('gold edges cover exactly the lineage; the web stays dim', () => {
     const layout = fixture()
     // film→a, a→b(you), b→c1..c4, c4→d1, d1→d2 = 8 gold edges.

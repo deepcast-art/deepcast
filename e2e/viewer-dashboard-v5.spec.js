@@ -168,11 +168,10 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(aside.getByRole('button', { name: 'Edit your first name' })).toBeVisible()
     await expect(aside.getByRole('button', { name: 'Sign out' })).toBeVisible()
 
-    // Journey line: generated-link counting, NUMERALS (numWord not ported).
+    // Journey line: X = film-wide generated total; Y = the viewer's ENTIRE
+    // downstream (Dan + Maya + Maya's Lea = 3, beyond the 2 direct links).
     await expect(
-      page.getByText(
-        'This film has reached 4 people. Through your hands, it has reached 2 more.'
-      )
+      page.getByText('This film has reached 4 people. 3 of them received it because of you.')
     ).toBeVisible()
 
     // The constellation: film at the center, YOU on the gold path, zoom works.
@@ -278,7 +277,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
 
     await expect(
       page.getByText(
-        'This film has reached 1 person. Through your hands, no one yet — your 3 tickets are waiting.'
+        'This film has reached 1 person. Your shareable tickets are waiting to grow that number.'
       )
     ).toBeVisible({ timeout: 15000 })
     // The section always renders — at zero links it shows the empty state.

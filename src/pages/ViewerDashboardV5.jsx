@@ -123,16 +123,6 @@ export default function ViewerDashboardV5({
     [sentInvites, filmInvites]
   )
 
-  const journey = useMemo(
-    () =>
-      buildJourneyLine({
-        filmInvites: filmInvites || [],
-        sentInvites: sentInvites || [],
-        ticketsRemaining,
-      }),
-    [filmInvites, sentInvites, ticketsRemaining]
-  )
-
   const constellation = useMemo(
     () =>
       buildConstellationLayout({
@@ -142,6 +132,18 @@ export default function ViewerDashboardV5({
         viewerInviteId,
       }),
     [filmInvites, creatorId, creatorName, viewerInviteId]
+  )
+
+  // The journey line's counts come from the constellation's tree — ONE
+  // counting path (owner rule 2026-07-21): X = film-wide generated total,
+  // Y = the viewer's entire downstream, all depths.
+  const journey = useMemo(
+    () =>
+      buildJourneyLine({
+        reached: constellation?.inviteCount ?? 0,
+        downstream: constellation?.viewerDownstreamCount ?? 0,
+      }),
+    [constellation]
   )
 
   const copyTicketLink = async (ticketRow) => {
