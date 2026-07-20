@@ -75,6 +75,7 @@ export default function Dashboard() {
       claimedFilmId: claimantInvite.film_id,
       claimedStatus: claimantInvite.status || null,
       claimedSlug: claimStash.slug,
+      claimedTicketNo: claimantInvite.ticket_no ?? null,
     }
   }, [authProfile, claimStash, claimantInvite])
   const isClaimant = Boolean(profile?.isClaimant)
@@ -317,7 +318,7 @@ export default function Dashboard() {
         : email
           ? supabase
               .from('invites')
-              .select('film_id, token, status, link_slug, claimed_by')
+              .select('film_id, token, status, link_slug, claimed_by, ticket_no')
               // Silent accounts (Piece E): claim-link rows keep recipient_email
               // NULL — an account holder's claimed films are found by
               // claimed_by (primary; exact) or claimed_email (attach-failed /
@@ -373,6 +374,9 @@ export default function Dashboard() {
               // Received-invite status — drives the screening card's
               // Resume film / Watch again state (screeningCard.js).
               status: r.status || null,
+              // The viewer's own "Ticket No." for this film (the number on
+              // the invite they received). Null pre-backfill.
+              ticketNo: r.ticket_no ?? null,
             }
           })
           .filter(f => f.id)
@@ -753,6 +757,11 @@ export default function Dashboard() {
           films={viewerAllFilms}
           selectedFilmId={viewerFilmId}
           claimStashSlug={claimStash?.slug || null}
+          ticketNo={
+            isClaimant
+              ? profile.claimedTicketNo
+              : viewerAllFilms.find((f) => f.id === viewerFilmId)?.ticketNo ?? null
+          }
           sentInvites={viewerSentInvites}
           filmInvites={viewerFilmInvites}
           creatorId={viewerFilmCreatorId}

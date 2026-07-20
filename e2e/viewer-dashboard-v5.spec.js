@@ -43,6 +43,7 @@ const SENT = [
     recipient_email: null,
     status: 'created',
     link_slug: 'dan-k3fm',
+    ticket_no: 61,
     created_at: '2026-07-18T10:00:00Z',
     parent_invite_id: 'aaaa1111-0000-4000-8000-000000000009',
   },
@@ -54,6 +55,7 @@ const SENT = [
     recipient_email: null,
     status: 'watched',
     link_slug: 'maya-r2hn',
+    ticket_no: 60,
     created_at: '2026-07-17T10:00:00Z',
     parent_invite_id: 'aaaa1111-0000-4000-8000-000000000009',
   },
@@ -82,6 +84,7 @@ const RECEIVED = [
     status: 'watched',
     link_slug: 'ava-p7wd',
     claimed_by: USER_ID,
+    ticket_no: 59,
     created_at: '2026-07-16T10:00:00Z',
   },
 ]
@@ -188,8 +191,12 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
 
     // "Your tickets": one row per generated link, OLDEST first, with the
     // design's status vocabulary and a working copy affordance.
+    // Ticket numbers: yours in the sidebar, each link's on its row.
+    await expect(aside.getByText('Ticket No. 59')).toBeVisible()
     const tickets = page.locator('section').filter({ hasText: 'Your tickets' })
     await expect(tickets.getByText('Your tickets')).toBeVisible()
+    await expect(tickets.getByText('Ticket No. 60')).toBeVisible()
+    await expect(tickets.getByText('Ticket No. 61')).toBeVisible()
     await expect(tickets.getByText('Dan', { exact: true })).toBeVisible()
     await expect(tickets.getByText('Unopened')).toBeVisible()
     await expect(tickets.getByText('Maya', { exact: true })).toBeVisible()
@@ -252,7 +259,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await page.setViewportSize({ width: 375, height: 812 })
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
 
-    await expect(page.getByText('3 tickets remaining · 2 given')).toBeVisible()
+    await expect(page.getByText('Ticket No. 59 · 3 tickets remaining · 2 given')).toBeVisible()
     // Bottom share bar (fixed) — the visible mobile CTA.
     const shareButtons = page.getByRole('button', { name: 'Share this film' })
     await expect(shareButtons.last()).toBeVisible()

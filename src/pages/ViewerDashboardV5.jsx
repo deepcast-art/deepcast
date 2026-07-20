@@ -93,6 +93,7 @@ export default function ViewerDashboardV5({
   films,
   selectedFilmId,
   claimStashSlug,
+  ticketNo,
   sentInvites,
   filmInvites,
   creatorId,
@@ -236,7 +237,11 @@ export default function ViewerDashboardV5({
 
           <div className="mt-10">
             <p className="font-serif-v3 text-[1.75rem] italic leading-tight text-mist">{name}</p>
-            {/* Ticket No. line lands here in the ticket-number phase. */}
+            {ticketNo != null && (
+              <p className="mt-2 font-sans text-[0.6875rem] uppercase tracking-[0.26em] text-gold">
+                Ticket No. {ticketNo}
+              </p>
+            )}
           </div>
 
           <div className="mt-9 flex flex-col gap-5 border-t border-mist/[0.12] pt-7">
@@ -279,6 +284,7 @@ export default function ViewerDashboardV5({
           <div className="mb-7 md:hidden">
             <p className="font-serif-v3 text-[1.625rem] italic leading-tight text-mist">{name}</p>
             <p className="mt-2 font-sans text-[0.65rem] uppercase tracking-[0.2em] text-smoke">
+              {ticketNo != null && <b className="font-normal text-gold">Ticket No. {ticketNo} · </b>}
               {mobileLine}
             </p>
           </div>
