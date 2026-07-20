@@ -1,0 +1,67 @@
+/**
+ * "Your tickets" rows (viewer dashboard V5) — ONE shared computation for the
+ * per-link status word, the shared-onward count, and the copyable link, per
+ * the canonical-stats rule (no inline page math).
+ *
+ * Status vocabulary is the V5 design's (owner-approved 2026-07-20):
+ *   Unopened  — link generated, not yet claimed (status created/pending)
+ *   Opened    — claimed (claim-flow 'claimed'; legacy 'opened')
+ *   Watched   — watched/signed_up (same canonical list as filmStats.js)
+ *   Shared to N people — the invitee generated N onward links, whatever
+ *                        their own watch state (deepest engagement wins)
+ */
+import { isInviteWatched } from './filmStats.js'
+import { withoutDemoGhosts } from './demoGhosts.js'
+
+/** Onward links per invite id (children by parent_invite_id, ghosts excluded). */
+export function countChildrenByParentId(filmInvites = []) {
+  const counts = {}
+  for (const inv of withoutDemoGhosts(filmInvites)) {
+    if (!inv?.parent_invite_id) continue
+    counts[inv.parent_invite_id] = (counts[inv.parent_invite_id] || 0) + 1
+  }
+  return counts
+}
+
+/**
+ * @returns rows OLDEST first (the order ticket numbers count in), each:
+ *   { id, name, statusKind, statusLabel, sharedCount, link, ticketNo }
+ *   link is null when the row has neither a claim slug nor a legacy token.
+ */
+export function buildTicketRows({ sentInvites = [], filmInvites = [], origin = '' } = {}) {
+  const childCounts = countChildrenByParentId(filmInvites)
+  const rows = withoutDemoGhosts(sentInvites).map((inv) => {
+    const sharedCount = childCounts[inv.id] || 0
+    let statusKind
+    if (sharedCount > 0) statusKind = 'shared'
+    else if (isInviteWatched(inv)) statusKind = 'watched'
+    else if (inv.status === 'claimed' || inv.status === 'opened') statusKind = 'opened'
+    else statusKind = 'unopened'
+    const statusLabel =
+      statusKind === 'shared'
+        ? `Shared to ${sharedCount} ${sharedCount === 1 ? 'person' : 'people'}`
+        : statusKind === 'watched'
+          ? 'Watched'
+          : statusKind === 'opened'
+            ? 'Opened'
+            : 'Unopened'
+    return {
+      id: inv.id,
+      name: inv.recipient_name?.trim() || inv.recipient_email?.split('@')[0] || 'Someone',
+      statusKind,
+      statusLabel,
+      sharedCount,
+      link: inv.link_slug
+        ? `${origin}/${inv.link_slug}`
+        : inv.token
+          ? `${origin}/i/${inv.token}`
+          : null,
+      // Stamped by the ticket-number phase; null renders no "Ticket No." line.
+      ticketNo: inv.ticket_no ?? null,
+      createdAt: inv.created_at || null,
+    }
+  })
+  return rows.sort(
+    (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+  )
+}

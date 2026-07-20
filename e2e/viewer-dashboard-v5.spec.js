@@ -59,6 +59,21 @@ const SENT = [
   },
 ]
 
+// Someone Maya invited onward — turns Maya's row into "Shared to 1 person".
+const DOWNSTREAM = [
+  {
+    id: 'aaaa1111-0000-4000-8000-000000000003',
+    film_id: FILM_ID,
+    sender_id: '44444444-4444-4444-8444-444444444444',
+    recipient_name: 'Lea',
+    recipient_email: null,
+    status: 'created',
+    link_slug: 'lea-m4qt',
+    created_at: '2026-07-19T10:00:00Z',
+    parent_invite_id: 'aaaa1111-0000-4000-8000-000000000002',
+  },
+]
+
 const RECEIVED = [
   {
     id: 'aaaa1111-0000-4000-8000-000000000009',
@@ -117,7 +132,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
       const url = route.request().url()
       let rows
       if (url.includes('sender_id=')) rows = SENT
-      else if (url.includes('film_id=eq')) rows = [...SENT, ...RECEIVED]
+      else if (url.includes('film_id=eq')) rows = [...SENT, ...RECEIVED, ...DOWNSTREAM]
       else rows = RECEIVED
       return route.fulfill({
         json: rows,
@@ -146,6 +161,23 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(aside.getByRole('link', { name: 'Contact' })).toBeVisible()
     await expect(aside.getByRole('button', { name: 'Edit your first name' })).toBeVisible()
     await expect(aside.getByRole('button', { name: 'Sign out' })).toBeVisible()
+
+    // "Your tickets": one row per generated link, OLDEST first, with the
+    // design's status vocabulary and a working copy affordance.
+    await expect(page.getByText('Your tickets')).toBeVisible()
+    await expect(page.getByText('Dan', { exact: true })).toBeVisible()
+    await expect(page.getByText('Unopened')).toBeVisible()
+    await expect(page.getByText('Maya', { exact: true })).toBeVisible()
+    await expect(page.getByText('Shared to 1 person')).toBeVisible()
+    const copyButtons = page.getByRole('button', { name: 'Copy invitation link' })
+    await expect(copyButtons).toHaveCount(2)
+    await copyButtons.first().click()
+    // Clipboard success shows "Copied"; a blocked clipboard shows the link
+    // itself — both are the honest states, never a silent no-op.
+    await expect(
+      page.getByText(/^(Copied|https?:\/\/.+)$/).first()
+    ).toBeVisible()
+
     await page.screenshot({ path: 'test-results/v5-desktop-account.png', fullPage: true })
   })
 

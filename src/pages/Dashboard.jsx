@@ -817,6 +817,8 @@ export default function Dashboard() {
           films={viewerAllFilms}
           selectedFilmId={viewerFilmId}
           claimStashSlug={claimStash?.slug || null}
+          sentInvites={viewerSentInvites}
+          filmInvites={viewerFilmInvites}
           ticketsRemaining={invitesLeft}
           ticketsGiven={sentCount}
           canShare={canShareMore}

@@ -10,11 +10,12 @@
  * The journey line, constellation, ticket rows, and ticket numbers arrive in
  * their own phases and mount inside <main> below the screening section.
  */
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import DeepcastLogo from '../components/DeepcastLogo'
 import MvpVersionLabel from '../components/MvpVersionLabel'
 import { screeningCardState } from '../lib/screeningCard.js'
+import { buildTicketRows } from '../lib/ticketRows.js'
 import { safeLocalStorage } from '../lib/safeStorage.js'
 
 const CONTACT_EMAIL = 'hello@deepcast.art'
@@ -89,6 +90,8 @@ export default function ViewerDashboardV5({
   films,
   selectedFilmId,
   claimStashSlug,
+  sentInvites,
+  filmInvites,
   ticketsRemaining,
   ticketsGiven,
   canShare,
@@ -100,6 +103,30 @@ export default function ViewerDashboardV5({
   const navigate = useNavigate()
   /** Mobile menu ALWAYS starts closed and never auto-opens (standing rule). */
   const [menuOpen, setMenuOpen] = useState(false)
+  /** Which ticket row's copy button is in its transient feedback state. */
+  const [copyFeedback, setCopyFeedback] = useState(null) // { id, label }
+
+  const ticketRows = useMemo(
+    () =>
+      buildTicketRows({
+        sentInvites: sentInvites || [],
+        filmInvites: filmInvites || [],
+        origin: typeof window !== 'undefined' ? window.location.origin : '',
+      }),
+    [sentInvites, filmInvites]
+  )
+
+  const copyTicketLink = async (ticketRow) => {
+    try {
+      await navigator.clipboard.writeText(ticketRow.link)
+      setCopyFeedback({ id: ticketRow.id, label: 'Copied' })
+    } catch {
+      // Clipboard blocked (Safari restrictions) — show the link itself so it
+      // can be selected by hand; never fail silently.
+      setCopyFeedback({ id: ticketRow.id, label: ticketRow.link })
+    }
+    setTimeout(() => setCopyFeedback(null), 1800)
+  }
 
   const name = profile.name?.trim() || 'Welcome'
   const remainingDisplay =
@@ -376,8 +403,59 @@ export default function ViewerDashboardV5({
                 </section>
               )}
 
-              {/* The constellation (journey line + map) and the "Your tickets"
-                  rows mount here in their phases. */}
+              {/* The constellation (journey line + map) mounts here in its phase. */}
+
+              {/* ── Your tickets ── */}
+              {ticketRows.length > 0 && (
+                <section className="mt-12 md:mt-16">
+                  <p className="font-sans text-[0.625rem] uppercase tracking-[0.3em] text-smoke">
+                    Your tickets
+                  </p>
+                  <div className="mt-5 border-t border-mist/[0.12]">
+                    {ticketRows.map((t) => (
+                      <div
+                        key={t.id}
+                        className="flex flex-wrap items-center gap-5 border-b border-mist/[0.12] px-1 py-[1.375rem]"
+                      >
+                        <div className="min-w-[9rem] flex-1">
+                          {t.ticketNo != null && (
+                            <p className="font-sans text-[0.5625rem] uppercase tracking-[0.26em] text-smoke">
+                              Ticket No. {t.ticketNo}
+                            </p>
+                          )}
+                          <p className="mt-1 font-serif-v3 text-[1.4375rem] italic leading-tight text-mist">
+                            {t.name}
+                          </p>
+                        </div>
+                        <span className="inline-flex min-w-0 items-center gap-2.5 font-sans text-[0.65rem] uppercase tracking-[0.22em] text-smoke md:min-w-[10rem]">
+                          <span
+                            aria-hidden
+                            className={`h-2 w-2 shrink-0 rounded-full border ${
+                              t.statusKind === 'shared'
+                                ? 'border-gold bg-gold shadow-[0_0_0_3px_rgba(199,169,107,0.2)]'
+                                : t.statusKind === 'watched'
+                                  ? 'border-gold bg-gold'
+                                  : t.statusKind === 'opened'
+                                    ? 'border-smoke bg-smoke'
+                                    : 'border-gold/45'
+                            }`}
+                          />
+                          {t.statusLabel}
+                        </span>
+                        {t.link && (
+                          <button
+                            type="button"
+                            onClick={() => copyTicketLink(t)}
+                            className="min-w-0 break-all py-1.5 text-left font-sans text-[0.65rem] uppercase tracking-[0.22em] text-gold transition-colors hover:text-gold-soft"
+                          >
+                            {copyFeedback?.id === t.id ? copyFeedback.label : 'Copy invitation link'}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               <footer className="mt-20 text-center font-sans text-[0.625rem] uppercase tracking-[0.22em] text-smoke/70">
                 &copy; {new Date().getFullYear()}{' '}
