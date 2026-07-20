@@ -162,6 +162,13 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(aside.getByRole('button', { name: 'Edit your first name' })).toBeVisible()
     await expect(aside.getByRole('button', { name: 'Sign out' })).toBeVisible()
 
+    // Journey line: generated-link counting, NUMERALS (numWord not ported).
+    await expect(
+      page.getByText(
+        'This film has reached 4 people. Through your hands, it has reached 2 more.'
+      )
+    ).toBeVisible()
+
     // "Your tickets": one row per generated link, OLDEST first, with the
     // design's status vocabulary and a working copy affordance.
     await expect(page.getByText('Your tickets')).toBeVisible()
@@ -179,6 +186,36 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     ).toBeVisible()
 
     await page.screenshot({ path: 'test-results/v5-desktop-account.png', fullPage: true })
+  })
+
+  test('zero-share state: the journey line names the waiting tickets', async ({ page }) => {
+    // Same mocks, but this viewer has generated nothing yet.
+    await page.route('**/rest/v1/invites**', (route) => {
+      const url = route.request().url()
+      const method = route.request().method()
+      let rows
+      if (url.includes('sender_id=')) rows = []
+      else if (url.includes('film_id=eq')) rows = RECEIVED
+      else rows = RECEIVED
+      // ViewerShareGate admits never-shared claimants via the claimed_by
+      // count — the RECEIVED row carries it.
+      return route.fulfill({
+        json: method === 'HEAD' ? undefined : rows,
+        headers: {
+          'content-range': `0-${Math.max(rows.length - 1, 0)}/${rows.length}`,
+          'access-control-expose-headers': 'Content-Range',
+        },
+      })
+    })
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+
+    await expect(
+      page.getByText(
+        'This film has reached 1 person. Through your hands, no one yet — your 3 tickets are waiting.'
+      )
+    ).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('Your tickets')).toHaveCount(0)
   })
 
   test('mobile: identity line, bottom share bar, menu overlay', async ({ page }) => {

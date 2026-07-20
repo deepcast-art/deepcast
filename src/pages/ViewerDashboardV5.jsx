@@ -16,6 +16,7 @@ import DeepcastLogo from '../components/DeepcastLogo'
 import MvpVersionLabel from '../components/MvpVersionLabel'
 import { screeningCardState } from '../lib/screeningCard.js'
 import { buildTicketRows } from '../lib/ticketRows.js'
+import { buildJourneyLine } from '../lib/journeyLine.js'
 import { safeLocalStorage } from '../lib/safeStorage.js'
 
 const CONTACT_EMAIL = 'hello@deepcast.art'
@@ -114,6 +115,16 @@ export default function ViewerDashboardV5({
         origin: typeof window !== 'undefined' ? window.location.origin : '',
       }),
     [sentInvites, filmInvites]
+  )
+
+  const journey = useMemo(
+    () =>
+      buildJourneyLine({
+        filmInvites: filmInvites || [],
+        sentInvites: sentInvites || [],
+        ticketsRemaining,
+      }),
+    [filmInvites, sentInvites, ticketsRemaining]
   )
 
   const copyTicketLink = async (ticketRow) => {
@@ -403,7 +414,25 @@ export default function ViewerDashboardV5({
                 </section>
               )}
 
-              {/* The constellation (journey line + map) mounts here in its phase. */}
+              {/* ── The constellation (journey line now; the map mounts here next) ── */}
+              {journey.reached > 0 && (
+                <section className="mt-12 md:mt-16">
+                  <p className="font-sans text-[0.625rem] uppercase tracking-[0.3em] text-smoke">
+                    Where your film has traveled
+                  </p>
+                  <p className="mt-5 font-serif-v3 text-[clamp(1.1875rem,2.6vw,1.4375rem)] italic leading-normal text-mist">
+                    {journey.segments.map((seg, i) =>
+                      seg.bold ? (
+                        <b key={i} className="font-medium text-gold-soft">
+                          {seg.text}
+                        </b>
+                      ) : (
+                        <span key={i}>{seg.text}</span>
+                      )
+                    )}
+                  </p>
+                </section>
+              )}
 
               {/* ── Your tickets ── */}
               {ticketRows.length > 0 && (
