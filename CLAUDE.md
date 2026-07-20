@@ -20,6 +20,7 @@ The app is multi-film. There are currently two films:
 - **"A Sacred Pause"** (`7c42093d-d5eb-4a38-a9fa-d28ca41d7b0f`, mux playback `6GMWj01CjP01Y1ee001Vd2qYqUPJtEOgUYz00nG02BYE9F9E`) — a **DEMO** film owned by the filmmaker (`filmmaker@gmail.com`), seeded with ghost invites (recipients `…@demo-deepcast.invalid`) to demonstrate the share graph. Its `description` and `gif_start=616` / `gif_end=624` are set so its custom invite email renders a real synopsis + GIF window.
   - **Distinct from** the 50 `…@demo.invalid` seeded graph nodes on The New Narrative (real-users section above) — different film, different email domain. Do not conflate the two demo sets.
   - **Teardown:** `node server/teardown-demo-film.js --id=7c42093d-d5eb-4a38-a9fa-d28ca41d7b0f` removes everything the demo created (its invites, watch_sessions, then the film row). Dry-run by default; `--execute` + typed confirmation to delete. Scoped to that one film id, and refuses to touch protected real-user emails.
+- **Testing rule (owner decision 2026-07-20): ALL testing happens on "The New Narrative" — it is the designated test film. "A Sacred Pause" is public-facing: NEVER create test links, test claims, or any other test data on it.**
 
 ### A Sacred Pause demo stopgaps (tech debt — NOT general behaviour)
 
@@ -159,6 +160,10 @@ Invites are LINKS, not emails. A sharer enters only the invitee's first name and
 ### Tickets (PER-FILM economy — Piece F, 2026-07-18)
 
 One wallet per (person, film): **`film_tickets(user_id, film_id, balance, unlimited)`**, migration `20260717_film_tickets.sql` (applied). Rows are LAZY — a missing row reads as the virtual full grant of 5 and materializes on first write; claiming a film initializes that film's wallet at 5. Spent at link GENERATION, no refunds (a failed generation is refunded — that's not a spend); race-safe spend/grant/refund live in `server/filmWallet.js`; canonical display is `filmTicketsRemaining(profile, wallet)` in `src/lib/shares.js`. EVERY spend path goes through the film wallet: legacy `/api/invites/send`, both create-link branches (session, and stash-based via `claimed_by` — `server/claimantWallet.js`), the admin grant, and the server-side replenish. **`users.invite_allocation` and `users.unlimited_shares` are DORMANT** — still written at account creation, never read on ticket paths. The legacy invite wallet (`invites.tickets_remaining`, `src/lib/ticketRules.js`) survives ONLY as the degradation path for claimed rows with no account (claimed_by NULL). Zero state: "You've given all your tickets for this film." — no upsell, and now truthfully per-film.
+
+### Ticket numbers (dashboard redesign, 2026-07-20)
+
+Every generated invite gets a sequential per-film `invites.ticket_no`, minted atomically at GENERATION (never at claim) by the `next_ticket_no()` DB function (`films.ticket_seq` counter, service-role only; migration `20260720_ticket_numbers.sql`, applied). Stamping is non-fatal — a numbering failure never blocks a share; the row stays unnumbered until the backfill (`server/backfill-ticket-numbers.js`, dry-run default). Demo ghosts are never numbered. **Ticket numbers are IMMUTABLE once assigned: deleting a link leaves a permanent gap in the numbering, and nothing ever renumbers existing invites — do not "fix" gaps.**
 
 ### Ordinal freeze
 
