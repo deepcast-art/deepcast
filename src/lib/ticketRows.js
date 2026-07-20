@@ -1,5 +1,5 @@
 /**
- * "Your tickets" rows (viewer dashboard V5) — ONE shared computation for the
+ * "Tickets you've shared" rows (viewer dashboard V5) — ONE shared computation for the
  * per-link status word, the shared-onward count, and the copyable link, per
  * the canonical-stats rule (no inline page math).
  *

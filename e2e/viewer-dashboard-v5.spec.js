@@ -188,12 +188,12 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await page.getByRole('button', { name: 'Reset zoom' }).click()
     await expect.poll(async () => map.getAttribute('viewBox')).toBe(vbBefore)
 
-    // "Your tickets": one row per generated link, OLDEST first, with the
+    // "Tickets you've shared": one row per generated link, OLDEST first, with the
     // design's status vocabulary and a working copy affordance.
     // Ticket numbers: yours in the sidebar, each link's on its row.
     await expect(aside.getByText('Ticket No. 59')).toBeVisible()
-    const tickets = page.locator('section').filter({ hasText: 'Your tickets' })
-    await expect(tickets.getByText('Your tickets')).toBeVisible()
+    const tickets = page.locator('section').filter({ hasText: "Tickets you've shared" })
+    await expect(tickets.getByText("Tickets you've shared")).toBeVisible()
     await expect(tickets.getByText('Ticket No. 60')).toBeVisible()
     await expect(tickets.getByText('Ticket No. 61')).toBeVisible()
     await expect(tickets.getByText('Dan', { exact: true })).toBeVisible()
@@ -307,7 +307,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
       )
     ).toBeVisible({ timeout: 15000 })
     // The section always renders — at zero links it shows the empty state.
-    await expect(page.getByText('Your tickets')).toBeVisible()
+    await expect(page.getByText("Tickets you've shared")).toBeVisible()
     await expect(page.getByText('No tickets given yet.')).toBeVisible()
   })
 

@@ -466,11 +466,11 @@ export default function ViewerDashboardV5({
                 </section>
               )}
 
-              {/* ── Your tickets (always present — the section is the home of
+              {/* ── Tickets you've shared (always present — the section is the home of
                     the ask, even before the first link exists) ── */}
               <section className="mt-12 md:mt-16">
                 <p className="font-sans text-[0.625rem] uppercase tracking-[0.3em] text-smoke">
-                  Your tickets
+                  Tickets you&apos;ve shared
                 </p>
                 {ticketRows.length === 0 ? (
                   <p className="mt-5 border-t border-mist/[0.12] pt-6 font-serif-v3 text-base italic text-smoke">
