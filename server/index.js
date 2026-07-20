@@ -30,6 +30,7 @@ import {
   setFilmUnlimited,
 } from './filmWallet.js'
 import { claimedSharerSpendDecision, claimedInviteTicketsDisplay } from './claimantWallet.js'
+import { nextTicketNo } from './ticketNumbers.js'
 
 const app = express()
 app.use(cors())
@@ -611,6 +612,10 @@ app.post('/api/invites/send', async (req, res) => {
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + getFilmInviteExpiryDays())
 
+    // Sequential per-film ticket number, counted at generation. Non-fatal:
+    // a numbering failure never blocks the send (ticket_no stays NULL).
+    const ticketNo = await nextTicketNo(supabase, filmId)
+
     const { error: inviteError } = await supabase
       .from('invites')
       .insert({
@@ -626,6 +631,9 @@ app.post('/api/invites/send', async (req, res) => {
         status: 'pending',
         expires_at: expiresAt.toISOString(),
         parent_invite_id: parentInviteId,
+        // Key omitted when numbering returned nothing, so this insert also
+        // works against a database where the migration hasn't landed yet.
+        ...(ticketNo != null ? { ticket_no: ticketNo } : {}),
       })
 
     if (inviteError) {
@@ -1003,6 +1011,10 @@ app.post('/api/invites/create-link', async (req, res) => {
       return res.status(500).json({ error: 'Could not generate a link right now — please try again' })
     }
 
+    // Sequential per-film ticket number, counted at generation. Non-fatal:
+    // a numbering failure never blocks the link (ticket_no stays NULL).
+    const ticketNo = await nextTicketNo(supabase, filmId)
+
     const { data: created, error: insertError } = await supabase
       .from('invites')
       .insert({
@@ -1017,6 +1029,9 @@ app.post('/api/invites/create-link', async (req, res) => {
         expires_at: expiresAt.toISOString(),
         parent_invite_id: parentInviteId,
         link_slug: slug,
+        // Key omitted when numbering returned nothing, so this insert also
+        // works against a database where the migration hasn't landed yet.
+        ...(ticketNo != null ? { ticket_no: ticketNo } : {}),
       })
       .select('id, link_slug')
       .single()
