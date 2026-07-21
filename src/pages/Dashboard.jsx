@@ -64,6 +64,9 @@ export default function Dashboard() {
   // loaders unchanged. Creator id/name feed the constellation layout.
   const [, setViewerFilmTitle] = useState('')
   const [viewerFilmCreatorId, setViewerFilmCreatorId] = useState(null)
+  /** films.creator_ticket_no for the selected film — the filmmaker's own №1
+   *  (owner spec 2026-07-22); null until the migration lands. */
+  const [viewerCreatorTicketNo, setViewerCreatorTicketNo] = useState(null)
   const [viewerInviteToken, setViewerInviteToken] = useState(null)
   const [viewerFilmInvites, setViewerFilmInvites] = useState([])
   const [viewerAllFilms, setViewerAllFilms] = useState([])
@@ -153,6 +156,7 @@ export default function Dashboard() {
       setViewerFilmInvites([])
       setViewerCreatorName('')
       setViewerFilmCreatorId(null)
+      setViewerCreatorTicketNo(null)
       setViewerInviteToken(null)
       return
     }
@@ -165,7 +169,7 @@ export default function Dashboard() {
     const [{ data: filmRow }, { data: allInv }] = await Promise.all([
       supabase
         .from('films')
-        .select('id, title, thumbnail_url, creator_id')
+        .select('*')
         .eq('id', filmId)
         .single(),
       supabase.from('invites').select('*').eq('film_id', filmId),
@@ -174,6 +178,7 @@ export default function Dashboard() {
     setViewerFilmTitle(filmRow?.title || '')
     setViewerFilmInvites(allInv || [])
     setViewerFilmCreatorId(filmRow?.creator_id || null)
+    setViewerCreatorTicketNo(filmRow?.creator_ticket_no ?? null)
 
     let cname = ''
     if (filmRow?.creator_id) {
@@ -242,7 +247,7 @@ export default function Dashboard() {
         // Resolve film details for every received film
         const { data: filmRows } = await supabase
           .from('films')
-          .select('id, title, thumbnail_url, creator_id')
+          .select('*')
           .in('id', uniqueRecvd.map(r => r.film_id))
 
         const filmsMap = new Map((filmRows || []).map(f => [f.id, f]))
@@ -296,7 +301,7 @@ export default function Dashboard() {
     const [{ data: filmRow }, { data: allInv }, knownCreatorRes] = await Promise.all([
       supabase
         .from('films')
-        .select('id, title, thumbnail_url, creator_id')
+        .select('*')
         .eq('id', filmId)
         .single(),
       supabase.from('invites').select('*').eq('film_id', filmId),
@@ -308,6 +313,7 @@ export default function Dashboard() {
     setViewerFilmTitle(filmRow?.title || '')
     setViewerFilmInvites(allInv || [])
     setViewerFilmCreatorId(filmRow?.creator_id || null)
+    setViewerCreatorTicketNo(filmRow?.creator_ticket_no ?? null)
 
     let cname = knownCreatorRes?.data?.name || ''
     if (!cname && filmRow?.creator_id && filmRow.creator_id !== knownCreatorId) {
@@ -621,6 +627,7 @@ export default function Dashboard() {
           filmInvites={viewerFilmInvites}
           creatorId={viewerFilmCreatorId}
           creatorName={viewerCreatorName}
+          creatorTicketNo={viewerCreatorTicketNo}
           viewerInviteId={viewerFocusInviteId}
           ticketsRemaining={invitesLeft}
           ticketsGiven={sentCount}
@@ -929,6 +936,14 @@ export default function Dashboard() {
                             </Link>
                           )}
                         </div>
+                        {/* The filmmaker holds №1 on every film (owner spec
+                            2026-07-22) — stored in films.creator_ticket_no;
+                            hidden until the migration lands. */}
+                        {film.creator_ticket_no != null && (
+                          <p className="mt-0.5 text-[10px] uppercase tracking-[0.26em] text-accent">
+                            Ticket No. {film.creator_ticket_no}
+                          </p>
+                        )}
                         {film.description && (
                           <p className="mt-1 line-clamp-1 text-xs text-text-muted">
                             {film.description}

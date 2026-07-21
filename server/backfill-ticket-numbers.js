@@ -55,15 +55,31 @@ const supabase = createClient(url, key, { auth: { autoRefreshToken: false, persi
 
 async function main() {
   const [{ data: films, error: fErr }, { data: invites, error: iErr }] = await Promise.all([
-    supabase.from('films').select('id, title, ticket_seq'),
+    supabase.from('films').select('id, title, ticket_seq, creator_ticket_no'),
     supabase
       .from('invites')
       .select('id, film_id, recipient_name, recipient_email, status, created_at, ticket_no')
       .order('created_at', { ascending: true }),
   ])
+  if (fErr && /creator_ticket_no/.test(fErr.message || '')) {
+    fail(
+      'films.creator_ticket_no missing — the filmmaker-№1 migration must land first.\n' +
+        '  The OWNER applies supabase/migrations/20260722_creator_ticket_no.sql, then re-run.'
+    )
+  }
   if (fErr || iErr) fail(fErr?.message || iErr?.message)
   if (films?.some((f) => f.ticket_seq == null)) {
     fail('films.ticket_seq missing — apply supabase/migrations/20260720_ticket_numbers.sql first.')
+  }
+  // Guard (owner spec 2026-07-22): №1 belongs to the film's creator. Refuse
+  // to number anyone until that is stored for every film.
+  const unset = (films || []).filter((f) => f.creator_ticket_no == null)
+  if (unset.length) {
+    fail(
+      `creator_ticket_no is unset on: ${unset.map((f) => f.title).join(', ')} — the filmmaker-№1\n` +
+        '  migration (supabase/migrations/20260722_creator_ticket_no.sql) must be applied by the\n' +
+        '  OWNER before any invitee is numbered (invitees start at №2).'
+    )
   }
 
   const plans = []

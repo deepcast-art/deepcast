@@ -95,6 +95,7 @@ export default function ViewerDashboardV5({
   filmInvites,
   creatorId,
   creatorName,
+  creatorTicketNo,
   viewerInviteId,
   ticketsRemaining,
   ticketsGiven,
@@ -126,9 +127,10 @@ export default function ViewerDashboardV5({
         filmInvites: filmInvites || [],
         creatorId,
         creatorName,
+        creatorTicketNo,
         viewerInviteId,
       }),
-    [filmInvites, creatorId, creatorName, viewerInviteId]
+    [filmInvites, creatorId, creatorName, creatorTicketNo, viewerInviteId]
   )
 
   // The journey line's counts come from the constellation's tree — ONE
