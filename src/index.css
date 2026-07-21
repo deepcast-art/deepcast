@@ -309,18 +309,19 @@ img {
   animation: dc-rise 0.7s cubic-bezier(0.2, 0.6, 0.2, 1) both;
 }
 
-/* Post-claim prologue (2026-07-21): three staggered line fade-ins (each line
-   stays once shown — delays set inline: 0 / 2.5s / 5s) and the whole-block
-   fade-out that resolves into the watch page. */
+/* Post-claim prologue (2026-07-21, softened 2.5x by owner revision): three
+   staggered line fade-ins of 2.5s each (line stays once shown — delays set
+   inline: 0 / 3s / 6s, fades overlap) and the 2.5s whole-block fade-out
+   that resolves into the watch page. */
 .dc-prologue-line {
-  animation: dc-fade-in 1s var(--ease-default) both;
+  animation: dc-fade-in 2.5s var(--ease-default) both;
 }
 @keyframes dc-fade-out {
   from { opacity: 1; }
   to { opacity: 0; }
 }
 .dc-prologue-out {
-  animation: dc-fade-out 1s var(--ease-default) both;
+  animation: dc-fade-out 2.5s var(--ease-default) both;
 }
 
 .dc-rise-1 { animation-delay: 0.15s; }

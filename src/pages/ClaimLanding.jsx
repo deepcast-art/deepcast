@@ -103,9 +103,14 @@ function StateShell({ children }) {
    owner return visits never reach it. No storage of any kind: the
    exactly-once guarantee is structural (in-memory claim-success state).
    Copy is founder-approved verbatim; ONE uniform type style, no bolding. */
-const PROLOGUE_LINE_DELAYS_MS = [0, 2500, 5000]
-const PROLOGUE_FADE_MS = 1000
-const PROLOGUE_EXIT_AT_MS = 9000 // line 3 done ~6s + ~3s hold
+/* Softened 2.5x (owner revision 2026-07-21): 2.5s fades, lines at 0/3/6s
+   (overlapping), ~2.5s hold once line 3 completes (~8.5s), 2.5s block
+   fade-out — the dissolve into the watch page begins around the 11s mark.
+   Keep PROLOGUE_FADE_MS in lockstep with the .dc-prologue-line /
+   .dc-prologue-out durations in index.css. */
+const PROLOGUE_LINE_DELAYS_MS = [0, 3000, 6000]
+const PROLOGUE_FADE_MS = 2500
+const PROLOGUE_EXIT_AT_MS = 11000 // line 3 done ~8.5s + ~2.5s hold
 const PROLOGUE_HOLD_AFTER_REVEAL_MS = 3000
 const PROLOGUE_REDUCED_HOLD_MS = 4000
 
