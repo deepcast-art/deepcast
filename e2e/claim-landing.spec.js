@@ -159,6 +159,9 @@ test.describe('three-page claim arc', () => {
     // Bare link only (2026-07-21): no pre-written share message anywhere.
     await expect(page.getByText(/I watched this and thought of you —/)).toHaveCount(0)
     await expect(page.getByRole('button', { name: /Copy their invitation/i })).toBeVisible()
+    // Reveal copy (2026-07-21): personal line 1 + counted line 2, numerals.
+    await expect(page.getByText(/Here’s Jordan’s ticket\. Deliver it with your own words/)).toBeVisible()
+    await expect(page.getByText('4 tickets left. Who else comes to mind?')).toBeVisible()
     await expect(page.getByText(/You can share 4 tickets for this film/)).toBeVisible()
     // The newest-used stub dims in sync with the text count.
     await expect(page.locator('[data-stub="used"]')).toHaveCount(1)

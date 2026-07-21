@@ -11,6 +11,7 @@ import { useState } from 'react'
 import { api } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import { firstNameInputError } from '../lib/firstNameRule'
+import { revealTicketsLine } from '../lib/revealTicketsLine'
 
 export default function ShareLinkModal({ open, onClose, filmId, parentInviteId, onCreated }) {
   const [name, setName] = useState('')
@@ -50,7 +51,9 @@ export default function ShareLinkModal({ open, onClose, filmId, parentInviteId, 
         appUrl: window.location.origin,
         parentInviteId: parentInviteId || null,
       })
-      setGenerated({ url: result.url, name: first })
+      // ticketsRemaining rides the same response: a number for finite
+      // wallets, null for unlimited sharers (never show them a count).
+      setGenerated({ url: result.url, name: first, ticketsRemaining: result.ticketsRemaining ?? null })
       setName('')
       setCopied(false)
       onCreated?.()
@@ -121,7 +124,12 @@ export default function ShareLinkModal({ open, onClose, filmId, parentInviteId, 
 
         {generated && (
           <div className="mt-7 border-t border-mist/[0.12] pt-6">
-            <p className="break-all font-sans text-sm text-mist">{generated.url}</p>
+            {/* Owner-approved reveal copy (2026-07-21). */}
+            <p className="font-serif-v3 text-base italic leading-relaxed text-smoke">
+              Here’s {generated.name}’s ticket. Deliver it with your own words — it admits one
+              person, once.
+            </p>
+            <p className="mt-4 break-all font-sans text-sm text-mist">{generated.url}</p>
             <button
               type="button"
               onClick={handleCopy}
@@ -129,6 +137,9 @@ export default function ShareLinkModal({ open, onClose, filmId, parentInviteId, 
             >
               {copied ? 'Copied' : 'Copy their invitation'}
             </button>
+            <p className="mt-5 font-sans text-[0.6875rem] uppercase tracking-[0.22em] text-smoke">
+              {revealTicketsLine(generated.ticketsRemaining)}
+            </p>
           </div>
         )}
       </div>

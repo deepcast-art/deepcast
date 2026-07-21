@@ -147,7 +147,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
       route.fulfill({ json: [FILM], headers: { 'content-range': '0-0/1', 'access-control-expose-headers': 'Content-Range' } })
     )
     await page.route('**/api/invites/create-link', (route) =>
-      route.fulfill({ json: { url: 'https://deepcast.art/noa-x9y2', slug: 'noa-x9y2' } })
+      route.fulfill({ json: { url: 'https://deepcast.art/noa-x9y2', slug: 'noa-x9y2', ticketsRemaining: 2 } })
     )
     await page.route('**/rest/v1/invites**', (route) => {
       const url = route.request().url()
@@ -246,6 +246,9 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(dialog.getByText('https://deepcast.art/noa-x9y2').first()).toBeVisible()
     // Bare link only (2026-07-21): no pre-written share message in the modal.
     await expect(dialog.getByText(/I watched this and thought of you/)).toHaveCount(0)
+    // Reveal copy (2026-07-21): personal line 1 + counted line 2, numerals.
+    await expect(dialog.getByText(/Here’s Noa’s ticket\. Deliver it with your own words/)).toBeVisible()
+    await expect(dialog.getByText('2 tickets left. Who else comes to mind?')).toBeVisible()
     await dialog.getByRole('button', { name: 'Close' }).click()
     await expect(page.getByRole('dialog')).toHaveCount(0)
   })

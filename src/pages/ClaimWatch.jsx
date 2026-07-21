@@ -7,6 +7,7 @@ import { filmConditionsLine } from '../lib/screeningConditions'
 import { readClaimStash, isClaimOwner } from '../lib/claimStash'
 import { INITIAL_CLAIMANT_TICKETS } from '../lib/ticketRules'
 import { firstNameInputError } from '../lib/firstNameRule'
+import { revealTicketsLine } from '../lib/revealTicketsLine'
 import { resumePositionToSave } from '../lib/resumePosition'
 import { safeLocalStorage } from '../lib/safeStorage'
 import { fullscreenPlayDecision, isIOSDevice } from '../lib/playbackFullscreen'
@@ -354,7 +355,10 @@ export default function ClaimWatch() {
         accessToken: stash?.filmId ? session?.access_token || null : null,
         appUrl: window.location.origin,
       })
-      setGenerated({ url: result.url, name })
+      // The reveal keeps its OWN copy of the response balance: null means an
+      // unlimited sharer (never a count) — distinct from the healed tickets
+      // display state above.
+      setGenerated({ url: result.url, name, ticketsRemaining: result.ticketsRemaining ?? null })
       if (result.ticketsRemaining != null) setTickets(result.ticketsRemaining)
       // Same moment the text count decrements, the newest-used stub dims.
       if (Number.isFinite(result.ticketsRemaining)) setStubBalance(result.ticketsRemaining)
@@ -514,8 +518,10 @@ export default function ClaimWatch() {
           {/* Result reveal — rises in (plain fade under reduced motion). */}
           {generated && (
             <div key={generated.url} className="mx-auto mt-9 max-w-[30rem] border-t border-warm/15 pt-8 dc-result-rise">
-              <p className="font-sans text-[10px] uppercase tracking-[0.3em] text-muted">
-                A ticket for {generated.name}
+              {/* Owner-approved reveal copy (2026-07-21). */}
+              <p className="mx-auto font-serif-v3 text-[1.0625rem] italic leading-[1.7] text-warm/85">
+                Here’s {generated.name}’s ticket. Deliver it with your own words — it admits one
+                person, once.
               </p>
               <p className="mt-3 break-all font-serif-v3 text-[clamp(1.1875rem,3vw,1.4375rem)] text-paper/90">
                 {generated.url}
@@ -527,6 +533,9 @@ export default function ClaimWatch() {
               >
                 {copied ? 'Copied' : 'Copy their invitation'}
               </button>
+              <p className="mt-6 font-sans text-xs uppercase tracking-[0.24em] text-muted">
+                {revealTicketsLine(generated.ticketsRemaining)}
+              </p>
               <p className="mt-7">
                 <Link
                   to="/dashboard"
