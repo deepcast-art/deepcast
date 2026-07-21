@@ -235,7 +235,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     // The share button opens the LINK flow (no email fields anywhere).
     await aside.getByRole('button', { name: 'Share this film' }).click()
     const dialog = page.getByRole('dialog')
-    await expect(dialog.getByText('Who is this film for?')).toBeVisible()
+    await expect(dialog.getByText('Who needs to see this film?')).toBeVisible()
     await expect(dialog.locator('input[type="email"]')).toHaveCount(0)
     // Typing an email into the first-name box is gently refused, client-side.
     await dialog.getByPlaceholder('Their first name').fill('noa@example.com')

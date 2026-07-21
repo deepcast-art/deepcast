@@ -92,12 +92,7 @@ export default function ShareLinkModal({ open, onClose, filmId, parentInviteId, 
         </button>
 
         <p className="font-sans text-[0.625rem] uppercase tracking-[0.3em] text-smoke">
-          Who is this film for?
-        </p>
-        {/* Founder-approved verbatim — the constraint line's primary home. */}
-        <p className="mt-4 font-serif-v3 text-sm italic leading-relaxed text-smoke">
-          This film reached you because someone thought of you. No algorithm, no feed. Films here
-          pass through human hands only.
+          Who needs to see this film?
         </p>
 
         <form onSubmit={handleGenerate} className="mt-7 flex flex-col gap-4">
@@ -135,7 +130,7 @@ export default function ShareLinkModal({ open, onClose, filmId, parentInviteId, 
               onClick={handleCopy}
               className="mt-4 border border-mist/25 px-5 py-2.5 font-sans text-[0.6875rem] uppercase tracking-[0.22em] text-smoke transition-colors hover:border-gold hover:text-gold-soft"
             >
-              {copied ? 'Copied' : 'Copy the message'}
+              {copied ? 'Copied' : 'Copy their invitation'}
             </button>
           </div>
         )}
