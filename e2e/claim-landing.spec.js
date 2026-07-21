@@ -146,7 +146,11 @@ test.describe('three-page claim arc', () => {
     // constraint line (its home), tickets line, and first-name form show
     // without any interaction.
     await expect(page.getByRole('button', { name: /Who is this film for\?/i })).toHaveCount(0)
-    await expect(page.getByText(/No algorithm, no feed/)).toBeVisible()
+    // Personalized constraint line (2026-07-21): receiver + sharer first
+    // names from the payload ('Ien Chi' trims to its first word).
+    await expect(
+      page.getByText(/Alex, this film reached you because Ien thought of you\. No algorithm, no feed\. Films here spread by private invite & real humans only\./)
+    ).toBeVisible()
     await expect(page.getByText(/You can share 5 tickets for this film/)).toBeVisible()
     // Ticket stubs: one per granted ticket, none spent yet.
     await expect(page.locator('[data-stub]')).toHaveCount(5)
@@ -184,13 +188,19 @@ test.describe('three-page claim arc', () => {
         JSON.stringify({ slug: 'alex-h4k2', inviteId: 'inv-you', filmId: 'film-1', claimedEmail: 'alex@example.com' })
       )
     })
+    // sharerName null: also covers the constraint line's generic fallback.
     await page.route('**/api/invites/link/**', (route) =>
-      route.fulfill({ json: { ...LINK_CLAIMED, ticketsRemaining: 0 } })
+      route.fulfill({ json: { ...LINK_CLAIMED, ticketsRemaining: 0, sharerName: null } })
     )
     await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
 
     // Panel is always open — the zero-tickets state shows with no interaction.
     await expect(page.getByText('You’ve given all your tickets for this film.')).toBeVisible()
+    // Fallback path: a missing sharer name renders the generic wording, with
+    // the updated final sentence.
+    await expect(
+      page.getByText('This film reached you because someone thought of you. No algorithm, no feed. Films here spread by private invite & real humans only.')
+    ).toBeVisible()
     await expect(page.getByPlaceholder('Their first name')).toHaveCount(0)
     // The emptied ticket book stays visible: all five stubs, all dimmed.
     await expect(page.locator('[data-stub="used"]')).toHaveCount(5)

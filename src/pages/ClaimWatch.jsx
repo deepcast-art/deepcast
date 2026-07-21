@@ -8,6 +8,7 @@ import { readClaimStash, isClaimOwner } from '../lib/claimStash'
 import { INITIAL_CLAIMANT_TICKETS } from '../lib/ticketRules'
 import { firstNameInputError } from '../lib/firstNameRule'
 import { revealTicketsLine } from '../lib/revealTicketsLine'
+import { buildWatchConstraintLine } from '../lib/constraintLine'
 import { resumePositionToSave } from '../lib/resumePosition'
 import { safeLocalStorage } from '../lib/safeStorage'
 import { fullscreenPlayDecision, isIOSDevice } from '../lib/playbackFullscreen'
@@ -382,6 +383,16 @@ export default function ClaimWatch() {
   }
 
   const title = link?.filmTitle || 'a film'
+  /* Personalized constraint line — rules (first-word trim, generic fallback,
+     hide-for-creator) live in the lib. viewerIsCreator is false today: the
+     film never travels back to its maker and non-owners bounce to the landing
+     route, so the creator can never own this page — the flag guards a future
+     where those rules change. */
+  const constraintLine = buildWatchConstraintLine({
+    receiverName: link?.inviteeFirstName,
+    sharerName: link?.sharerName,
+    viewerIsCreator: false,
+  })
   const outOfTickets = tickets != null && tickets <= 0
 
   /* Invite-v2 look (2026-07-19): the marquee, the film, the ask. On phones
@@ -461,12 +472,13 @@ export default function ClaimWatch() {
         <section className="mt-[clamp(2.75rem,7svh,5.5rem)] w-screen ml-[calc(50%-50vw)] border-y border-warm/15 px-[clamp(1.5rem,5vw,3rem)] py-[clamp(2.25rem,6vw,3.5rem)] text-center min-[540px]:ml-auto min-[540px]:mr-auto min-[540px]:w-full min-[540px]:max-w-[40rem] min-[540px]:border">
           <p className="font-sans text-[11px] uppercase tracking-[0.32em] text-accent">Pass it on</p>
 
-          {/* The constraint line — this panel is its home.
-              Founder-approved verbatim (2026-07-16). Do not edit. */}
-          <p className="mx-auto mt-6 max-w-md font-serif-v3 text-[clamp(1.125rem,2.6vw,1.3125rem)] italic leading-[1.7] text-warm/90">
-            This film reached you because someone thought of you. No algorithm, no feed. Films
-            here pass through human hands only.
-          </p>
+          {/* The constraint line — this panel is its home. Personalized,
+              owner-approved copy (2026-07-21). */}
+          {constraintLine && (
+            <p className="mx-auto mt-6 max-w-md font-serif-v3 text-[clamp(1.125rem,2.6vw,1.3125rem)] italic leading-[1.7] text-warm/90">
+              {constraintLine}
+            </p>
+          )}
 
           {/* Stubs sit above the tickets/zero line — in the zero state they
               remain, all dimmed (the emptied ticket book reads better than a
