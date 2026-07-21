@@ -178,7 +178,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(aside.getByText('3', { exact: true })).toBeVisible()
     await expect(aside.getByText('2', { exact: true })).toBeVisible()
     await expect(aside.getByRole('button', { name: 'Share this film' })).toBeVisible()
-    await expect(aside.getByRole('link', { name: 'About Deepcast' })).toBeVisible()
+    await expect(aside.getByRole('button', { name: 'About Deepcast' })).toBeVisible()
     await expect(aside.getByRole('link', { name: 'Contact' })).toBeVisible()
     await expect(aside.getByRole('button', { name: 'Edit your first name' })).toBeVisible()
     await expect(aside.getByRole('button', { name: 'Sign out' })).toBeVisible()
@@ -249,6 +249,28 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(page.getByRole('dialog')).toHaveCount(0)
   })
 
+  test('About opens as a popup in place — no navigation away from the dashboard', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('A Sacred Pause')).toBeVisible({ timeout: 15000 })
+
+    await page.locator('aside').getByRole('button', { name: 'About Deepcast' }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.getByText('What is Deepcast?')).toBeVisible()
+    await expect(dialog.getByText('Who is it for?')).toBeVisible()
+    await expect(dialog.getByText('Who made this?')).toBeVisible()
+    // Still on the dashboard — the popup replaced the old page navigation.
+    await expect(page).toHaveURL(/\/dashboard$/)
+    await dialog.getByRole('button', { name: 'Close' }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+
+    // The /about route stays live for direct links, rendering the same
+    // shared copy (route protection untouched).
+    await page.goto('/about', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('What is Deepcast?')).toBeVisible()
+    await expect(page.getByText('Who made this?')).toBeVisible()
+  })
+
   test('constellation: draggable immediately at 1:1, wheel zoom toward the pointer', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
@@ -286,7 +308,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
       await expect(page.getByText('A Sacred Pause')).toBeVisible({ timeout: 15000 })
       const aside = page.locator('aside')
       const targets = [
-        aside.getByRole('link', { name: 'About Deepcast' }),
+        aside.getByRole('button', { name: 'About Deepcast' }),
         aside.getByRole('link', { name: 'Contact' }),
         aside.getByRole('link', { name: 'Report a bug' }),
         aside.getByRole('button', { name: 'Edit your first name' }),
@@ -343,7 +365,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(shareButtons.last()).toBeVisible()
 
     await page.getByRole('button', { name: 'Menu' }).click()
-    await expect(page.getByRole('link', { name: 'About Deepcast' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'About Deepcast' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
     await page.screenshot({ path: 'test-results/v5-mobile-menu.png' })
     await page.getByRole('button', { name: 'Close' }).click()

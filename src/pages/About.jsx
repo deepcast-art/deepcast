@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import DeepcastLogo from '../components/DeepcastLogo'
+import AboutContent from '../components/AboutContent'
 
 export default function About() {
   return (
@@ -33,68 +34,8 @@ export default function About() {
           <h1 className="mt-3 font-serif-v3 text-2xl italic text-accent sm:text-3xl">About Deepcast</h1>
         </div>
 
-        <div className="space-y-8 animate-fade-in animate-delay-200">
-          <section>
-            <h2 className="font-serif-v3 text-[21px] italic text-accent">What is Deepcast?</h2>
-            <p className="mt-2 font-body font-light text-base text-[#dddddd]/70 leading-relaxed">
-              Deepcast is a humanity-oriented film distribution platform with three principles:
-            </p>
-            <ol className="mt-2 space-y-2 font-body font-light text-base text-[#dddddd]/70 leading-relaxed">
-              <li>1) Films spread privately by real humans only. No algorithms.</li>
-              <li>2) Films won’t be seen by more people unless existing viewers choose to share</li>
-              <li>3) All shares should be thoughtful and highly curated</li>
-            </ol>
-          </section>
-
-          <section>
-            <h2 className="font-serif-v3 text-[21px] italic text-accent">Why does it exist?</h2>
-            <p className="mt-2 font-body font-light text-base text-[#dddddd]/70 leading-relaxed">
-              I’m lifelong filmmaker who’s been focused on crafting substantive stories. When I
-              worked at Jubilee, we grew a YouTube channel to 5M+ subscribers and over a billion
-              views — but not without a cost. I watched how over time the company drifted in
-              mission due to the YouTube algorithms, tilting everything towards more and more
-              attention extraction, clickbait, and spectacle. In this age of increasing noise and
-              fog, Deepcast is an attempt to create a platform optimized for humanity, connection,
-              and substance rather than just views. To go from broadcasting to ‘deepcasting’.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="font-serif-v3 text-[21px] italic text-accent">Who is it for?</h2>
-            <p className="mt-2 font-body font-light text-base text-[#dddddd]/70 leading-relaxed">
-              Filmmakers, creators, storytellers who want to build an army of their true fans, are
-              tired of the gatekeepers &amp; algorithms &amp; and not having a direct relationship
-              with their audience. Viewers who want more meaningful viewing experience customized
-              for them, more substantive stories, meaningful community, and deeper relationships
-              with their favorite storytellers.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="font-serif-v3 text-[21px] italic text-accent">Who made this?</h2>
-            <p className="mt-2 font-body font-light text-base text-[#dddddd]/70 leading-relaxed">
-              I did — Ien Chi (
-              <a
-                href="https://www.ienchi.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-accent transition-colors hover:text-accent-hover"
-              >
-                https://www.ienchi.com
-              </a>
-              ). This is an early MVP, and I&apos;m looking for help bringing it to life. If
-              you&apos;re a filmmaker, collaborator, advisor, investor, engineer with taste,
-              designer, curator, or community builder — or none of these, but something here moved
-              you — write me:{' '}
-              <a
-                href="mailto:ien.chi96@gmail.com"
-                className="text-accent transition-colors hover:text-accent-hover"
-              >
-                ien.chi96@gmail.com
-              </a>
-              . I read every message myself.
-            </p>
-          </section>
+        <div className="animate-fade-in animate-delay-200">
+          <AboutContent />
         </div>
       </div>
     </div>

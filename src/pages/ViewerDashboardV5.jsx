@@ -18,6 +18,7 @@ import { buildTicketRows } from '../lib/ticketRows.js'
 import { buildJourneyLine } from '../lib/journeyLine.js'
 import { buildConstellationLayout } from '../lib/constellationLayout.js'
 import ConstellationMap from '../components/ConstellationMap'
+import AboutModal from '../components/AboutModal'
 import { safeLocalStorage } from '../lib/safeStorage.js'
 
 const CONTACT_EMAIL = 'hello@deepcast.art'
@@ -109,6 +110,7 @@ export default function ViewerDashboardV5({
   const navigate = useNavigate()
   /** Mobile menu ALWAYS starts closed and never auto-opens (standing rule). */
   const [menuOpen, setMenuOpen] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
   /** Which ticket row's copy button is in its transient feedback state. */
   const [copyFeedback, setCopyFeedback] = useState(null) // { id, label }
 
@@ -174,9 +176,17 @@ export default function ViewerDashboardV5({
   // menu links show for everyone, desktop and mobile.
   const menuLinks = (
     <>
-      <Link to="/about" className={sideLinkClass} onClick={() => setMenuOpen(false)}>
+      {/* Opens the About popup in place — /about stays live for direct links. */}
+      <button
+        type="button"
+        onClick={() => {
+          setMenuOpen(false)
+          setAboutOpen(true)
+        }}
+        className={sideLinkClass}
+      >
         About Deepcast
-      </Link>
+      </button>
       <a href={`mailto:${CONTACT_EMAIL}`} className={sideLinkClass}>
         Contact
       </a>
@@ -545,6 +555,8 @@ export default function ViewerDashboardV5({
           </button>
         </div>
       )}
+
+      <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>
   )
 }
