@@ -7,6 +7,7 @@ import DeepcastLogo from '../components/DeepcastLogo'
 import { buildLineageChain } from '../lib/lineageThread'
 import { formatRuntimeMinutes } from '../lib/runtime'
 import { saveClaimStash, readClaimStash, isClaimOwner } from '../lib/claimStash'
+import { emailInputError } from '../lib/emailShape'
 import { isInviteWatched } from '../lib/filmStats'
 
 /** The wordmark variant sizes via its `size` prop (a text-* class), NOT via
@@ -436,8 +437,11 @@ export default function ClaimLanding() {
   const handleClaim = async (e) => {
     e.preventDefault()
     const trimmed = email.trim()
-    if (!trimmed || !trimmed.includes('@')) {
-      setClaimError('Please enter a valid email address.')
+    // Our own shape check (the form is noValidate — the browser's grey
+    // tooltip never appears). One message covers malformed AND empty.
+    const emailError = emailInputError(trimmed)
+    if (emailError) {
+      setClaimError(emailError)
       return
     }
     setClaimBusy(true)
@@ -637,7 +641,9 @@ export default function ClaimLanding() {
               who sent it. Copy the link from your address bar and pass it along.
             </p>
           ) : (
-            <form onSubmit={handleClaim} className="flex flex-col">
+            /* noValidate: never the browser's grey tooltip — malformed
+               emails get our inline message in the brand's own error line. */
+            <form onSubmit={handleClaim} noValidate className="flex flex-col">
               <label htmlFor="claim-email" className="sr-only">
                 Your email
               </label>

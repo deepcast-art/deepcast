@@ -106,6 +106,42 @@ test.describe('three-page claim arc', () => {
     expect(jsErrors).toEqual([])
   })
 
+  test('malformed or empty email: our inline message, never the browser tooltip', async ({ page }) => {
+    await page.route('**/api/invites/link/**', (route) => route.fulfill({ json: LINK_CREATED }))
+    // The claim endpoint must never be hit by an invalid submit.
+    let claimCalls = 0
+    await page.route('**/api/invites/claim', (route) => {
+      claimCalls += 1
+      return route.fulfill({ json: CLAIM_RESPONSE })
+    })
+    await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
+
+    // The observed bug shape: a comma instead of a period. With noValidate,
+    // submit reaches OUR handler (the native tooltip would have blocked it),
+    // and the message renders in the existing inline error line.
+    await page.getByPlaceholder('you@example.com').fill('ien,chi96+test11@gmail.com')
+    await page.getByRole('button', { name: /Accept your invite/i }).click()
+    await expect(
+      page.getByText('That doesn’t look like an email address — check it and try again.')
+    ).toBeVisible()
+    await expect(page).toHaveURL(/\/alex-h4k2$/)
+
+    // Empty field: the same single message.
+    await page.getByPlaceholder('you@example.com').fill('')
+    await page.getByRole('button', { name: /Accept your invite/i }).click()
+    await expect(
+      page.getByText('That doesn’t look like an email address — check it and try again.')
+    ).toBeVisible()
+    expect(claimCalls).toBe(0)
+
+    // A well-formed plus-addressed email proceeds exactly as today.
+    await page.getByPlaceholder('you@example.com').fill('ien.chi96+test11@gmail.com')
+    await page.getByRole('button', { name: /Accept your invite/i }).click()
+    await expect(page.getByText('That doesn’t look like an email address — check it and try again.')).toHaveCount(0)
+    expect(claimCalls).toBe(1)
+    expect(jsErrors).toEqual([])
+  })
+
   test('duplicate claim: recognition message, then routed toward the dashboard', async ({ page }) => {
     await page.route('**/api/invites/link/**', (route) => route.fulfill({ json: LINK_CREATED }))
     await page.route('**/api/invites/claim', (route) =>
