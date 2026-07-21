@@ -1,3 +1,5 @@
+> **LEGACY FLOW (2026-07-22):** this documents the retired email-invite screening flow (`/i/:token`). Already-sent links resolve forever, so this page stays as reference — but nothing new creates email invites; sharing is custom unique links (see [PROJECT-BRIEF.md](PROJECT-BRIEF.md)).
+
 # Invite Screening Flow
 
 ## 0. Cold Start — Render Server Wake-Up

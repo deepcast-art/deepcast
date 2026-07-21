@@ -1,3 +1,5 @@
+> **PARKED (2026-07-22):** approved direction, not scheduled — awaiting Ien's go-ahead. Nothing below has been executed.
+
 # Render migration runbook — move the API to US East (Virginia)
 
 **Why:** the Supabase database lives in AWS us-east-1 (Virginia). The current Render service is

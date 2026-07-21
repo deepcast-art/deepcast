@@ -1,3 +1,5 @@
+> **HISTORICAL (2026-07-22):** this recon/plan is complete and shipped — including the later V5 dashboard redesign it did not cover. Current truth lives in [CLAUDE.md](CLAUDE.md) and [docs/PROJECT-BRIEF.md](docs/PROJECT-BRIEF.md); treat everything below as a record, not guidance.
+
 # Invite/Share Rework — Reconnaissance & Implementation Plan
 
 Source of truth for scope/decisions: [deepcast-mvp-rework.md](deepcast-mvp-rework.md). This document is the engineering recon that plan calls for, plus a sequenced implementation plan for Phase 1. Read-only reconnaissance — no code was changed to produce this.

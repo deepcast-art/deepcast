@@ -2,7 +2,7 @@
 
 ## watch_sessions table is empty / inserts appear to be failing (pre-existing)
 
-**Status:** open, pre-existing — NOT introduced by the passwordless invite-first change.
+**Status:** RESOLVED as observed on 2026-07-22 — production `watch_sessions` now records rows (e.g. 27 sessions on a single legacy invite verified during the ticket-number work). Kept for history; the notes below describe the original silent-failure behaviour.
 
 **Symptom:** `public.watch_sessions` has **0 rows table-wide**, including for historical real
 watches (e.g. the 06‑05 minhjhang test) and the seeded demo data whose invites are marked

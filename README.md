@@ -2,6 +2,8 @@
 
 The project is for a social network to share media through word of mouth.
 
+**Current product truth (2026-07-22):** the V5 viewer dashboard is live — one dashboard for every user, shares are custom unique links only (the email-invite system is retired; legacy `/i/:token` links still resolve), and per-film ticket numbers are live and immutable (filmmaker №1, invitees from №2). Engineering rules and full current state: **[CLAUDE.md](./CLAUDE.md)**. Plain-English product briefing: **[docs/PROJECT-BRIEF.md](./docs/PROJECT-BRIEF.md)**.
+
 ## Git branches
 
 - **`main`** — production (merge here when you want to release).

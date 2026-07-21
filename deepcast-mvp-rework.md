@@ -1,3 +1,5 @@
+> **HISTORICAL TRACKER (2026-07-22):** Phase 1 and the admin/economy pieces shipped, followed by the V5 dashboard redesign, link-only sharing, ticket numbers, and the one-tier sign-in unification (none tracked here). The decisions log below remains a valid record; for current truth read [CLAUDE.md](CLAUDE.md) and [docs/PROJECT-BRIEF.md](docs/PROJECT-BRIEF.md).
+
 # Deepcast MVP Rework — Sharing & Invite Flow
 
 Tracker for the invite/share overhaul. Work top to bottom within each phase; Phase 1 is the compelling-MVP core, Phase 2 is fast-follow.
