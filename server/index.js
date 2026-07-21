@@ -1300,7 +1300,7 @@ app.post('/api/invites/claim', async (req, res) => {
     if (priorClaim) {
       // Void atomically — only a still-unclaimed row can void, so a race
       // with a genuine claim can never destroy a real claim.
-      const { data: voidedRow } = await supabase
+      const { data: voidedRow, error: voidError } = await supabase
         .from('invites')
         .update({ status: VOID_INVITE_STATUS })
         .eq('id', invite.id)
@@ -1308,13 +1308,18 @@ app.post('/api/invites/claim', async (req, res) => {
         .is('claimed_email', null)
         .select('id')
         .maybeSingle()
+      if (voidError) {
+        // Never silent (the 2026-07-21 constraint incident): the claimer's
+        // truth is still "already held", but the miss is loud in the logs.
+        console.error('[claim] duplicate VOID FAILED (link left claimable):', voidError.message)
+      }
       if (voidedRow) {
         await refundVoidedSenderTicket(invite).catch((e) =>
           console.error('[claim] void refund failed (void stands):', e?.message || e)
         )
       }
       console.log(
-        `[claim] duplicate: ${emailNorm} already holds film ${invite.film_id} — link ${slug} voided`
+        `[claim] duplicate: ${emailNorm} already holds film ${invite.film_id} — link ${slug} ${voidedRow ? 'voided' : 'NOT voided'}`
       )
       return res.json({ alreadyHeld: true, filmId: invite.film_id })
     }

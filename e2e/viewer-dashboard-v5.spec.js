@@ -61,6 +61,21 @@ const SENT = [
   },
 ]
 
+// A duplicate-claim casualty (Fix B): visible as ledger history, dead
+// everywhere else — never counted as given, never copyable.
+const VOIDED_SENT = {
+  id: 'aaaa1111-0000-4000-8000-000000000004',
+  film_id: FILM_ID,
+  sender_id: USER_ID,
+  recipient_name: 'Rex',
+  recipient_email: null,
+  status: 'void',
+  link_slug: 'rex-v0id',
+  ticket_no: 62,
+  created_at: '2026-07-20T10:00:00Z',
+  parent_invite_id: 'aaaa1111-0000-4000-8000-000000000009',
+}
+
 // Someone Maya invited onward — turns Maya's row into "Shared to 1 person".
 const DOWNSTREAM = [
   {
@@ -137,8 +152,8 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await page.route('**/rest/v1/invites**', (route) => {
       const url = route.request().url()
       let rows
-      if (url.includes('sender_id=')) rows = SENT
-      else if (url.includes('film_id=eq')) rows = [...SENT, ...RECEIVED, ...DOWNSTREAM]
+      if (url.includes('sender_id=')) rows = [...SENT, VOIDED_SENT]
+      else if (url.includes('film_id=eq')) rows = [...SENT, VOIDED_SENT, ...RECEIVED, ...DOWNSTREAM]
       else rows = RECEIVED
       return route.fulfill({
         json: rows,
@@ -196,6 +211,12 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(tickets.getByText("Tickets you've shared")).toBeVisible()
     await expect(tickets.getByText('Ticket No. 60')).toBeVisible()
     await expect(tickets.getByText('Ticket No. 61')).toBeVisible()
+
+    // The voided row: ledger history with the approved status line, its dead
+    // number still shown, no copy button — and it counts NOWHERE (given
+    // stays 2, the journey line and constellation ignore it).
+    await expect(tickets.getByText('Already held this film — ticket returned.')).toBeVisible()
+    await expect(tickets.getByText('Ticket No. 62')).toBeVisible()
     await expect(tickets.getByText('Dan', { exact: true })).toBeVisible()
     await expect(tickets.getByText('Unopened')).toBeVisible()
     await expect(tickets.getByText('Maya', { exact: true })).toBeVisible()
