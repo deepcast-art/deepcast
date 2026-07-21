@@ -312,9 +312,15 @@ img {
 /* Post-claim prologue (2026-07-21, softened 2.5x by owner revision): three
    staggered line fade-ins of 2.5s each (line stays once shown — delays set
    inline: 0 / 3s / 6s, fades overlap) and the 2.5s whole-block fade-out
-   that resolves into the watch page. */
+   that resolves into the watch page.
+   The line fade-in uses the TIME-MIRROR of the fade-out's curve (owner
+   revision: match the out's character). Both are pure opacity at 2.5s; the
+   shared --ease-default is fast-start/slow-tail, which reads gentle on the
+   way OUT (the slow part is visible) but brisk on the way IN — mirroring
+   the curve, cubic-bezier(0.8, 0, 1, 1), makes lines emerge with the same
+   gradual glide the dissolve has. */
 .dc-prologue-line {
-  animation: dc-fade-in 2.5s var(--ease-default) both;
+  animation: dc-fade-in 2.5s cubic-bezier(0.8, 0, 1, 1) both;
 }
 @keyframes dc-fade-out {
   from { opacity: 1; }
