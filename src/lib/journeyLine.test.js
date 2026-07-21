@@ -15,13 +15,13 @@ describe('buildJourneyLine', () => {
   it('zero state: exact copy, no numbers beyond X', () => {
     const r = buildJourneyLine({ reached: 58, downstream: 0 })
     expect(textOf(r)).toBe(
-      'This film has reached 58 people. Your shareable tickets are waiting to grow that number.'
+      'This film has reached 58 people. Grow that number by sharing the film.'
     )
   })
 
   it('singular X reads "1 person"', () => {
     expect(textOf(buildJourneyLine({ reached: 1, downstream: 0 }))).toBe(
-      'This film has reached 1 person. Your shareable tickets are waiting to grow that number.'
+      'This film has reached 1 person. Grow that number by sharing the film.'
     )
     expect(textOf(buildJourneyLine({ reached: 1, downstream: 1 }))).toBe(
       'This film has reached 1 person. 1 of them received it because of you.'

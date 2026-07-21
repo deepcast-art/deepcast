@@ -3,8 +3,8 @@
  * (2026-07-21):
  *   Y > 0: "This film has reached [X] people. [Y] of them received it
  *           because of you."
- *   Y = 0: "This film has reached [X] people. Your shareable tickets are
- *           waiting to grow that number."
+ *   Y = 0: "This film has reached [X] people. Grow that number by sharing
+ *           the film." (revised 2026-07-22)
  *
  * ONE shared computation per the canonical-stats rule. Numbers render as
  * NUMERALS ("4", "58") — never spelled out.
@@ -47,7 +47,7 @@ export function buildJourneyLine({ reached = 0, downstream = 0 } = {}) {
     segments: [
       { text: 'This film has reached ', bold: false },
       { text: people(reached), bold: true },
-      { text: '. Your shareable tickets are waiting to grow that number.', bold: false },
+      { text: '. Grow that number by sharing the film.', bold: false },
     ],
   }
 }

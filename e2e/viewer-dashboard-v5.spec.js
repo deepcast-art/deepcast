@@ -324,7 +324,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
 
     await expect(
       page.getByText(
-        'This film has reached 1 person. Your shareable tickets are waiting to grow that number.'
+        'This film has reached 1 person. Grow that number by sharing the film.'
       )
     ).toBeVisible({ timeout: 15000 })
     // The section always renders — at zero links it shows the empty state.
