@@ -329,6 +329,12 @@ img {
 .dc-prologue-out {
   animation: dc-fade-out 3s var(--ease-default) both;
 }
+/* Watch-page arrival from the prologue only (owner spec 2026-07-21): the
+   page breathes in over 1s — pure opacity, the prologue fade-in's mirror
+   curve. Cosmetic; never applied on direct visits/revisits/refreshes. */
+.dc-watch-arrival {
+  animation: dc-fade-in 1s cubic-bezier(0.8, 0, 1, 1) both;
+}
 
 .dc-rise-1 { animation-delay: 0.15s; }
 .dc-rise-2 { animation-delay: 0.4s; }
@@ -425,7 +431,7 @@ img {
 
 @media (prefers-reduced-motion: reduce) {
   .dc-fade-in, .animate-fade-in, .animate-fade-in-slow,
-  .dc-prologue-line, .dc-prologue-out {
+  .dc-prologue-line, .dc-prologue-out, .dc-watch-arrival {
     animation: none;
     opacity: 1;
   }

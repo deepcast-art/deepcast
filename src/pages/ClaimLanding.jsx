@@ -549,7 +549,10 @@ export default function ClaimLanding() {
         receiver={receiver}
         sharer={sharer}
         posterUrl={posterUrl}
-        onDone={() => navigate(`/watch/${slug}`)}
+        /* fromPrologue is an in-memory router marker, COSMETIC only: the
+           watch page fades in on this one arrival. The prologue's
+           once-per-claim guarantee never depends on it. */
+        onDone={() => navigate(`/watch/${slug}`, { state: { fromPrologue: true } })}
       />
     )
   }

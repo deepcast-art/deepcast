@@ -155,8 +155,10 @@ test.describe('three-page claim arc', () => {
     await expect(page.getByText(/choose the few people who need it next/)).toBeVisible()
     await prologue.click()
 
-    // PAGE 2: the watch page.
+    // PAGE 2: the watch page — breathing in via the arrival fade, which
+    // rides ONLY the prologue's in-memory router marker.
     await expect(page).toHaveURL(/\/watch\/alex-h4k2$/, { timeout: 10_000 })
+    await expect(page.locator('.dc-watch-arrival')).toHaveCount(1)
     await expect(page.getByRole('heading', { name: 'A Sacred Pause' })).toBeVisible()
     // Per-film runtime (fixture duration 1932.6s) + the constant tail.
     await expect(page.getByText('32 minutes. Headphones recommended.')).toBeVisible()
@@ -200,6 +202,8 @@ test.describe('three-page claim arc', () => {
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await expect(page).toHaveURL(/\/watch\/alex-h4k2$/)
     await expect(page.getByRole('button', { name: 'Continue to the film' })).toHaveCount(0)
+    // Revisits render instantly — no arrival fade without the marker.
+    await expect(page.locator('.dc-watch-arrival')).toHaveCount(0)
 
     expect(jsErrors).toEqual([])
   })
@@ -246,6 +250,8 @@ test.describe('three-page claim arc', () => {
     await expect(page.getByText(/choose the few people who need it next/)).toBeVisible()
     // No taps: after the short hold it releases to the watch page on its own.
     await expect(page).toHaveURL(/\/watch\/alex-h4k2$/, { timeout: 8_000 })
+    // Reduced motion: the watch page renders instantly, no arrival fade.
+    await expect(page.locator('.dc-watch-arrival')).toHaveCount(0)
     expect(jsErrors).toEqual([])
   })
 
@@ -262,6 +268,9 @@ test.describe('three-page claim arc', () => {
     )
     await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
 
+    // Direct visits render instantly — the arrival fade rides only the
+    // prologue's router marker.
+    await expect(page.locator('.dc-watch-arrival')).toHaveCount(0)
     // Panel is always open — the zero-tickets state shows with no interaction.
     await expect(page.getByText('You’ve given all your tickets for this film.')).toBeVisible()
     // Fallback path: a missing sharer name renders the generic wording, with

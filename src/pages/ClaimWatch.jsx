@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { useParams, useSearchParams, Link, Navigate } from 'react-router-dom'
+import { useParams, useSearchParams, useLocation, Link, Navigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import DeepcastLogo from '../components/DeepcastLogo'
@@ -79,6 +79,23 @@ function TicketStubs({ granted, remaining }) {
 export default function ClaimWatch() {
   const { slug } = useParams()
   const [searchParams] = useSearchParams()
+  const location = useLocation()
+  /* Arrival-from-prologue fade (owner spec 2026-07-21) — COSMETIC only.
+     The in-memory router marker makes this one arrival breathe in over 1s;
+     every other entry (direct visit, revisit, refresh) renders instantly.
+     Captured once at mount, then scrubbed from the history entry so a
+     refresh or back-swipe never replays it. Reduced-motion skips the fade.
+     NO storage; the prologue's once-per-claim logic never reads this. */
+  const [arrivalFade] = useState(
+    () =>
+      Boolean(location.state?.fromPrologue) &&
+      !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
+  useEffect(() => {
+    if (window.history.state?.usr?.fromPrologue) {
+      window.history.replaceState({ ...window.history.state, usr: null }, '')
+    }
+  }, [])
   const stash = readClaimStash()
   const stashOwner = isClaimOwner(stash, slug)
   /** Session-based ownership (Piece E return visits): on a new browser there
@@ -402,7 +419,7 @@ export default function ClaimWatch() {
      one solid page token the dashboard uses (bg-bg-page) — uniform, no
      gradient, no grain (decided 2026-07-19). */
   return (
-    <div className="relative min-h-dvh bg-bg-page text-warm">
+    <div className={`relative min-h-dvh bg-bg-page text-warm${arrivalFade ? ' dc-watch-arrival' : ''}`}>
       {/* Wordmark: top-left on wide screens, centered on phones (landing convention). */}
       <header className="relative z-10 flex justify-center px-[clamp(1.5rem,4vw,3rem)] pt-[max(1.75rem,env(safe-area-inset-top,0px))] sm:justify-start">
         <DeepcastLogo variant="wordmark" size="text-2xl" className="text-warm opacity-90" />
