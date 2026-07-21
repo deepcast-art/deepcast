@@ -212,12 +212,19 @@ function devPreviewChain(searchParams) {
 }
 
 /**
- * PAGE 1 of the three-page structure (final spec 2026-07-16): the landing
- * letter over a full-bleed film still. One job: the letter and the claim.
+ * PAGE 1 of the three-page structure (2026-07-16 spec, SUPERSEDED by the
+ * founder's 2026-07-21 redesign — the copy below is the current
+ * founder-approved verbatim): the landing letter over a full-bleed film
+ * still. One job: the letter and the claim.
  *
- * Order: Dear X / sharer line (first-name) / lineage thread / film title /
- * transmission hook / inline email + Accept CTA / "This invitation admits
- * one person, once." NOT here: concept line, ordinal, conditions, graph.
+ * Order: "{Receiver}, {Sharer} gifted you a film." (ONE uniform type style —
+ * no bolding of names or any word; both names first-word-trimmed; missing
+ * receiver drops the prefix, missing sharer reads "Someone") / lineage
+ * thread / film title / transmission hook / inline email + Accept CTA /
+ * "This invitation admits one person, once." / "By private invitation only
+ * · Ticket №{N}" (the ticket segment renders only when ticketNo exists).
+ * The old "Dear X," greeting is GONE; "watched this and thought of you"
+ * moved to the post-claim prologue.
  *
  * Claiming routes DIRECTLY to /watch/:slug — there is no reveal beat.
  * Revisit rule: the claimant re-opening their own claimed link (recognized
@@ -361,6 +368,7 @@ export default function ClaimLanding() {
     lineageNames,
     posterUrl,
     durationSeconds,
+    ticketNo,
   } = state.invite || {}
   const previewNames = devPreviewChain(searchParams)
   const chainNames = previewNames ?? lineageNames
@@ -370,9 +378,15 @@ export default function ClaimLanding() {
   const hook = (transmissionHook || '').trim()
   const runtimeLabel = formatRuntimeMinutes(durationSeconds)
   const firstName = (inviteeFirstName || '').trim() || 'friend'
-  // First word only, on this page only — legacy accounts may store full names
-  // ("Ien Chi"), but the letter register is first-name-only (decided 2026-07-16).
+  // First word only — legacy accounts may store full names ("Ien Chi"), but
+  // the letter register is first-name-only (decided 2026-07-16).
   const sharer = ((sharerName || '').trim() || 'Someone').split(/\s+/)[0]
+  // The gifted line's receiver: first-word-trimmed, and simply OMITTED (with
+  // its comma) when missing — founder rules 2026-07-21, do not improvise.
+  const receiver = (inviteeFirstName || '').trim().split(/\s+/)[0] || ''
+  const giftedLine = receiver
+    ? `${receiver}, ${sharer} gifted you a film.`
+    : `${sharer} gifted you a film.`
 
   if (state.phase === 'claimed') {
     return (
@@ -398,24 +412,21 @@ export default function ClaimLanding() {
       </header>
 
       <main className="relative z-10 mx-auto flex min-h-svh w-full max-w-2xl flex-col items-center justify-center px-6 pb-[max(clamp(1.5rem,3.5svh,4rem),env(safe-area-inset-bottom,0px))] pt-[clamp(4.5rem,8svh,7rem)] text-center">
-        {/* 1. Greeting — the letter's opening, kept as the page heading. */}
-        <h1 className="font-sans text-xs font-normal uppercase tracking-[0.32em] text-accent dc-rise dc-rise-2">
-          Dear {firstName},
+        {/* 1. The gifted line — the letter's opening AND the page heading.
+            ONE uniform style: no bolding, no emphasis (founder rule
+            2026-07-21). */}
+        <h1 className="max-w-[15em] font-serif-v3 text-[clamp(2.125rem,5.5vw,3.25rem)] font-normal leading-[1.16] dc-rise dc-rise-2">
+          {giftedLine}
         </h1>
 
-        {/* 2. Sharer line — one clean italic line in the brand serif. */}
-        <p className="mt-3 max-w-[15em] font-serif-v3 text-[clamp(2.125rem,5.5vw,3.25rem)] leading-[1.16] dc-rise dc-rise-2">
-          <strong className="font-semibold">{sharer}</strong> watched this and thought of you.
-        </p>
-
-        {/* 3. Lineage chain — the whisper. */}
+        {/* 2. Lineage chain — the whisper. */}
         <div className="dc-rise dc-rise-3">
           <LineageChain names={chainNames} senderIsCreator={chainSenderIsCreator} />
         </div>
 
         <LetterDivider className="mt-[clamp(1.75rem,3.5svh,3.25rem)] dc-rise dc-rise-3" />
 
-        {/* 4. Film title + 5. transmission hook (per-film data; nothing when NULL) */}
+        {/* 3. Film title + 4. transmission hook (per-film data; nothing when NULL) */}
         <div className="mt-[clamp(1.5rem,3svh,2.75rem)] w-full">
           <h2 className="font-serif-v3 text-[clamp(1.75rem,4vw,2.375rem)] leading-tight dc-rise dc-rise-4">
             {filmTitle || 'a film'}
@@ -445,7 +456,7 @@ export default function ClaimLanding() {
           )}
         </div>
 
-        {/* 6. Inline email + CTA — visible immediately, no click-to-reveal. */}
+        {/* 5. Inline email + CTA — visible immediately, no click-to-reveal. */}
         <div className="mt-[clamp(2rem,4.5svh,3.75rem)] w-full max-w-[26rem] dc-rise dc-rise-6">
           {alreadyHeld ? (
             <p className="font-serif-v3 text-lg italic text-warm">
@@ -481,11 +492,17 @@ export default function ClaimLanding() {
               </button>
             </form>
           )}
-          {/* 7. The single-claim line. */}
+          {/* 6. The single-claim line + the private-invitation/ticket line
+              (same register; ticket segment only when a number exists). */}
           {!sharerView && !alreadyHeld && (
-            <p className="mt-5 font-sans text-[10px] uppercase tracking-[0.24em] text-warm/45">
-              This invitation admits one person, once.
-            </p>
+            <>
+              <p className="mt-5 font-sans text-[10px] uppercase tracking-[0.24em] text-warm/45">
+                This invitation admits one person, once.
+              </p>
+              <p className="mt-2 font-sans text-[10px] uppercase tracking-[0.24em] text-warm/45">
+                By private invitation only{ticketNo != null ? ` · Ticket №${ticketNo}` : ''}
+              </p>
+            </>
           )}
         </div>
       </main>

@@ -32,6 +32,7 @@ const LINK_CREATED = {
   muxPlaybackId: 'e2e-fake-playback-id',
   inviteId: 'inv-you',
   claimOrdinal: null,
+  ticketNo: 8,
   ticketsRemaining: null,
   durationSeconds: 1932.5983, // floors to "32 minutes" on the landing letter
 }
@@ -75,10 +76,15 @@ test.describe('three-page claim arc', () => {
     await page.route('**/api/invites/link/**', (route) => route.fulfill({ json: LINK_CREATED }))
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
 
-    await expect(page.getByRole('heading', { name: /Dear Alex/ })).toBeVisible()
-    // Legacy full names trim to the first word on this page.
-    await expect(page.getByText('watched this and thought of you')).toBeVisible()
-    await expect(page.getByText('Ien Chi watched this')).toHaveCount(0)
+    // The gifted line (founder redesign 2026-07-21): uniform type, both
+    // names first-word-trimmed, no "Dear X," greeting anywhere.
+    await expect(page.getByRole('heading', { name: 'Alex, Ien gifted you a film.' })).toBeVisible()
+    await expect(page.getByText(/Dear Alex/)).toHaveCount(0)
+    await expect(page.getByText(/Ien Chi gifted/)).toHaveCount(0)
+    // "watched this and thought of you" left this page for the prologue.
+    await expect(page.getByText(/watched this and thought of you/)).toHaveCount(0)
+    // The private-invitation line with the permanent ticket number.
+    await expect(page.getByText('By private invitation only · Ticket №8')).toBeVisible()
     // The thread (depth-1) with its context label, and the film block.
     await expect(page.getByText('How this reached you')).toBeVisible()
     await expect(page.getByText('you', { exact: true })).toBeVisible()
@@ -226,11 +232,13 @@ test.describe('three-page claim arc', () => {
   test('a film with no transmission hook, no still, and no duration renders nothing in those slots', async ({ page }) => {
     await page.route('**/api/invites/link/**', (route) =>
       route.fulfill({
-        json: { ...LINK_CREATED, transmissionHook: null, posterUrl: null, durationSeconds: null },
+        json: { ...LINK_CREATED, transmissionHook: null, posterUrl: null, durationSeconds: null, ticketNo: null },
       })
     )
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('heading', { name: 'A Sacred Pause' })).toBeVisible()
+    // Null ticket number: the private-invitation line stands alone.
+    await expect(page.getByText('By private invitation only', { exact: true })).toBeVisible()
     await expect(page.getByText(/placeholder/i)).toHaveCount(0)
     await expect(page.getByText('A one-line hook about why this film exists.')).toHaveCount(0)
     await expect(page.getByText(/\d+ minutes?/)).toHaveCount(0)
