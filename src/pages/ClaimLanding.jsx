@@ -7,6 +7,7 @@ import DeepcastLogo from '../components/DeepcastLogo'
 import { buildLineageChain } from '../lib/lineageThread'
 import { formatRuntimeMinutes } from '../lib/runtime'
 import { saveClaimStash, readClaimStash, isClaimOwner } from '../lib/claimStash'
+import { isInviteWatched } from '../lib/filmStats'
 
 /** The wordmark variant sizes via its `size` prop (a text-* class), NOT via
  *  h-* utilities — an h-6 on the span leaves the default text-8xl glyphs
@@ -406,10 +407,14 @@ export default function ClaimLanding() {
         const data = await api.getLinkInvite(slug)
         if (cancelled) return
         if (data.status && data.status !== 'created') {
-          // Already claimed: the owner (recognized by stash) goes to their
-          // watch page; everyone else sees the dead-link state.
+          // Already claimed: the owner (recognized by stash) is bounced —
+          // to their DASHBOARD once they've completed the film (the shared
+          // isInviteWatched rule: 70%-watched, same bar as the ticket
+          // statuses), else to their watch page. Everyone else sees the
+          // dead-link state. The bounce never enters the claim-success
+          // path, so revisits can never see the prologue.
           if (isClaimOwner(readClaimStash(), slug)) {
-            navigate(`/watch/${slug}`, { replace: true })
+            navigate(isInviteWatched(data) ? '/dashboard' : `/watch/${slug}`, { replace: true })
             return
           }
           setState({ phase: 'claimed', invite: data })

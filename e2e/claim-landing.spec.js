@@ -194,12 +194,33 @@ test.describe('three-page claim arc', () => {
     await expect(page.getByRole('link', { name: /Your dashboard/i })).toBeVisible()
 
     // REVISIT RULE: re-opening the claimed landing slug routes the owner
-    // (recognized by stash) straight back to their watch page — never the
-    // prologue again.
+    // (recognized by stash) straight back to their watch page while the
+    // film is NOT yet completed (status 'claimed') — never the prologue
+    // again.
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await expect(page).toHaveURL(/\/watch\/alex-h4k2$/)
     await expect(page.getByRole('button', { name: 'Continue to the film' })).toHaveCount(0)
 
+    expect(jsErrors).toEqual([])
+  })
+
+  test('owner revisit after COMPLETING the film routes to the dashboard, never the watch page or prologue', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        'deepcast:claim',
+        JSON.stringify({ slug: 'alex-h4k2', inviteId: 'inv-you', filmId: 'film-1', claimedEmail: 'alex@example.com' })
+      )
+    })
+    // status 'watched' = the shared isInviteWatched bar (70%-watched).
+    await page.route('**/api/invites/link/**', (route) =>
+      route.fulfill({ json: { ...LINK_CLAIMED, status: 'watched' } })
+    )
+    await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
+    // Dashboard for the signed-in; this mocked browser has no session, so
+    // ProtectedRoute forwards to sign-in — either way, never /watch, never
+    // the prologue.
+    await page.waitForURL(/\/(dashboard|login)/, { timeout: 10000 })
+    await expect(page.getByRole('button', { name: 'Continue to the film' })).toHaveCount(0)
     expect(jsErrors).toEqual([])
   })
 
