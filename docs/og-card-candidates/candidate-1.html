@@ -1,0 +1,78 @@
+<!doctype html>
+<!-- OG card candidate 1 — "Admit One": the ticket itself, quiet and literal.
+     1200x630. App tokens: ink #080c18, gold #c7a96b, warm #dddddd.
+     Fonts load from ../../public/fonts/ (screenshot via file://). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: 'Phoenix'; src: url('../../public/fonts/phoenix-regular.otf') format('opentype'); font-weight: 400; }
+  @font-face { font-family: 'Phoenix'; src: url('../../public/fonts/phoenix-medium.otf') format('opentype'); font-weight: 500; }
+  @font-face { font-family: 'Garamond Premier Pro Italic'; src: url('../../public/fonts/garamond-premier-pro-italic.ttf') format('truetype'); }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(ellipse 900px 520px at 50% 44%, rgba(199, 169, 107, 0.07), transparent 68%),
+      radial-gradient(ellipse 1400px 900px at 50% 50%, #0a0f1d 0%, #080c18 62%, #05080f 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Phoenix', sans-serif; color: #dddddd;
+  }
+
+  .ticket {
+    position: relative;
+    width: 780px; height: 316px;
+    border: 1px solid rgba(199, 169, 107, 0.6);
+    background: linear-gradient(160deg, #0d1322 0%, #0a0f1c 55%, #0b101e 100%);
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), inset 0 0 60px rgba(8, 12, 24, 0.8);
+    display: flex;
+  }
+  /* inner hairline */
+  .ticket::before {
+    content: ''; position: absolute; inset: 7px;
+    border: 1px solid rgba(199, 169, 107, 0.18);
+    pointer-events: none;
+  }
+
+  .body { flex: 1; padding: 54px 40px 48px 62px; display: flex; flex-direction: column; justify-content: space-between; }
+  .brand { font-size: 15px; letter-spacing: 0.42em; color: #c7a96b; font-weight: 500; }
+  .line  { font-family: 'Garamond Premier Pro Italic', Georgia, serif; font-style: italic; font-size: 52px; line-height: 1.18; color: #e6e2d8; max-width: 480px; }
+  .rule  { font-size: 12.5px; letter-spacing: 0.3em; color: rgba(221, 221, 221, 0.42); }
+
+  /* perforation + stub */
+  .perf {
+    position: relative; width: 0;
+    border-left: 1.5px dashed rgba(199, 169, 107, 0.4);
+  }
+  .notch {
+    position: absolute; left: -14px; width: 27px; height: 27px; border-radius: 50%;
+    background: #080c18;
+  }
+  .notch.top { top: -15px; box-shadow: inset 0 -2px 0 rgba(199, 169, 107, 0.35); }
+  .notch.bot { bottom: -15px; box-shadow: inset 0 2px 0 rgba(199, 169, 107, 0.35); }
+
+  .stub {
+    width: 178px; display: flex; align-items: center; justify-content: center;
+  }
+  .stub span {
+    transform: rotate(90deg); white-space: nowrap;
+    font-size: 16px; letter-spacing: 0.5em; color: #c7a96b; font-weight: 500;
+  }
+</style>
+</head>
+<body>
+  <div class="ticket">
+    <div class="body">
+      <div class="brand">DEEPCAST</div>
+      <div class="line">You’ve been given a&nbsp;ticket.</div>
+      <div class="rule">ADMITS ONE PERSON, ONCE</div>
+    </div>
+    <div class="perf">
+      <div class="notch top"></div>
+      <div class="notch bot"></div>
+    </div>
+    <div class="stub"><span>ADMIT ONE</span></div>
+  </div>
+</body>
+</html>

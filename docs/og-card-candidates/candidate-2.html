@@ -1,0 +1,42 @@
+<!doctype html>
+<!-- OG card candidate 2 — "Letterpress": pure typography, the letter's voice.
+     1200x630. App tokens: ink #080c18, gold #c7a96b, warm #dddddd. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: 'Phoenix'; src: url('../../public/fonts/phoenix-regular.otf') format('opentype'); font-weight: 400; }
+  @font-face { font-family: 'Phoenix'; src: url('../../public/fonts/phoenix-medium.otf') format('opentype'); font-weight: 500; }
+  @font-face { font-family: 'Garamond Premier Pro Italic'; src: url('../../public/fonts/garamond-premier-pro-italic.ttf') format('truetype'); }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    background: linear-gradient(180deg, #0a0f1c 0%, #080c18 45%, #060910 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Phoenix', sans-serif; color: #dddddd; text-align: center;
+  }
+  .stack { display: flex; flex-direction: column; align-items: center; gap: 34px; padding-bottom: 8px; }
+
+  .brand { font-size: 15px; letter-spacing: 0.46em; color: rgba(199, 169, 107, 0.85); font-weight: 500; }
+
+  .line {
+    font-family: 'Garamond Premier Pro Italic', Georgia, serif; font-style: italic;
+    font-size: 84px; line-height: 1.12; color: #e8e4da;
+  }
+  .line .gold { color: #d8c79a; }
+
+  .rule { width: 130px; height: 1px; background: linear-gradient(90deg, transparent, rgba(199, 169, 107, 0.75), transparent); }
+
+  .sub { font-size: 13.5px; letter-spacing: 0.32em; color: rgba(221, 221, 221, 0.44); }
+</style>
+</head>
+<body>
+  <div class="stack">
+    <div class="brand">DEEPCAST</div>
+    <div class="line">You’ve been given<br><span class="gold">a ticket.</span></div>
+    <div class="rule"></div>
+    <div class="sub">A FILM, PASSED TO YOU BY SOMEONE WHO THOUGHT OF YOU</div>
+  </div>
+</body>
+</html>
