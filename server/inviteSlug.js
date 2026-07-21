@@ -1,24 +1,26 @@
 /**
  * inviteSlug.js — slug generation for the link-based claim flow (PLAN.md Step 2 / A1).
  *
- * The slug is routing only: it never carries the invitee's display name back
- * out of the URL (that always comes from invites.recipient_name). It is
- * guessable-by-design and lives its own lifecycle, entirely separate from the
- * existing high-entropy `token` column used by the legacy email-invite flow.
+ * The slug is routing only: it is an opaque lookup key and never carries the
+ * invitee's display name (that always comes from invites.recipient_name). It
+ * is guessable-by-design and lives its own lifecycle, entirely separate from
+ * the existing high-entropy `token` column used by the legacy email-invite flow.
  *
- * Spec (deepcast-mvp-rework.md decisions, 2026-07-06):
- *  - Name part: Unicode-normalize, strip diacritics, drop all chars outside
- *    a-z, lowercase, max 20 chars. Falls back to "invite" if nothing survives.
- *  - Suffix: 4 chars from an unambiguous alphabet (excludes 0, o, 1, l, i).
- *  - Collision: regenerate the suffix up to 3 times, then widen to 5 chars.
- *  - Reserved-route blocklist is defense-in-depth against a Phase-1 slug ever
- *    shadowing a fixed app route, even though the slug's trailing "-suffix"
- *    already makes a literal collision structurally impossible today.
+ * Format (owner ruling 2026-07-21, replacing the name-based scheme): the fixed
+ * word "ticket", a hyphen, and a 5-character random suffix — e.g. ticket-x7q2v.
+ * The typed first name no longer feeds into the slug at all. Existing rows are
+ * never rewritten: old name-based slugs (e.g. zoe-ab2c) resolve forever via
+ * their stored strings.
+ *
+ *  - Suffix: 5 chars from an unambiguous alphabet (excludes 0, o, 1, l, i).
+ *  - Collision: regenerate the suffix up to 3 times, then widen to 6 chars.
+ *  - Reserved-route blocklist is defense-in-depth against a slug ever
+ *    shadowing a fixed app route, even though the trailing "-suffix" already
+ *    makes a literal collision structurally impossible.
  */
 import crypto from 'node:crypto'
 
-const MAX_NAME_LENGTH = 20
-const FALLBACK_NAME = 'invite'
+export const SLUG_WORD = 'ticket'
 
 // Existing top-level route segments (src/App.jsx) — kept in sync manually;
 // there is no shared route registry to import from a plain Node script.
@@ -37,29 +39,15 @@ export const RESERVED_SLUG_WORDS = new Set([
   'i',
 ])
 
+if (RESERVED_SLUG_WORDS.has(SLUG_WORD)) {
+  // Startup guard: the fixed word must never shadow an app route. If a route
+  // named "ticket" is ever added, this fails loudly instead of minting slugs
+  // that collide with it.
+  throw new Error(`Slug word "${SLUG_WORD}" is a reserved route segment`)
+}
+
 // Excludes 0, o, 1, l, i — visually ambiguous in most fonts.
 const UNAMBIGUOUS_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'
-
-// Reserved words go through the same a-z-only stripping as a candidate name
-// before comparison — otherwise "reset-password" (a real route) would never
-// match its own sanitized form "resetpassword".
-const RESERVED_SLUG_WORDS_STRIPPED = new Set(
-  [...RESERVED_SLUG_WORDS].map((word) => word.replace(/[^a-z]/g, ''))
-)
-
-/** Sanitize a raw first name into the slug's name part. Pure, no I/O. */
-export function sanitizeSlugName(rawName) {
-  const input = typeof rawName === 'string' ? rawName : ''
-  const normalized = input
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '') // strip combining diacritical marks
-    .toLowerCase()
-    .replace(/[^a-z]/g, '')
-    .slice(0, MAX_NAME_LENGTH)
-
-  if (!normalized || RESERVED_SLUG_WORDS_STRIPPED.has(normalized)) return FALLBACK_NAME
-  return normalized
-}
 
 /** Random suffix drawn from the unambiguous alphabet. Pure aside from randomness. */
 export function generateSlugSuffix(length) {
@@ -73,20 +61,18 @@ export function generateSlugSuffix(length) {
 
 /**
  * Generate a slug unique against `existsFn` (async (slug) => boolean).
- * Retries the 4-char suffix up to 3 times, then widens to 5 chars for up to
- * 10 more attempts before giving up (astronomically unlikely at 31^5 ≈ 28.6M
- * combinations per name).
+ * Retries the 5-char suffix up to 3 times, then widens to 6 chars for up to
+ * 10 more attempts before giving up (astronomically unlikely at 31^6 ≈ 887M
+ * combinations).
  */
-export async function generateUniqueSlug(rawName, existsFn) {
-  const name = sanitizeSlugName(rawName)
-
+export async function generateUniqueSlug(existsFn) {
   for (let attempt = 0; attempt < 3; attempt++) {
-    const slug = `${name}-${generateSlugSuffix(4)}`
+    const slug = `${SLUG_WORD}-${generateSlugSuffix(5)}`
     if (!(await existsFn(slug))) return slug
   }
 
   for (let attempt = 0; attempt < 10; attempt++) {
-    const slug = `${name}-${generateSlugSuffix(5)}`
+    const slug = `${SLUG_WORD}-${generateSlugSuffix(6)}`
     if (!(await existsFn(slug))) return slug
   }
 

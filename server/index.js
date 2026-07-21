@@ -1000,7 +1000,8 @@ app.post('/api/invites/create-link', async (req, res) => {
 
     let slug
     try {
-      slug = await generateUniqueSlug(inviteeFirstName, async (candidate) => {
+      // Neutral slug (2026-07-21): the typed first name never feeds the URL.
+      slug = await generateUniqueSlug(async (candidate) => {
         const { data } = await supabase
           .from('invites')
           .select('id')
