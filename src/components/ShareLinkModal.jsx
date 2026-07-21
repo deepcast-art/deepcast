@@ -64,7 +64,7 @@ export default function ShareLinkModal({ open, onClose, filmId, parentInviteId, 
   const handleCopy = async () => {
     if (!generated?.url) return
     try {
-      await navigator.clipboard.writeText(`I watched this and thought of you — ${generated.url}`)
+      await navigator.clipboard.writeText(generated.url)
       setCopied(true)
     } catch {
       setCopied(false)
@@ -122,9 +122,6 @@ export default function ShareLinkModal({ open, onClose, filmId, parentInviteId, 
         {generated && (
           <div className="mt-7 border-t border-mist/[0.12] pt-6">
             <p className="break-all font-sans text-sm text-mist">{generated.url}</p>
-            <p className="mt-3 font-serif-v3 text-base italic text-smoke">
-              &ldquo;I watched this and thought of you &mdash; {generated.url}&rdquo;
-            </p>
             <button
               type="button"
               onClick={handleCopy}

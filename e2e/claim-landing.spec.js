@@ -156,7 +156,8 @@ test.describe('three-page claim arc', () => {
     await page.getByPlaceholder('Their first name').fill('Jordan')
     await page.getByRole('button', { name: /Create their invitation/i }).click()
     await expect(page.getByText('http://localhost:3000/jordan-ab2c').first()).toBeVisible()
-    await expect(page.getByText(/I watched this and thought of you —/)).toBeVisible()
+    // Bare link only (2026-07-21): no pre-written share message anywhere.
+    await expect(page.getByText(/I watched this and thought of you —/)).toHaveCount(0)
     await expect(page.getByRole('button', { name: /Copy their invitation/i })).toBeVisible()
     await expect(page.getByText(/You can share 4 tickets for this film/)).toBeVisible()
     // The newest-used stub dims in sync with the text count.

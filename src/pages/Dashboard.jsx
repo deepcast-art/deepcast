@@ -1119,9 +1119,7 @@ export default function Dashboard() {
                                               type="button"
                                               onClick={async () => {
                                                 try {
-                                                  await navigator.clipboard.writeText(
-                                                    `I watched this and thought of you — ${url}`
-                                                  )
+                                                  await navigator.clipboard.writeText(url)
                                                   setCopiedTicketId(row.id)
                                                 } catch {
                                                   setCopiedTicketId(null)
@@ -1129,7 +1127,7 @@ export default function Dashboard() {
                                               }}
                                               className="cursor-pointer rounded-none border border-border px-2 py-0.5 text-[9px] uppercase tracking-wider text-text-muted transition-colors hover:border-text-muted hover:text-text"
                                             >
-                                              {copiedTicketId === row.id ? 'Copied' : 'Copy the message'}
+                                              {copiedTicketId === row.id ? 'Copied' : 'Copy their invitation'}
                                             </button>
                                           </span>
                                         )}

@@ -370,7 +370,7 @@ export default function ClaimWatch() {
   const handleCopy = async () => {
     if (!generated?.url) return
     try {
-      await navigator.clipboard.writeText(`I watched this and thought of you — ${generated.url}`)
+      await navigator.clipboard.writeText(generated.url)
       setCopied(true)
     } catch {
       setCopied(false)
@@ -519,9 +519,6 @@ export default function ClaimWatch() {
               </p>
               <p className="mt-3 break-all font-serif-v3 text-[clamp(1.1875rem,3vw,1.4375rem)] text-paper/90">
                 {generated.url}
-              </p>
-              <p className="mx-auto mt-5 font-serif-v3 text-[1.0625rem] italic leading-[1.7] text-warm/85">
-                “I watched this and thought of you — {generated.url}”
               </p>
               <button
                 type="button"

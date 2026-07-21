@@ -50,7 +50,7 @@ export default function CreatorLinkPanel({ filmId, onCreated }) {
   const handleCopy = async () => {
     if (!generated?.url) return
     try {
-      await navigator.clipboard.writeText(`I watched this and thought of you — ${generated.url}`)
+      await navigator.clipboard.writeText(generated.url)
       setCopied(true)
     } catch {
       setCopied(false)
@@ -85,15 +85,12 @@ export default function CreatorLinkPanel({ filmId, onCreated }) {
       {generated && (
         <div className="mt-4 border-t border-border/60 pt-4">
           <p className="break-all text-sm text-text">{generated.url}</p>
-          <p className="mt-2 text-sm italic text-text-muted">
-            &ldquo;I watched this and thought of you &mdash; {generated.url}&rdquo;
-          </p>
           <button
             type="button"
             onClick={handleCopy}
             className="mt-3 cursor-pointer rounded-none border border-border px-4 py-2 text-xs uppercase tracking-wider text-text-muted transition-colors hover:border-text-muted hover:text-text"
           >
-            {copied ? 'Copied' : 'Copy the message'}
+            {copied ? 'Copied' : 'Copy their invitation'}
           </button>
         </div>
       )}

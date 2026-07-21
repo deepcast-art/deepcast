@@ -244,7 +244,8 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await dialog.getByPlaceholder('Their first name').fill('Noa')
     await dialog.getByRole('button', { name: 'Create their invitation' }).click()
     await expect(dialog.getByText('https://deepcast.art/noa-x9y2').first()).toBeVisible()
-    await expect(dialog.getByText(/I watched this and thought of you/)).toBeVisible()
+    // Bare link only (2026-07-21): no pre-written share message in the modal.
+    await expect(dialog.getByText(/I watched this and thought of you/)).toHaveCount(0)
     await dialog.getByRole('button', { name: 'Close' }).click()
     await expect(page.getByRole('dialog')).toHaveCount(0)
   })
