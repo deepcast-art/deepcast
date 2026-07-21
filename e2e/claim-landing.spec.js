@@ -147,7 +147,7 @@ test.describe('three-page claim arc', () => {
     // without any interaction.
     await expect(page.getByRole('button', { name: /Who is this film for\?/i })).toHaveCount(0)
     await expect(page.getByText(/No algorithm, no feed/)).toBeVisible()
-    await expect(page.getByText(/You have 5 tickets for this film/)).toBeVisible()
+    await expect(page.getByText(/You can share 5 tickets for this film/)).toBeVisible()
     // Ticket stubs: one per granted ticket, none spent yet.
     await expect(page.locator('[data-stub]')).toHaveCount(5)
     await expect(page.locator('[data-stub="used"]')).toHaveCount(0)
@@ -157,8 +157,8 @@ test.describe('three-page claim arc', () => {
     await page.getByRole('button', { name: /Create their invitation/i }).click()
     await expect(page.getByText('http://localhost:3000/jordan-ab2c').first()).toBeVisible()
     await expect(page.getByText(/I watched this and thought of you —/)).toBeVisible()
-    await expect(page.getByRole('button', { name: /Copy the message/i })).toBeVisible()
-    await expect(page.getByText(/You have 4 tickets for this film/)).toBeVisible()
+    await expect(page.getByRole('button', { name: /Copy their invitation/i })).toBeVisible()
+    await expect(page.getByText(/You can share 4 tickets for this film/)).toBeVisible()
     // The newest-used stub dims in sync with the text count.
     await expect(page.locator('[data-stub="used"]')).toHaveCount(1)
     await expect(page.getByRole('link', { name: /See where your ticket went/i })).toBeVisible()

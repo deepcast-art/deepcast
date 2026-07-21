@@ -481,8 +481,8 @@ export default function ClaimWatch() {
               <p
                 className={`${Number.isFinite(stubBalance) ? 'mt-3.5' : 'mt-8'} font-sans text-xs uppercase tracking-[0.24em] text-muted`}
               >
-                You have {tickets ?? '…'} ticket{tickets === 1 ? '' : 's'} for this film. Each
-                admits one person, once.
+                You can share {tickets ?? '…'} ticket{tickets === 1 ? '' : 's'} for this film.
+                Each admits one person, once.
               </p>
 
               {/* First name → generate. */}
@@ -528,7 +528,7 @@ export default function ClaimWatch() {
                 onClick={handleCopy}
                 className="mt-6 min-h-[44px] touch-manipulation border border-warm/20 px-9 py-3 font-sans text-xs uppercase tracking-[0.26em] text-warm transition-colors hover:border-accent hover:text-accent focus-visible:border-accent focus-visible:text-accent focus-visible:outline-none cursor-pointer"
               >
-                {copied ? 'Copied' : 'Copy the message'}
+                {copied ? 'Copied' : 'Copy their invitation'}
               </button>
               <p className="mt-7">
                 <Link
