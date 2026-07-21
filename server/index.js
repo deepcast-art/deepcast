@@ -18,6 +18,7 @@ import {
 import { buildDeletePlan, executeDeletePlan } from './deleteSplice.js'
 import { removeTeammateDecision } from './teamRules.js'
 import { generateUniqueSlug } from './inviteSlug.js'
+import { apiPortRefusal } from './apiPort.js'
 import { resolveAccountlessSharerIdentity } from './claimIdentity.js'
 import { INITIAL_CLAIMANT_TICKETS, ticketSpendDecision, NO_TICKETS_MESSAGE } from '../src/lib/ticketRules.js'
 import { isRoleUnlimitedSharer, filmTicketsRemaining } from '../src/lib/shares.js'
@@ -3337,6 +3338,12 @@ ${gifBlock}
 // ============ START SERVER ============
 
 const PORT = process.env.PORT || 3001
+// Never start on Vite's port (3000) — see server/apiPort.js for the story.
+const portRefusal = apiPortRefusal(PORT)
+if (portRefusal) {
+  console.error(portRefusal)
+  process.exit(1)
+}
 app.listen(PORT, () => {
   console.log(`Deepcast API server running on port ${PORT}`)
 })
