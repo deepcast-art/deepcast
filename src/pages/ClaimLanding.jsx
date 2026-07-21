@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
@@ -90,6 +90,144 @@ function StateShell({ children }) {
       <div className="relative z-10 flex min-h-svh flex-col items-center justify-center px-6 text-center dc-fade-in">
         <LandingLogo />
         {children}
+      </div>
+    </div>
+  )
+}
+
+/* ── The post-claim prologue (founder spec 2026-07-21) ──────────────────
+   A once-per-claim full-screen interstitial: three italic serif lines fade
+   in one after another (each REMAINING once shown), hold, then the whole
+   block fades out and resolves into the watch page. It exists ONLY in the
+   claim-success path — duplicates, sharer-view, dead links, voids, and
+   owner return visits never reach it. No storage of any kind: the
+   exactly-once guarantee is structural (in-memory claim-success state).
+   Copy is founder-approved verbatim; ONE uniform type style, no bolding. */
+const PROLOGUE_LINE_DELAYS_MS = [0, 2500, 5000]
+const PROLOGUE_FADE_MS = 1000
+const PROLOGUE_EXIT_AT_MS = 9000 // line 3 done ~6s + ~3s hold
+const PROLOGUE_HOLD_AFTER_REVEAL_MS = 3000
+const PROLOGUE_REDUCED_HOLD_MS = 4000
+
+function ClaimPrologue({ receiver, sharer, posterUrl, onDone }) {
+  const [reduced] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+  const [allShown, setAllShown] = useState(reduced)
+  const [leaving, setLeaving] = useState(false)
+  const doneRef = useRef(false)
+  const leavingRef = useRef(false)
+  const exitTimer = useRef(null)
+  const shownTimer = useRef(null)
+  const fadeTimer = useRef(null)
+
+  const finish = useCallback(() => {
+    if (doneRef.current) return
+    doneRef.current = true
+    onDone()
+  }, [onDone])
+
+  const beginExit = useCallback(() => {
+    if (leavingRef.current || doneRef.current) return
+    if (reduced) {
+      finish()
+      return
+    }
+    leavingRef.current = true
+    setLeaving(true)
+    fadeTimer.current = setTimeout(finish, PROLOGUE_FADE_MS)
+  }, [reduced, finish])
+
+  /* Warm the watch page while the prologue holds the screen — route chunk,
+     Mux preconnects, poster prefetch. All best-effort and silent: if any of
+     it fails, navigation proceeds exactly as it would have. No video
+     pre-buffering beyond the player's own defaults; the film still waits
+     for the viewer's play press. */
+  useEffect(() => {
+    import('./ClaimWatch.jsx').catch(() => {})
+    const links = ['https://stream.mux.com', 'https://image.mux.com'].map((href) => {
+      const link = document.createElement('link')
+      link.rel = 'preconnect'
+      link.href = href
+      document.head.appendChild(link)
+      return link
+    })
+    if (posterUrl) {
+      const img = new Image()
+      img.src = posterUrl
+    }
+    return () => links.forEach((l) => l.remove())
+  }, [posterUrl])
+
+  useEffect(() => {
+    if (reduced) {
+      // Static lines, a ~4s hold, then straight through — no animation.
+      exitTimer.current = setTimeout(finish, PROLOGUE_REDUCED_HOLD_MS)
+    } else {
+      shownTimer.current = setTimeout(
+        () => setAllShown(true),
+        PROLOGUE_LINE_DELAYS_MS[2] + PROLOGUE_FADE_MS
+      )
+      exitTimer.current = setTimeout(beginExit, PROLOGUE_EXIT_AT_MS)
+    }
+    return () => {
+      clearTimeout(exitTimer.current)
+      clearTimeout(shownTimer.current)
+      clearTimeout(fadeTimer.current)
+    }
+  }, [reduced, finish, beginExit])
+
+  /* Tap-to-advance (can never trap): first tap reveals all three lines
+     instantly; any tap once all are visible skips to the fade-out. */
+  const advance = useCallback(() => {
+    if (leavingRef.current) return
+    if (!reduced && !allShown) {
+      setAllShown(true)
+      clearTimeout(shownTimer.current)
+      clearTimeout(exitTimer.current)
+      exitTimer.current = setTimeout(beginExit, PROLOGUE_HOLD_AFTER_REVEAL_MS)
+      return
+    }
+    beginExit()
+  }, [reduced, allShown, beginExit])
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        advance()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [advance])
+
+  const lines = [
+    `${receiver ? `${receiver}, ` : ''}${sharer} watched this and thought of you.`,
+    'No algorithm decided you should see it. A real person did.',
+    'After watching, you’ll get to do the same — choose the few people who need it next.',
+  ]
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label="Continue to the film"
+      onClick={advance}
+      className={`fixed inset-0 z-[300] flex cursor-default items-center justify-center bg-bg-page px-6 text-center focus:outline-none ${
+        leaving ? 'dc-prologue-out' : ''
+      }`}
+    >
+      <div className="flex w-full max-w-[34rem] flex-col gap-[clamp(1.5rem,3.5svh,2.25rem)]">
+        {lines.map((text, i) => (
+          <p
+            key={i}
+            className={`font-serif-v3 text-[clamp(1.375rem,3.4vw,1.9375rem)] italic leading-[1.6] text-warm ${
+              allShown ? '' : 'dc-prologue-line'
+            }`}
+            style={allShown ? undefined : { animationDelay: `${PROLOGUE_LINE_DELAYS_MS[i]}ms` }}
+          >
+            {text}
+          </p>
+        ))}
       </div>
     </div>
   )
@@ -226,7 +364,8 @@ function devPreviewChain(searchParams) {
  * The old "Dear X," greeting is GONE; "watched this and thought of you"
  * moved to the post-claim prologue.
  *
- * Claiming routes DIRECTLY to /watch/:slug — there is no reveal beat.
+ * Claiming plays the once-per-claim PROLOGUE (see ClaimPrologue below),
+ * then routes to /watch/:slug.
  * Revisit rule: the claimant re-opening their own claimed link (recognized
  * by the safeStorage stash) goes straight to their watch page; anyone else
  * hitting a claimed link gets the dead-link page. Without a stash (new
@@ -320,7 +459,11 @@ export default function ClaimLanding() {
         filmId: result.filmId,
         claimedEmail: trimmed,
       })
-      navigate(`/watch/${slug}`)
+      // Once-per-claim prologue (founder spec 2026-07-21): entered ONLY from
+      // this success path — the early returns above (sharerView, alreadyHeld)
+      // and every other page state can never reach it. It navigates to
+      // /watch/{slug} when it finishes.
+      setState((s) => ({ ...s, phase: 'prologue' }))
     } catch (err) {
       const msg = err.message || 'Something went wrong — please try again.'
       if (/already been accepted/i.test(msg)) {
@@ -387,6 +530,17 @@ export default function ClaimLanding() {
   const giftedLine = receiver
     ? `${receiver}, ${sharer} gifted you a film.`
     : `${sharer} gifted you a film.`
+
+  if (state.phase === 'prologue') {
+    return (
+      <ClaimPrologue
+        receiver={receiver}
+        sharer={sharer}
+        posterUrl={posterUrl}
+        onDone={() => navigate(`/watch/${slug}`)}
+      />
+    )
+  }
 
   if (state.phase === 'claimed') {
     return (

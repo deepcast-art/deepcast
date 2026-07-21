@@ -166,6 +166,14 @@ for (const mode of MODES) {
       await page.getByPlaceholder('you@example.com').fill('alex@example.com')
       await page.getByRole('button', { name: /Accept your invite/i }).click()
 
+      // The post-claim prologue must not depend on storage: it appears and
+      // is tap-skippable even with storage blocked (first tap reveals all,
+      // second skips to the watch page).
+      const prologue = page.getByRole('button', { name: 'Continue to the film' })
+      await expect(prologue).toBeVisible({ timeout: 10_000 })
+      await prologue.click()
+      await prologue.click()
+
       await expect(page).toHaveURL(/\/watch\/alex-e2e1$/, { timeout: 15_000 })
       await expect(page.locator('mux-player')).toBeAttached({ timeout: 45_000 })
       expect(jsErrors, 'no uncaught JS errors').toEqual([])

@@ -117,6 +117,8 @@ test.describe('three-page claim arc', () => {
     // Founder copy, verbatim — and the claim form is gone.
     await expect(page.getByText('You already hold this film.')).toBeVisible()
     await expect(page.getByPlaceholder('you@example.com')).toHaveCount(0)
+    // Duplicate outcomes never see the prologue.
+    await expect(page.getByRole('button', { name: 'Continue to the film' })).toHaveCount(0)
     // Lands on the existing dashboard (sign-in page when this browser has
     // no session — typing an email never opens someone's account).
     await page.waitForURL(/\/(dashboard|login)/, { timeout: 10000 })
@@ -141,8 +143,20 @@ test.describe('three-page claim arc', () => {
     await page.getByPlaceholder('you@example.com').fill('alex@example.com')
     await page.getByRole('button', { name: /Accept your invite/i }).click()
 
-    // PAGE 2: routed DIRECTLY to the watch page — no reveal beat.
-    await expect(page).toHaveURL(/\/watch\/alex-h4k2$/)
+    // The once-per-claim PROLOGUE (2026-07-21): line 1 fades in immediately;
+    // the first tap reveals all three lines instantly; a further tap skips
+    // to the fade-out and the watch page.
+    await expect(page.getByText('Alex, Ien watched this and thought of you.')).toBeVisible()
+    const prologue = page.getByRole('button', { name: 'Continue to the film' })
+    await prologue.click()
+    await expect(
+      page.getByText('No algorithm decided you should see it. A real person did.')
+    ).toBeVisible()
+    await expect(page.getByText(/choose the few people who need it next/)).toBeVisible()
+    await prologue.click()
+
+    // PAGE 2: the watch page.
+    await expect(page).toHaveURL(/\/watch\/alex-h4k2$/, { timeout: 10_000 })
     await expect(page.getByRole('heading', { name: 'A Sacred Pause' })).toBeVisible()
     // Per-film runtime (fixture duration 1932.6s) + the constant tail.
     await expect(page.getByText('32 minutes. Headphones recommended.')).toBeVisible()
@@ -180,10 +194,37 @@ test.describe('three-page claim arc', () => {
     await expect(page.getByRole('link', { name: /Your dashboard/i })).toBeVisible()
 
     // REVISIT RULE: re-opening the claimed landing slug routes the owner
-    // (recognized by stash) straight back to their watch page.
+    // (recognized by stash) straight back to their watch page — never the
+    // prologue again.
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await expect(page).toHaveURL(/\/watch\/alex-h4k2$/)
+    await expect(page.getByRole('button', { name: 'Continue to the film' })).toHaveCount(0)
 
+    expect(jsErrors).toEqual([])
+  })
+
+  test('prologue honors reduced motion: all lines static, then auto-arrival with no taps', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    let claimed = false
+    await page.route('**/api/invites/link/**', (route) =>
+      route.fulfill({ json: claimed ? LINK_CLAIMED : LINK_CREATED })
+    )
+    await page.route('**/api/invites/claim', (route) => {
+      claimed = true
+      return route.fulfill({ json: CLAIM_RESPONSE })
+    })
+    await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
+    await page.getByPlaceholder('you@example.com').fill('alex@example.com')
+    await page.getByRole('button', { name: /Accept your invite/i }).click()
+
+    // All three lines appear together, statically.
+    await expect(page.getByText('Alex, Ien watched this and thought of you.')).toBeVisible()
+    await expect(
+      page.getByText('No algorithm decided you should see it. A real person did.')
+    ).toBeVisible()
+    await expect(page.getByText(/choose the few people who need it next/)).toBeVisible()
+    // No taps: after the short hold it releases to the watch page on its own.
+    await expect(page).toHaveURL(/\/watch\/alex-h4k2$/, { timeout: 8_000 })
     expect(jsErrors).toEqual([])
   })
 
