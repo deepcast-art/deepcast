@@ -157,21 +157,6 @@ describe('buildConstellationLayout', () => {
     expect(layout.creatorLabel).toBe('Ien')
   })
 
-  it('creatorTicketNo passes through stored-only (null hides the line)', () => {
-    const rows = [inv('a', CREATOR)]
-    expect(
-      buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR, creatorTicketNo: 1 })
-        .creatorTicketNo
-    ).toBe(1)
-    expect(
-      buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR }).creatorTicketNo
-    ).toBeNull()
-    expect(
-      buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR, creatorTicketNo: 'x' })
-        .creatorTicketNo
-    ).toBeNull()
-  })
-
   it('journey counts: film-wide invites and the viewer\'s whole subtree', () => {
     const layout = fixture()
     expect(layout.inviteCount).toBe(11)

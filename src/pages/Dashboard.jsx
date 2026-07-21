@@ -64,9 +64,6 @@ export default function Dashboard() {
   // loaders unchanged. Creator id/name feed the constellation layout.
   const [, setViewerFilmTitle] = useState('')
   const [viewerFilmCreatorId, setViewerFilmCreatorId] = useState(null)
-  /** films.creator_ticket_no for the selected film — the filmmaker's own №1
-   *  (owner spec 2026-07-22); null until the migration lands. */
-  const [viewerCreatorTicketNo, setViewerCreatorTicketNo] = useState(null)
   const [viewerInviteToken, setViewerInviteToken] = useState(null)
   const [viewerFilmInvites, setViewerFilmInvites] = useState([])
   const [viewerAllFilms, setViewerAllFilms] = useState([])
@@ -156,7 +153,6 @@ export default function Dashboard() {
       setViewerFilmInvites([])
       setViewerCreatorName('')
       setViewerFilmCreatorId(null)
-      setViewerCreatorTicketNo(null)
       setViewerInviteToken(null)
       return
     }
@@ -178,7 +174,6 @@ export default function Dashboard() {
     setViewerFilmTitle(filmRow?.title || '')
     setViewerFilmInvites(allInv || [])
     setViewerFilmCreatorId(filmRow?.creator_id || null)
-    setViewerCreatorTicketNo(filmRow?.creator_ticket_no ?? null)
 
     let cname = ''
     if (filmRow?.creator_id) {
@@ -313,7 +308,6 @@ export default function Dashboard() {
     setViewerFilmTitle(filmRow?.title || '')
     setViewerFilmInvites(allInv || [])
     setViewerFilmCreatorId(filmRow?.creator_id || null)
-    setViewerCreatorTicketNo(filmRow?.creator_ticket_no ?? null)
 
     let cname = knownCreatorRes?.data?.name || ''
     if (!cname && filmRow?.creator_id && filmRow.creator_id !== knownCreatorId) {
@@ -627,7 +621,6 @@ export default function Dashboard() {
           filmInvites={viewerFilmInvites}
           creatorId={viewerFilmCreatorId}
           creatorName={viewerCreatorName}
-          creatorTicketNo={viewerCreatorTicketNo}
           viewerInviteId={viewerFocusInviteId}
           ticketsRemaining={invitesLeft}
           ticketsGiven={sentCount}

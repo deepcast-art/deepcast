@@ -246,19 +246,6 @@ export default function ConstellationMap({ layout }) {
                 >
                   FILMMAKER
                 </text>
-                {layout.creatorTicketNo != null && (
-                  <text
-                    x={n.x}
-                    y={n.y + 70}
-                    textAnchor="middle"
-                    fill="#C7A96B"
-                    fontSize="7.5"
-                    letterSpacing="2.5"
-                    style={{ fontFamily: LABEL_FONT }}
-                  >
-                    TICKET NO. {layout.creatorTicketNo}
-                  </text>
-                )}
               </g>
             )
           }

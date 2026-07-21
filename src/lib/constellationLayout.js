@@ -52,7 +52,6 @@ export function buildConstellationLayout({
   filmInvites = [],
   creatorId = null,
   creatorName = '',
-  creatorTicketNo = null,
   teamMemberIds = null,
   viewerInviteId = null,
 } = {}) {
@@ -322,8 +321,6 @@ export function buildConstellationLayout({
     dimEdges,
     goldEdges,
     creatorLabel,
-    /** The filmmaker's own №1 (owner spec 2026-07-22); null hides the line. */
-    creatorTicketNo: Number.isInteger(creatorTicketNo) ? creatorTicketNo : null,
     hasYou: Boolean(you),
     /** Film-wide generated total, ghosts excluded — the journey line's X. */
     inviteCount: invites.length,
