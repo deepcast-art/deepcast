@@ -13,7 +13,7 @@
  *    ("Already held this film — ticket returned."), which is a ledger
  *    view, not an existence view.
  */
-import { withoutDemoGhosts } from './demoGhosts.js'
+import { withoutDemoGhosts, isDemoGhostInvite } from './demoGhosts.js'
 
 export const VOID_INVITE_STATUS = 'void'
 export const isVoidInvite = (inv) => inv?.status === VOID_INVITE_STATUS
@@ -28,3 +28,10 @@ export function existingInvites(invites = [], { includeGhosts = false } = {}) {
 
 /** "Tickets given" — voided (refunded) links no longer count. */
 export const countTicketsGiven = (sentInvites = []) => existingInvites(sentInvites).length
+
+/** The backfill's numbering rule (systemic fix, 2026-07-22): a row gets a
+ *  ticket number only if it is unnumbered AND it exists — never a demo
+ *  ghost, never a voided link. Voided rows are never numbered, anywhere,
+ *  ever. */
+export const needsTicketNumber = (inv) =>
+  inv?.ticket_no == null && !isDemoGhostInvite(inv) && !isVoidInvite(inv)

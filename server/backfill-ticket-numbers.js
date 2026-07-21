@@ -29,6 +29,7 @@ import 'dotenv/config'
 import readline from 'readline'
 import { createClient } from '@supabase/supabase-js'
 import { isDemoGhostInvite } from '../src/lib/demoGhosts.js'
+import { isVoidInvite, needsTicketNumber } from '../src/lib/inviteExistence.js'
 
 const EXECUTE = process.argv.includes('--execute')
 const CONFIRM_PHRASE = 'BACKFILL TICKET NUMBERS'
@@ -57,7 +58,7 @@ async function main() {
     supabase.from('films').select('id, title, ticket_seq'),
     supabase
       .from('invites')
-      .select('id, film_id, recipient_name, recipient_email, created_at, ticket_no')
+      .select('id, film_id, recipient_name, recipient_email, status, created_at, ticket_no')
       .order('created_at', { ascending: true }),
   ])
   if (fErr || iErr) fail(fErr?.message || iErr?.message)
@@ -69,13 +70,17 @@ async function main() {
   for (const film of films || []) {
     const rows = (invites || []).filter((inv) => inv.film_id === film.id)
     const ghosts = rows.filter(isDemoGhostInvite).length
-    const toNumber = rows.filter((inv) => inv.ticket_no == null && !isDemoGhostInvite(inv))
+    const voids = rows.filter(isVoidInvite).length
+    // ONE existence rule (src/lib/inviteExistence.js): ghosts and voided
+    // links are never numbered, anywhere, ever.
+    const toNumber = rows.filter(needsTicketNumber)
     if (!toNumber.length) continue
     const start = film.ticket_seq
     plans.push({
       film,
       startSeq: start,
       ghosts,
+      voids,
       assignments: toNumber.map((inv, i) => ({ inv, ticketNo: start + 1 + i })),
     })
   }
@@ -85,7 +90,9 @@ async function main() {
     console.log(
       `  ${p.film.title} — ${p.assignments.length} invite(s), №${p.startSeq + 1}…№${
         p.startSeq + p.assignments.length
-      }${p.ghosts ? ` (${p.ghosts} demo ghost row(s) skipped — never numbered)` : ''}`
+      }${p.ghosts ? ` (${p.ghosts} demo ghost row(s) skipped — never numbered)` : ''}${
+        p.voids ? ` (${p.voids} voided link(s) skipped — never numbered)` : ''
+      }`
     )
     for (const a of p.assignments) {
       const who = a.inv.recipient_name?.trim() || a.inv.recipient_email || '(unnamed link)'

@@ -29,8 +29,13 @@
 
 const norm = (v) => String(v ?? '').trim().toLowerCase()
 
+// Dead-end rows the sweep removes with their person: unclaimed links AND
+// voided duplicate links (Fix B follow-up 2026-07-22 — 'void' predated this
+// sweep, which left orphan void rows behind when a person was removed).
 const isUnclaimedLink = (inv) =>
-  inv.status === 'created' && !inv.claimed_email && inv.claimed_by == null
+  (inv.status === 'created' || inv.status === 'void') &&
+  !inv.claimed_email &&
+  inv.claimed_by == null
 
 /**
  * Pure plan assembly from already-fetched rows.
@@ -196,9 +201,13 @@ export async function executeDeletePlan(supabase, plan) {
     result.repointed += 1
   }
 
-  // 2+4) Dead links first, then the received rows (children-first ordering).
-  const deadIds = plan.deleteInvites.filter((i) => i.status === 'created').map((i) => i.id)
-  const receivedIds = plan.deleteInvites.filter((i) => i.status !== 'created').map((i) => i.id)
+  // 2+4) Dead links (unclaimed + voided) first, then the received rows
+  // (children-first ordering).
+  const DEAD_STATUSES = ['created', 'void']
+  const deadIds = plan.deleteInvites.filter((i) => DEAD_STATUSES.includes(i.status)).map((i) => i.id)
+  const receivedIds = plan.deleteInvites
+    .filter((i) => !DEAD_STATUSES.includes(i.status))
+    .map((i) => i.id)
 
   // 3) Watch sessions before their invites go (both keys already resolved).
   if (plan.watchSessionIds.length) {

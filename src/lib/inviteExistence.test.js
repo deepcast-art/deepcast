@@ -3,6 +3,7 @@ import {
   existingInvites,
   isVoidInvite,
   countTicketsGiven,
+  needsTicketNumber,
   VOID_INVITE_STATUS,
   VOID_TICKET_LABEL,
 } from './inviteExistence.js'
@@ -32,6 +33,15 @@ describe('inviteExistence — the ONE who-exists rule', () => {
     expect(
       countTicketsGiven([inv('a'), inv('b', { status: 'claimed' }), inv('v', { status: VOID_INVITE_STATUS })])
     ).toBe(2)
+  })
+
+  it('needsTicketNumber: voided rows are never numbered, anywhere, ever', () => {
+    expect(needsTicketNumber(inv('a'))).toBe(true)
+    expect(needsTicketNumber(inv('n', { ticket_no: 4 }))).toBe(false)
+    expect(needsTicketNumber(inv('v', { status: VOID_INVITE_STATUS }))).toBe(false)
+    expect(needsTicketNumber(inv('g', { recipient_email: 'x@demo.invalid' }))).toBe(false)
+    // A voided row that somehow carries a number is still never re-numbered.
+    expect(needsTicketNumber(inv('vn', { status: VOID_INVITE_STATUS, ticket_no: 9 }))).toBe(false)
   })
 
   it('exposes the founder-approved voided-row label verbatim', () => {
