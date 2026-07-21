@@ -309,9 +309,9 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
       const aside = page.locator('aside')
       const targets = [
         aside.getByRole('button', { name: 'About Deepcast' }),
-        aside.getByRole('link', { name: 'Contact' }),
-        aside.getByRole('link', { name: 'Report a bug' }),
         aside.getByRole('button', { name: 'Edit your first name' }),
+        aside.getByRole('link', { name: 'Report a bug' }),
+        aside.getByRole('link', { name: 'Contact' }),
         aside.getByRole('button', { name: 'Sign out' }),
       ]
       for (const target of targets) {

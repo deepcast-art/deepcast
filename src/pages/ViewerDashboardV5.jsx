@@ -187,16 +187,16 @@ export default function ViewerDashboardV5({
       >
         About Deepcast
       </button>
-      <a href={`mailto:${CONTACT_EMAIL}`} className={sideLinkClass}>
-        Contact
-      </a>
+      <NameEditor editor={nameEditor} />
       <a
         href={`mailto:${BUG_REPORT_EMAIL}?subject=${encodeURIComponent(BUG_REPORT_SUBJECT)}`}
         className={sideLinkClass}
       >
         Report a bug
       </a>
-      <NameEditor editor={nameEditor} />
+      <a href={`mailto:${CONTACT_EMAIL}`} className={sideLinkClass}>
+        Contact
+      </a>
       <button type="button" onClick={onSignOut} className={sideLinkClass}>
         Sign out
       </button>
