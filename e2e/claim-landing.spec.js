@@ -84,7 +84,7 @@ test.describe('three-page claim arc', () => {
     // "watched this and thought of you" left this page for the prologue.
     await expect(page.getByText(/watched this and thought of you/)).toHaveCount(0)
     // The private-invitation line with the permanent ticket number.
-    await expect(page.getByText('By private invitation only · Ticket №8')).toBeVisible()
+    await expect(page.getByText('By private invitation only · Ticket No. 8')).toBeVisible()
     // The thread (depth-1) with its context label, and the film block.
     await expect(page.getByText('How this reached you')).toBeVisible()
     await expect(page.getByText('you', { exact: true })).toBeVisible()

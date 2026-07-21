@@ -360,7 +360,7 @@ function devPreviewChain(searchParams) {
  * receiver drops the prefix, missing sharer reads "Someone") / lineage
  * thread / film title / transmission hook / inline email + Accept CTA /
  * "This invitation admits one person, once." / "By private invitation only
- * · Ticket №{N}" (the ticket segment renders only when ticketNo exists).
+ * · Ticket No. {N}" (the ticket segment renders only when ticketNo exists).
  * The old "Dear X," greeting is GONE; "watched this and thought of you"
  * moved to the post-claim prologue.
  *
@@ -654,7 +654,7 @@ export default function ClaimLanding() {
                 This invitation admits one person, once.
               </p>
               <p className="mt-2 font-sans text-[10px] uppercase tracking-[0.24em] text-warm/45">
-                By private invitation only{ticketNo != null ? ` · Ticket №${ticketNo}` : ''}
+                By private invitation only{ticketNo != null ? ` · Ticket No. ${ticketNo}` : ''}
               </p>
             </>
           )}
