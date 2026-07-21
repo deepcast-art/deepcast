@@ -278,8 +278,8 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
   test('side links stay ON SCREEN without scrolling, even at short/zoomed heights', async ({ page }) => {
     // 900 = the owner's stated bar; 660 ≈ a small laptop window or ~125%
     // browser zoom, where the old sidebar buried the links under an
-    // invisible internal scroll. The links block is pinned, so the four
-    // links' boxes must sit fully inside the viewport at BOTH heights.
+    // invisible internal scroll. The links block is pinned, so every
+    // link's box must sit fully inside the viewport at BOTH heights.
     for (const h of [900, 660]) {
       await page.setViewportSize({ width: 1440, height: h })
       await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
@@ -288,6 +288,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
       const targets = [
         aside.getByRole('link', { name: 'About Deepcast' }),
         aside.getByRole('link', { name: 'Contact' }),
+        aside.getByRole('link', { name: 'Report a bug' }),
         aside.getByRole('button', { name: 'Edit your first name' }),
         aside.getByRole('button', { name: 'Sign out' }),
       ]

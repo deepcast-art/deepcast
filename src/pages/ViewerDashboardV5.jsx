@@ -21,6 +21,8 @@ import ConstellationMap from '../components/ConstellationMap'
 import { safeLocalStorage } from '../lib/safeStorage.js'
 
 const CONTACT_EMAIL = 'hello@deepcast.art'
+const BUG_REPORT_EMAIL = 'ien.chi96@gmail.com'
+const BUG_REPORT_SUBJECT = 'Deepcast bug report'
 
 const sideLinkClass =
   'text-left font-sans text-[0.6875rem] uppercase tracking-[0.22em] text-smoke transition-colors hover:text-mist'
@@ -169,7 +171,7 @@ export default function ViewerDashboardV5({
     'w-full border border-gold bg-gold px-4 py-[1.125rem] text-center font-sans text-[0.8125rem] uppercase tracking-[0.26em] text-ink transition-colors duration-300 hover:bg-transparent hover:text-gold-soft focus-visible:bg-transparent focus-visible:text-gold-soft focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-gold disabled:hover:text-ink'
 
   // One tier (Fix A, 2026-07-21): every viewer is a signed-in user — the
-  // four links show for everyone, desktop and mobile.
+  // menu links show for everyone, desktop and mobile.
   const menuLinks = (
     <>
       <Link to="/about" className={sideLinkClass} onClick={() => setMenuOpen(false)}>
@@ -177,6 +179,12 @@ export default function ViewerDashboardV5({
       </Link>
       <a href={`mailto:${CONTACT_EMAIL}`} className={sideLinkClass}>
         Contact
+      </a>
+      <a
+        href={`mailto:${BUG_REPORT_EMAIL}?subject=${encodeURIComponent(BUG_REPORT_SUBJECT)}`}
+        className={sideLinkClass}
+      >
+        Report a bug
       </a>
       <NameEditor editor={nameEditor} />
       <button type="button" onClick={onSignOut} className={sideLinkClass}>
