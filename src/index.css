@@ -311,8 +311,8 @@ img {
 
 /* Post-claim prologue (2026-07-21, softened 2.5x by owner revision): three
    staggered line fade-ins of 2.5s each (line stays once shown — delays set
-   inline: 0 / 3s / 6s, fades overlap) and the 2.5s whole-block fade-out
-   that resolves into the watch page.
+   inline: 0 / 3s / 6s, fades overlap) and the 3s whole-block fade-out
+   that resolves into the watch page (lengthened from 2.5s, owner polish).
    The line fade-in uses the TIME-MIRROR of the fade-out's curve (owner
    revision: match the out's character). Both are pure opacity at 2.5s; the
    shared --ease-default is fast-start/slow-tail, which reads gentle on the
@@ -327,7 +327,7 @@ img {
   to { opacity: 0; }
 }
 .dc-prologue-out {
-  animation: dc-fade-out 2.5s var(--ease-default) both;
+  animation: dc-fade-out 3s var(--ease-default) both;
 }
 
 .dc-rise-1 { animation-delay: 0.15s; }
