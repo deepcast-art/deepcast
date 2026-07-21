@@ -1,6 +1,8 @@
 <!doctype html>
-<!-- OG card candidate 1 — "Admit One": the ticket itself, quiet and literal.
-     1200x630. App tokens: ink #080c18, gold #c7a96b, warm #dddddd.
+<!-- OG card candidate 1 — "Admit One" (PICKED, revised 2026-07-21):
+     real Deepcast wordmark (the Deepcast_Logo_Transparent.svg markup with the
+     app's on-dark fill #d1d1d1 — the SVG asset's own #1A1A1A is invisible on
+     this field), ticket scaled up ~1.2x. 1200x630.
      Fonts load from ../../public/fonts/ (screenshot via file://). -->
 <html lang="en">
 <head>
@@ -8,13 +10,14 @@
 <style>
   @font-face { font-family: 'Phoenix'; src: url('../../public/fonts/phoenix-regular.otf') format('opentype'); font-weight: 400; }
   @font-face { font-family: 'Phoenix'; src: url('../../public/fonts/phoenix-medium.otf') format('opentype'); font-weight: 500; }
+  @font-face { font-family: 'Phoenix'; src: url('../../public/fonts/Phoenix-Semi-Bold.otf') format('opentype'); font-weight: 600; }
   @font-face { font-family: 'Garamond Premier Pro Italic'; src: url('../../public/fonts/garamond-premier-pro-italic.ttf') format('truetype'); }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 1200px; height: 630px; overflow: hidden; }
   body {
     background:
-      radial-gradient(ellipse 900px 520px at 50% 44%, rgba(199, 169, 107, 0.07), transparent 68%),
+      radial-gradient(ellipse 980px 560px at 50% 44%, rgba(199, 169, 107, 0.07), transparent 68%),
       radial-gradient(ellipse 1400px 900px at 50% 50%, #0a0f1d 0%, #080c18 62%, #05080f 100%);
     display: flex; align-items: center; justify-content: center;
     font-family: 'Phoenix', sans-serif; color: #dddddd;
@@ -22,49 +25,65 @@
 
   .ticket {
     position: relative;
-    width: 780px; height: 316px;
+    width: 952px; height: 388px;
     border: 1px solid rgba(199, 169, 107, 0.6);
     background: linear-gradient(160deg, #0d1322 0%, #0a0f1c 55%, #0b101e 100%);
-    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), inset 0 0 60px rgba(8, 12, 24, 0.8);
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), inset 0 0 70px rgba(8, 12, 24, 0.8);
     display: flex;
   }
-  /* inner hairline */
   .ticket::before {
-    content: ''; position: absolute; inset: 7px;
+    content: ''; position: absolute; inset: 8px;
     border: 1px solid rgba(199, 169, 107, 0.18);
     pointer-events: none;
   }
 
-  .body { flex: 1; padding: 54px 40px 48px 62px; display: flex; flex-direction: column; justify-content: space-between; }
-  .brand { font-size: 15px; letter-spacing: 0.42em; color: #c7a96b; font-weight: 500; }
-  .line  { font-family: 'Garamond Premier Pro Italic', Georgia, serif; font-style: italic; font-size: 52px; line-height: 1.18; color: #e6e2d8; max-width: 480px; }
-  .rule  { font-size: 12.5px; letter-spacing: 0.3em; color: rgba(221, 221, 221, 0.42); }
+  .body { flex: 1; padding: 62px 46px 56px 76px; display: flex; flex-direction: column; justify-content: space-between; }
 
-  /* perforation + stub */
+  /* The real wordmark: Deepcast_Logo_Transparent.svg markup, on-dark fill.
+     The asset centers its text in an 800-wide viewBox, so a small negative
+     margin optically left-aligns the glyphs with the lines below. */
+  .brand svg { height: 40px; width: auto; display: block; margin-left: -66px; }
+
+  .line  { font-family: 'Garamond Premier Pro Italic', Georgia, serif; font-style: italic; font-size: 63px; line-height: 1.18; color: #e6e2d8; max-width: 560px; }
+  .rule  { font-size: 15px; letter-spacing: 0.3em; color: rgba(221, 221, 221, 0.42); }
+
   .perf {
     position: relative; width: 0;
     border-left: 1.5px dashed rgba(199, 169, 107, 0.4);
   }
   .notch {
-    position: absolute; left: -14px; width: 27px; height: 27px; border-radius: 50%;
+    position: absolute; left: -16px; width: 32px; height: 32px; border-radius: 50%;
     background: #080c18;
   }
-  .notch.top { top: -15px; box-shadow: inset 0 -2px 0 rgba(199, 169, 107, 0.35); }
-  .notch.bot { bottom: -15px; box-shadow: inset 0 2px 0 rgba(199, 169, 107, 0.35); }
+  .notch.top { top: -17px; box-shadow: inset 0 -2px 0 rgba(199, 169, 107, 0.35); }
+  .notch.bot { bottom: -17px; box-shadow: inset 0 2px 0 rgba(199, 169, 107, 0.35); }
 
   .stub {
-    width: 178px; display: flex; align-items: center; justify-content: center;
+    width: 214px; display: flex; align-items: center; justify-content: center;
   }
   .stub span {
     transform: rotate(90deg); white-space: nowrap;
-    font-size: 16px; letter-spacing: 0.5em; color: #c7a96b; font-weight: 500;
+    font-size: 19px; letter-spacing: 0.5em; color: #c7a96b; font-weight: 500;
   }
 </style>
 </head>
 <body>
   <div class="ticket">
     <div class="body">
-      <div class="brand">DEEPCAST</div>
+      <div class="brand">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 180" role="img" aria-label="Deepcast">
+          <text
+            x="400"
+            y="140"
+            font-family="'Phoenix', 'Helvetica Neue', Helvetica, sans-serif"
+            font-size="110"
+            font-weight="600"
+            fill="#d1d1d1"
+            text-anchor="middle"
+            letter-spacing="-0.02em"
+          >deepcast</text>
+        </svg>
+      </div>
       <div class="line">You’ve been given a&nbsp;ticket.</div>
       <div class="rule">ADMITS ONE PERSON, ONCE</div>
     </div>
