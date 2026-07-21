@@ -274,13 +274,6 @@ export default function ViewerDashboardV5({
             </div>
           </div>
 
-          {/* Founder-approved verbatim (2026-07-21) — the sidebar's quiet aside.
-              (The share surfaces keep their own approved constraint line.) */}
-          <p className="mt-6 font-serif-v3 text-sm italic leading-relaxed text-smoke/80">
-            This film reached you because someone thought of you. No algorithm, no feed. Films here
-            spread by private invite &amp; real humans only.
-          </p>
-
           {canShare && (
             <button type="button" onClick={onShare} disabled={shareDisabled} className={`mt-7 ${shareCtaClass}`}>
               Share this film
