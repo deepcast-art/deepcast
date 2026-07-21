@@ -2,7 +2,7 @@
 
 ## Project overview
 
-Deepcast is an invite-based social network for sharing films through word of mouth. Users receive screening invites, watch films, and pass invitations along to others, forming a network graph.
+Deepcast optimizes for depth over reach. It is an invite-only network where substantive films spread person to person through trusted relationships — each viewer receives a ticket from someone who thought of them, watches, and passes the film onward — toward deep impact and resonance rather than raw numbers. Deepcasting, not broadcasting. Depth is the heart of the platform; everything else — the tickets, the constellation, invite-only — exists to serve it.
 
 ## ⚠️ PRODUCTION HAS REAL USERS (June 2026)
 
@@ -35,7 +35,7 @@ These are per-film hardcodes pending the multi-film / editable-welcome work, whe
 ## Platform principles (use these when writing any user-facing copy or making product decisions)
 
 - Deepcast is private, human-to-human film sharing. No algorithms, no feed, no AI curation. Films travel person to person, by invitation only — "the modern-day version of storytelling around the fire."
-- The core idea: going from broadcasting to deepcasting. Millions of views mean nothing without resonance. We optimize for humanity and substance, never for attention, virality, extraction, polarization, or spectacle.
+- The core idea: depth over reach — going from broadcasting to deepcasting. Millions of views mean nothing without resonance; what matters is substantive films reaching people through deep relationships and trust built person to person, spreading through trusted networks toward deep impact. We optimize for humanity and substance, never for attention, virality, extraction, polarization, or spectacle. Depth is the heart; tickets, the constellation, and invite-only all exist to serve it.
 - Origin: the founder (Ien Chi) is a lifelong filmmaker; at Jubilee he helped grow a YouTube channel to 5M subscribers / 1B+ views and watched platform incentives push everything toward clickbait. Deepcast is the counter-bet — preserving real human curation and connection in the age of AI slop.
 - Deepcast is NOT: a gatekeeper, a content factory, a quantity play, or an attention business.
 - It's for people who live for higher ideals — artists, creators, mission-driven people — and for filmmakers making bold, substantive work that might not survive gatekeepers: "ideas like mustard seeds" that grow once championed.
@@ -219,6 +219,7 @@ The single source of truth for which invite rows count: voided links count NOWHE
 - **Ticket expiry refund** — approved spec in `docs/ticket-expiry-refund-spec.md` (14 days unclaimed → sender refunded; the link never dies; late claims never re-charge).
 - **Share-modal "human hands" wording** — the share surfaces still carry the original constraint line ("…pass through human hands only."); the sidebar's new "…spread by private invite & real humans only." applies to the sidebar aside only, pending a decision to unify.
 - **Render region migration (Oregon → Virginia)** — runbook in `docs/render-migration-runbook.md`, awaiting an owner decision.
+- **Session-based duplicate detection** — if a signed-in user opens a claim link for a film they already hold, treat it as a duplicate claim immediately: recognition message, void the link, refund the sender. Extends the existing duplicate machinery with a second trigger. IP-based and name-based detection explicitly REJECTED (false positives; membership privacy leak).
 - Phase 2 items live in `deepcast-mvp-rework.md` (historical record).
 
 **A5 remainder (open):** remove the two legacy email-invite mounts (Upload, Profile) and their quota labels. The `/i/:token` acceptance path and email templates stay forever.
