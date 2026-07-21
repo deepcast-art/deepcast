@@ -1213,6 +1213,9 @@ app.get('/api/invites/link/:slug', async (req, res) => {
       muxPlaybackId: invite.films?.mux_playback_id || null,
       inviteId: invite.id,
       claimOrdinal: invite.claim_ordinal ?? null,
+      // Permanent ticket number (minted at generation) — present for
+      // unclaimed and claimed links alike; null when the row has none.
+      ticketNo: invite.ticket_no ?? null,
       ticketsRemaining: claimedInviteTicketsDisplay(invite, claimAccount, claimFilmWallet),
     })
   } catch (err) {
