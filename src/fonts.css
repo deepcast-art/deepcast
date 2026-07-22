@@ -56,7 +56,13 @@
   font-display: swap;
 }
 
-/* Single-style cut: glyphs are already italic */
+/* Single-style cut: glyphs are already italic (the file's true angle is −18°).
+   The SAME file is registered under BOTH font-style values. Without the italic
+   registration, any element that adds `font-style: italic` (Tailwind's `italic`
+   class) finds no italic face and the browser SYNTHESIZES an oblique skew on
+   top of the already-italic glyphs — the double-slant bug fixed 2026-07-21.
+   With both faces present, italic and normal resolve to the identical glyphs
+   and no browser can ever synthesize a slant on this family again. */
 @font-face {
   font-family: 'Garamond Premier Pro Italic';
   src: url('/fonts/garamond-premier-pro-italic.ttf') format('truetype');
@@ -64,5 +70,14 @@
   font-style: normal;
   font-display: swap;
   /* Only download Latin glyphs — skips extended language sets in the file */
+  unicode-range: U+0020-007E, U+00A0-00FF, U+2018, U+2019, U+201C, U+201D, U+2026, U+2013, U+2014;
+}
+
+@font-face {
+  font-family: 'Garamond Premier Pro Italic';
+  src: url('/fonts/garamond-premier-pro-italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
   unicode-range: U+0020-007E, U+00A0-00FF, U+2018, U+2019, U+201C, U+201D, U+2026, U+2013, U+2014;
 }
