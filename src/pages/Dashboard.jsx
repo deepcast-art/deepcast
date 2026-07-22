@@ -64,6 +64,9 @@ export default function Dashboard() {
   // loaders unchanged. Creator id/name feed the constellation layout.
   const [, setViewerFilmTitle] = useState('')
   const [viewerFilmCreatorId, setViewerFilmCreatorId] = useState(null)
+  // Per-film ghost visibility (films.show_ghosts) — false for every film
+  // unless the owner flips the flag by hand (staging/demo films only).
+  const [viewerShowGhosts, setViewerShowGhosts] = useState(false)
   const [viewerInviteToken, setViewerInviteToken] = useState(null)
   const [viewerFilmInvites, setViewerFilmInvites] = useState([])
   const [viewerAllFilms, setViewerAllFilms] = useState([])
@@ -126,7 +129,9 @@ export default function Dashboard() {
 
   const invitesLeft = !isViewer ? null : filmTicketsRemaining(profile, viewerFilmWallet)
   // "Tickets given" — voided (refunded) duplicate links no longer count.
-  const sentCount = isViewer ? countTicketsGiven(viewerSentInvites) : 0
+  const sentCount = isViewer
+    ? countTicketsGiven(viewerSentInvites, { includeGhosts: viewerShowGhosts })
+    : 0
   // V5 (owner decision 2026-07-20): the dashboard share button is the LINK
   // flow for every viewer — one tier, one wallet read (Fix A 2026-07-21).
   const canShareMore = Boolean(isViewer && viewerFilmId)
@@ -174,6 +179,7 @@ export default function Dashboard() {
     setViewerFilmTitle(filmRow?.title || '')
     setViewerFilmInvites(allInv || [])
     setViewerFilmCreatorId(filmRow?.creator_id || null)
+    setViewerShowGhosts(Boolean(filmRow?.show_ghosts))
 
     let cname = ''
     if (filmRow?.creator_id) {
@@ -308,6 +314,7 @@ export default function Dashboard() {
     setViewerFilmTitle(filmRow?.title || '')
     setViewerFilmInvites(allInv || [])
     setViewerFilmCreatorId(filmRow?.creator_id || null)
+    setViewerShowGhosts(Boolean(filmRow?.show_ghosts))
 
     let cname = knownCreatorRes?.data?.name || ''
     if (!cname && filmRow?.creator_id && filmRow.creator_id !== knownCreatorId) {
@@ -627,6 +634,7 @@ export default function Dashboard() {
           canShare={canShareMore}
           shareDisabled={shareDisabled}
           onShare={openShareModal}
+          showGhosts={viewerShowGhosts}
           nameEditor={{
             editing: editingName,
             draft: nameDraft,

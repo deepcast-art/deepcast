@@ -106,6 +106,8 @@ export default function ViewerDashboardV5({
   onShare,
   nameEditor,
   onSignOut,
+  // Per-film ghost visibility (films.show_ghosts) — staging/demo films only.
+  showGhosts = false,
 }) {
   const navigate = useNavigate()
   /** Mobile menu ALWAYS starts closed and never auto-opens (standing rule). */
@@ -120,8 +122,9 @@ export default function ViewerDashboardV5({
         sentInvites: sentInvites || [],
         filmInvites: filmInvites || [],
         origin: typeof window !== 'undefined' ? window.location.origin : '',
+        includeGhosts: showGhosts,
       }),
-    [sentInvites, filmInvites]
+    [sentInvites, filmInvites, showGhosts]
   )
 
   const constellation = useMemo(
@@ -131,8 +134,9 @@ export default function ViewerDashboardV5({
         creatorId,
         creatorName,
         viewerInviteId,
+        includeGhosts: showGhosts,
       }),
-    [filmInvites, creatorId, creatorName, viewerInviteId]
+    [filmInvites, creatorId, creatorName, viewerInviteId, showGhosts]
   )
 
   // The journey line's counts come from the constellation's tree — ONE

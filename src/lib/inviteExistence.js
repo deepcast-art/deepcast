@@ -26,8 +26,11 @@ export function existingInvites(invites = [], { includeGhosts = false } = {}) {
   return base.filter((inv) => !isVoidInvite(inv))
 }
 
-/** "Tickets given" — voided (refunded) links no longer count. */
-export const countTicketsGiven = (sentInvites = []) => existingInvites(sentInvites).length
+/** "Tickets given" — voided (refunded) links no longer count. `includeGhosts`
+ *  follows the film's show_ghosts flag (ghosts are never the viewer's own
+ *  sends in practice; threaded for one-rule consistency). */
+export const countTicketsGiven = (sentInvites = [], { includeGhosts = false } = {}) =>
+  existingInvites(sentInvites, { includeGhosts }).length
 
 /** The backfill's numbering rule (systemic fix, 2026-07-22): a row gets a
  *  ticket number only if it is unnumbered AND it exists — never a demo

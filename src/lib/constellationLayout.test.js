@@ -221,4 +221,65 @@ describe('buildConstellationLayout', () => {
     }
     expect(layout.width).toBeGreaterThan(900)
   })
+
+  it('show_ghosts flag ON: ghosts join every count and render indistinguishably from real nodes', () => {
+    // Same tree twice: once with real emails, once with the middle branch as
+    // ghosts. recipient_name matched pairwise, so flag-on layouts must be
+    // DEEP-EQUAL — nothing in the output can betray which nodes are ghosts.
+    const build = (ghostDomain) => {
+      seq = 0
+      const dom = (i) => (ghostDomain && i ? { recipient_email: `g${i}@demo-deepcast.invalid` } : {})
+      const rows = [
+        inv('a', CREATOR, null, dom(0)),
+        inv('b', 'user-a', 'a'),
+        inv('g1', CREATOR, null, dom(1)),
+        inv('g2', 'user-g1', 'g1', dom(2)),
+        inv('g3', 'user-g2', 'g2', dom(3)),
+      ]
+      return buildConstellationLayout({
+        filmInvites: rows,
+        creatorId: CREATOR,
+        creatorName: 'Ien',
+        viewerInviteId: 'b',
+        includeGhosts: true,
+      })
+    }
+    expect(build(true)).toEqual(build(false))
+    const layout = build(true)
+    expect(layout.inviteCount).toBe(5) // ghosts counted in X
+    expect(layout.nodes.map((n) => n.id)).toEqual(expect.arrayContaining(['g1', 'g2', 'g3']))
+  })
+
+  it('show_ghosts flag ON: ghost children raise the viewer downstream (journey Y)', () => {
+    seq = 0
+    const rows = [
+      inv('you', CREATOR),
+      inv('kid', 'user-you', 'you'),
+      inv('gkid', 'user-kid', 'kid', { recipient_email: 'gk@demo-deepcast.invalid' }),
+    ]
+    const base = { filmInvites: rows, creatorId: CREATOR, viewerInviteId: 'you' }
+    expect(buildConstellationLayout(base).viewerDownstreamCount).toBe(1)
+    expect(
+      buildConstellationLayout({ ...base, includeGhosts: true }).viewerDownstreamCount
+    ).toBe(2)
+  })
+
+  it('flag OFF (explicit or omitted) is byte-identical to today: ghosts fully absent', () => {
+    // The New Narrative guarantee: a flag-off film with ghost rows lays out
+    // exactly as the same film with the ghost rows never present.
+    seq = 0
+    const real = [inv('a', CREATOR), inv('b', 'user-a', 'a')]
+    seq = 0
+    const withGhosts = [
+      inv('a', CREATOR),
+      inv('b', 'user-a', 'a'),
+      inv('g', CREATOR, null, { recipient_email: 'x@demo.invalid' }),
+    ]
+    const opts = { creatorId: CREATOR, creatorName: 'Ien', viewerInviteId: 'b' }
+    const today = buildConstellationLayout({ filmInvites: real, ...opts })
+    expect(buildConstellationLayout({ filmInvites: withGhosts, ...opts })).toEqual(today)
+    expect(
+      buildConstellationLayout({ filmInvites: withGhosts, ...opts, includeGhosts: false })
+    ).toEqual(today)
+  })
 })

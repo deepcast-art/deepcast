@@ -91,6 +91,34 @@ describe('buildTicketRows', () => {
     expect(countChildrenByParentId([mine, ghostKid])).toEqual({})
   })
 
+  it('show_ghosts flag ON: ghost children count toward Shared to N', () => {
+    const mine = row({ id: 'parent', status: 'claimed' })
+    const ghostKid = row({
+      id: 'gk',
+      parent_invite_id: 'parent',
+      recipient_email: 'x@demo-deepcast.invalid',
+    })
+    const r = buildTicketRows({
+      sentInvites: [mine],
+      filmInvites: [mine, ghostKid],
+      origin: ORIGIN,
+      includeGhosts: true,
+    })[0]
+    expect(r.statusLabel).toBe('Shared to 1 person')
+    expect(countChildrenByParentId([mine, ghostKid], { includeGhosts: true })).toEqual({ parent: 1 })
+  })
+
+  it('flag OFF (explicit) is identical to omitted — the flag-off film renders as today', () => {
+    const mine = row({ id: 'parent', status: 'claimed' })
+    const ghostKid = row({
+      id: 'gk',
+      parent_invite_id: 'parent',
+      recipient_email: 'x@demo.invalid',
+    })
+    const args = { sentInvites: [mine], filmInvites: [mine, ghostKid], origin: ORIGIN }
+    expect(buildTicketRows({ ...args, includeGhosts: false })).toEqual(buildTicketRows(args))
+  })
+
   it('builds claim links from slugs and legacy links from tokens; null when neither', () => {
     const rows = buildTicketRows({
       sentInvites: [

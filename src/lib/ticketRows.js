@@ -15,11 +15,12 @@ import { withoutDemoGhosts } from './demoGhosts.js'
 import { existingInvites, isVoidInvite, VOID_TICKET_LABEL } from './inviteExistence.js'
 import { safeFirstName } from './displayName.js'
 
-/** Onward links per invite id (children by parent_invite_id; ghosts and
- *  voided links excluded — the shared existence rule). */
-export function countChildrenByParentId(filmInvites = []) {
+/** Onward links per invite id (children by parent_invite_id; voided links
+ *  always excluded, ghosts excluded unless the film's show_ghosts flag is on
+ *  — the shared existence rule). */
+export function countChildrenByParentId(filmInvites = [], { includeGhosts = false } = {}) {
   const counts = {}
-  for (const inv of existingInvites(filmInvites)) {
+  for (const inv of existingInvites(filmInvites, { includeGhosts })) {
     if (!inv?.parent_invite_id) continue
     counts[inv.parent_invite_id] = (counts[inv.parent_invite_id] || 0) + 1
   }
@@ -31,11 +32,11 @@ export function countChildrenByParentId(filmInvites = []) {
  *   { id, name, statusKind, statusLabel, sharedCount, link, ticketNo }
  *   link is null when the row has neither a claim slug nor a legacy token.
  */
-export function buildTicketRows({ sentInvites = [], filmInvites = [], origin = '' } = {}) {
-  const childCounts = countChildrenByParentId(filmInvites)
+export function buildTicketRows({ sentInvites = [], filmInvites = [], origin = '', includeGhosts = false } = {}) {
+  const childCounts = countChildrenByParentId(filmInvites, { includeGhosts })
   // Voided rows stay VISIBLE here (the sender's ledger) but are dead as
   // people: special status, no copyable link, never counted anywhere else.
-  const rows = withoutDemoGhosts(sentInvites).map((inv) => {
+  const rows = (includeGhosts ? sentInvites || [] : withoutDemoGhosts(sentInvites)).map((inv) => {
     const sharedCount = childCounts[inv.id] || 0
     let statusKind
     if (isVoidInvite(inv)) statusKind = 'void'

@@ -54,9 +54,14 @@ export function buildConstellationLayout({
   creatorName = '',
   teamMemberIds = null,
   viewerInviteId = null,
+  // Per-film ghost visibility (films.show_ghosts, owner ruling 2026-07-22):
+  // true renders the seeded ghosts as ordinary nodes — same node path, same
+  // counts — for staging/demo films only. Default false = today's behavior.
+  includeGhosts = false,
 } = {}) {
-  // Shared existence rule: no ghosts, no voided links (inviteExistence.js).
-  const invites = existingInvites(filmInvites)
+  // Shared existence rule: no voided links ever; ghosts only when the film's
+  // flag asks for them (inviteExistence.js).
+  const invites = existingInvites(filmInvites, { includeGhosts })
   if (!invites.length) return null
 
   const { parentByInviteId, memberNodes, isCreatorSender } = resolveInviteParents({

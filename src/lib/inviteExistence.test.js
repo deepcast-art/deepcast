@@ -35,6 +35,17 @@ describe('inviteExistence — the ONE who-exists rule', () => {
     ).toBe(2)
   })
 
+  it('countTicketsGiven honors the per-film show_ghosts flag; voids stay dead either way', () => {
+    const list = [
+      inv('a'),
+      inv('g', { recipient_email: 'x@demo-deepcast.invalid' }),
+      inv('v', { status: VOID_INVITE_STATUS }),
+    ]
+    expect(countTicketsGiven(list)).toBe(1) // flag off (default) — today's behavior
+    expect(countTicketsGiven(list, { includeGhosts: false })).toBe(1) // explicit off ≡ omitted
+    expect(countTicketsGiven(list, { includeGhosts: true })).toBe(2) // ghosts count, voids never
+  })
+
   it('needsTicketNumber: voided rows are never numbered, anywhere, ever', () => {
     expect(needsTicketNumber(inv('a'))).toBe(true)
     expect(needsTicketNumber(inv('n', { ticket_no: 4 }))).toBe(false)
