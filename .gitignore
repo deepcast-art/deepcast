@@ -42,6 +42,8 @@ dist-ssr
 playwright-report/
 test-results/
 blob-report/
+# Local-only Playwright fallback config (full Chromium instead of headless-shell) — never commit
+playwright.local.config.js
 
 # Design reference mockups (local only)
 design-refs/
