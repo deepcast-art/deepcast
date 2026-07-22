@@ -16,6 +16,7 @@ function norm(v) {
 /** Protected real users — the teardown-script superset. NEVER deletable. */
 export const PROTECTED_EMAILS = [
   'filmmaker@gmail.com',
+  'jbregel@gmail.com',
   'contact@tracebelll.com',
   'contact@tinamarieolsen.com',
   'clark.austin@gmail.com',
