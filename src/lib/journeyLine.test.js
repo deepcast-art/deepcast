@@ -7,7 +7,7 @@ const textOf = (r) => r.segments.map((s) => s.text).join('')
 describe('buildJourneyLine', () => {
   it('downstream state: exact copy, numerals, bold on both counts', () => {
     const r = buildJourneyLine({ reached: 4, downstream: 3 })
-    expect(textOf(r)).toBe('This film has reached 4 people. 3 of them received it because of you.')
+    expect(textOf(r)).toBe('This film has reached 4 people. 3 of them through you.')
     expect(r.segments.filter((s) => s.bold).map((s) => s.text)).toEqual(['4 people', '3 of them'])
     expect(textOf(r)).not.toMatch(/four|three/i)
   })
@@ -24,7 +24,7 @@ describe('buildJourneyLine', () => {
       'This film has reached 1 person. Grow that number by sharing the film.'
     )
     expect(textOf(buildJourneyLine({ reached: 1, downstream: 1 }))).toBe(
-      'This film has reached 1 person. 1 of them received it because of you.'
+      'This film has reached 1 person. 1 of them through you.'
     )
   })
 
@@ -59,6 +59,6 @@ describe('buildJourneyLine', () => {
       reached: layout.inviteCount,
       downstream: layout.viewerDownstreamCount,
     })
-    expect(textOf(r)).toBe('This film has reached 5 people. 4 of them received it because of you.')
+    expect(textOf(r)).toBe('This film has reached 5 people. 4 of them through you.')
   })
 })

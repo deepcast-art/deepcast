@@ -186,7 +186,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     // Journey line: X = film-wide generated total; Y = the viewer's ENTIRE
     // downstream (Dan + Maya + Maya's Lea = 3, beyond the 2 direct links).
     await expect(
-      page.getByText('This film has reached 4 people. 3 of them received it because of you.')
+      page.getByText('This film has reached 4 people. 3 of them through you.')
     ).toBeVisible()
 
     // The constellation: film at the center, YOU on the gold path, zoom works.

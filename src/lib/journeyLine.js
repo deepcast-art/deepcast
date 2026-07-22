@@ -1,8 +1,7 @@
 /**
- * The journey line (viewer dashboard V5). Founder-approved copy verbatim
- * (2026-07-21):
- *   Y > 0: "This film has reached [X] people. [Y] of them received it
- *           because of you."
+ * The journey line (viewer dashboard V5). Founder-approved copy verbatim:
+ *   Y > 0: "This film has reached [X] people. [Y] of them through you."
+ *           (revised 2026-07-22)
  *   Y = 0: "This film has reached [X] people. Grow that number by sharing
  *           the film." (revised 2026-07-22)
  *
@@ -37,7 +36,7 @@ export function buildJourneyLine({ reached = 0, downstream = 0 } = {}) {
         { text: people(reached), bold: true },
         { text: '. ', bold: false },
         { text: `${downstream} of them`, bold: true },
-        { text: ' received it because of you.', bold: false },
+        { text: ' through you.', bold: false },
       ],
     }
   }

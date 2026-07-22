@@ -449,7 +449,7 @@ export default function ViewerDashboardV5({
               {journey.reached > 0 && (
                 <section className="mt-12 md:mt-16">
                   <p className="font-sans text-[0.625rem] uppercase tracking-[0.3em] text-smoke">
-                    Where your film has traveled
+                    Where this film has traveled
                   </p>
                   <p className="mt-5 font-serif-v3 text-[clamp(1.1875rem,2.6vw,1.4375rem)] italic leading-normal text-mist">
                     {journey.segments.map((seg, i) =>
