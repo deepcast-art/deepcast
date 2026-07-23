@@ -57,7 +57,7 @@ These are per-film hardcodes pending the multi-film / editable-welcome work, whe
 
 - **Frontend:** React 19 + Vite 7, Tailwind CSS 4, React Router 7
 - **Backend:** Express 5 (`server/index.js`), Supabase (auth + Postgres), Mux (video), Resend (email)
-- **Deployment:** Vercel (frontend) + Render (API at `deepcast-virginia.onrender.com` — the Virginia service, live since 2026-07-23; `vercel.json` rewrites `/api/*` to it). The old Oregon service (`deepcast.onrender.com`) is retired and will be suspended soon — never point anything back at it.
+- **Deployment:** Vercel (frontend) + Render (API at `deepcast-virginia.onrender.com` — the Virginia service, live since 2026-07-23; `vercel.json` rewrites `/api/*` to it). The old Oregon service (`deepcast.onrender.com`) is still live as the rollback safety net and will be suspended manually around end of July 2026 — never point anything back at it except in a rollback.
 
 ## Project structure
 
