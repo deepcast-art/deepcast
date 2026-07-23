@@ -248,7 +248,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(dialog.getByText(/I watched this and thought of you/)).toHaveCount(0)
     // Reveal copy (2026-07-21): personal line 1 + counted line 2, numerals.
     await expect(dialog.getByText(/Here’s Noa’s ticket\. Deliver it with your own words/)).toBeVisible()
-    await expect(dialog.getByText('2 tickets left. Who else comes to mind?')).toBeVisible()
+    await expect(dialog.getByText('2 tickets left. Who else needs it?')).toBeVisible()
     await dialog.getByRole('button', { name: 'Close' }).click()
     await expect(page.getByRole('dialog')).toHaveCount(0)
   })

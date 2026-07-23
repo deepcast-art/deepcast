@@ -232,6 +232,50 @@ test.describe('three-page claim arc', () => {
     // Dashboard links: header + footer (the arrow is the nav affordance).
     await expect(page.getByRole('link', { name: /Your dashboard/i })).toHaveCount(2)
 
+    // ── The modal share cycle: State 1 → generate → State 2 (replacement)
+    //    → create another → State 1 again. ──
+    await page.getByRole('button', { name: 'Pass it on' }).click()
+    await expect(page.getByText('Pass it on. Make an impact.')).toBeVisible()
+    // The lineage emblem: fixture chain ['Ien Chi'] + senderIsCreator → the
+    // filmmaker's node, YOU, and the unclaimed next slot reading "?".
+    await expect(page.locator('dialog svg text').filter({ hasText: 'IEN' })).toHaveCount(1)
+    await expect(page.locator('dialog svg text').filter({ hasText: 'YOU' })).toHaveCount(1)
+    await expect(page.locator('dialog svg text').filter({ hasText: '?' })).toHaveCount(1)
+
+    await page.getByPlaceholder('Their first name').fill('Jordan')
+    await page.getByRole('button', { name: /Create their invitation/i }).click()
+
+    // THE REPLACEMENT MODEL: the link renders where the field was — the
+    // form and charge are gone, no scrolling needed.
+    await expect(page.getByText('http://localhost:3000/jordan-ab2c')).toBeVisible()
+    await expect(page.getByPlaceholder('Their first name')).toHaveCount(0)
+    await expect(page.getByText(/Who needs to see this\?/)).toHaveCount(0)
+    // Stamped reveal copy (amendment A) + the authoritative tickets line;
+    // the standalone count line hides in State 2.
+    await expect(
+      page.getByText(/Here’s Jordan’s ticket link\. Send it to them with why they came to mind\./)
+    ).toBeVisible()
+    await expect(page.getByText('4 tickets left. Who else needs it?')).toBeVisible()
+    await expect(page.getByText('5 tickets left.', { exact: true })).toHaveCount(0)
+    await expect(page.getByText('4 tickets left.', { exact: true })).toHaveCount(0)
+    // Bare link only: no pre-written message anywhere.
+    await expect(page.getByText(/I watched this and thought of you —/)).toHaveCount(0)
+    // One more stub dims; the "?" label becomes JORDAN and the node stays
+    // hollow (grammar: hollow until claimed).
+    await expect(page.locator('dialog [data-stub="used"]')).toHaveCount(1)
+    await expect(page.locator('dialog svg text').filter({ hasText: 'JORDAN' })).toHaveCount(1)
+    await expect(page.locator('dialog svg text').filter({ hasText: '?' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /Copy their invitation/i })).toBeVisible()
+    await expect(page.getByRole('link', { name: /See where your ticket went/i })).toBeVisible()
+
+    // The modal cycles: the form returns, cleared and focused.
+    await page.getByRole('button', { name: 'Create another invitation' }).click()
+    await expect(page.getByPlaceholder('Their first name')).toBeFocused()
+    await expect(page.getByPlaceholder('Their first name')).toHaveValue('')
+    await expect(page.getByText(/Who needs to see this\?/)).toBeVisible()
+    await expect(page.getByText(/Here’s Jordan’s/)).toHaveCount(0)
+    await page.keyboard.press('Escape')
+
     // REVISIT RULE: re-opening the claimed landing slug routes the owner
     // (recognized by stash) straight back to their watch page while the
     // film is NOT yet completed (status 'claimed') — never the prologue

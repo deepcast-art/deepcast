@@ -18,7 +18,7 @@ import {
   tierFillPercent,
   formatTierNumber,
 } from '../lib/viewerTiers'
-import { chainHands, pairsOfHandsPhrase } from '../lib/handsChain'
+import { chainHands, pairsOfHandsPhrase, lastHands, lineageLabel } from '../lib/handsChain'
 import { filmStory, filmPosterUrl } from '../content/filmStory'
 
 /** Claim-flow resume keys (slug-scoped — the claimant's public token is never
@@ -83,6 +83,156 @@ function TicketStubs({ granted, remaining }) {
 }
 
 /**
+ * The lineage emblem (redesign spec §5) — the film's recent hands, drawn as
+ * a small branch inside the modal. The geometry is a FIXED, hand-composed
+ * template (identical for every viewer of every film); ONLY the name labels
+ * and element visibility are dynamic — string substitution, no layout
+ * engine. Node grammar (sacred): solid = claimed/arrived · hollow = a
+ * ticket not yet claimed; the "?" sits in the NAME SLOT above the hollow
+ * node, never inside the circle. aria-hidden — the rail's rule line carries
+ * the accessible fact.
+ *
+ * v1 renders ZERO near-branch forks (founder amendment F): the backend does
+ * not yet confirm "that hand made at least one other share", and inventing
+ * people is a brand violation. Far-field dots are pure atmosphere and stay.
+ * Predecessors shown = the last min(3, chain length) hands, occupying the
+ * template slots CLOSEST to YOU; the faint entry stroke renders only when
+ * the chain runs deeper than the three shown.
+ */
+function LineageEmblem({ hands, nextLabel }) {
+  const shown = lastHands(hands, 3)
+  if (shown.length === 0) return null
+
+  // Template slots (replica geometry, fixed): position, node size/opacity,
+  // and each slot's label anchor.
+  const SLOTS = [
+    { x: 70, y: 92, r: 2.2, op: 0.7, lx: 62, ly: 110 },
+    { x: 140, y: 60, r: 2.4, op: 0.78, lx: 140, ly: 47 },
+    { x: 215, y: 84, r: 2.6, op: 0.85, lx: 215, ly: 71 },
+  ]
+  const YOU = { x: 288, y: 52 }
+  const NEXT = { x: 350, y: 80 }
+  const active = SLOTS.slice(3 - shown.length)
+  // The gold path brightens toward its newest tip; segment opacities are
+  // template-fixed, taken from the YOU end backward.
+  const points = [...active.map((s) => ({ x: s.x, y: s.y })), YOU]
+  const segmentOpacities = [0.45, 0.55, 0.65].slice(-(points.length - 1))
+  const entryStroke = hands.length > 3
+
+  const labelStyle = {
+    fontFamily: 'var(--font-sans)',
+    fontWeight: 400,
+    letterSpacing: '0.15em',
+  }
+
+  return (
+    <figure aria-hidden="true" className="mx-auto mt-7 w-full max-w-[25rem]">
+      <svg viewBox="0 0 400 160" xmlns="http://www.w3.org/2000/svg" className="block h-auto w-full">
+        {/* Far field: distant parts of the tree — pure atmosphere, ALWAYS
+            rendered, never wired to data. */}
+        <g fill="rgba(221,221,221,0.13)">
+          <circle cx="44" cy="26" r="1.2" />
+          <circle cx="204" cy="14" r="1.2" />
+          <circle cx="368" cy="34" r="1.2" />
+          <circle cx="346" cy="142" r="1.2" />
+          <circle cx="16" cy="40" r="1.2" />
+        </g>
+        {/* The gold path: entry stroke implies the deeper chain. */}
+        <g strokeWidth="1" fill="none">
+          {entryStroke && (
+            <line x1="4" y1="110" x2="70" y2="92" stroke="rgba(177,161,128,0.3)" />
+          )}
+          {points.slice(0, -1).map((p, i) => (
+            <line
+              key={`${p.x},${p.y}`}
+              x1={p.x}
+              y1={p.y}
+              x2={points[i + 1].x}
+              y2={points[i + 1].y}
+              stroke={`rgba(177,161,128,${segmentOpacities[i]})`}
+            />
+          ))}
+          {/* To the unclaimed next: dashed — not yet walked. */}
+          {nextLabel && (
+            <line
+              x1={YOU.x}
+              y1={YOU.y}
+              x2={NEXT.x}
+              y2={NEXT.y}
+              strokeDasharray="3 3"
+              stroke="rgba(177,161,128,0.5)"
+            />
+          )}
+        </g>
+        {/* Hands: solid = claimed; growing toward the present. */}
+        <g fill="#b1a180">
+          {active.map((s) => (
+            <circle key={`${s.x},${s.y}`} cx={s.x} cy={s.y} r={s.r} opacity={s.op} />
+          ))}
+          <circle cx={YOU.x} cy={YOU.y} r="3.6" />
+          <circle
+            cx={YOU.x}
+            cy={YOU.y}
+            r="7"
+            fill="none"
+            stroke="rgba(177,161,128,0.35)"
+            strokeWidth="0.8"
+          />
+        </g>
+        {/* The unclaimed next: hollow — it stays hollow until claimed. */}
+        {nextLabel && (
+          <circle
+            cx={NEXT.x}
+            cy={NEXT.y}
+            r="3.2"
+            fill="none"
+            stroke="rgba(177,161,128,0.8)"
+            strokeWidth="1.2"
+          />
+        )}
+        {/* Names — REAL first names from the viewer's chain, uppercased,
+            ~8-char cap (lineageLabel). */}
+        {active.map((s, i) => (
+          <text
+            key={`label-${s.x}`}
+            x={s.lx}
+            y={s.ly}
+            fontSize="9"
+            textAnchor="middle"
+            fill="rgba(221,221,221,0.75)"
+            style={labelStyle}
+          >
+            {lineageLabel(shown[i])}
+          </text>
+        ))}
+        <text
+          x={YOU.x}
+          y="38"
+          fontSize="9"
+          textAnchor="middle"
+          fill="var(--color-accent)"
+          style={labelStyle}
+        >
+          YOU
+        </text>
+        {nextLabel && (
+          <text
+            x={NEXT.x}
+            y="67"
+            fontSize="9"
+            textAnchor="middle"
+            fill="rgba(177,161,128,0.85)"
+            style={labelStyle}
+          >
+            {nextLabel}
+          </text>
+        )}
+      </svg>
+    </figure>
+  )
+}
+
+/**
  * The pass-it-on modal (redesign spec §4) — the ticket window, opened by the
  * rail's CTA. Native <dialog> (top layer, Esc via the cancel event, focus
  * containment that automatically covers elements the reveal adds later).
@@ -105,6 +255,11 @@ function PassItOnModal({
   shareBusy,
   shareError,
   onSubmit,
+  hands,
+  generated,
+  copied,
+  onCopy,
+  onAgain,
 }) {
   const dialogRef = useRef(null)
   const panelRef = useRef(null)
@@ -119,6 +274,13 @@ function PassItOnModal({
       document.body.style.overflow = prevOverflow
     }
   }, [])
+
+  /** The modal cycles: when "Create another invitation" swaps the form back
+   *  in, the (re-rendered) field takes focus again. Native <dialog> focus
+   *  containment re-covers whatever the reveal adds or removes. */
+  useEffect(() => {
+    if (!generated) inputRef.current?.focus()
+  }, [generated])
 
   /** Scrim dismissal: only a mousedown that starts OUTSIDE the panel closes
    *  (clicks on the dialog element itself — never its children). */
@@ -169,14 +331,71 @@ function PassItOnModal({
           Pass it on. Make an impact.
         </p>
 
-        {/* The lineage emblem renders here (Phase 5 — spec §5). */}
+        {/* The lineage — how it reached you, and the unclaimed next. State 2
+            makes exactly one substitution: the "?" becomes the recipient's
+            name; the node STAYS hollow until they claim. */}
+        <LineageEmblem
+          hands={hands}
+          nextLabel={generated ? lineageLabel(generated.name) : outOfTickets ? null : '?'}
+        />
 
         {/* Stubs sit above the tickets/zero line — in the zero state they
             remain, all dimmed (the emptied ticket book reads better than a
             bare sentence). */}
         <TicketStubs granted={granted} remaining={remaining} />
 
-        {outOfTickets ? (
+        {generated ? (
+          /* ── State 2 — THE REPLACEMENT MODEL (spec §4b): the reveal
+             REPLACES the charge and the form (and the standalone count
+             line — the reveal's own line is authoritative), so the link
+             renders where the field was: zero scrolling to see it. ── */
+          <div
+            key={generated.url}
+            className="dc-result-rise mx-auto mt-8 max-w-[30rem] border-t border-warm/15 pt-7"
+          >
+            {/* Founder-approved reveal copy (amendment A, 2026-07-23). */}
+            <p className="mx-auto font-serif-v3 italic text-[1.0625rem] leading-[1.7] text-warm/85">
+              Here’s {generated.name}’s ticket link. Send it to them with why they came
+              to mind.
+            </p>
+            {/* The bare link — no pre-written message, ever (product law). */}
+            <p className="mt-3 break-all font-serif-v3 text-[clamp(1.1875rem,3vw,1.4375rem)] text-paper/90">
+              {generated.url}
+            </p>
+            <button
+              type="button"
+              onClick={onCopy}
+              className="mt-6 min-h-[44px] cursor-pointer touch-manipulation border border-warm/20 px-9 py-3 font-sans font-normal text-xs uppercase tracking-[0.26em] text-warm transition-colors hover:border-accent hover:text-accent focus-visible:border-accent focus-visible:text-accent focus-visible:outline-none"
+            >
+              {copied ? 'Copied' : 'Copy their invitation'}
+            </button>
+            <p className="mt-7 font-sans font-normal text-xs uppercase tracking-[0.24em] text-muted">
+              {revealTicketsLine(generated.ticketsRemaining)}
+            </p>
+            {/* The share-again act — a true gold-outline button (a box acts;
+                an arrow navigates). Omitted after the last ticket: there is
+                nothing left to create. */}
+            {(generated.ticketsRemaining == null || generated.ticketsRemaining > 0) && (
+              <p className="mt-3.5">
+                <button
+                  type="button"
+                  onClick={onAgain}
+                  className="inline-block min-h-[44px] cursor-pointer touch-manipulation border border-accent/60 px-7 py-[0.6875rem] font-sans font-normal text-[0.6875rem] uppercase tracking-[0.26em] text-accent transition-colors duration-300 hover:border-accent hover:bg-accent hover:text-ink focus-visible:border-accent focus-visible:bg-accent focus-visible:text-ink focus-visible:outline-none"
+                >
+                  Create another invitation
+                </button>
+              </p>
+            )}
+            <p className="mt-8">
+              <Link
+                to="/dashboard"
+                className="font-sans font-normal text-xs uppercase tracking-[0.24em] text-muted transition-colors hover:text-warm"
+              >
+                See where your ticket went →
+              </Link>
+            </p>
+          </div>
+        ) : outOfTickets ? (
           <p
             className={`${Number.isFinite(remaining) ? 'mt-3.5' : 'mt-8'} font-sans font-normal text-xs uppercase tracking-[0.24em] text-muted`}
           >
@@ -563,6 +782,14 @@ export default function ClaimWatch() {
     }
   }
 
+  /** "Create another invitation" — the modal cycles back to State 1: the
+   *  reveal clears, the charge and the (empty) field return. */
+  const handleShareAgain = () => {
+    setGenerated(null)
+    setCopied(false)
+    setShareError('')
+  }
+
   const handleCopy = async () => {
     if (!generated?.url) return
     try {
@@ -908,6 +1135,11 @@ export default function ClaimWatch() {
           shareBusy={shareBusy}
           shareError={shareError}
           onSubmit={handleGenerate}
+          hands={hands}
+          generated={generated}
+          copied={copied}
+          onCopy={handleCopy}
+          onAgain={handleShareAgain}
         />
       )}
 
