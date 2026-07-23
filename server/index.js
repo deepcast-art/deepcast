@@ -35,6 +35,7 @@ import { claimedSharerSpendDecision, claimedInviteTicketsDisplay } from './claim
 import { nextTicketNo } from './ticketNumbers.js'
 import { firstNameInputError } from '../src/lib/firstNameRule.js'
 import { VOID_INVITE_STATUS } from '../src/lib/inviteExistence.js'
+import { countFilmClaims } from '../src/lib/filmClaims.js'
 import { refundOnVoidDecision } from './voidRules.js'
 
 const app = express()
@@ -1112,7 +1113,9 @@ app.get('/api/invites/link/:slug', async (req, res) => {
     const [{ data: filmInvites }, { data: creatorUser }, { data: claimAccount }, { data: claimFilmWallet }] = await Promise.all([
       supabase
         .from('invites')
-        .select('id, parent_invite_id, sender_id, sender_name, recipient_name, recipient_email, created_at')
+        // `status` rides along for the film-wide claims count (watch-page
+        // redesign, 2026-07-23) — same single query, no extra round trip.
+        .select('id, parent_invite_id, sender_id, sender_name, recipient_name, recipient_email, created_at, status')
         .eq('film_id', invite.film_id),
       invite.films?.creator_id
         ? supabase.from('users').select('name').eq('id', invite.films.creator_id).maybeSingle()
@@ -1209,6 +1212,13 @@ app.get('/api/invites/link/:slug', async (req, res) => {
         filmCreatorId: creatorId,
       }),
       posterUrl,
+      // Film-wide claims count for the watch rail (redesign 2026-07-23):
+      // the shared claimed-stage rule over the who-exists set — voided
+      // links never count, ghosts count only when the film shows them
+      // (show_ghosts). Honest number, no padding, no clamping.
+      filmClaimsCount: countFilmClaims(rows, {
+        includeGhosts: invite.films?.show_ghosts === true,
+      }),
       // Watch-page needs on revisit (playback is public-policy; invites are
       // world-readable under RLS, so none of this is a new exposure class).
       muxPlaybackId: invite.films?.mux_playback_id || null,
