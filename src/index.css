@@ -43,6 +43,16 @@
   --color-mist: #eae7e0;
   --color-smoke: #9a9890;
 
+  /* Watch-page redesign tints (design-refs/watch-page_24.html — the replica's
+     --tint-track / --tint-scrim, under the app's --color-* namespace so the
+     bg-tint-track / bg-tint-scrim utilities exist).
+     --color-tint-track: the tier bar's empty track, nothing else.
+     --color-tint-scrim: the modal scrim — ink at 82%, film faintly visible.
+     The page's shared 1px hairline is NOT a new token: it is warm at 15%
+     (rgba(221,221,221,0.15)), the existing border-warm/15 utility. */
+  --color-tint-track: rgba(221, 221, 221, 0.08);
+  --color-tint-scrim: rgba(8, 12, 24, 0.82);
+
   /* Semantic aliases */
   --color-bg-page: var(--color-ink);
   --color-bg-surface: var(--color-paper);
