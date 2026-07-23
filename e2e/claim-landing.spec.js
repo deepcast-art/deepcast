@@ -35,6 +35,7 @@ const LINK_CREATED = {
   ticketNo: 8,
   ticketsRemaining: null,
   durationSeconds: 1932.5983, // floors to "32 minutes" on the landing letter
+  filmClaimsCount: 847, // the rail's record (three milestones crossed)
 }
 
 const LINK_CLAIMED = { ...LINK_CREATED, status: 'claimed', claimOrdinal: 57, ticketsRemaining: 5 }
@@ -206,8 +207,9 @@ test.describe('three-page claim arc', () => {
     // modal (redesign Phase 4 — its coverage returns there); no share form
     // lives on the page.
     await expect(page.getByRole('button', { name: 'Pass it on' })).toBeVisible()
-    await expect(page.getByText(/Viewers reached of/i)).toBeVisible()
-    // TEMP specimen count until Phase 6 wires the real number: milestones show.
+    // The record: the payload's film-wide count, comma-formatted goal.
+    await expect(page.getByText('847', { exact: true })).toBeVisible()
+    await expect(page.getByText('Viewers reached of 1,000 goal')).toBeVisible()
     await expect(page.getByText('Milestones passed')).toBeVisible()
     // The rule line: fixture lineage ['Ien Chi'] + senderIsCreator → one
     // hand, singular grammar (owner-approved 2026-07-23), numeral kept.
@@ -479,6 +481,28 @@ test.describe('three-page claim arc', () => {
     // The emptied ticket book stays: all five stubs, all dimmed.
     await expect(page.locator('dialog [data-stub="used"]')).toHaveCount(5)
     await expect(page.getByPlaceholder('Their first name')).toHaveCount(0)
+    expect(jsErrors).toEqual([])
+  })
+
+  test('sparse rail: a young film shows its honest count and NO milestones block', async ({ page }) => {
+    // Founder amendments B + E: below the first tier the ENTIRE milestones
+    // block is absent from the DOM (no label, no placeholder), the count is
+    // the true number (no padding, no clamping), and the bar aims at 100.
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        'deepcast:claim',
+        JSON.stringify({ slug: 'alex-h4k2', inviteId: 'inv-you', filmId: 'film-1', claimedEmail: 'alex@example.com' })
+      )
+    })
+    await page.route('**/api/invites/link/**', (route) =>
+      route.fulfill({ json: { ...LINK_CLAIMED, filmClaimsCount: 3 } })
+    )
+    await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
+
+    await expect(page.getByText('3', { exact: true })).toBeVisible()
+    await expect(page.getByText('Viewers reached of 100 goal')).toBeVisible()
+    await expect(page.getByText('Milestones passed')).toHaveCount(0)
+    await expect(page.getByText('✦')).toHaveCount(0)
     expect(jsErrors).toEqual([])
   })
 

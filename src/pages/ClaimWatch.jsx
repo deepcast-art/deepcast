@@ -30,12 +30,6 @@ const progressKey = (slug) => `screening_progress_slug_${slug}`
 
 const MuxPlayer = lazy(() => import('@mux/mux-player-react').then((m) => ({ default: m.default })))
 
-/** TEMP until Phase 6 wires the real film-wide claims count from the link
- *  route — this is the design replica's specimen number so the rail can be
- *  judged against the approved render. It must NEVER ship to production;
- *  Phase 6 replaces it with the honest count (no padding, no clamping). */
-const TEMP_CLAIMS_COUNT_UNTIL_PHASE_6 = 847
-
 /** The old always-docked pass-it-on panel, held OUT of the render path since
  *  the redesign's Phase 2 (the founder-approved modal replaces it in Phase
  *  4). The JSX is kept temporarily so the share handlers/state stay wired
@@ -812,8 +806,12 @@ export default function ClaimWatch() {
   })
   const outOfTickets = tickets != null && tickets <= 0
 
-  /* ── The rail's record (spec §3b) ── */
-  const claimsCount = TEMP_CLAIMS_COUNT_UNTIL_PHASE_6
+  /* ── The rail's record (spec §3b): the film-wide claims count from the
+     link payload (server-computed by the shared countFilmClaims rule —
+     voided never count, ghosts per show_ghosts). The HONEST number, no
+     padding, no clamping (founder amendment E); a missing field reads as
+     the empty record, so the milestones block simply stays absent. ── */
+  const claimsCount = Number.isFinite(link?.filmClaimsCount) ? link.filmClaimsCount : 0
   const goal = nextTier(claimsCount)
   const crossed = crossedTiers(claimsCount)
 
