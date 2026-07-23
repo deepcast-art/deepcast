@@ -20,6 +20,7 @@ import { removeTeammateDecision } from './teamRules.js'
 import { generateUniqueSlug } from './inviteSlug.js'
 import { apiPortRefusal } from './apiPort.js'
 import { resolveAccountlessSharerIdentity } from './claimIdentity.js'
+import { claimNameStamp } from './claimNameRule.js'
 import { INITIAL_CLAIMANT_TICKETS, ticketSpendDecision, NO_TICKETS_MESSAGE } from '../src/lib/ticketRules.js'
 import { isRoleUnlimitedSharer, filmTicketsRemaining } from '../src/lib/shares.js'
 import {
@@ -1405,9 +1406,25 @@ app.post('/api/invites/claim', async (req, res) => {
       // never touching any other film's balance.
       await initFilmWallet(supabase, userId, invite.film_id)
       const [{ data: acct }, wallet] = await Promise.all([
-        supabase.from('users').select('id, role, team_creator_id').eq('id', userId).maybeSingle(),
+        supabase.from('users').select('id, name, role, team_creator_id').eq('id', userId).maybeSingle(),
         readFilmWallet(supabase, userId, invite.film_id),
       ])
+      // Canonical-name rule (2026-07-23): a claimed invite renders the
+      // account's name everywhere, so an ATTACHED account's current name
+      // replaces the typed placeholder now (created accounts are born
+      // matching — claimNameRule.js). Inside this try by design: a failed
+      // stamp degrades exactly like a failed account link — the claim stands.
+      const nameStamp = claimNameStamp({
+        accountCreated,
+        accountName: acct?.name,
+        typedName: invite.recipient_name,
+      })
+      if (nameStamp.stamp) {
+        await supabase
+          .from('invites')
+          .update({ recipient_name: nameStamp.name })
+          .eq('id', invite.id)
+      }
       const remaining = filmTicketsRemaining(acct, wallet)
       accountBalance = Number.isFinite(remaining) ? remaining : null
       // ── Fix A (2026-07-21): the claim also SIGNS THE PERSON IN — but only
