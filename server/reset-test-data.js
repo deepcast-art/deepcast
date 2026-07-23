@@ -294,7 +294,7 @@ async function main() {
 
   console.log('\n=== Done ===')
   if (DRY_RUN) {
-    console.log('Dry run only — nothing was changed. Re-run without --dry-run to apply.')
+    console.log('Dry run only — nothing was changed. To apply, the owner runs:  node server/reset-test-data.js --execute  (then types the confirmation phrase).')
   } else {
     console.log('Fresh invite URLs to test with (same token works on both origins):\n')
     for (const { email, localUrl, prodUrl } of urls) {
