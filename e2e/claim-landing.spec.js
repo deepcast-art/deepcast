@@ -319,6 +319,52 @@ test.describe('three-page claim arc', () => {
     expect(jsErrors).toEqual([])
   })
 
+  test('responsive: edge-to-edge player and no sideways scroll at 600px; centered wordmark at 375px', async ({ page }) => {
+    // Redesign §6: below 900px the page is one column in natural order and
+    // the player goes full-bleed — which must never introduce horizontal
+    // scroll; below 540px the header centers the wordmark and its dashboard
+    // link yields to the footer's.
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        'deepcast:claim',
+        JSON.stringify({ slug: 'alex-h4k2', inviteId: 'inv-you', filmId: 'film-1', claimedEmail: 'alex@example.com' })
+      )
+    })
+    await page.route('**/api/invites/link/**', (route) => route.fulfill({ json: LINK_CLAIMED }))
+
+    await page.setViewportSize({ width: 600, height: 900 })
+    await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('button', { name: 'Pass it on' })).toBeVisible()
+    const at600 = await page.evaluate(() => {
+      const rect = document.querySelector('main .bg-black')?.getBoundingClientRect()
+      return {
+        docScrollWidth: document.documentElement.scrollWidth,
+        innerWidth: window.innerWidth,
+        playerLeft: rect ? Math.round(rect.left) : null,
+        playerRight: rect ? Math.round(rect.right) : null,
+      }
+    })
+    expect(at600.docScrollWidth).toBeLessThanOrEqual(at600.innerWidth)
+    expect(at600.playerLeft).toBe(0)
+    expect(at600.playerRight).toBe(600)
+    // The header dashboard link is present above 540px.
+    await expect(page.locator('header').getByRole('link', { name: /Your dashboard/i })).toBeVisible()
+
+    await page.setViewportSize({ width: 375, height: 812 })
+    // Below 540px the header link hides (the footer's covers phones) and the
+    // wordmark centers.
+    await expect(page.locator('header').getByRole('link', { name: /Your dashboard/i })).toBeHidden()
+    const logo = await page.locator('header').first().boundingBox()
+    const wordmark = await page.getByText('deepcast', { exact: true }).first().boundingBox()
+    expect(Math.abs(wordmark.x + wordmark.width / 2 - (logo.x + logo.width / 2))).toBeLessThan(3)
+    const at375 = await page.evaluate(() => ({
+      docScrollWidth: document.documentElement.scrollWidth,
+      innerWidth: window.innerWidth,
+    }))
+    expect(at375.docScrollWidth).toBeLessThanOrEqual(at375.innerWidth)
+    expect(jsErrors).toEqual([])
+  })
+
   test('the filmmaker story renders only for films with authored content', async ({ page }) => {
     // Keyed by the film's real Mux playback id (src/content/filmStory.js).
     // Stream traffic is blocked so the real id never reaches Mux from CI.
