@@ -245,7 +245,15 @@ export default function ViewerDashboardV5({
 
       <div className="relative z-[2] mx-auto grid max-w-[90rem] md:min-h-dvh md:grid-cols-[18rem_1fr]">
         {/* ── Sidebar (desktop) ── */}
-        <aside className="sticky top-0 hidden h-dvh flex-col overflow-y-auto border-r border-mist/[0.12] px-8 py-8 md:flex">
+        {/* overflow-x-clip: this column never scrolls sideways, and no real
+            content can cross its edge (every child is width-adaptive —
+            verified 2026-07-23). Without it, overflow-y-auto silently
+            computes overflow-x to auto, and at fractional browser zooms the
+            engine's scrollWidth/clientWidth rounding invents a phantom 1px
+            scroll range — which macOS always-on scrollbars render as a
+            horizontal bar under the menu links (owner-reported). Nothing is
+            ever visually clipped by this; it removes only the phantom bar. */}
+        <aside className="sticky top-0 hidden h-dvh flex-col overflow-y-auto overflow-x-clip border-r border-mist/[0.12] px-8 py-8 md:flex">
           <Link to="/" aria-label="Deepcast" className="opacity-90 hover:opacity-100">
             <DeepcastLogo size="text-2xl" className="text-mist" />
           </Link>
