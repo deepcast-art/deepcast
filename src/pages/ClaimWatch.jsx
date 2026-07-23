@@ -12,6 +12,14 @@ import { buildWatchConstraintLine } from '../lib/constraintLine'
 import { resumePositionToSave } from '../lib/resumePosition'
 import { safeLocalStorage } from '../lib/safeStorage'
 import { fullscreenPlayDecision, isIOSDevice } from '../lib/playbackFullscreen'
+import {
+  nextTier,
+  crossedTiers,
+  tierFillPercent,
+  formatTierNumber,
+} from '../lib/viewerTiers'
+import { chainHands, pairsOfHandsPhrase } from '../lib/handsChain'
+import { filmStory, filmPosterUrl } from '../content/filmStory'
 
 /** Claim-flow resume keys (slug-scoped — the claimant's public token is never
  *  exposed client-side). Seconds feed the resume; the fraction feeds the
@@ -21,6 +29,18 @@ const positionKey = (slug) => `screening_position_slug_${slug}`
 const progressKey = (slug) => `screening_progress_slug_${slug}`
 
 const MuxPlayer = lazy(() => import('@mux/mux-player-react').then((m) => ({ default: m.default })))
+
+/** TEMP until Phase 6 wires the real film-wide claims count from the link
+ *  route — this is the design replica's specimen number so the rail can be
+ *  judged against the approved render. It must NEVER ship to production;
+ *  Phase 6 replaces it with the honest count (no padding, no clamping). */
+const TEMP_CLAIMS_COUNT_UNTIL_PHASE_6 = 847
+
+/** The old always-docked pass-it-on panel, held OUT of the render path since
+ *  the redesign's Phase 2 (the founder-approved modal replaces it in Phase
+ *  4). The JSX is kept temporarily so the share handlers/state stay wired
+ *  exactly as shipped until the modal takes them over; Phase 7 deletes it. */
+const LEGACY_DOCKED_PANEL = false
 
 /**
  * Decorative ticket stubs (reference motif, adopted 2026-07-19): one outlined
@@ -63,18 +83,17 @@ function TicketStubs({ granted, remaining }) {
 }
 
 /**
- * PAGE 2 of the three-page structure (final spec 2026-07-16): the watch page.
- * One job: the film — plus the share panel, which is the platform-concept
- * line's permanent home (the ask).
+ * PAGE 2 of the three-page structure: the watch page, in its founder-approved
+ * two-column redesign (ground truth design-refs/watch-page_24.html; behavior
+ * spec design-refs/watch-page-spec.md). Desktop ≥900px: header → masthead →
+ * hero grid (player left, the record/act/law rail right) → creed band →
+ * filmmaker story → footer. Below 900px the same modules stack in natural
+ * order. The pass-it-on flow moves into a modal opened by the rail CTA
+ * (founder override of the old always-docked panel).
  *
- * Threshold: title + conditions line, then the player. The share panel is
- * permanently docked BELOW the player (never an overlay) and ALWAYS OPEN
- * (decided 2026-07-19 — no toggle, no pause-nudge, no credits auto-open).
- * Tickets spend at link generation, no refunds.
- *
- * Only the claimant (recognized by the safeStorage stash) lands here;
- * anyone else is bounced to the landing route, which shows the dead-link
- * page for claimed slugs.
+ * Only the claimant (recognized by the safeStorage stash or a signed-in
+ * session matching claimed_by) lands here; anyone else is bounced to the
+ * landing route, which shows the dead-link page for claimed slugs.
  */
 export default function ClaimWatch() {
   const { slug } = useParams()
@@ -251,7 +270,7 @@ export default function ClaimWatch() {
 
   /** ADDITIVE handler (this prop did not exist before this piece): at the
    *  credits, leave every kind of fullscreen so the viewer lands back on the
-   *  page — the pass-it-on panel is the destination. */
+   *  page — the pass-it-on ask is the destination. */
   const handleEnded = () => {
     try {
       screen.orientation?.unlock?.()
@@ -400,11 +419,9 @@ export default function ClaimWatch() {
   }
 
   const title = link?.filmTitle || 'a film'
-  /* Personalized constraint line — rules (first-word trim, generic fallback,
-     hide-for-creator) live in the lib. viewerIsCreator is false today: the
-     film never travels back to its maker and non-owners bounce to the landing
-     route, so the creator can never own this page — the flag guards a future
-     where those rules change. */
+  /* Personalized constraint line — CUT from this page by the redesign (spec
+     §9.4: the lib stays; the surface moved). Still computed only for the
+     unrendered legacy panel below; Phase 7 removes both together. */
   const constraintLine = buildWatchConstraintLine({
     receiverName: link?.inviteeFirstName,
     sharerName: link?.sharerName,
@@ -412,94 +429,328 @@ export default function ClaimWatch() {
   })
   const outOfTickets = tickets != null && tickets <= 0
 
-  /* Invite-v2 look (2026-07-19): the marquee, the film, the ask. On phones
-     (<540px) the player and the panel break out of the centered column to
-     true edge-to-edge (reference layout); wider screens keep the shadowed
-     centered column. MuxPlayer props/behavior unchanged. Background: the
-     one solid page token the dashboard uses (bg-bg-page) — uniform, no
-     gradient, no grain (decided 2026-07-19). */
+  /* ── The rail's record (spec §3b) ── */
+  const claimsCount = TEMP_CLAIMS_COUNT_UNTIL_PHASE_6
+  const goal = nextTier(claimsCount)
+  const crossed = crossedTiers(claimsCount)
+
+  /* ── The rule line's chain depth (spec §3b.6) — from the same lineage the
+     landing thread reads, id-verified collapse included. ── */
+  const hands = chainHands(link?.lineageNames, { senderIsCreator: link?.senderIsCreator })
+  const chainLength = hands.length
+
+  /* ── Per-film story + poster (founder amendments C/D) — one module,
+     src/content/filmStory.js. No entry → no story section, nothing invented. ── */
+  const story = filmStory(link?.muxPlaybackId)
+
   return (
     <div className={`relative min-h-dvh bg-bg-page text-warm${arrivalFade ? ' dc-watch-arrival' : ''}`}>
-      {/* Wordmark: top-left on wide screens, centered on phones (landing convention). */}
-      <header className="relative z-10 flex justify-center px-[clamp(1.5rem,4vw,3rem)] pt-[max(1.75rem,env(safe-area-inset-top,0px))] sm:justify-start">
+      {/* ══ Header — wordmark left, quiet dashboard link right; below 540px
+          the wordmark centers and the link yields to the footer's. ══ */}
+      <header className="relative z-10 flex items-center justify-center px-4 pt-[max(1.25rem,env(safe-area-inset-top,0px))] min-[540px]:justify-between min-[540px]:px-[clamp(1.5rem,4vw,3rem)]">
         <DeepcastLogo variant="wordmark" size="text-2xl" className="text-warm opacity-90" />
+        <Link
+          to="/dashboard"
+          className="hidden font-sans font-normal text-xs uppercase tracking-[0.26em] text-muted transition-colors hover:text-warm min-[540px]:inline-block"
+        >
+          Your dashboard →
+        </Link>
       </header>
 
-      <main className="relative z-10 mx-auto w-full max-w-5xl px-4 pt-[clamp(1.5rem,4svh,3rem)] text-center">
-        {/* Marquee: title + the per-film conditions note. */}
-        <h1 className="font-serif-v3 text-[clamp(1.75rem,4vw,2.375rem)] leading-tight">{title}</h1>
-        <p className="mt-3 inline-flex items-center justify-center gap-2.5 font-sans text-[11px] uppercase tracking-[0.28em] text-muted">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            aria-hidden
-            className="h-4 w-4 shrink-0"
-          >
-            <path d="M4 13a8 8 0 0 1 16 0" />
-            <rect x="3" y="13" width="4" height="6" rx="1.5" />
-            <rect x="17" y="13" width="4" height="6" rx="1.5" />
-          </svg>
-          {filmConditionsLine(link?.durationSeconds)}
-        </p>
-
-        {/* Portrait-play hint (iOS native fullscreen rotates with the device;
-            approved three-word copy, nothing more). Self-dismisses. */}
-        {rotateHint && (
-          <p className="mt-3 font-sans text-[11px] uppercase tracking-[0.28em] text-accent dc-fade-in">
-            Rotate your phone
-          </p>
-        )}
-
-        {/* Player: edge-to-edge on phones; centered shadowed column above 540px. */}
-        <div className="mt-[clamp(1.75rem,4svh,2.5rem)] w-screen ml-[calc(50%-50vw)] bg-black dc-fade-in min-[540px]:ml-auto min-[540px]:mr-auto min-[540px]:w-full min-[540px]:max-w-[60rem] min-[540px]:shadow-[0_40px_90px_rgba(0,0,0,0.55)]">
-          {loadFailed ? (
-            <p className="py-24 text-center font-serif-v3 text-sm italic text-warm/60">
-              Something went wrong loading the film — please refresh.
-            </p>
-          ) : (
-            <Suspense
-              fallback={
-                <div className="flex aspect-video w-full items-center justify-center">
-                  <div className="w-6 h-6 border-[0.5px] border-accent border-t-transparent rounded-full animate-spin" />
-                </div>
-              }
+      <main className="relative z-10 mx-auto w-full max-w-[44rem] px-4 min-[540px]:px-[clamp(1rem,4vw,3rem)] min-[900px]:max-w-[80rem]">
+        {/* ══ Masthead — film title + conditions line, nothing else. ══ */}
+        <div className="pt-7 text-center min-[900px]:pt-[clamp(0.75rem,1.5svh,1.125rem)]">
+          <h1 className="font-serif-v3 font-normal italic text-[clamp(1.5rem,2.2vw,1.75rem)] leading-[1.25]">
+            {title}
+          </h1>
+          <p className="mt-2.5 inline-flex items-center justify-center gap-2 font-sans font-normal text-[10px] uppercase tracking-[0.26em] text-muted min-[900px]:mt-[0.4375rem]">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              aria-hidden
+              className="h-3.5 w-3.5 shrink-0"
             >
-              <MuxPlayer
-                ref={playerRef}
-                streamType="on-demand"
-                playbackId={link?.muxPlaybackId || undefined}
-                startTime={startSeconds}
-                metadata={{ video_title: title }}
-                accentColor="#b1a180"
-                onTimeUpdate={handleTimeUpdate}
-                onPlay={handlePlay}
-                onEnded={handleEnded}
-                className="aspect-video w-full"
-              />
-            </Suspense>
+              <path d="M4 13a8 8 0 0 1 16 0" />
+              <rect x="3" y="13" width="4" height="6" rx="1.5" />
+              <rect x="17" y="13" width="4" height="6" rx="1.5" />
+            </svg>
+            {filmConditionsLine(link?.durationSeconds)}
+          </p>
+
+          {/* Portrait-play hint (iOS native fullscreen rotates with the
+              device; approved three-word copy). Transient, self-dismisses —
+              existing behavior, unchanged by the redesign. */}
+          {rotateHint && (
+            <p className="mt-3 font-sans font-normal text-[11px] uppercase tracking-[0.28em] text-accent dc-fade-in">
+              Rotate your phone
+            </p>
           )}
         </div>
 
-        {/* Pass-it-on panel — permanently docked below the player, never an
-            overlay, ALWAYS OPEN (2026-07-19). Full-width with side borders
-            dropped on phones, bordered centered panel above 540px. */}
+        {/* ══ The hero grid — player left, the rail right; single column in
+            natural order below 900px, where the player goes edge to edge. ══ */}
+        <div className="mt-8 min-[900px]:mt-5 min-[900px]:grid min-[900px]:grid-cols-[minmax(0,1fr)_24rem] min-[900px]:items-stretch min-[900px]:gap-x-14">
+          {/* ── Player — flat on ink, no shadow, never autoplay. ── */}
+          <div className="min-w-0">
+            <div className="w-screen ml-[calc(50%-50vw)] mr-[calc(50%-50vw)] bg-black dc-fade-in min-[900px]:ml-0 min-[900px]:mr-0 min-[900px]:w-full">
+              {loadFailed ? (
+                <p className="py-24 text-center font-serif-v3 text-sm italic text-warm/60">
+                  Something went wrong loading the film — please refresh.
+                </p>
+              ) : (
+                <Suspense
+                  fallback={
+                    <div className="flex aspect-video w-full items-center justify-center">
+                      <div className="w-6 h-6 border-[0.5px] border-accent border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  }
+                >
+                  <MuxPlayer
+                    ref={playerRef}
+                    streamType="on-demand"
+                    playbackId={link?.muxPlaybackId || undefined}
+                    poster={filmPosterUrl(link?.muxPlaybackId)}
+                    startTime={startSeconds}
+                    metadata={{ video_title: title }}
+                    accentColor="#b1a180"
+                    onTimeUpdate={handleTimeUpdate}
+                    onPlay={handlePlay}
+                    onEnded={handleEnded}
+                    className="aspect-video w-full"
+                  />
+                </Suspense>
+              )}
+            </div>
+          </div>
+
+          {/* ── The rail — the record, the act, the law. One left edge,
+              vertically centered against the player on desktop (the left
+              column holds ONLY the player — the centering contract). ── */}
+          <div className="min-w-0">
+            <div className="mx-auto mt-9 w-full max-w-[26rem] text-left min-[900px]:mx-0 min-[900px]:mt-0 min-[900px]:flex min-[900px]:h-full min-[900px]:max-w-none min-[900px]:flex-col min-[900px]:justify-center">
+              {/* The record: bar → count → goal label. Squared ends, solid
+                  accent fill, progress toward the NEXT tier only. */}
+              <section
+                aria-label={`${formatTierNumber(claimsCount)} viewers reached of ${formatTierNumber(goal)} goal`}
+              >
+                <div aria-hidden className="h-[2px] w-full bg-tint-track">
+                  <div
+                    className="h-full bg-accent"
+                    style={{ width: `${tierFillPercent(claimsCount)}%` }}
+                  />
+                </div>
+                <p
+                  aria-hidden
+                  className="mt-[1.125rem] font-sans font-semibold text-[2.25rem] leading-none tracking-[0.01em] text-warm"
+                >
+                  {formatTierNumber(claimsCount)}
+                </p>
+                <p
+                  aria-hidden
+                  className="mt-[0.625rem] font-sans font-normal text-[0.8125rem] uppercase leading-[1.6] tracking-[0.18em] text-warm/80"
+                >
+                  Viewers reached of {formatTierNumber(goal)} goal
+                </p>
+              </section>
+
+              {/* Milestones — quiet permanent hallmarks. The ENTIRE block is
+                  absent until the first tier is crossed (founder amendment
+                  B): no label, no placeholder, no celebration. */}
+              {crossed.length > 0 && (
+                <div className="mt-7 text-left">
+                  <p className="font-sans font-normal text-[0.8125rem] uppercase tracking-[0.18em] text-warm/60">
+                    Milestones passed
+                  </p>
+                  <p className="mt-2 font-sans font-normal text-[0.8125rem] tracking-[0.14em] text-warm/75">
+                    {crossed.map((tier, i) => (
+                      <span key={tier}>
+                        {i > 0 && (
+                          <span aria-hidden className="px-[0.55em] opacity-50">
+                            ·
+                          </span>
+                        )}
+                        <span
+                          aria-hidden
+                          className="pr-[0.3em] tracking-normal text-accent opacity-50"
+                        >
+                          ✦
+                        </span>
+                        {formatTierNumber(tier)}
+                      </span>
+                    ))}
+                  </p>
+                </div>
+              )}
+
+              {/* The act + the law, grouped. The CTA is the page's ONLY
+                  solid-filled object; it opens the pass-it-on modal
+                  (arriving in Phase 4). */}
+              <div>
+                <button
+                  type="button"
+                  className="mt-6 block min-h-[52px] w-full cursor-pointer touch-manipulation border border-accent bg-accent px-6 py-[0.9375rem] font-sans font-normal text-[0.8125rem] uppercase tracking-[0.28em] text-ink transition-colors duration-300 hover:border-[rgba(177,161,128,0.88)] hover:bg-[rgba(177,161,128,0.88)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[3px] focus-visible:outline-accent min-[900px]:mt-9"
+                >
+                  Pass it on
+                </button>
+                {chainLength >= 1 && (
+                  <div className="mt-5">
+                    <p className="font-serif-v3 italic text-[0.875rem] leading-[1.6] text-warm/65">
+                      This film passed through {pairsOfHandsPhrase(chainLength)} to reach you.
+                      You are its newest link{' '}—{' '}
+                      <span className="text-accent">or{' '}its{' '}last.</span>
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ══ The creed — hairline band, three marks, three statements.
+            Founder-provided copy, verbatim (2026-07-23 revision). ══ */}
+        <section
+          aria-label="How films travel here"
+          className="mt-12 border-y border-warm/15 py-[clamp(2rem,4svh,2.75rem)] min-[900px]:mt-[clamp(1.75rem,4svh,2.5rem)]"
+        >
+          <div className="grid grid-cols-1 gap-y-11 min-[900px]:grid-cols-3 min-[900px]:gap-x-16">
+            <div className="text-center">
+              {/* The hand-off: one gift between two real people (solid = arrived). */}
+              <div className="flex h-5 items-center justify-center">
+                <svg className="h-5 w-auto text-accent opacity-45" viewBox="0 0 30 20" aria-hidden>
+                  <line x1="5" y1="10" x2="25" y2="10" stroke="currentColor" strokeWidth="1.1" />
+                  <circle cx="5" cy="10" r="2.2" fill="currentColor" />
+                  <circle cx="25" cy="10" r="2.2" fill="currentColor" />
+                </svg>
+              </div>
+              <p className="mx-auto mt-3.5 max-w-[22rem] font-serif-v3 italic text-[1.0625rem] leading-[1.7] text-warm/80">
+                Films here spread by private invite and real humans only. No algorithms.
+              </p>
+            </div>
+
+            <div className="text-center">
+              {/* The fan: the chain extends; hollow tips only exist if you pass it on. */}
+              <div className="flex h-5 items-center justify-center">
+                <svg className="h-5 w-auto text-accent opacity-45" viewBox="0 0 50 20" aria-hidden>
+                  <line x1="5" y1="10" x2="19" y2="10" stroke="currentColor" strokeWidth="1.1" />
+                  <line x1="19" y1="10" x2="33" y2="3.5" stroke="currentColor" strokeWidth="1.1" />
+                  <line x1="19" y1="10" x2="37" y2="10" stroke="currentColor" strokeWidth="1.1" />
+                  <line x1="19" y1="10" x2="33" y2="16.5" stroke="currentColor" strokeWidth="1.1" />
+                  <circle cx="5" cy="10" r="2.2" fill="currentColor" />
+                  <circle cx="19" cy="10" r="2.2" fill="currentColor" />
+                  <circle cx="34" cy="3" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+                  <circle cx="39" cy="10" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+                  <circle cx="34" cy="17" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+                </svg>
+              </div>
+              <p className="mx-auto mt-3.5 max-w-[22rem] font-serif-v3 italic text-[1.0625rem] leading-[1.7] text-warm/80">
+                This film won&rsquo;t reach anyone new, unless{' '}
+                <span className="text-accent">you</span> pass it on.
+              </p>
+            </div>
+
+            <div className="text-center">
+              {/* The ticket stub — the instrument of the law beneath it. */}
+              <div className="flex h-5 items-center justify-center">
+                <svg className="h-5 w-auto text-accent opacity-45" viewBox="0 0 32 20" aria-hidden>
+                  <path
+                    d="M2 2 h28 v5 a3 3 0 0 0 0 6 v5 h-28 v-5 a3 3 0 0 0 0-6 z"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.2"
+                  />
+                </svg>
+              </div>
+              <p className="mx-auto mt-3.5 max-w-[22rem] font-serif-v3 italic text-[1.0625rem] leading-[1.7] text-warm/80">
+                Share intentionally. Each ticket admits one person, once.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* ══ The story — the filmmaker's note. Per-film content from
+            src/content/filmStory.js; a film with no entry renders NOTHING
+            here (no frame, no eyebrow — never invented copy). ══ */}
+        {story && (
+          <section
+            aria-label="From the filmmaker"
+            className="mx-auto mt-12 w-full max-w-[42rem] text-left min-[900px]:mt-[clamp(3rem,6svh,4.5rem)]"
+          >
+            <div className="flex items-end gap-4">
+              {/* The photo frame — hairline circle on the track tint; the
+                  filmmaker's real photo drops into this frame when it
+                  exists (src/content/filmStory.js). */}
+              <div
+                aria-hidden
+                className="h-14 w-14 shrink-0 overflow-hidden rounded-full border border-warm/15 bg-tint-track"
+              >
+                {story.filmmakerPhotoUrl && (
+                  <img
+                    src={story.filmmakerPhotoUrl}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                )}
+              </div>
+              <p className="pb-[0.3125rem] font-sans font-normal text-[11px] uppercase tracking-[0.32em] text-muted">
+                From the filmmaker
+                {story.filmmakerLocation && (
+                  <>
+                    {' '}·{' '}
+                    {story.filmmakerLocation}
+                  </>
+                )}
+              </p>
+            </div>
+
+            <p className="mt-7 max-w-[34rem] font-serif-v3 italic text-[clamp(1.25rem,2vw,1.4375rem)] leading-[1.55] text-warm/90">
+              {story.epigraph}
+            </p>
+
+            <div className="mt-7 max-w-[62ch]">
+              {story.body.map((paragraph, i) => (
+                <p
+                  key={i}
+                  className={`${i > 0 ? 'mt-[1.375rem] ' : ''}font-sans font-light text-[1.0625rem] leading-[1.85] text-warm/80`}
+                >
+                  {paragraph}
+                </p>
+              ))}
+            </div>
+
+            <p className="mt-8 font-serif-v3 italic text-[1.125rem] text-muted">
+              — {story.filmmakerName}, director
+            </p>
+          </section>
+        )}
+      </main>
+
+      {/* ══ Footer — the quiet persistent dashboard link. ══ */}
+      <footer className="relative z-10 pb-[max(clamp(2.5rem,6vh,4rem),env(safe-area-inset-bottom,0px))] pt-[clamp(2rem,5vh,3rem)] text-center">
+        <Link
+          to="/dashboard"
+          className="font-sans font-normal text-xs uppercase tracking-[0.26em] text-muted transition-colors hover:text-warm"
+        >
+          Your dashboard →
+        </Link>
+      </footer>
+
+      {/* ════ LEGACY docked pass-it-on panel — OUT of the render path since
+          Phase 2 of the redesign; the modal (Phase 4) takes over its state
+          and handlers, and Phase 7 deletes this block. Kept verbatim so the
+          share machinery stays wired exactly as shipped meanwhile. ════ */}
+      {LEGACY_DOCKED_PANEL && (
         <section className="mt-[clamp(2.75rem,7svh,5.5rem)] w-screen ml-[calc(50%-50vw)] border-y border-warm/15 px-[clamp(1.5rem,5vw,3rem)] py-[clamp(2.25rem,6vw,3.5rem)] text-center min-[540px]:ml-auto min-[540px]:mr-auto min-[540px]:w-full min-[540px]:max-w-[40rem] min-[540px]:border">
           <p className="font-sans text-[11px] uppercase tracking-[0.32em] text-accent">Pass it on</p>
 
-          {/* The constraint line — this panel is its home. Personalized,
-              owner-approved copy (2026-07-21). */}
           {constraintLine && (
             <p className="mx-auto mt-6 max-w-md font-serif-v3 text-[clamp(1.125rem,2.6vw,1.3125rem)] italic leading-[1.7] text-warm/90">
               {constraintLine}
             </p>
           )}
 
-          {/* Stubs sit above the tickets/zero line — in the zero state they
-              remain, all dimmed (the emptied ticket book reads better than a
-              bare sentence; decided 2026-07-19). */}
           <TicketStubs granted={INITIAL_CLAIMANT_TICKETS} remaining={stubBalance} />
 
           {outOfTickets ? (
@@ -510,7 +761,6 @@ export default function ClaimWatch() {
             </p>
           ) : (
             <>
-              {/* Tickets line — live per-film wallet value. */}
               <p
                 className={`${Number.isFinite(stubBalance) ? 'mt-3.5' : 'mt-8'} font-sans text-xs uppercase tracking-[0.24em] text-muted`}
               >
@@ -518,7 +768,6 @@ export default function ClaimWatch() {
                 Each admits one person, once.
               </p>
 
-              {/* First name → generate. */}
               <form onSubmit={handleGenerate} className="mx-auto mt-7 flex max-w-[22rem] flex-col gap-4">
                 <label htmlFor="share-first-name" className="sr-only">
                   Their first name
@@ -544,10 +793,8 @@ export default function ClaimWatch() {
             </>
           )}
 
-          {/* Result reveal — rises in (plain fade under reduced motion). */}
           {generated && (
             <div key={generated.url} className="mx-auto mt-9 max-w-[30rem] border-t border-warm/15 pt-8 dc-result-rise">
-              {/* Owner-approved reveal copy (2026-07-21). */}
               <p className="mx-auto font-serif-v3 text-[1.0625rem] italic leading-[1.7] text-warm/85">
                 Here’s {generated.name}’s ticket. Deliver it with your own words — it admits one
                 person, once.
@@ -576,18 +823,7 @@ export default function ClaimWatch() {
             </div>
           )}
         </section>
-      </main>
-
-      {/* Footer — the persistent quiet dashboard link, for claimants who
-          haven't shared yet. */}
-      <footer className="relative z-10 pb-[max(clamp(2.5rem,6vh,4rem),env(safe-area-inset-bottom,0px))] pt-[clamp(2rem,5vh,3rem)] text-center">
-        <Link
-          to="/dashboard"
-          className="font-sans text-xs uppercase tracking-[0.26em] text-muted transition-colors hover:text-warm"
-        >
-          Your dashboard →
-        </Link>
-      </footer>
+      )}
     </div>
   )
 }

@@ -161,7 +161,7 @@ test.describe('three-page claim arc', () => {
     expect(jsErrors).toEqual([])
   })
 
-  test('full arc: claim → watch → share panel → generate with ticket decrement → revisit', async ({ page }) => {
+  test('full arc: claim → prologue → the redesigned watch page → revisit', async ({ page }) => {
     let claimed = false
     await page.route('**/api/invites/link/**', (route) =>
       route.fulfill({ json: claimed ? LINK_CLAIMED : LINK_CREATED })
@@ -200,36 +200,37 @@ test.describe('three-page claim arc', () => {
     await expect(page.getByText('32 minutes. Headphones recommended.')).toBeVisible()
     await expect(page.locator('mux-player')).toBeAttached({ timeout: 20_000 })
 
-    // The docked panel is ALWAYS OPEN (2026-07-19): no toggle exists, and the
-    // constraint line (its home), tickets line, and first-name form show
-    // without any interaction.
-    await expect(page.getByRole('button', { name: /Who is this film for\?/i })).toHaveCount(0)
-    // Personalized constraint line (2026-07-21): receiver + sharer first
-    // names from the payload ('Ien Chi' trims to its first word).
+    // The redesigned watch page (2026-07-23): the rail replaces the docked
+    // panel — the record (tier bar + count + goal), the act (the CTA), and
+    // the law (the rule line). The pass-it-on flow itself moves into the
+    // modal (redesign Phase 4 — its coverage returns there); no share form
+    // lives on the page.
+    await expect(page.getByRole('button', { name: 'Pass it on' })).toBeVisible()
+    await expect(page.getByText(/Viewers reached of/i)).toBeVisible()
+    // TEMP specimen count until Phase 6 wires the real number: milestones show.
+    await expect(page.getByText('Milestones passed')).toBeVisible()
+    // The rule line: fixture lineage ['Ien Chi'] + senderIsCreator → one
+    // hand, singular grammar (owner-approved 2026-07-23), numeral kept.
     await expect(
-      page.getByText(/Alex, this film reached you because Ien thought of you\. No algorithm, no feed\. Films here spread by private invite & real humans only\./)
+      page.getByText(/This film passed through 1 pair of hands to reach you/)
     ).toBeVisible()
-    await expect(page.getByText(/You can share 5 tickets for this film/)).toBeVisible()
-    // Ticket stubs: one per granted ticket, none spent yet.
-    await expect(page.locator('[data-stub]')).toHaveCount(5)
-    await expect(page.locator('[data-stub="used"]')).toHaveCount(0)
-
-    // Generate a second-generation link — visible ticket decrement.
-    await page.getByPlaceholder('Their first name').fill('Jordan')
-    await page.getByRole('button', { name: /Create their invitation/i }).click()
-    await expect(page.getByText('http://localhost:3000/jordan-ab2c').first()).toBeVisible()
-    // Bare link only (2026-07-21): no pre-written share message anywhere.
-    await expect(page.getByText(/I watched this and thought of you —/)).toHaveCount(0)
-    await expect(page.getByRole('button', { name: /Copy their invitation/i })).toBeVisible()
-    // Reveal copy (2026-07-21): personal line 1 + counted line 2, numerals.
-    await expect(page.getByText(/Here’s Jordan’s ticket\. Deliver it with your own words/)).toBeVisible()
-    await expect(page.getByText('4 tickets left. Who else comes to mind?')).toBeVisible()
-    await expect(page.getByText(/You can share 4 tickets for this film/)).toBeVisible()
-    // The newest-used stub dims in sync with the text count.
-    await expect(page.locator('[data-stub="used"]')).toHaveCount(1)
-    await expect(page.getByRole('link', { name: /See where your ticket went/i })).toBeVisible()
-    // Persistent quiet dashboard link exists too.
-    await expect(page.getByRole('link', { name: /Your dashboard/i })).toBeVisible()
+    // The creed, founder-provided verbatim (2026-07-23 revision).
+    await expect(
+      page.getByText('Films here spread by private invite and real humans only. No algorithms.')
+    ).toBeVisible()
+    await expect(page.getByText(/won’t reach anyone new, unless/)).toBeVisible()
+    await expect(
+      page.getByText('Share intentionally. Each ticket admits one person, once.')
+    ).toBeVisible()
+    // The personalized constraint line is CUT from this page (spec §9.4).
+    await expect(page.getByText(/this film reached you because/)).toHaveCount(0)
+    // No share form and no ticket stubs on the page — the modal owns them.
+    await expect(page.getByPlaceholder('Their first name')).toHaveCount(0)
+    await expect(page.locator('[data-stub]')).toHaveCount(0)
+    // No story section for a film without authored content — never invented.
+    await expect(page.getByText('From the filmmaker')).toHaveCount(0)
+    // Dashboard links: header + footer (the arrow is the nav affordance).
+    await expect(page.getByRole('link', { name: /Your dashboard/i })).toHaveCount(2)
 
     // REVISIT RULE: re-opening the claimed landing slug routes the owner
     // (recognized by stash) straight back to their watch page while the
@@ -291,14 +292,17 @@ test.describe('three-page claim arc', () => {
     expect(jsErrors).toEqual([])
   })
 
-  test('zero tickets: the panel shows the quiet all-given state, no form', async ({ page }) => {
+  test('zero tickets: the page renders the rail; the ticket book lives in the modal now', async ({ page }) => {
+    // The redesign (2026-07-23) moved the ticket stubs, count line, and the
+    // all-given zero state into the pass-it-on modal — Phase 4 restores
+    // their coverage there. The page itself renders the rail regardless of
+    // the wallet, and the constraint line is CUT (spec §9.4).
     await page.addInitScript(() => {
       window.localStorage.setItem(
         'deepcast:claim',
         JSON.stringify({ slug: 'alex-h4k2', inviteId: 'inv-you', filmId: 'film-1', claimedEmail: 'alex@example.com' })
       )
     })
-    // sharerName null: also covers the constraint line's generic fallback.
     await page.route('**/api/invites/link/**', (route) =>
       route.fulfill({ json: { ...LINK_CLAIMED, ticketsRemaining: 0, sharerName: null } })
     )
@@ -307,16 +311,33 @@ test.describe('three-page claim arc', () => {
     // Direct visits render instantly — the arrival fade rides only the
     // prologue's router marker.
     await expect(page.locator('.dc-watch-arrival')).toHaveCount(0)
-    // Panel is always open — the zero-tickets state shows with no interaction.
-    await expect(page.getByText('You’ve given all your tickets for this film.')).toBeVisible()
-    // Fallback path: a missing sharer name renders the generic wording, with
-    // the updated final sentence.
-    await expect(
-      page.getByText('This film reached you because someone thought of you. No algorithm, no feed. Films here spread by private invite & real humans only.')
-    ).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Pass it on' })).toBeVisible()
+    // No constraint line in either wording, no form, no stubs on the page.
+    await expect(page.getByText(/this film reached you because/i)).toHaveCount(0)
     await expect(page.getByPlaceholder('Their first name')).toHaveCount(0)
-    // The emptied ticket book stays visible: all five stubs, all dimmed.
-    await expect(page.locator('[data-stub="used"]')).toHaveCount(5)
+    await expect(page.locator('[data-stub]')).toHaveCount(0)
+    expect(jsErrors).toEqual([])
+  })
+
+  test('the filmmaker story renders only for films with authored content', async ({ page }) => {
+    // Keyed by the film's real Mux playback id (src/content/filmStory.js).
+    // Stream traffic is blocked so the real id never reaches Mux from CI.
+    await page.route('**stream.mux.com/**', (route) => route.abort())
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        'deepcast:claim',
+        JSON.stringify({ slug: 'alex-h4k2', inviteId: 'inv-you', filmId: 'film-1', claimedEmail: 'alex@example.com' })
+      )
+    })
+    await page.route('**/api/invites/link/**', (route) =>
+      route.fulfill({
+        json: { ...LINK_CLAIMED, muxPlaybackId: '6GMWj01CjP01Y1ee001Vd2qYqUPJtEOgUYz00nG02BYE9F9E' },
+      })
+    )
+    await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
+
+    await expect(page.getByText('From the filmmaker · Atlanta, Georgia')).toBeVisible()
+    await expect(page.getByText('— Jon Bregel, director')).toBeVisible()
     expect(jsErrors).toEqual([])
   })
 
