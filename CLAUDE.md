@@ -12,15 +12,18 @@ Deepcast optimizes for depth over reach. It is an invite-only network where subs
 - Before ANY production deletion: SELECT and show the owner the exact rows first. No exceptions.
 - The 50 seeded demo graph nodes (invites with `recipient_email LIKE '%@demo.invalid'`) are intentional and stay.
 
-## Films (two films, June 2026)
+## Films (three films, July 2026)
 
-The app is multi-film. There are currently two films:
+The app is multi-film. There are currently three films:
 
-- **"The New Narrative"** (`80df945a-6fb7-416b-ad73-3fab4b9cadf8`) — the REAL film, with real users and the real share graph. Covered by the real-users rule above.
-- **"A Sacred Pause"** (`7c42093d-d5eb-4a38-a9fa-d28ca41d7b0f`, mux playback `6GMWj01CjP01Y1ee001Vd2qYqUPJtEOgUYz00nG02BYE9F9E`) — **PUBLIC-FACING** (since 2026-07-21; formerly the demo film), owned by the filmmaker (`filmmaker@gmail.com`), directed by Jon Bregel. Still carries its seeded ghost invites (recipients `…@demo-deepcast.invalid`) — intentional graph texture on admin surfaces, excluded from every viewer surface and never ticket-numbered. Its `description` and `gif_start=616` / `gif_end=624` remain set for the legacy invite email.
+- **"The New Narrative"** (`80df945a-6fb7-416b-ad73-3fab4b9cadf8`) — the REAL film, with real users and the real share graph. Covered by the real-users rule above. `show_ghosts` is false: its 50 seeded `…@demo.invalid` nodes appear on admin surfaces only.
+- **"A Sacred Pause"** (`7c42093d-d5eb-4a38-a9fa-d28ca41d7b0f`, mux playback `6GMWj01CjP01Y1ee001Vd2qYqUPJtEOgUYz00nG02BYE9F9E`) — **PUBLIC-FACING** (since 2026-07-21; formerly the demo film), owned by the filmmaker (`filmmaker@gmail.com`), directed by Jon Bregel. Still carries its seeded ghost invites (recipients `…@demo-deepcast.invalid`); its `show_ghosts` flag is TRUE (owner-stated 2026-07-22), so those ghosts render on VIEWER surfaces too (constellation, journey counts, ticket rows) as ordinary indistinguishable nodes — they are still never ticket-numbered, and they always show on admin surfaces regardless. Its `description` and `gif_start=616` / `gif_end=624` remain set for the legacy invite email (legacy columns — see the GIF retirement note in the email section).
   - **Distinct from** the 50 `…@demo.invalid` seeded graph nodes on The New Narrative (real-users section above) — different film, different email domain. Do not conflate the two demo sets.
   - **Teardown script — NEVER RUN IT (owner decision 2026-07-21):** `server/teardown-demo-film.js` deletes this entire film (its invites, watch_sessions, then the film row). Its purpose EXPIRED when A Sacred Pause became the public-facing film — running it would destroy a live production film. It stays committed for the historical record only (dry-run by default, typed confirmation, protected-email guard including Jon), but there is no circumstance under which it should be executed.
-- **Testing rule (owner decision 2026-07-20): ALL testing happens on "The New Narrative" — it is the designated test film. "A Sacred Pause" is public-facing: NEVER create test links, test claims, or any other test data on it.**
+- **"The Faith Dialogues"** (`6a9c0c79-24f6-427e-ba34-c113acf92d9f`, mux playback `4HnHRG3NAf9YYR7V1fNs0143gGJnLUZ9F1umQuXsOaaQ`, mux asset `maKIC023p9tTzstYdjC7mbMPd6nAOA6iDacDBSm00uwss`, 33m03s / 1983s) — **PRIVATE DEMO film** (row inserted by the owner 2026-07-22), `show_ghosts` TRUE, seeded ghosts planned. `gif_start`/`gif_end` are NULL by design (the GIF mechanism is retired — see the email section).
+  - **Claim-link flow ONLY.** The legacy email-invite and resend paths (`/api/invites/send`, `/api/invites/resend`, the `InviteForm` mounts on Upload/Profile, the Network Map resend button) must NEVER be used for this film: with NULL gif fields the email would embed a Mux default opening-seconds GIF, and the legacy screening's pre-film prologue (`src/pages/InviteScreening.jsx`, non-Sacred-Pause branch) shows copy written for The New Narrative.
+  - **The five allowlisted test emails must NEVER be used on this film.** `server/reset-test-data.js` collects its delete-set by those emails across ALL films — a test claim or send here would be deleted on the next reset, leaving permanent ticket-number gaps.
+- **Testing rule (owner decision 2026-07-20): ALL testing happens on "The New Narrative" — it is the designated test film. "A Sacred Pause" is public-facing and "The Faith Dialogues" is a curated private demo: NEVER create test links, test claims, or any other test data on either.**
 
 ### A Sacred Pause demo stopgaps (tech debt — NOT general behaviour)
 
@@ -30,7 +33,7 @@ Three customizations are hardcoded behind `SACRED_PAUSE_FILM_ID === '7c42093d-�
 - the invite-email title + synopsis italics (`buildInviteEmailHtml`, `server/index.js`),
 - the invite-email GIF at `fps=15` (`buildFilmGifUrl`, `server/index.js`).
 
-These are per-film hardcodes pending the multi-film / editable-welcome work, where they become per-film editable fields (editable welcome copy, synopsis, GIF window + fps). When that lands, delete the `SACRED_PAUSE_FILM_ID` gates.
+These are per-film hardcodes pending the multi-film / editable-welcome work, where the surviving ones become per-film editable fields (editable welcome copy, synopsis). The GIF window/fps piece is NOT future work anymore — the GIF mechanism is retired (see the email section); the fps gate merely lingers until the legacy email path itself is removed. When the editable-welcome work lands, delete the `SACRED_PAUSE_FILM_ID` gates.
 
 ## Platform principles (use these when writing any user-facing copy or making product decisions)
 
@@ -105,7 +108,7 @@ npm test                 # Unit + E2E
   - `npx playwright test --config playwright.local.config.js` (local-only file, not committed) is the fallback that launches full Chromium instead of headless-shell.
 - Build includes unit tests: `npm run build` runs `vitest run && vite build`.
 - Local dev: Vite on port **3000**, Express API on port **3001** (Vite proxies `/api/*` to 3001). `npm run dev` starts both.
-- **Fresh manual-test links:** `node server/reset-test-data.js` (dry-run BY DEFAULT since 2026-07-17; `--execute` + typed phrase to write) deletes ONLY the allowlisted test emails' data and mints five fresh, unopened filmmaker invites — one per allowlisted email. These are the five standard scenarios used to manually walk the invite → watch → pass-it-on → dashboard journey from five separate identities (including the already-signed-in relink case and the R5 no-relink case).
+- **Fresh manual-test links:** `node server/reset-test-data.js` (dry-run BY DEFAULT since 2026-07-17; `--execute` + typed phrase to write) deletes ONLY the allowlisted test emails' data and mints five fresh, unopened filmmaker invites — one per allowlisted email. **Its delete-set is collected by those emails across ALL films** (not film-scoped), which is why the five test emails must never touch The Faith Dialogues or A Sacred Pause. These are the five standard scenarios used to manually walk the invite → watch → pass-it-on → dashboard journey from five separate identities (including the already-signed-in relink case and the R5 no-relink case).
 - **Email rendering:** `node server/preview-email.js` writes `server/email-preview.html` to inspect the invite email without sending anything.
 - **Read-only database inspection:** ALL read-only inspection (checking, comparing, verifying data) must go through `node server/db-read.js "select ..."` — never the Supabase MCP connection — so the owner is only ever prompted for genuine database WRITES. The script rejects anything that isn't a single SELECT / WITH...SELECT at the code level (tested in `server/db-read.test.js`), and the backing `db_read` Postgres function runs in a READ ONLY transaction as a second layer.
 - Setup for new clone: `npm install && npx playwright install chromium webkit firefox` (on this machine, use the manual curl+unzip install above instead).
@@ -201,7 +204,7 @@ The single source of truth for which invite rows count: voided links count NOWHE
 
 ### Standing content rules
 
-- **Real films ship with bar-free masters and a hand-picked `poster_url`.** Baked letterbox bars poison the poster frame, GIF, and player, and nothing downstream can remove them.
+- **Real films ship with bar-free masters and a hand-picked `poster_url`.** Baked letterbox bars poison the poster frame and player (and the legacy email GIF, while that path survives), and nothing downstream can remove them.
 - **Real films need real Ien-authored transmission hooks** before they ship; the demo film's hook is demo copy.
 
 ## CURRENT STATE (2026-07-22 — the V5 ship is LIVE on production)
@@ -230,7 +233,7 @@ The single source of truth for which invite rows count: voided links count NOWHE
 
 **Accepted MVP limitations (by decision — do not "fix" without Ien):** two same-first-name claimants on one film can merge into one graph node; legacy account-viewer screening cards show no progress bar; claimed-but-unwatched does not count toward the legacy reach stat; multi-film dashboards pin the constellation/journey/tickets to one auto-selected film (stacked screening cards, no switcher).
 
-**Backlog (logged 2026-07-22, not scheduled): two-film dashboard selection bug.** The V5 dashboard picks its pinned film from the viewer's MOST RECENT SENT invite (`Dashboard.jsx`, `let filmId = sentList[0]?.film_id`) while stacking screening cards for ALL received films — an account active on two films can show one film's screening card beside another film's journey/constellation data (seen 2026-07-22 with a test account holding The New Narrative sends and an A Sacred Pause claim). Fix direction: a film switcher or a consistent single-film selection rule. Real users are single-film today, so this is not urgent.
+**Backlog (logged 2026-07-22, not scheduled): two-film dashboard selection bug.** The V5 dashboard picks its pinned film from the viewer's MOST RECENT SENT invite (`Dashboard.jsx`, `let filmId = sentList[0]?.film_id`) while stacking screening cards for ALL received films — an account active on two films can show one film's screening card beside another film's journey/constellation data (seen 2026-07-22 with a test account holding The New Narrative sends and an A Sacred Pause claim). Fix direction: a film switcher or a consistent single-film selection rule. Real users are single-film today, so this is not urgent — but with three films (The Faith Dialogues added 2026-07-22) the odds of a two-film account rise; any demo viewer who also holds another film will hit it.
 
 **Backups** (owner's machine, outside the repo): `~/deepcast-backups/2026-07-06/` (full pre-migration table dump + restore notes) and `~/deepcast-backups/2026-07-16-d4/` (the deleted test rows). The Supabase free tier has NO automatic backups; proper pg_dump path is tracker item E8.
 
@@ -240,9 +243,11 @@ The single source of truth for which invite rows count: voided links count NOWHE
 
 Everything below this line about invite EMAILS and the send flow describes the LEGACY system. Invite links never expire, so already-sent email invites must keep working indefinitely: `/i/:token`, its status machinery (`pending→opened→watched→signed_up`), `buildInviteEmailHtml`/`PlainText`, and the resend routes stay live and untouched. CREATION of new email invites is retired from every viewer-facing surface (the viewer dashboard's email modal was DELETED with the V5 ship, 2026-07-21); the A5 remainder is the two `InviteForm.jsx` mounts on the creator-only Upload and Profile pages, and the legacy screening's pass-it-on letter (reachable only from old `/i/:token` invites).
 
-## Invite email content & MUX GIF
+## Invite email content & MUX GIF — GIF mechanism RETIRED (2026-07-22)
 
-(Delivery/throttling is the doctrine above; this is how the email's CONTENT is built.)
+**The GIF preview mechanism is retired product-wide.** New films ship with NULL `gif_start`/`gif_end`, no GIF window is ever chosen for them, and no GIF pre-warming step exists anywhere (the claim prologue warms the watch route chunk, Mux preconnects, and the poster — never a GIF; the link-preview card is the one static site-wide og image in `index.html`). `gif_start`/`gif_end` are legacy columns kept only for the two original films' historical values. Never set GIF timecodes for a new film. Caveat that keeps this section alive: the legacy creator-only email path (`/api/invites/send` via the Upload/Profile `InviteForm` mounts, and the Network Map resend) still embeds a GIF when it runs — for a film with NULL gif fields it would render Mux's default opening-seconds window, one of the reasons legacy email invites must never be used for new films (see The Faith Dialogues rules in the Films section).
+
+(Delivery/throttling is the doctrine above; the rest of this section describes how the LEGACY email's content is built.)
 
 - **The invite email is film-data-driven.** Synopsis = `films.description`; the animated preview GIF URL is built by `buildFilmGifUrl(film, filmId)` from `films.mux_playback_id` + `films.gif_start`/`gif_end`. The HTML body is assembled in `buildInviteEmailHtml` (`server/index.js`). Per-film content needs only the film row, not code — the A Sacred Pause italics/fps are the gated demo exception noted in the Films section.
 - **`films.description` is HTML-escaped and its newlines are dropped.** It is inserted via `escapeHtml`, with no `\n`→`<br>` conversion, so any markup or line breaks in the data are lost. **Formatting must be done in the template, not the data** — wrap the already-escaped strings in tags we control; never unescape, never allow data-supplied HTML through.
