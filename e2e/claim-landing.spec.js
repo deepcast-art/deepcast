@@ -365,6 +365,79 @@ test.describe('three-page claim arc', () => {
     expect(jsErrors).toEqual([])
   })
 
+  test('the pass-it-on modal: CTA opens it focused, State 1 contents, every close path returns focus', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        'deepcast:claim',
+        JSON.stringify({ slug: 'alex-h4k2', inviteId: 'inv-you', filmId: 'film-1', claimedEmail: 'alex@example.com' })
+      )
+    })
+    await page.route('**/api/invites/link/**', (route) => route.fulfill({ json: LINK_CLAIMED }))
+    await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
+
+    const cta = page.getByRole('button', { name: 'Pass it on' })
+    const eyebrow = page.getByText('Pass it on. Make an impact.')
+
+    // Closed by default; nothing of the flow leaks onto the page.
+    await expect(eyebrow).toHaveCount(0)
+
+    // Open → the first-name field holds focus; State 1 contents in order.
+    await cta.click()
+    await expect(eyebrow).toBeVisible()
+    await expect(page.getByPlaceholder('Their first name')).toBeFocused()
+    await expect(page.locator('dialog [data-stub]')).toHaveCount(5)
+    await expect(page.locator('dialog [data-stub="used"]')).toHaveCount(0)
+    await expect(page.getByText('5 tickets left.')).toBeVisible()
+    await expect(page.getByText(/Who needs to see this\? Not anyone/)).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Create their invitation' })).toBeVisible()
+    // Body scroll locks while the modal is open.
+    expect(await page.evaluate(() => document.body.style.overflow)).toBe('hidden')
+
+    // Esc closes and focus returns to the CTA.
+    await page.keyboard.press('Escape')
+    await expect(eyebrow).toHaveCount(0)
+    await expect(cta).toBeFocused()
+    expect(await page.evaluate(() => document.body.style.overflow)).not.toBe('hidden')
+
+    // × closes.
+    await cta.click()
+    await expect(eyebrow).toBeVisible()
+    await page.getByRole('button', { name: 'Close' }).click()
+    await expect(eyebrow).toHaveCount(0)
+    await expect(cta).toBeFocused()
+
+    // Mousedown on the scrim itself closes (outside the panel).
+    await cta.click()
+    await expect(eyebrow).toBeVisible()
+    await page.mouse.move(8, 400)
+    await page.mouse.down()
+    await page.mouse.up()
+    await expect(eyebrow).toHaveCount(0)
+    await expect(cta).toBeFocused()
+
+    expect(jsErrors).toEqual([])
+  })
+
+  test('the pass-it-on modal: zero tickets shows the all-given state, stubs dimmed, no form', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        'deepcast:claim',
+        JSON.stringify({ slug: 'alex-h4k2', inviteId: 'inv-you', filmId: 'film-1', claimedEmail: 'alex@example.com' })
+      )
+    })
+    await page.route('**/api/invites/link/**', (route) =>
+      route.fulfill({ json: { ...LINK_CLAIMED, ticketsRemaining: 0 } })
+    )
+    await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
+
+    await page.getByRole('button', { name: 'Pass it on' }).click()
+    await expect(page.getByText('You’ve given all your tickets for this film.')).toBeVisible()
+    // The emptied ticket book stays: all five stubs, all dimmed.
+    await expect(page.locator('dialog [data-stub="used"]')).toHaveCount(5)
+    await expect(page.getByPlaceholder('Their first name')).toHaveCount(0)
+    expect(jsErrors).toEqual([])
+  })
+
   test('the filmmaker story renders only for films with authored content', async ({ page }) => {
     // Keyed by the film's real Mux playback id (src/content/filmStory.js).
     // Stream traffic is blocked so the real id never reaches Mux from CI.

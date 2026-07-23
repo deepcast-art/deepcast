@@ -83,6 +83,152 @@ function TicketStubs({ granted, remaining }) {
 }
 
 /**
+ * The pass-it-on modal (redesign spec §4) — the ticket window, opened by the
+ * rail's CTA. Native <dialog> (top layer, Esc via the cancel event, focus
+ * containment that automatically covers elements the reveal adds later).
+ * Behavior contract: open → focus the first-name field; close on ×, Esc, and
+ * MOUSEDOWN on the scrim itself (mousedown, not click — a text-selection
+ * drag ending outside must not dismiss); focus returns to the CTA (the
+ * caller's onClose owns that); body scroll locks while open. Mounted only
+ * while open, so the entrance animations (.dc-fade-in scrim,
+ * .dc-result-rise panel) restart on every open; reduced-motion overrides
+ * live on those classes in index.css.
+ */
+function PassItOnModal({
+  onClose,
+  granted,
+  remaining,
+  tickets,
+  outOfTickets,
+  shareName,
+  onNameChange,
+  shareBusy,
+  shareError,
+  onSubmit,
+}) {
+  const dialogRef = useRef(null)
+  const panelRef = useRef(null)
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    dialogRef.current?.showModal()
+    inputRef.current?.focus()
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prevOverflow
+    }
+  }, [])
+
+  /** Scrim dismissal: only a mousedown that starts OUTSIDE the panel closes
+   *  (clicks on the dialog element itself — never its children). */
+  const handleScrimMouseDown = (e) => {
+    if (panelRef.current && !panelRef.current.contains(e.target)) onClose()
+  }
+
+  return (
+    <dialog
+      ref={dialogRef}
+      id="passiton-modal"
+      aria-labelledby="passiton-title"
+      onMouseDown={handleScrimMouseDown}
+      onCancel={(e) => {
+        e.preventDefault()
+        onClose()
+      }}
+      className="dc-passiton-scrim dc-fade-in fixed inset-0 m-0 flex h-full max-h-none w-full max-w-none items-center justify-center overflow-y-auto bg-tint-scrim px-0 py-2 min-[540px]:p-4"
+    >
+      <div
+        ref={panelRef}
+        className="dc-result-rise relative max-h-[calc(100dvh-2rem)] w-full overflow-y-auto border-y border-warm/15 bg-ink px-6 pb-11 pt-10 text-center text-warm min-[540px]:max-w-[30rem] min-[540px]:border min-[540px]:px-10 min-[540px]:pb-12 min-[540px]:pt-11"
+      >
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={onClose}
+          className="absolute right-1.5 top-1.5 flex h-11 w-11 cursor-pointer touch-manipulation items-center justify-center text-warm/60 transition-colors hover:text-warm focus-visible:text-warm focus-visible:outline-none"
+        >
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1"
+            strokeLinecap="round"
+            aria-hidden
+            className="h-4 w-4"
+          >
+            <line x1="2" y1="2" x2="14" y2="14" />
+            <line x1="14" y1="2" x2="2" y2="14" />
+          </svg>
+        </button>
+
+        <p
+          id="passiton-title"
+          className="font-sans font-normal text-[11px] uppercase tracking-[0.32em] text-muted"
+        >
+          Pass it on. Make an impact.
+        </p>
+
+        {/* The lineage emblem renders here (Phase 5 — spec §5). */}
+
+        {/* Stubs sit above the tickets/zero line — in the zero state they
+            remain, all dimmed (the emptied ticket book reads better than a
+            bare sentence). */}
+        <TicketStubs granted={granted} remaining={remaining} />
+
+        {outOfTickets ? (
+          <p
+            className={`${Number.isFinite(remaining) ? 'mt-3.5' : 'mt-8'} font-sans font-normal text-xs uppercase tracking-[0.24em] text-muted`}
+          >
+            You’ve given all your tickets for this film.
+          </p>
+        ) : (
+          <>
+            {/* The count — founder-directed whittle ("{n} tickets left."). */}
+            <p
+              className={`${Number.isFinite(remaining) ? 'mt-3.5' : 'mt-8'} font-sans font-normal text-xs uppercase tracking-[0.24em] text-muted`}
+            >
+              {tickets ?? '…'} ticket{tickets === 1 ? '' : 's'} left.
+            </p>
+
+            {/* The charge — founder-approved verbatim (2026-07-23, final).
+                NBSP binds "anyone" to the dash so "—" never leads a line. */}
+            <p className="mx-auto mt-6 max-w-[26rem] font-serif-v3 italic text-[1.0625rem] leading-[1.7] text-warm/80">
+              Who <span className="text-accent">needs</span> to see this? Not
+              anyone{' '}— the one it will matter to.
+            </p>
+
+            <form onSubmit={onSubmit} className="mx-auto mt-7 flex max-w-[22rem] flex-col gap-4">
+              <label htmlFor="share-first-name" className="sr-only">
+                Their first name
+              </label>
+              <input
+                ref={inputRef}
+                id="share-first-name"
+                type="text"
+                value={shareName}
+                onChange={(e) => onNameChange(e.target.value)}
+                placeholder="Their first name"
+                maxLength={50}
+                className="w-full border-b border-warm/20 bg-transparent px-1 py-3 text-center font-sans text-base font-light tracking-[0.06em] text-warm transition-colors duration-300 placeholder:font-serif-v3 placeholder:italic placeholder:tracking-normal placeholder:text-warm/40 focus:border-accent focus:outline-none"
+              />
+              {shareError && <p className="font-sans text-xs text-error/90">{shareError}</p>}
+              <button
+                type="submit"
+                disabled={shareBusy}
+                className="min-h-[48px] w-full cursor-pointer touch-manipulation border border-accent/60 px-6 py-3.5 font-sans font-normal text-[0.8125rem] uppercase tracking-[0.28em] text-accent transition-colors duration-300 hover:border-accent hover:bg-accent hover:text-ink focus-visible:border-accent focus-visible:bg-accent focus-visible:text-ink focus-visible:outline-none disabled:opacity-50"
+              >
+                {shareBusy ? 'One moment…' : 'Create their invitation'}
+              </button>
+            </form>
+          </>
+        )}
+      </div>
+    </dialog>
+  )
+}
+
+/**
  * PAGE 2 of the three-page structure: the watch page, in its founder-approved
  * two-column redesign (ground truth design-refs/watch-page_24.html; behavior
  * spec design-refs/watch-page-spec.md). Desktop ≥900px: header → masthead →
@@ -178,6 +324,15 @@ export default function ClaimWatch() {
   const [generated, setGenerated] = useState(null)
   const [copied, setCopied] = useState(false)
   const hasMarkedWatched = useRef(false)
+  /** The pass-it-on modal (redesign §4). Mounted only while open so its
+   *  entrance animations restart each time; focus returns to the CTA on
+   *  every close path. */
+  const [shareOpen, setShareOpen] = useState(false)
+  const ctaRef = useRef(null)
+  const closeShare = () => {
+    setShareOpen(false)
+    setTimeout(() => ctaRef.current?.focus(), 0)
+  }
 
   /* ── Phone fullscreen-landscape playback (2026-07-19; decisions in
      src/lib/playbackFullscreen.js). Desktop/tablet: nothing here ever runs —
@@ -587,7 +742,11 @@ export default function ClaimWatch() {
                   (arriving in Phase 4). */}
               <div>
                 <button
+                  ref={ctaRef}
                   type="button"
+                  aria-haspopup="dialog"
+                  aria-controls="passiton-modal"
+                  onClick={() => setShareOpen(true)}
                   className="mt-6 block min-h-[52px] w-full cursor-pointer touch-manipulation border border-accent bg-accent px-6 py-[0.9375rem] font-sans font-normal text-[0.8125rem] uppercase tracking-[0.28em] text-ink transition-colors duration-300 hover:border-[rgba(177,161,128,0.88)] hover:bg-[rgba(177,161,128,0.88)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[3px] focus-visible:outline-accent min-[900px]:mt-9"
                 >
                   Pass it on
@@ -735,6 +894,22 @@ export default function ClaimWatch() {
           Your dashboard →
         </Link>
       </footer>
+
+      {/* ══ The pass-it-on modal — the ticket window (spec §4). ══ */}
+      {shareOpen && (
+        <PassItOnModal
+          onClose={closeShare}
+          granted={INITIAL_CLAIMANT_TICKETS}
+          remaining={stubBalance}
+          tickets={tickets}
+          outOfTickets={outOfTickets}
+          shareName={shareName}
+          onNameChange={setShareName}
+          shareBusy={shareBusy}
+          shareError={shareError}
+          onSubmit={handleGenerate}
+        />
+      )}
 
       {/* ════ LEGACY docked pass-it-on panel — OUT of the render path since
           Phase 2 of the redesign; the modal (Phase 4) takes over its state

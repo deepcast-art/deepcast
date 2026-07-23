@@ -346,6 +346,14 @@ img {
   animation: dc-fade-in 1s cubic-bezier(0.8, 0, 1, 1) both;
 }
 
+/* Watch-page pass-it-on modal (redesign 2026-07-23, native <dialog>): the
+   SCRIM is the dialog element itself — styled with --color-tint-scrim and
+   fading in via .dc-fade-in — so a mousedown outside the panel can be told
+   apart from one inside (the UA's own ::backdrop stays transparent). */
+.dc-passiton-scrim::backdrop {
+  background: transparent;
+}
+
 .dc-rise-1 { animation-delay: 0.15s; }
 .dc-rise-2 { animation-delay: 0.4s; }
 .dc-rise-3 { animation-delay: 0.62s; }
