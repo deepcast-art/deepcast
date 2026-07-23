@@ -596,8 +596,16 @@ export default function Dashboard() {
       const email = (profile.email || '').trim()
       await Promise.all([
         supabase.from('invites').update({ sender_name: newName }).eq('sender_id', profile.id),
+        // Canonical-name rule (2026-07-23): claim-flow invites store
+        // recipient_email NULL — the rows addressed to me are found by
+        // claimed_by (primary) and claimed_email (degraded no-account
+        // claims). recipient_email still reaches legacy email invites.
+        supabase.from('invites').update({ recipient_name: newName }).eq('claimed_by', profile.id),
         email
           ? supabase.from('invites').update({ recipient_name: newName }).ilike('recipient_email', email)
+          : Promise.resolve(),
+        email
+          ? supabase.from('invites').update({ recipient_name: newName }).ilike('claimed_email', email)
           : Promise.resolve(),
       ])
 

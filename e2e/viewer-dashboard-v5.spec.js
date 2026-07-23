@@ -359,6 +359,85 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(page.getByText('No tickets given yet.')).toBeVisible()
   })
 
+  test('renaming propagates to claim-flow invites — keyed writes only, never a bare update', async ({ page }) => {
+    // Canonical-name rule (2026-07-23): "Edit your first name" must reach the
+    // invite rows addressed to me by claimed_by/claimed_email — claim-flow
+    // rows store recipient_email NULL, so the old email-only match reached
+    // nothing. Every recipient_name write must carry a row filter: an
+    // unfiltered update would rename ghosts and strangers film-wide.
+    let savedName = null
+    const restHeaders = {
+      'content-range': '0-0/1',
+      'access-control-expose-headers': 'Content-Range',
+    }
+    await page.route('**/rest/v1/users**', (route) => {
+      const req = route.request()
+      if (req.method() === 'PATCH') {
+        try {
+          savedName = JSON.parse(req.postData() || '{}').name ?? savedName
+        } catch { /* ignore */ }
+        return route.fulfill({ json: [], headers: restHeaders })
+      }
+      return route.fulfill({
+        json: [{ ...PROFILE, name: savedName || PROFILE.name }],
+        headers: restHeaders,
+      })
+    })
+    const invitePatches = []
+    await page.route('**/rest/v1/invites**', (route) => {
+      const req = route.request()
+      if (req.method() === 'PATCH') {
+        let body = {}
+        try {
+          body = JSON.parse(req.postData() || '{}')
+        } catch { /* ignore */ }
+        invitePatches.push({ url: req.url(), body })
+        return route.fulfill({ json: [], headers: restHeaders })
+      }
+      // Same read behavior as the shared beforeEach mock.
+      const url = req.url()
+      let rows
+      if (url.includes('sender_id=')) rows = [...SENT, VOIDED_SENT]
+      else if (url.includes('film_id=eq')) rows = [...SENT, VOIDED_SENT, ...RECEIVED, ...DOWNSTREAM]
+      else rows = RECEIVED
+      return route.fulfill({
+        json: rows,
+        headers: {
+          'content-range': `0-${Math.max(rows.length - 1, 0)}/${rows.length}`,
+          'access-control-expose-headers': 'Content-Range',
+        },
+      })
+    })
+
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('A Sacred Pause')).toBeVisible({ timeout: 15000 })
+
+    const aside = page.locator('aside')
+    await aside.getByRole('button', { name: 'Edit your first name' }).click()
+    await aside.getByLabel('First name').fill('Avalon')
+    await aside.getByRole('button', { name: 'Save' }).click()
+
+    // The sidebar re-renders with the account's new name (fetchProfile re-read).
+    await expect(aside.getByText('Avalon')).toBeVisible()
+
+    // The four keyed propagation writes, all carrying the new name:
+    const patchFor = (marker) => invitePatches.find((p) => p.url.includes(marker))
+    expect(patchFor(`claimed_by=eq.${USER_ID}`)?.body).toEqual({ recipient_name: 'Avalon' })
+    expect(patchFor(`sender_id=eq.${USER_ID}`)?.body).toEqual({ sender_name: 'Avalon' })
+    expect(patchFor('recipient_email=ilike.')?.body).toEqual({ recipient_name: 'Avalon' })
+    expect(patchFor('claimed_email=ilike.')?.body).toEqual({ recipient_name: 'Avalon' })
+
+    // Ghost safety: every invite write is row-filtered — no PATCH without a
+    // sender_id / claimed_by / recipient_email / claimed_email key.
+    for (const p of invitePatches) {
+      expect(
+        /(sender_id|claimed_by)=eq\.|(recipient_email|claimed_email)=ilike\./.test(p.url),
+        `unfiltered invite write: ${p.url}`
+      ).toBe(true)
+    }
+  })
+
   test('mobile: identity line, bottom share bar, menu overlay', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 })
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
