@@ -412,7 +412,8 @@ function PassItOnModal({
 
             {/* The charge — founder-approved verbatim (2026-07-23, final).
                 NBSP binds "anyone" to the dash so "—" never leads a line. */}
-            <p className="mx-auto mt-6 max-w-[26rem] font-serif-v3 italic text-[1.0625rem] leading-[1.7] text-warm/80">
+            {/* Founder amendment 2026-07-23: 1.125rem, up from 1.0625rem. */}
+            <p className="mx-auto mt-6 max-w-[26rem] font-serif-v3 italic text-[1.125rem] leading-[1.7] text-warm/80">
               Who <span className="text-accent">needs</span> to see this? Not
               anyone{' '}— the one it will matter to.
             </p>
@@ -980,9 +981,10 @@ export default function ClaimWatch() {
                 </button>
                 {chainLength >= 1 && (
                   <div className="mt-5">
-                    {/* Founder amendment 2026-07-23: 0.9375rem, up from the
-                        replica's 0.875rem. Everything else unchanged. */}
-                    <p className="font-serif-v3 italic text-[0.9375rem] leading-[1.6] text-warm/65">
+                    {/* Founder amendments 2026-07-23: raised twice from the
+                        replica's 0.875rem — now 1rem. Everything else
+                        unchanged. */}
+                    <p className="font-serif-v3 italic text-[1rem] leading-[1.6] text-warm/65">
                       This film passed through {pairsOfHandsPhrase(chainLength)} to reach you.
                       You are its newest link{' '}—{' '}
                       <span className="text-accent">or{' '}its{' '}last.</span>
@@ -1010,7 +1012,7 @@ export default function ClaimWatch() {
                   <circle cx="25" cy="10" r="2.2" fill="currentColor" />
                 </svg>
               </div>
-              <p className="mx-auto mt-3.5 max-w-[22rem] font-serif-v3 italic text-[1.0625rem] leading-[1.7] text-warm/80">
+              <p className="mx-auto mt-3.5 max-w-[22rem] font-serif-v3 italic text-[1.125rem] leading-[1.7] text-warm/80">
                 Films here spread by private invite and real humans only. No algorithms.
               </p>
             </div>
@@ -1030,7 +1032,7 @@ export default function ClaimWatch() {
                   <circle cx="34" cy="17" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.2" />
                 </svg>
               </div>
-              <p className="mx-auto mt-3.5 max-w-[22rem] font-serif-v3 italic text-[1.0625rem] leading-[1.7] text-warm/80">
+              <p className="mx-auto mt-3.5 max-w-[22rem] font-serif-v3 italic text-[1.125rem] leading-[1.7] text-warm/80">
                 This film won&rsquo;t reach anyone new, unless{' '}
                 <span className="text-accent">you</span> pass it on.
               </p>
@@ -1048,7 +1050,7 @@ export default function ClaimWatch() {
                   />
                 </svg>
               </div>
-              <p className="mx-auto mt-3.5 max-w-[22rem] font-serif-v3 italic text-[1.0625rem] leading-[1.7] text-warm/80">
+              <p className="mx-auto mt-3.5 max-w-[22rem] font-serif-v3 italic text-[1.125rem] leading-[1.7] text-warm/80">
                 Share intentionally. Each ticket admits one person, once.
               </p>
             </div>
