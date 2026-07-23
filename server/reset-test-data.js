@@ -28,6 +28,7 @@
 import 'dotenv/config'
 import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
+import { PROTECTED_EMAILS } from './deleteRules.js'
 
 /* ----------------------------- configuration ----------------------------- */
 
@@ -40,8 +41,10 @@ const TARGET_EMAILS = [
 ].map((e) => e.trim().toLowerCase())
 
 // Real users — the script refuses to run if the allowlist ever includes one.
-// contact@tracebelll.com is Trace Bell, the first real production user (June 2026).
-const PROTECTED_EMAILS = ['filmmaker@gmail.com', 'contact@tracebelll.com']
+// The list is IMPORTED from server/deleteRules.js (all six real users), the
+// same list the admin Remove flow enforces. deleteRules.js and
+// teardown-demo-film.js keep identical copies — when a real user is added,
+// update BOTH there; this script picks the change up automatically.
 const FILM_TITLE = 'The New Narrative'
 // Informational only — invite links never expire in the MVP (see server/inviteValidation.js).
 const INVITE_EXPIRY_DAYS = 3650
