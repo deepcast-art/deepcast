@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { safeLocalStorage } from './safeStorage'
+import { authStorage } from './authStorage'
 
 // URL + anon key are configurable so a preview deployment can point at a separate
 // (non-production) Supabase project. When the env vars are unset, both fall back to the
@@ -31,7 +32,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     // Recovery / magic links use hash fragments; must be parsed on first load.
     detectSessionInUrl: true,
     // Session persistence must survive restricted storage (Safari private mode) —
-    // safeLocalStorage falls back to in-memory for the page's lifetime.
-    storage: safeLocalStorage,
+    // authStorage writes native localStorage when it works (normal mode is
+    // byte-identical) and falls back to chunked SESSION COOKIES when the
+    // native write throws, so the session survives reloads in a private
+    // window (the 2026-07-22 dashboard→login bounce). Blocked cookies degrade
+    // to in-memory for the page's lifetime, exactly the old behavior.
+    storage: authStorage,
   },
 })
