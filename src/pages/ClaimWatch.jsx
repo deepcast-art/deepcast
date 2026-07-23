@@ -564,14 +564,11 @@ export default function ClaimWatch() {
                   <p className="font-sans font-normal text-[0.8125rem] uppercase tracking-[0.18em] text-warm/60">
                     Milestones passed
                   </p>
-                  <p className="mt-2 font-sans font-normal text-[0.8125rem] tracking-[0.14em] text-warm/75">
-                    {crossed.map((tier, i) => (
+                  {/* Founder amendment 2026-07-23: no interpunct separators —
+                      the groups are separated by spacing alone. */}
+                  <p className="mt-2 flex flex-wrap gap-x-[1.25em] gap-y-1 font-sans font-normal text-[0.8125rem] tracking-[0.14em] text-warm/75">
+                    {crossed.map((tier) => (
                       <span key={tier}>
-                        {i > 0 && (
-                          <span aria-hidden className="px-[0.55em] opacity-50">
-                            ·
-                          </span>
-                        )}
                         <span
                           aria-hidden
                           className="pr-[0.3em] tracking-normal text-accent opacity-50"
@@ -597,7 +594,9 @@ export default function ClaimWatch() {
                 </button>
                 {chainLength >= 1 && (
                   <div className="mt-5">
-                    <p className="font-serif-v3 italic text-[0.875rem] leading-[1.6] text-warm/65">
+                    {/* Founder amendment 2026-07-23: 0.9375rem, up from the
+                        replica's 0.875rem. Everything else unchanged. */}
+                    <p className="font-serif-v3 italic text-[0.9375rem] leading-[1.6] text-warm/65">
                       This film passed through {pairsOfHandsPhrase(chainLength)} to reach you.
                       You are its newest link{' '}—{' '}
                       <span className="text-accent">or{' '}its{' '}last.</span>
