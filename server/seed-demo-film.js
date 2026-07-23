@@ -28,7 +28,7 @@
  *     title or playback id already exists (run the teardown script first).
  *   - DRY RUN BY DEFAULT: prints the film, the tree shape, sample rows and totals,
  *     and changes NOTHING. Writing requires `--execute` AND typing the confirmation
- *     phrase interactively (same pattern as cleanup-test-nodes.js).
+ *     phrase interactively (same pattern as reset-test-data.js).
  *   - Deterministic (fixed seed): the dry-run preview is exactly what --execute creates.
  *
  * Usage:

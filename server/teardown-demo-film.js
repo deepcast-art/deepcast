@@ -24,7 +24,7 @@
  *     exists so a misidentified film can never take a real person down with it.
  *   - DRY RUN BY DEFAULT: prints exactly what would be deleted and changes
  *     NOTHING. Deletion requires `--execute` AND typing the confirmation phrase
- *     interactively (same pattern as cleanup-test-nodes.js).
+ *     interactively (same pattern as reset-test-data.js).
  *
  * Usage:
  *   node server/teardown-demo-film.js                       # dry run (resolve by playback id)
