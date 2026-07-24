@@ -36,6 +36,7 @@ const LINK_CREATED = {
   ticketsRemaining: null,
   durationSeconds: 1932.5983, // floors to "32 minutes" on the landing letter
   filmClaimsCount: 847, // the rail's record (three milestones crossed)
+  lineageForks: [true], // the creator verifiably shared beyond this chain
 }
 
 const LINK_CLAIMED = { ...LINK_CREATED, status: 'claimed', claimOrdinal: 57, ticketsRemaining: 5 }
@@ -243,6 +244,9 @@ test.describe('three-page claim arc', () => {
     await expect(page.locator('dialog svg text').filter({ hasText: 'IEN' })).toHaveCount(1)
     await expect(page.locator('dialog svg text').filter({ hasText: 'YOU' })).toHaveCount(1)
     await expect(page.locator('dialog svg text').filter({ hasText: '?' })).toHaveCount(1)
+    // The fixture confirms one fork (the creator shared beyond this chain):
+    // exactly one near-branch cluster lights up — data-driven, never invented.
+    await expect(page.locator('dialog svg g[data-fork]')).toHaveCount(1)
 
     await page.getByPlaceholder('Their first name').fill('Jordan')
     await page.getByRole('button', { name: /Create their invitation/i }).click()
@@ -503,6 +507,26 @@ test.describe('three-page claim arc', () => {
     await expect(page.getByText('Viewers reached of 100 goal')).toBeVisible()
     await expect(page.getByText('Milestones passed')).toHaveCount(0)
     await expect(page.getByText('✦')).toHaveCount(0)
+    expect(jsErrors).toEqual([])
+  })
+
+  test('lineage forks render ONLY from server-confirmed data', async ({ page }) => {
+    // No lineageForks in the payload (or all-false) → zero fork clusters:
+    // the emblem never invents people (creed line 1, founder amendment F).
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        'deepcast:claim',
+        JSON.stringify({ slug: 'alex-h4k2', inviteId: 'inv-you', filmId: 'film-1', claimedEmail: 'alex@example.com' })
+      )
+    })
+    await page.route('**/api/invites/link/**', (route) =>
+      route.fulfill({ json: { ...LINK_CLAIMED, lineageForks: undefined } })
+    )
+    await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Pass it on' }).click()
+    await expect(page.getByText('Pass it on. Make an impact.')).toBeVisible()
+    await expect(page.locator('dialog svg text').filter({ hasText: 'YOU' })).toHaveCount(1)
+    await expect(page.locator('dialog svg g[data-fork]')).toHaveCount(0)
     expect(jsErrors).toEqual([])
   })
 

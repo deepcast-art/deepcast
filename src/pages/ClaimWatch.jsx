@@ -18,7 +18,13 @@ import {
   tierFillPercent,
   formatTierNumber,
 } from '../lib/viewerTiers'
-import { chainHands, pairsOfHandsPhrase, lastHands, lineageLabel } from '../lib/handsChain'
+import {
+  chainHands,
+  pairsOfHandsPhrase,
+  lastHands,
+  lineageLabel,
+  chainForkFlags,
+} from '../lib/handsChain'
 import { filmStory, filmPosterUrl } from '../content/filmStory'
 
 /** Claim-flow resume keys (slug-scoped — the claimant's public token is never
@@ -86,14 +92,17 @@ function TicketStubs({ granted, remaining }) {
  * node, never inside the circle. aria-hidden — the rail's rule line carries
  * the accessible fact.
  *
- * v1 renders ZERO near-branch forks (founder amendment F): the backend does
- * not yet confirm "that hand made at least one other share", and inventing
- * people is a brand violation. Far-field dots are pure atmosphere and stay.
- * Predecessors shown = the last min(3, chain length) hands, occupying the
- * template slots CLOSEST to YOU; the faint entry stroke renders only when
- * the chain runs deeper than the three shown.
+ * NEAR-BRANCH FORKS (owner-approved 2026-07-23): each faint fork renders
+ * ONLY when the server confirmed that hand made at least one other share
+ * (`lineageForks` → chainForkFlags — never an invented person). The fork
+ * geometry is the replica's, mapped per slot; the pre-frame entry forks
+ * render only when a hand DEEPER than the three shown verifiably forked.
+ * Far-field dots are pure atmosphere and stay. Predecessors shown = the
+ * last min(3, chain length) hands, occupying the template slots CLOSEST to
+ * YOU; the faint entry stroke renders only when the chain runs deeper than
+ * the three shown.
  */
-function LineageEmblem({ hands, nextLabel }) {
+function LineageEmblem({ hands, forks = [], nextLabel }) {
   const shown = lastHands(hands, 3)
   if (shown.length === 0) return null
 
@@ -104,14 +113,107 @@ function LineageEmblem({ hands, nextLabel }) {
     { x: 140, y: 60, r: 2.4, op: 0.78, lx: 140, ly: 47 },
     { x: 215, y: 84, r: 2.6, op: 0.85, lx: 215, ly: 71 },
   ]
+  // Replica fork clusters, per slot (lines / junction dots / twig-end dots).
+  const SLOT_FORKS = [
+    {
+      lines: [
+        [70, 92, 104, 132],
+        [104, 132, 152, 146],
+        [104, 132, 146, 118],
+        [70, 92, 92, 46],
+        [92, 46, 126, 22],
+        [92, 46, 130, 54],
+      ],
+      junctions: [
+        [104, 132],
+        [92, 46],
+      ],
+      twigs: [
+        [152, 146],
+        [146, 118],
+        [126, 22],
+        [130, 54],
+      ],
+    },
+    {
+      lines: [
+        [140, 60, 190, 40],
+        [190, 40, 226, 18],
+        [190, 40, 228, 46],
+      ],
+      junctions: [[190, 40]],
+      twigs: [
+        [226, 18],
+        [228, 46],
+      ],
+    },
+    {
+      lines: [
+        [215, 84, 248, 126],
+        [248, 126, 298, 140],
+        [248, 126, 228, 148],
+      ],
+      junctions: [[248, 126]],
+      twigs: [
+        [298, 140],
+        [228, 148],
+      ],
+    },
+  ]
+  // The replica's pre-frame entry forks — hands beyond the frame.
+  const PRE_FRAME_FORKS = {
+    lines: [
+      [22, 105, 50, 140],
+      [37, 101, 62, 64],
+    ],
+    junctions: [],
+    twigs: [
+      [50, 140],
+      [62, 64],
+    ],
+  }
   const YOU = { x: 288, y: 52 }
   const NEXT = { x: 350, y: 80 }
   const active = SLOTS.slice(3 - shown.length)
+  const activeForks = SLOT_FORKS.slice(3 - shown.length)
+  const shownForks = forks.slice(-shown.length)
   // The gold path brightens toward its newest tip; segment opacities are
   // template-fixed, taken from the YOU end backward.
   const points = [...active.map((s) => ({ x: s.x, y: s.y })), YOU]
   const segmentOpacities = [0.45, 0.55, 0.65].slice(-(points.length - 1))
   const entryStroke = hands.length > 3
+  // Pre-frame forks: only if some hand DEEPER than the shown three forked.
+  const preFrameFork = entryStroke && forks.slice(0, forks.length - shown.length).some(Boolean)
+
+  /* INTERIM (owner direction 2026-07-23, pending the sparse design-ref):
+     chains shorter than 3 leave the fixed composition hugging the right
+     edge, so the RENDERED constellation group is horizontally centered by
+     a pure translate — no new composition, no new elements, and the
+     far-field dots stay put (full-canvas atmosphere). Full chains (3 shown)
+     keep the replica's exact placement. */
+  const xMin = active[0].x
+  const xMax = nextLabel ? NEXT.x : YOU.x
+  const dx = shown.length < 3 ? Math.round((200 - (xMin + xMax) / 2) * 10) / 10 : 0
+
+  const forkCluster = (cluster, key) => (
+    <g key={key} data-fork={key}>
+      <g stroke="rgba(221,221,221,0.1)" strokeWidth="0.8">
+        {cluster.lines.map(([x1, y1, x2, y2]) => (
+          <line key={`${x1},${y1},${x2},${y2}`} x1={x1} y1={y1} x2={x2} y2={y2} />
+        ))}
+      </g>
+      <g fill="rgba(221,221,221,0.22)">
+        {cluster.junctions.map(([cx, cy]) => (
+          <circle key={`${cx},${cy}`} cx={cx} cy={cy} r="1.6" />
+        ))}
+      </g>
+      <g fill="rgba(221,221,221,0.18)">
+        {cluster.twigs.map(([cx, cy]) => (
+          <circle key={`${cx},${cy}`} cx={cx} cy={cy} r="1.3" />
+        ))}
+      </g>
+    </g>
+  )
 
   const labelStyle = {
     fontFamily: 'var(--font-sans)',
@@ -131,6 +233,16 @@ function LineageEmblem({ hands, nextLabel }) {
           <circle cx="346" cy="142" r="1.2" />
           <circle cx="16" cy="40" r="1.2" />
         </g>
+        {/* Everything below rides the INTERIM centering translate (dx=0 for
+            full chains) — the constellation group, its forks, and labels
+            move as one; the far field above stays put. */}
+        <g transform={dx !== 0 ? `translate(${dx} 0)` : undefined}>
+        {/* Near branches — each faint fork is a REAL share by that hand
+            (server-confirmed booleans; nothing invented). */}
+        {activeForks.map((cluster, i) =>
+          shownForks[i] ? forkCluster(cluster, `slot-${3 - shown.length + i}`) : null
+        )}
+        {preFrameFork && forkCluster(PRE_FRAME_FORKS, 'preframe')}
         {/* The gold path: entry stroke implies the deeper chain. */}
         <g strokeWidth="1" fill="none">
           {entryStroke && (
@@ -221,6 +333,7 @@ function LineageEmblem({ hands, nextLabel }) {
             {nextLabel}
           </text>
         )}
+        </g>
       </svg>
     </figure>
   )
@@ -250,6 +363,7 @@ function PassItOnModal({
   shareError,
   onSubmit,
   hands,
+  handForks,
   generated,
   copied,
   onCopy,
@@ -330,6 +444,7 @@ function PassItOnModal({
             name; the node STAYS hollow until they claim. */}
         <LineageEmblem
           hands={hands}
+          forks={handForks}
           nextLabel={generated ? lineageLabel(generated.name) : outOfTickets ? null : '?'}
         />
 
@@ -819,6 +934,11 @@ export default function ClaimWatch() {
      landing thread reads, id-verified collapse included. ── */
   const hands = chainHands(link?.lineageNames, { senderIsCreator: link?.senderIsCreator })
   const chainLength = hands.length
+  /* Server-confirmed fork booleans, aligned with `hands` by the same
+     collapse rule — the emblem lights a near-branch fork ONLY on true. */
+  const handForks = chainForkFlags(link?.lineageForks, link?.lineageNames, {
+    senderIsCreator: link?.senderIsCreator,
+  })
 
   /* ── Per-film story + poster (founder amendments C/D) — one module,
      src/content/filmStory.js. No entry → no story section, nothing invented. ── */
@@ -911,7 +1031,12 @@ export default function ClaimWatch() {
               vertically centered against the player on desktop (the left
               column holds ONLY the player — the centering contract). ── */}
           <div className="min-w-0">
-            <div className="mx-auto mt-9 w-full max-w-[26rem] text-left min-[900px]:mx-0 min-[900px]:mt-0 min-[900px]:flex min-[900px]:h-full min-[900px]:max-w-none min-[900px]:flex-col min-[900px]:justify-center">
+            {/* Founder amendment 2026-07-23: optical lift — 2.5rem bottom
+                padding inside the centered flex, so the cluster's mass sits
+                a touch above geometric center (it read slightly low against
+                the player, especially with the milestones block absent).
+                Desktop only; mobile keeps natural block flow. */}
+            <div className="mx-auto mt-9 w-full max-w-[26rem] text-left min-[900px]:mx-0 min-[900px]:mt-0 min-[900px]:flex min-[900px]:h-full min-[900px]:max-w-none min-[900px]:flex-col min-[900px]:justify-center min-[900px]:pb-10">
               {/* The record: bar → count → goal label. Squared ends, solid
                   accent fill, progress toward the NEXT tier only. */}
               <section
@@ -1136,6 +1261,7 @@ export default function ClaimWatch() {
           shareError={shareError}
           onSubmit={handleGenerate}
           hands={hands}
+          handForks={handForks}
           generated={generated}
           copied={copied}
           onCopy={handleCopy}

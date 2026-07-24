@@ -67,3 +67,22 @@ export function lineageLabel(name) {
   const s = String(name || '').trim().toUpperCase()
   return s.length > 8 ? `${s.slice(0, 7)}·` : s
 }
+
+/**
+ * Align the server's `lineageForks` booleans with the DISPLAYED hands
+ * (owner-approved 2026-07-23): the array arrives parallel to lineageNames,
+ * so it must follow the exact same trims and the same id-verified two-entry
+ * collapse chainHands applies — a collapsed pair's forks merge with OR (the
+ * one displayed hand forked if either underlying entry did). Missing or
+ * short arrays read as all-false: a fork renders ONLY on confirmed data.
+ */
+export function chainForkFlags(lineageForks, lineageNames, { senderIsCreator = false } = {}) {
+  const names = Array.isArray(lineageNames) ? lineageNames : []
+  const flags = Array.isArray(lineageForks) ? lineageForks : []
+  const paired = names
+    .map((name, i) => ({ name: String(name || '').trim(), fork: Boolean(flags[i]) }))
+    .filter((p) => p.name)
+  if (paired.length === 0) return []
+  if (paired.length === 2 && senderIsCreator === true) return [paired[0].fork || paired[1].fork]
+  return paired.map((p) => p.fork)
+}

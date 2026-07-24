@@ -36,6 +36,7 @@ import { nextTicketNo } from './ticketNumbers.js'
 import { firstNameInputError } from '../src/lib/firstNameRule.js'
 import { VOID_INVITE_STATUS } from '../src/lib/inviteExistence.js'
 import { countFilmClaims } from '../src/lib/filmClaims.js'
+import { buildLineageForks } from '../src/lib/lineageForks.js'
 import { refundOnVoidDecision } from './voidRules.js'
 
 const app = express()
@@ -1181,6 +1182,22 @@ app.get('/api/invites/link/:slug', async (req, res) => {
         .map((r) => r.recipient_name || r.recipient_email || 'Someone'),
     ]
 
+    // Per-film ghost visibility, threaded once for both new watch-rail
+    // fields (claims count + lineage forks).
+    const showGhosts = invite.films?.show_ghosts === true
+
+    // lineageForks (owner-approved 2026-07-23): parallel to lineageNames —
+    // true only where that hand VERIFIABLY made another share of this film
+    // (rules + tests in src/lib/lineageForks.js). Creator sends are
+    // id-verified, never name-matched.
+    const lineageForks = buildLineageForks({
+      rows,
+      viewerInviteId: invite.id,
+      ancestors,
+      creatorSentIds: new Set(rows.filter((r) => isCreatorSent(r)).map((r) => r.id)),
+      includeGhosts: showGhosts,
+    })
+
     // Landing still: hand-picked films.poster_url first, else the film's
     // public Mux poster frame, else null (page falls back to the dark bg).
     const posterUrl =
@@ -1216,9 +1233,8 @@ app.get('/api/invites/link/:slug', async (req, res) => {
       // the shared claimed-stage rule over the who-exists set — voided
       // links never count, ghosts count only when the film shows them
       // (show_ghosts). Honest number, no padding, no clamping.
-      filmClaimsCount: countFilmClaims(rows, {
-        includeGhosts: invite.films?.show_ghosts === true,
-      }),
+      filmClaimsCount: countFilmClaims(rows, { includeGhosts: showGhosts }),
+      lineageForks,
       // Watch-page needs on revisit (playback is public-policy; invites are
       // world-readable under RLS, so none of this is a new exposure class).
       muxPlaybackId: invite.films?.mux_playback_id || null,

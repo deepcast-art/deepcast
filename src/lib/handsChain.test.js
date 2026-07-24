@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { chainHands, lastHands, pairsOfHandsPhrase, lineageLabel } from './handsChain'
+import { chainHands, lastHands, pairsOfHandsPhrase, lineageLabel, chainForkFlags } from './handsChain'
 
 describe('chainHands', () => {
   it('first-names every hand, order preserved (origin → direct sharer)', () => {
@@ -77,5 +77,31 @@ describe('lineageLabel', () => {
   it('empty input is an empty label', () => {
     expect(lineageLabel('')).toBe('')
     expect(lineageLabel(null)).toBe('')
+  })
+})
+
+describe('chainForkFlags', () => {
+  it('is parallel to the names, missing entries reading as false', () => {
+    expect(chainForkFlags([true, false, true], ['Ien', 'Dan', 'Pia'])).toEqual([
+      true,
+      false,
+      true,
+    ])
+    expect(chainForkFlags([true], ['Ien', 'Dan'])).toEqual([true, false])
+    expect(chainForkFlags(undefined, ['Ien', 'Dan'])).toEqual([false, false])
+  })
+
+  it('merges with OR under the id-verified two-entry collapse', () => {
+    expect(chainForkFlags([false, true], ['Ien Chi', 'Ien Park'], { senderIsCreator: true })).toEqual([true])
+    expect(chainForkFlags([false, false], ['Ien Chi', 'Ien Park'], { senderIsCreator: true })).toEqual([false])
+    expect(chainForkFlags([false, true], ['Ien Chi', 'Ien Park'], { senderIsCreator: false })).toEqual([false, true])
+  })
+
+  it('drops blank names WITH their flags, keeping alignment', () => {
+    expect(chainForkFlags([true, false, true], ['', 'Dan', 'Pia'])).toEqual([false, true])
+  })
+
+  it('empty chain is an empty list', () => {
+    expect(chainForkFlags([], [])).toEqual([])
   })
 })
