@@ -8,7 +8,6 @@ import { readClaimStash, isClaimOwner } from '../lib/claimStash'
 import { INITIAL_CLAIMANT_TICKETS } from '../lib/ticketRules'
 import { firstNameInputError } from '../lib/firstNameRule'
 import { revealTicketsLine } from '../lib/revealTicketsLine'
-import { buildWatchConstraintLine } from '../lib/constraintLine'
 import { resumePositionToSave } from '../lib/resumePosition'
 import { safeLocalStorage } from '../lib/safeStorage'
 import { fullscreenPlayDecision, isIOSDevice } from '../lib/playbackFullscreen'
@@ -35,12 +34,6 @@ const positionKey = (slug) => `screening_position_slug_${slug}`
 const progressKey = (slug) => `screening_progress_slug_${slug}`
 
 const MuxPlayer = lazy(() => import('@mux/mux-player-react').then((m) => ({ default: m.default })))
-
-/** The old always-docked pass-it-on panel, held OUT of the render path since
- *  the redesign's Phase 2 (the founder-approved modal replaces it in Phase
- *  4). The JSX is kept temporarily so the share handlers/state stay wired
- *  exactly as shipped until the modal takes them over; Phase 7 deletes it. */
-const LEGACY_DOCKED_PANEL = false
 
 /**
  * Decorative ticket stubs (reference motif, adopted 2026-07-19): one outlined
@@ -911,14 +904,6 @@ export default function ClaimWatch() {
   }
 
   const title = link?.filmTitle || 'a film'
-  /* Personalized constraint line — CUT from this page by the redesign (spec
-     §9.4: the lib stays; the surface moved). Still computed only for the
-     unrendered legacy panel below; Phase 7 removes both together. */
-  const constraintLine = buildWatchConstraintLine({
-    receiverName: link?.inviteeFirstName,
-    sharerName: link?.sharerName,
-    viewerIsCreator: false,
-  })
   const outOfTickets = tickets != null && tickets <= 0
 
   /* ── The rail's record (spec §3b): the film-wide claims count from the
@@ -1267,94 +1252,6 @@ export default function ClaimWatch() {
           onCopy={handleCopy}
           onAgain={handleShareAgain}
         />
-      )}
-
-      {/* ════ LEGACY docked pass-it-on panel — OUT of the render path since
-          Phase 2 of the redesign; the modal (Phase 4) takes over its state
-          and handlers, and Phase 7 deletes this block. Kept verbatim so the
-          share machinery stays wired exactly as shipped meanwhile. ════ */}
-      {LEGACY_DOCKED_PANEL && (
-        <section className="mt-[clamp(2.75rem,7svh,5.5rem)] w-screen ml-[calc(50%-50vw)] border-y border-warm/15 px-[clamp(1.5rem,5vw,3rem)] py-[clamp(2.25rem,6vw,3.5rem)] text-center min-[540px]:ml-auto min-[540px]:mr-auto min-[540px]:w-full min-[540px]:max-w-[40rem] min-[540px]:border">
-          <p className="font-sans text-[11px] uppercase tracking-[0.32em] text-accent">Pass it on</p>
-
-          {constraintLine && (
-            <p className="mx-auto mt-6 max-w-md font-serif-v3 text-[clamp(1.125rem,2.6vw,1.3125rem)] italic leading-[1.7] text-warm/90">
-              {constraintLine}
-            </p>
-          )}
-
-          <TicketStubs granted={INITIAL_CLAIMANT_TICKETS} remaining={stubBalance} />
-
-          {outOfTickets ? (
-            <p
-              className={`${Number.isFinite(stubBalance) ? 'mt-3.5' : 'mt-8'} font-sans text-xs uppercase tracking-[0.24em] text-muted`}
-            >
-              You’ve given all your tickets for this film.
-            </p>
-          ) : (
-            <>
-              <p
-                className={`${Number.isFinite(stubBalance) ? 'mt-3.5' : 'mt-8'} font-sans text-xs uppercase tracking-[0.24em] text-muted`}
-              >
-                You can share {tickets ?? '…'} ticket{tickets === 1 ? '' : 's'} for this film.
-                Each admits one person, once.
-              </p>
-
-              <form onSubmit={handleGenerate} className="mx-auto mt-7 flex max-w-[22rem] flex-col gap-4">
-                <label htmlFor="share-first-name" className="sr-only">
-                  Their first name
-                </label>
-                <input
-                  id="share-first-name"
-                  type="text"
-                  value={shareName}
-                  onChange={(e) => setShareName(e.target.value)}
-                  placeholder="Their first name"
-                  maxLength={50}
-                  className="w-full border-b border-warm/20 bg-transparent px-1 py-3 text-center font-sans text-base font-light tracking-[0.06em] text-warm transition-colors duration-300 placeholder:font-serif-v3 placeholder:italic placeholder:tracking-normal placeholder:text-warm/40 focus:border-accent focus:outline-none"
-                />
-                {shareError && <p className="font-sans text-xs text-error/90">{shareError}</p>}
-                <button
-                  type="submit"
-                  disabled={shareBusy}
-                  className="min-h-[48px] w-full touch-manipulation border border-accent/60 px-6 py-3.5 font-sans text-[0.8125rem] uppercase tracking-[0.28em] text-accent transition-colors duration-300 hover:border-accent hover:bg-accent hover:text-ink focus-visible:border-accent focus-visible:bg-accent focus-visible:text-ink focus-visible:outline-none disabled:opacity-50 cursor-pointer"
-                >
-                  {shareBusy ? 'One moment…' : 'Create their invitation'}
-                </button>
-              </form>
-            </>
-          )}
-
-          {generated && (
-            <div key={generated.url} className="mx-auto mt-9 max-w-[30rem] border-t border-warm/15 pt-8 dc-result-rise">
-              <p className="mx-auto font-serif-v3 text-[1.0625rem] italic leading-[1.7] text-warm/85">
-                Here’s {generated.name}’s ticket. Deliver it with your own words — it admits one
-                person, once.
-              </p>
-              <p className="mt-3 break-all font-serif-v3 text-[clamp(1.1875rem,3vw,1.4375rem)] text-paper/90">
-                {generated.url}
-              </p>
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="mt-6 min-h-[44px] touch-manipulation border border-warm/20 px-9 py-3 font-sans text-xs uppercase tracking-[0.26em] text-warm transition-colors hover:border-accent hover:text-accent focus-visible:border-accent focus-visible:text-accent focus-visible:outline-none cursor-pointer"
-              >
-                {copied ? 'Copied' : 'Copy their invitation'}
-              </button>
-              <p className="mt-6 font-sans text-xs uppercase tracking-[0.24em] text-muted">
-                {revealTicketsLine(generated.ticketsRemaining)}
-              </p>
-              <p className="mt-7">
-                <Link
-                  to="/dashboard"
-                  className="font-sans text-xs uppercase tracking-[0.24em] text-accent transition-colors hover:text-accent/70"
-                >
-                  See where your ticket went →
-                </Link>
-              </p>
-            </div>
-          )}
-        </section>
       )}
     </div>
   )
