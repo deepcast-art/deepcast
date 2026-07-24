@@ -6,6 +6,8 @@ Deepcast optimizes for depth over reach. It is an invite-only network where subs
 
 ## ⚠️ PRODUCTION HAS REAL USERS (June 2026)
 
+> **STALE AS OF THE 24 JULY 2026 FOUNDER RULING** (recorded in `docs/PROJECT-BRIEF.md`): every account, including the named users below, is now deletable TEST DATA. The in-code protection lists (`server/deleteRules.js`, `server/teardown-demo-film.js`) have NOT been updated — removing them and running any account cleanup is a queued, FOUNDER-RUN task. Until that task runs, this section and the lists stay in force exactly as written: the agent still never executes production deletions.
+
 **The database is no longer disposable.** Trace Bell (`contact@tracebelll.com`) is a real user — he must NEVER be deleted or modified destructively by any cleanup, reset, or migration, in any table. The filmmaker account (`filmmaker@gmail.com`) was always protected; Trace now is too.
 
 - `server/reset-test-data.js` enforces this in code: real users live in its `PROTECTED_EMAILS` list and the script refuses to run if its allowlist ever includes one. **Every future data script must follow the same pattern** — explicit allowlists only (never pattern matches), real users in a hard-refusal guard, dry-run by default.
@@ -115,6 +117,7 @@ npm test                 # Unit + E2E
 
 ## Standing doctrine (every session)
 
+- **End-of-day reconciliation (founder rule, 2026-07-24):** at the end of every working day, CLAUDE.md and `docs/PROJECT-BRIEF.md` are BOTH reconciled against shipped reality and committed — every claim verified against the code, never against anyone's narration, including the founder's. CLAUDE.md stays the IMPLEMENTATION layer (how to build safely); PROJECT-BRIEF.md stays the STRATEGY layer (what was decided, why, and the state of the venture) — new content goes to whichever file matches its reader.
 - **Plan before editing.** Read the relevant files and write a short plan (files per phase, order, risks) before changing anything.
 - **Diagnose root cause before fixing.** Never patch a symptom; explain the cause, then fix it at the source.
 - **One commit per phase.** After each phase run unit tests, `npm run build`, and the e2e suite, and fix any regression *before* committing.
