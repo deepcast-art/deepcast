@@ -517,7 +517,7 @@ function PassItOnModal({
             {/* Founder amendment 2026-07-23: 1.125rem, up from 1.0625rem. */}
             <p className="mx-auto mt-6 max-w-[26rem] font-serif-v3 italic text-[1.125rem] leading-[1.7] text-warm/80">
               Who <span className="text-accent">needs</span> to see this? Not
-              anyone{' '}— the one it will matter to.
+              anyone{' '}— the one it will matter{' '}to.
             </p>
 
             <form onSubmit={onSubmit} className="mx-auto mt-7 flex max-w-[22rem] flex-col gap-4">
@@ -1141,7 +1141,7 @@ export default function ClaimWatch() {
                 </svg>
               </div>
               <p className="mx-auto mt-3.5 max-w-[22rem] font-serif-v3 italic text-[1.125rem] leading-[1.7] text-warm/80">
-                This film won&rsquo;t reach anyone new, unless{' '}
+                This film won’t reach anyone new, unless{' '}
                 <span className="text-accent">you</span> pass it on.
               </p>
             </div>
