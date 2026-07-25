@@ -16,7 +16,8 @@
  *  invite_allocation grant (5) in every account-creation code path. */
 export const INITIAL_CLAIMANT_TICKETS = 5
 
-export const NO_TICKETS_MESSAGE = "You've given all your tickets for this film."
+// Founder vocabulary (2026-07-25): "shared" is the verb, everywhere.
+export const NO_TICKETS_MESSAGE = "You've shared all your tickets for this film."
 
 /**
  * Decide a ticket spend against the sharer's current tickets_remaining.

@@ -168,10 +168,10 @@ export default function ViewerDashboardV5({
     ticketsRemaining === Infinity ? 'Unlimited' : (ticketsRemaining ?? '—')
   const mobileLine =
     ticketsRemaining === Infinity
-      ? `Unlimited tickets · ${ticketsGiven} given`
+      ? `Unlimited tickets · ${ticketsGiven} shared`
       : ticketsRemaining == null
-        ? `${ticketsGiven} tickets given`
-        : `${ticketsRemaining} tickets remaining · ${ticketsGiven} given`
+        ? `${ticketsGiven} tickets shared`
+        : `${ticketsRemaining} tickets remaining · ${ticketsGiven} shared`
 
   const shareCtaClass =
     'w-full border border-gold bg-gold px-4 py-[1.125rem] text-center font-sans text-[0.8125rem] uppercase tracking-[0.26em] text-ink transition-colors duration-300 hover:bg-transparent hover:text-gold-soft focus-visible:bg-transparent focus-visible:text-gold-soft focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-gold disabled:hover:text-ink'
@@ -281,7 +281,7 @@ export default function ViewerDashboardV5({
                 {ticketsGiven}
               </p>
               <p className="font-sans text-[0.625rem] uppercase tracking-[0.22em] text-smoke">
-                Tickets given
+                Tickets shared
               </p>
             </div>
           </div>
@@ -491,7 +491,7 @@ export default function ViewerDashboardV5({
                 </p>
                 {ticketRows.length === 0 ? (
                   <p className="mt-5 border-t border-mist/[0.12] pt-6 font-serif-v3 text-base italic text-smoke">
-                    No tickets given yet.
+                    No tickets shared yet.
                   </p>
                 ) : (
                   <div className="mt-5 border-t border-mist/[0.12]">

@@ -150,7 +150,7 @@ Order, all centered:
 
 **The affordance law (why the above looks the way it does):** on this page, **a box means "act here"; an arrow means "go there."** Buttons are outlined or filled rectangles; navigation is a text link with `→`. Never style an action as bare text and never put an arrow on an in-place action.
 
-**Zero state** (all tickets spent — from the original app, keep it): the count line + form are replaced by `You've given all your tickets for this film.`; stubs remain, all dimmed. Apply the same replacement model.
+**Zero state** (all tickets spent — from the original app, keep it): the count line + form are replaced by `You've shared all your tickets for this film.` (verb revised 2026-07-25); stubs remain, all dimmed. Apply the same replacement model.
 
 **Count collision (resolved by design):** the top count line and the reveal's `…tickets left. Who else needs it?` would state the count twice in State 2. Per the design, in State 2 the reveal's line is authoritative — hide the standalone top count line OR accept the echo; preferred: hide it post-creation.
 
@@ -232,7 +232,7 @@ Copy the SVG from the replica exactly. Its layers and their rules:
 | `{n} tickets left. Who else needs it?` | **PENDING** (replaced locked `…Who else comes to mind?`) |
 | `Create another invitation` | **PENDING** |
 | `See where your ticket went →` | LOCKED |
-| Zero state: `You've given all your tickets for this film.` | LOCKED |
+| Zero state: `You've shared all your tickets for this film.` | FOUNDER (verb revised 2026-07-25; was LOCKED "given") |
 | First-name validation message | LOCKED (`firstNameRule.js`) |
 | Lineage labels: real first names, `YOU`, `?` | by rule (§5) |
 

@@ -503,7 +503,7 @@ function PassItOnModal({
           <p
             className={`${Number.isFinite(remaining) ? 'mt-3.5' : 'mt-8'} font-sans font-normal text-xs uppercase tracking-[0.24em] text-muted`}
           >
-            You’ve given all your tickets for this film.
+            You’ve shared all your tickets for this film.
           </p>
         ) : (
           <>

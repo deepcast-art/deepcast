@@ -174,7 +174,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     // more than once in dev StrictMode before the film arrives).
     await expect(page.getByText('A Sacred Pause')).toBeVisible({ timeout: 15000 })
     await expect(aside.getByText('Tickets remaining')).toBeVisible()
-    await expect(aside.getByText('Tickets given')).toBeVisible()
+    await expect(aside.getByText('Tickets shared')).toBeVisible()
     await expect(aside.getByText('3', { exact: true })).toBeVisible()
     await expect(aside.getByText('2', { exact: true })).toBeVisible()
     await expect(aside.getByRole('button', { name: 'Share this film' })).toBeVisible()
@@ -356,7 +356,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     ).toBeVisible({ timeout: 15000 })
     // The section always renders — at zero links it shows the empty state.
     await expect(page.getByText("Tickets you've shared")).toBeVisible()
-    await expect(page.getByText('No tickets given yet.')).toBeVisible()
+    await expect(page.getByText('No tickets shared yet.')).toBeVisible()
   })
 
   test('renaming propagates to claim-flow invites — keyed writes only, never a bare update', async ({ page }) => {
@@ -442,7 +442,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await page.setViewportSize({ width: 375, height: 812 })
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
 
-    await expect(page.getByText('Ticket No. 59 · 3 tickets remaining · 2 given')).toBeVisible()
+    await expect(page.getByText('Ticket No. 59 · 3 tickets remaining · 2 shared')).toBeVisible()
     // Bottom share bar (fixed) — the visible mobile CTA.
     const shareButtons = page.getByRole('button', { name: 'Share this film' })
     await expect(shareButtons.last()).toBeVisible()

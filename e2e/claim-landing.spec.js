@@ -504,7 +504,7 @@ test.describe('three-page claim arc', () => {
     await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
 
     await page.getByRole('button', { name: 'Pass it on' }).click()
-    await expect(page.getByText('You’ve given all your tickets for this film.')).toBeVisible()
+    await expect(page.getByText('You’ve shared all your tickets for this film.')).toBeVisible()
     // The emptied ticket book stays: all five stubs, all dimmed.
     await expect(page.locator('dialog [data-stub="used"]')).toHaveCount(5)
     await expect(page.getByPlaceholder('Their first name')).toHaveCount(0)
