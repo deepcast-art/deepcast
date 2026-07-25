@@ -1086,7 +1086,15 @@ export default function ClaimWatch() {
                   aria-haspopup="dialog"
                   aria-controls="passiton-modal"
                   onClick={() => setShareOpen(true)}
-                  className="mt-6 block min-h-[52px] w-full cursor-pointer touch-manipulation border border-accent bg-accent px-6 py-[0.9375rem] font-sans font-normal text-[0.8125rem] uppercase tracking-[0.28em] text-ink transition-colors duration-300 hover:border-[rgba(177,161,128,0.88)] hover:bg-[rgba(177,161,128,0.88)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[3px] focus-visible:outline-accent min-[900px]:mt-9"
+                  /* Hover keyline (founder-approved 2026-07-25, deliberate):
+                     on hover the FILL dims to 0.88 alpha while the border
+                     stays solid accent, so a thin brighter ring frames the
+                     inside edge — the printed-ticket look. This replaced an
+                     accidental engine-dependent version (both fill AND
+                     border at 0.88, whose alpha compositing produced the
+                     ring on chromium/firefox but barely on webkit). Do not
+                     "fix" the border back to matching the hover fill. */
+                  className="mt-6 block min-h-[52px] w-full cursor-pointer touch-manipulation border border-accent bg-accent px-6 py-[0.9375rem] font-sans font-normal text-[0.8125rem] uppercase tracking-[0.28em] text-ink transition-colors duration-300 hover:bg-[rgba(177,161,128,0.88)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[3px] focus-visible:outline-accent min-[900px]:mt-9"
                 >
                   Pass it on
                 </button>
