@@ -1179,13 +1179,15 @@ export default function ClaimWatch() {
                   exists (src/content/filmStory.js). */}
               <div
                 aria-hidden
-                className="h-14 w-14 shrink-0 overflow-hidden rounded-full border border-warm/15 bg-tint-track"
+                className="h-20 w-20 shrink-0 overflow-hidden rounded-full border border-warm/15 bg-tint-track min-[900px]:h-24 min-[900px]:w-24"
               >
                 {story.filmmakerPhotoUrl && (
+                  /* Slight zoom-in so the face fills more of the circle;
+                     the frame's overflow-hidden clips the excess. */
                   <img
                     src={story.filmmakerPhotoUrl}
                     alt=""
-                    className="h-full w-full object-cover"
+                    className="h-full w-full scale-[1.12] object-cover"
                   />
                 )}
               </div>
@@ -1193,8 +1195,12 @@ export default function ClaimWatch() {
                 From the filmmaker
                 {story.filmmakerLocation && (
                   <>
-                    {' '}·{' '}
-                    {story.filmmakerLocation}
+                    {' '}
+                    {/* The separator stays glued to the location (one
+                        unbreakable unit), but a narrow viewport may now break
+                        before it — the header wraps at the phrase boundary,
+                        never mid-phrase beside the larger photo. */}
+                    <span className="whitespace-nowrap">·{' '}{story.filmmakerLocation}</span>
                   </>
                 )}
               </p>
