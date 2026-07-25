@@ -78,7 +78,7 @@ export default function CreatorLinkPanel({ filmId, onCreated }) {
           disabled={busy}
           className="shrink-0 cursor-pointer rounded-none bg-accent px-4 py-2 text-xs uppercase tracking-wider text-warm transition-colors hover:bg-accent-hover disabled:opacity-50"
         >
-          {busy ? 'One moment…' : 'Create their invitation'}
+          {busy ? 'One moment…' : 'Share it with them'}
         </button>
       </form>
       {error && <p className="mt-2 text-sm text-error">{error}</p>}
@@ -90,7 +90,7 @@ export default function CreatorLinkPanel({ filmId, onCreated }) {
             onClick={handleCopy}
             className="mt-3 cursor-pointer rounded-none border border-border px-4 py-2 text-xs uppercase tracking-wider text-text-muted transition-colors hover:border-text-muted hover:text-text"
           >
-            {copied ? 'Copied' : 'Copy their invitation'}
+            {copied ? 'Copied' : 'Copy their ticket link'}
           </button>
         </div>
       )}

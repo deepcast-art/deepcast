@@ -272,7 +272,7 @@ test.describe('three-page claim arc', () => {
     await expect(page.locator('dialog svg g[data-fork]')).toHaveCount(1)
 
     await page.getByPlaceholder('Their first name').fill('Jordan')
-    await page.getByRole('button', { name: /Create their invitation/i }).click()
+    await page.getByRole('button', { name: 'Share it with them' }).click()
 
     // THE REPLACEMENT MODEL: the link renders where the field was — the
     // form and charge are gone, no scrolling needed.
@@ -294,11 +294,11 @@ test.describe('three-page claim arc', () => {
     await expect(page.locator('dialog [data-stub="used"]')).toHaveCount(1)
     await expect(page.locator('dialog svg text').filter({ hasText: 'JORDAN' })).toHaveCount(1)
     await expect(page.locator('dialog svg text').filter({ hasText: '?' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: /Copy their invitation/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Copy their ticket link' })).toBeVisible()
     await expect(page.getByRole('link', { name: /See where your ticket went/i })).toBeVisible()
 
     // The modal cycles: the form returns, cleared and focused.
-    await page.getByRole('button', { name: 'Create another invitation' }).click()
+    await page.getByRole('button', { name: 'Share another ticket' }).click()
     await expect(page.getByPlaceholder('Their first name')).toBeFocused()
     await expect(page.getByPlaceholder('Their first name')).toHaveValue('')
     await expect(page.getByText(/Who needs to see this\?/)).toBeVisible()
@@ -462,7 +462,7 @@ test.describe('three-page claim arc', () => {
     await expect(page.locator('dialog [data-stub="used"]')).toHaveCount(0)
     await expect(page.getByText('5 tickets left.')).toBeVisible()
     await expect(page.getByText(/Who needs to see this\? Not anyone/)).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Create their invitation' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Share it with them' })).toBeVisible()
     // Body scroll locks while the modal is open.
     expect(await page.evaluate(() => document.body.style.overflow)).toBe('hidden')
 

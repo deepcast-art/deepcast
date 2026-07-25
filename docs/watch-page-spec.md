@@ -59,7 +59,7 @@ Existing tokens (Tailwind `@theme` in `src/index.css`):
 If these neutral grays spread further, promote `rgba(221,221,221,0.65)`-family to a proper token and have the muted-vs-neutral conversation app-wide.
 
 **The gold law (strict):** accent gold appears ONLY as *act* or *mark*:
-- Acts: the "Pass it on" CTA (solid fill), "Create their invitation" / "Create another invitation" (gold outline), the tier bar's fill, input focus underline, hover states.
+- Acts: the "Pass it on" CTA (solid fill), "Share it with them" / "Share another ticket" (gold outline; ticket-verb labels 2026-07-25 — were "Create their invitation" / "Create another invitation"), the tier bar's fill, input focus underline, hover states.
 - Marks: ticket stubs, ✦ hallmarks, creed mark glyphs, the lineage's gold path/nodes.
 - Approved copy-emphasis exceptions (the ONLY colored words inside copy lines — this overrides the old README's "one uniform type style" rule, founder-approved): `"or its last."` in the rule line, `"you"` in creed line 2, `"needs"` in the modal charge.
 
@@ -131,7 +131,7 @@ Order, all centered:
 3. **Ticket stubs**: 5 stub SVGs, `data-stub="used"` ones at opacity 0.22, **spent newest-first (rightmost stubs dim first)**, 400ms opacity transition (none under reduced motion). Decorative, `aria-hidden`.
 4. `{tickets_remaining} tickets left.` — whisper caps line (0.75rem/0.24em, muted).
 5. **The charge**: `Who needs to see this? Not anyone — the one it will matter to.` — Garamond italic, **1.125rem (FOUNDER AMENDMENT 2026-07-23, up from the replica's 1.0625rem)**, warm@0.8, with `needs` in accent. Bind `anyone — the` with `&nbsp;` before the dash.
-6. **The form**: input (centered text, hairline bottom border warm@0.2 → accent on focus; placeholder `Their first name` in serif italic warm@0.4; sr-only label; maxlength 50) and the button `Create their invitation` (gold outline: border accent@0.6, accent text, caps 0.8125rem/0.28em, min-height 48px; hover/focus fills accent with ink text). Name validation errors render inline in `--color-error` between input and button (`firstNameRule.js`) — state not shown in replica but carried over from the original.
+6. **The form**: input (centered text, hairline bottom border warm@0.2 → accent on focus; placeholder `Their first name` in serif italic warm@0.4; sr-only label; maxlength 50) and the button `Share it with them` (label 2026-07-25, was `Create their invitation`; gold outline: border accent@0.6, accent text, caps 0.8125rem/0.28em, min-height 48px; hover/focus fills accent with ink text). Name validation errors render inline in `--color-error` between input and button (`firstNameRule.js`) — state not shown in replica but carried over from the original.
 
 ### 4b. State 2 — after creating a ticket (THE REPLACEMENT MODEL)
 ⚠ Post-creation, the modal **transforms — it does not grow**. The charge line and the form are REPLACED by the reveal, so the link renders where the field was: **no scrolling required to see the ticket link**. The lineage updates (§5), the stubs dim one more, the count line updates. Full State-2 order:
@@ -143,9 +143,9 @@ Order, all centered:
 5. **The reveal** (rises in with `.dc-result-rise`; hairline top rule, `padding-top: 1.75rem`):
    - `Here's {recipient_name}'s ticket link. Send it to them with why they came to mind.` — serif italic 1.0625rem warm@0.85
    - **The bare link** — serif, `clamp(1.1875rem, 3vw, 1.4375rem)`, paper@0.9, `word-break: break-all`. Handed over BARE — no pre-written message, ever (product law).
-   - `Copy their invitation` — warm-outline button (border warm@0.2, warm text; accent border/text on hover), min-height 44px. Copies the link.
+   - `Copy their ticket link` (label 2026-07-25, was `Copy their invitation`) — warm-outline button (border warm@0.2, warm text; accent border/text on hover), min-height 44px. Copies the link.
    - `1.75rem` → `{tickets_remaining} tickets left. Who else needs it?` — whisper caps, muted
-   - `0.875rem` (bonded) → **`Create another invitation`** — a GOLD-OUTLINE link-button (same affordance family as the form's create button: border accent@0.6, accent text, fills gold on hover, min-height 44px, caps 0.6875rem/0.26em). Action: swap the form state back in — field cleared, charge line restored. The modal cycles.
+   - `0.875rem` (bonded) → **`Share another ticket`** (label 2026-07-25, was `Create another invitation`) — a GOLD-OUTLINE link-button (same affordance family as the form's create button: border accent@0.6, accent text, fills gold on hover, min-height 44px, caps 0.6875rem/0.26em). Action: swap the form state back in — field cleared, charge line restored. The modal cycles.
    - `2rem` (separated) → `See where your ticket went →` — muted arrow-link, warm on hover. Destination: the dashboard (the live share graph — the "big reveal" lives THERE, deliberately last as the exit).
 
 **The affordance law (why the above looks the way it does):** on this page, **a box means "act here"; an arrow means "go there."** Buttons are outlined or filled rectangles; navigation is a text link with `→`. Never style an action as bare text and never put an arrow on an in-place action.
@@ -227,10 +227,10 @@ Copy the SVG from the replica exactly. Its layers and their rules:
 | Modal eyebrow: `Pass it on` | FOUNDER (2026-07-25; "Make an impact." cut) |
 | `{n} tickets left.` | founder-directed whittle (was the longer tickets line) — treat as approved |
 | Charge: `Who needs to see this? Not anyone — the one it will matter to.` | FOUNDER (`needs` in accent) |
-| `Their first name` (placeholder) / `Create their invitation` / `Copy their invitation` | LOCKED |
+| `Their first name` (placeholder) / `Share it with them` / `Copy their ticket link` | FOUNDER (button labels re-stamped 2026-07-25 — ticket verbs, replacing `Create their invitation` / `Copy their invitation`; the placeholder unchanged) |
 | Reveal: `Here's {recipient_name}'s ticket link. Send it to them with why they came to mind.` | **PENDING** |
 | `{n} tickets left. Who else needs it?` | **PENDING** (replaced locked `…Who else comes to mind?`) |
-| `Create another invitation` | **PENDING** |
+| `Share another ticket` | FOUNDER (2026-07-25, replacing `Create another invitation`) |
 | `See where your ticket went →` | LOCKED |
 | Zero state: `You've shared all your tickets for this film.` | FOUNDER (verb revised 2026-07-25; was LOCKED "given") |
 | First-name validation message | LOCKED (`firstNameRule.js`) |

@@ -239,10 +239,10 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(dialog.locator('input[type="email"]')).toHaveCount(0)
     // Typing an email into the first-name box is gently refused, client-side.
     await dialog.getByPlaceholder('Their first name').fill('noa@example.com')
-    await dialog.getByRole('button', { name: 'Create their invitation' }).click()
+    await dialog.getByRole('button', { name: 'Share it with them' }).click()
     await expect(dialog.getByText('Just their first name — no email needed.')).toBeVisible()
     await dialog.getByPlaceholder('Their first name').fill('Noa')
-    await dialog.getByRole('button', { name: 'Create their invitation' }).click()
+    await dialog.getByRole('button', { name: 'Share it with them' }).click()
     await expect(dialog.getByText('https://deepcast.art/noa-x9y2').first()).toBeVisible()
     // Bare link only (2026-07-21): no pre-written share message in the modal.
     await expect(dialog.getByText(/I watched this and thought of you/)).toHaveCount(0)

@@ -117,7 +117,7 @@ export default function ShareLinkModal({ open, onClose, filmId, parentInviteId, 
             disabled={busy}
             className="w-full border border-gold bg-gold px-4 py-4 font-sans text-[0.8125rem] uppercase tracking-[0.26em] text-ink transition-colors duration-300 hover:bg-transparent hover:text-gold-soft disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {busy ? 'One moment…' : 'Create their invitation'}
+            {busy ? 'One moment…' : 'Share it with them'}
           </button>
         </form>
         {error && <p className="mt-3 font-sans text-sm text-error">{error}</p>}
@@ -136,7 +136,7 @@ export default function ShareLinkModal({ open, onClose, filmId, parentInviteId, 
               onClick={handleCopy}
               className="mt-4 border border-mist/25 px-5 py-2.5 font-sans text-[0.6875rem] uppercase tracking-[0.22em] text-smoke transition-colors hover:border-gold hover:text-gold-soft"
             >
-              {copied ? 'Copied' : 'Copy their invitation'}
+              {copied ? 'Copied' : 'Copy their ticket link'}
             </button>
             <p className="mt-5 font-sans text-[0.6875rem] uppercase tracking-[0.22em] text-smoke">
               {revealTicketsLine(generated.ticketsRemaining)}

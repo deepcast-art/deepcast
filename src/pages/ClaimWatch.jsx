@@ -376,7 +376,7 @@ function PassItOnModal({
     }
   }, [])
 
-  /** The modal cycles: when "Create another invitation" swaps the form back
+  /** The modal cycles: when "Share another ticket" swaps the form back
    *  in, the (re-rendered) field takes focus again. Native <dialog> focus
    *  containment re-covers whatever the reveal adds or removes. */
   useEffect(() => {
@@ -471,7 +471,7 @@ function PassItOnModal({
               onClick={onCopy}
               className="mt-6 min-h-[44px] cursor-pointer touch-manipulation border border-warm/20 px-9 py-3 font-sans font-normal text-xs uppercase tracking-[0.26em] text-warm transition-colors hover:border-accent hover:text-accent focus-visible:border-accent focus-visible:text-accent focus-visible:outline-none"
             >
-              {copied ? 'Copied' : 'Copy their invitation'}
+              {copied ? 'Copied' : 'Copy their ticket link'}
             </button>
             <p className="mt-7 font-sans font-normal text-xs uppercase tracking-[0.24em] text-muted">
               {revealTicketsLine(generated.ticketsRemaining)}
@@ -486,7 +486,7 @@ function PassItOnModal({
                   onClick={onAgain}
                   className="inline-block min-h-[44px] cursor-pointer touch-manipulation border border-accent/60 px-7 py-[0.6875rem] font-sans font-normal text-[0.6875rem] uppercase tracking-[0.26em] text-accent transition-colors duration-300 hover:border-accent hover:bg-accent hover:text-ink focus-visible:border-accent focus-visible:bg-accent focus-visible:text-ink focus-visible:outline-none"
                 >
-                  Create another invitation
+                  Share another ticket
                 </button>
               </p>
             )}
@@ -542,7 +542,7 @@ function PassItOnModal({
                 disabled={shareBusy}
                 className="min-h-[48px] w-full cursor-pointer touch-manipulation border border-accent/60 px-6 py-3.5 font-sans font-normal text-[0.8125rem] uppercase tracking-[0.28em] text-accent transition-colors duration-300 hover:border-accent hover:bg-accent hover:text-ink focus-visible:border-accent focus-visible:bg-accent focus-visible:text-ink focus-visible:outline-none disabled:opacity-50"
               >
-                {shareBusy ? 'One moment…' : 'Create their invitation'}
+                {shareBusy ? 'One moment…' : 'Share it with them'}
               </button>
             </form>
           </>
@@ -887,7 +887,7 @@ export default function ClaimWatch() {
     }
   }
 
-  /** "Create another invitation" — the modal cycles back to State 1: the
+  /** "Share another ticket" — the modal cycles back to State 1: the
    *  reveal clears, the charge and the (empty) field return. */
   const handleShareAgain = () => {
     setGenerated(null)
