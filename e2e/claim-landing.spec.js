@@ -83,8 +83,8 @@ test.describe('three-page claim arc', () => {
     await expect(page.getByRole('heading', { name: 'Alex, Ien gifted you a film.' })).toBeVisible()
     await expect(page.getByText(/Dear Alex/)).toHaveCount(0)
     await expect(page.getByText(/Ien Chi gifted/)).toHaveCount(0)
-    // "watched this and thought of you" left this page for the prologue.
-    await expect(page.getByText(/watched this and thought of you/)).toHaveCount(0)
+    // "saw this and thought of you" left this page for the prologue.
+    await expect(page.getByText(/saw this and thought of you/)).toHaveCount(0)
     // The private-invitation line with the permanent ticket number.
     await expect(page.getByText('By private invitation only · Ticket No. 8')).toBeVisible()
     // The thread (depth-1) with its context label, and the film block.
@@ -184,11 +184,11 @@ test.describe('three-page claim arc', () => {
     // The once-per-claim PROLOGUE (2026-07-21): line 1 fades in immediately;
     // the first tap reveals all three lines instantly; a further tap skips
     // to the fade-out and the watch page.
-    await expect(page.getByText('Alex, Ien watched this and thought of you.')).toBeVisible()
+    await expect(page.getByText('Alex, Ien saw this and thought of you.')).toBeVisible()
     const prologue = page.getByRole('button', { name: 'Continue to the film' })
     await prologue.click()
     await expect(
-      page.getByText('No algorithm decided you should see it. A real person did.')
+      page.getByText('No algorithm sent you this. A person did.')
     ).toBeVisible()
     await expect(page.getByText(/choose the few people who need it next/)).toBeVisible()
     await prologue.click()
@@ -330,9 +330,9 @@ test.describe('three-page claim arc', () => {
     await page.getByRole('button', { name: /Accept your invite/i }).click()
 
     // All three lines appear together, statically.
-    await expect(page.getByText('Alex, Ien watched this and thought of you.')).toBeVisible()
+    await expect(page.getByText('Alex, Ien saw this and thought of you.')).toBeVisible()
     await expect(
-      page.getByText('No algorithm decided you should see it. A real person did.')
+      page.getByText('No algorithm sent you this. A person did.')
     ).toBeVisible()
     await expect(page.getByText(/choose the few people who need it next/)).toBeVisible()
     // No taps: after the short hold it releases to the watch page on its own.

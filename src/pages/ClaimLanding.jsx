@@ -210,9 +210,9 @@ function ClaimPrologue({ receiver, sharer, posterUrl, onDone }) {
   }, [advance])
 
   const lines = [
-    `${receiver ? `${receiver}, ` : ''}${sharer} watched this and thought of you.`,
-    'No algorithm decided you should see it. A real person did.',
-    'After watching, you’ll get to do the same — choose the few people who need it next.',
+    `${receiver ? `${receiver}, ` : ''}${sharer} saw this and thought of you.`,
+    'No algorithm sent you this. A person did.',
+    'After watching, you’ll do the same — choose the few people who need it next.',
   ]
 
   return (
@@ -370,7 +370,7 @@ function devPreviewChain(searchParams) {
  * thread / film title / transmission hook / inline email + Accept CTA /
  * "This invitation admits one person, once." / "By private invitation only
  * · Ticket No. {N}" (the ticket segment renders only when ticketNo exists).
- * The old "Dear X," greeting is GONE; "watched this and thought of you"
+ * The old "Dear X," greeting is GONE; "saw this and thought of you"
  * moved to the post-claim prologue.
  *
  * Claiming plays the once-per-claim PROLOGUE (see ClaimPrologue below),
