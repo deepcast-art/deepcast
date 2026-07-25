@@ -1,9 +1,16 @@
 import { DEV_HARNESS_ENABLED } from '../../lib/devHarness'
 
 /**
- * THROWAWAY DEV HARNESS v4 — lineage-emblem TREE-GRAMMAR candidates.
+ * THROWAWAY DEV HARNESS v6 — lineage-emblem TREE-GRAMMAR candidates.
  * NOT a product surface; never part of a production bundle (lazy-loaded
  * behind DEV_HARNESS_ENABLED, same mechanism as DevHarness.jsx).
+ *
+ * v6 (2026-07-25): the cluster is ONE DOT — the three-dot knot is
+ * dead. The compressed middle renders as a single gold node on the
+ * uniform path, same treatment family as the articulated nodes and
+ * subtly smaller than the direct sharer's node (NEVER larger); the
+ * label does the counting work. The count suffix tightens to "+ {n}"
+ * ("PRIYA + 4"), numerals always; one hidden hand stays the bare name.
  *
  * v5 (2026-07-25, founder structural ruling — THE NAMED-CLUSTER
  * COLLAPSE, same grammar family as src/lib/lineageThread.js):
@@ -12,19 +19,19 @@ import { DEV_HARNESS_ENABLED } from '../../lib/devHarness'
  *    YOU (plus the dotted-gold "?"). Origin and direct sharer NEVER
  *    compress — permanent anchors.
  *  - Everything between the filmmaker and the direct sharer compresses
- *    into ONE condensed cluster node ON the gold path (the v4 tight
- *    gold dot-cluster; line through it unbroken and uniform), labeled
- *    with the NEAREST HIDDEN HAND'S REAL first name plus a count:
- *    0 hidden hands → NO cluster; 1 hidden → the name alone ("PRIYA");
- *    2+ hidden → "{name} + {n} more" ("PRIYA + 4 MORE"), numerals
- *    always. The named person is the hand who shared TO the direct
+ *    into ONE condensed node ON the gold path (line through it
+ *    unbroken and uniform), labeled with the NEAREST HIDDEN HAND'S
+ *    REAL first name plus a count: 0 hidden hands → NO cluster node;
+ *    1 hidden → the name alone ("PRIYA"); 2+ hidden → "{name} + {n}"
+ *    ("PRIYA + 4"), numerals always (the v5 "+ n more" suffix is
+ *    dead). The named person is the hand who shared TO the direct
  *    sharer — real lineage data, never invented (mock names here).
  *    The v4 "N hands"/numeral-only treatments are DEAD.
  *  - Four panels: depths 1 and 2 approved as rendered in v4; depth 3
  *    collapsed under the rule (cluster "PRIYA") and THINNED (~⅓ of the
  *    second-generation buds removed — the founder found v4's depth 3
  *    slightly too complicated); depth 8 in the same silhouette with
- *    cluster "PRIYA + 4 MORE".
+ *    the condensed node "PRIYA + 4".
  * Carried v4 rules: GOLD PATH UNIFORMITY — identical width, color,
  * opacity, and style on every gold segment, no fading anywhere.
  * Panels are composed and judged ALONE (v3 rule). Composition rules of
@@ -147,11 +154,9 @@ function GrayGrowth({ gray }) {
 }
 
 /**
- * One growth stage of the tree. `chain` = gold nodes from the filmmaker
- * through the hands (YOU excluded); `receding` renders the FIRST gold
- * segment as compressed ancestry (long, fading toward the origin), with
- * an optional `hiddenHands` count carrying the "⋯ N hands ⋯" collapse
- * grammar (numerals always).
+ * One growth stage of the tree. `chain` = the articulated gold nodes
+ * (filmmaker first, then the direct sharer; YOU excluded); `condensed`
+ * = the single collapse node + its name label (v6).
  */
 function TreePanel({ chain, you, next, gray, condensed = null }) {
   const filmmaker = chain[0]
@@ -173,16 +178,15 @@ function TreePanel({ chain, you, next, gray, condensed = null }) {
         )
       })}
 
-      {/* The named-cluster collapse (v5): ONE condensed node ON the gold
-          path — a tight cluster of gold dots (many people, not one), the
-          uniform line running through unbroken. Labeled with the nearest
-          hidden hand's name (+ count when 2+ hidden), horizontal beneath
-          the cluster in the constellation's fine-label treatment. */}
+      {/* The named-cluster collapse (v6): ONE single gold node ON the
+          gold path — the uniform line running through unbroken; subtly
+          smaller than the articulated nodes (r 3.2 vs 3.5), never
+          larger. The label does the counting: the nearest hidden hand's
+          name (+ " + n" when 2+ hidden), horizontal beneath, in the
+          constellation's fine-label treatment. */}
       {condensed && (
         <g>
-          {condensed.dots.map(([x, y], i) => (
-            <circle key={`c${i}`} cx={x} cy={y} r="2.4" fill="#C7A96B" />
-          ))}
+          <circle cx={condensed.dot[0]} cy={condensed.dot[1]} r="3.2" fill="#C7A96B" />
           <text
             x={condensed.label.x}
             y={condensed.label.y}
@@ -309,7 +313,7 @@ const PANELS = [
   {
     key: 'depth-3',
     caption:
-      'Depth 3 under the collapse rule — filmmaker → cluster ("PRIYA", the one hidden hand, no count) → Jonas (direct sharer) → you. Thinned from v4: primary limbs kept, ~⅓ of second-generation buds removed.',
+      'Depth 3 under the collapse rule — filmmaker → the condensed node ("PRIYA", the one hidden hand, no count) → Jonas (direct sharer) → you. Thinned from v4: primary limbs kept, ~⅓ of second-generation buds removed.',
     chain: [
       { x: 62, y: 172, name: 'Avery' },
       { x: 238, y: 104, name: 'Jonas' },
@@ -317,11 +321,7 @@ const PANELS = [
     you: { x: 322, y: 82 },
     next: { x: 392, y: 64 },
     condensed: {
-      dots: [
-        [144, 140],
-        [148, 134],
-        [157, 136],
-      ],
+      dot: [150, 138],
       label: { text: 'Priya', x: 130, y: 164 },
     },
     gray: {
@@ -334,11 +334,10 @@ const PANELS = [
         [95, 215, 140, 224],
         [95, 215, 126, 196],
         // The cluster's top: one limb, one onward bud (second fork gone).
-        [148, 134, 184, 96],
+        [150, 138, 184, 96],
         [184, 96, 222, 76],
-        // The cluster's underside: the limb forks two ways (kept — it
-        // anchors from the cluster's right dot so the label sits clear).
-        [157, 136, 176, 184],
+        // The cluster's underside: the limb forks two ways.
+        [150, 138, 176, 184],
         [176, 184, 212, 200],
         [176, 184, 208, 166],
         // Jonas: one young top bud; the down-limb (fork removed).
@@ -366,7 +365,7 @@ const PANELS = [
   {
     key: 'depth-8',
     caption:
-      'Depth ~8 under the collapse rule — filmmaker → cluster ("PRIYA + 4 MORE": Priya shared to Lena; four more hands hidden behind her) → Lena (direct sharer) → you. Same silhouette, thinned density.',
+      'Depth ~8 under the collapse rule — filmmaker → the condensed node ("PRIYA + 4": Priya shared to Lena; four more hands hidden behind her) → Lena (direct sharer) → you. Same silhouette, thinned density.',
     chain: [
       { x: 48, y: 180, name: 'Avery' },
       { x: 268, y: 100, name: 'Lena' },
@@ -374,12 +373,8 @@ const PANELS = [
     you: { x: 340, y: 78 },
     next: { x: 398, y: 62 },
     condensed: {
-      dots: [
-        [141, 146],
-        [146, 140],
-        [153, 142],
-      ],
-      label: { text: 'Priya + 4 more', x: 168, y: 166 },
+      dot: [147, 144],
+      label: { text: 'Priya + 4', x: 155, y: 164 },
     },
     gray: {
       lines: [
@@ -393,8 +388,8 @@ const PANELS = [
         // One twig off the gold span, left of the cluster label.
         [96, 163, 118, 200],
         // The cluster's top limb with onward growth (the hidden hands'
-        // spread), anchored at the cluster's right dot.
-        [153, 142, 190, 96],
+        // spread).
+        [147, 144, 190, 96],
         [190, 96, 226, 74],
         // Lena: the down-limb whose bud buds again.
         [268, 100, 300, 140],
@@ -427,12 +422,12 @@ export default function DevEmblemHarness() {
           THROWAWAY DEV HARNESS — not in production
         </p>
         <h1 className="mb-2 font-serif-v3 text-2xl italic">
-          Lineage emblem v5 — the named-cluster collapse
+          Lineage emblem v6 — single-dot collapse
         </h1>
         <p className="mb-8 max-w-2xl font-sans text-sm text-warm/60">
           At most three articulated stops — filmmaker, your direct sharer, you. Hidden hands
-          between them condense into one cluster on the line, named for the hand nearest your
-          sharer ("Priya", or "Priya + 4 more"). Gold uniform end to end; dotted gold = the
+          between them condense into one gold node on the line, named for the hand nearest
+          your sharer ("Priya", or "Priya + 4"). Gold uniform end to end; dotted gold = the
           unminted next ticket; dotted gray = the network&rsquo;s other branches, always
           unlabeled. Mock names, zero real data; the live pass-it-on modal is untouched.
         </p>
