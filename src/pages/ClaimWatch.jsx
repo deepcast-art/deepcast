@@ -425,11 +425,13 @@ function PassItOnModal({
           </svg>
         </button>
 
+        {/* The eyebrow doubles as the modal's accessible name (the dialog's
+            aria-labelledby points here). "Make an impact." cut 2026-07-25. */}
         <p
           id="passiton-title"
           className="font-sans font-normal text-[11px] uppercase tracking-[0.32em] text-muted"
         >
-          Pass it on. Make an impact.
+          Pass it on
         </p>
 
         {/* The lineage — how it reached you, and the unclaimed next. State 2
@@ -906,14 +908,15 @@ export default function ClaimWatch() {
   const title = link?.filmTitle || 'a film'
   const outOfTickets = tickets != null && tickets <= 0
 
-  /* ── The rail's record (spec §3b): the film-wide claims count from the
-     link payload (server-computed by the shared countFilmClaims rule —
+  /* ── The rail's record (spec §3b): the film-wide TICKETS-SHARED count
+     from the link payload (founder metric switch 2026-07-25 — non-void
+     generated links, server-computed by the shared countFilmShares rule:
      voided never count, ghosts per show_ghosts). The HONEST number, no
      padding, no clamping (founder amendment E); a missing field reads as
      the empty record, so the milestones block simply stays absent. ── */
-  const claimsCount = Number.isFinite(link?.filmClaimsCount) ? link.filmClaimsCount : 0
-  const goal = nextTier(claimsCount)
-  const crossed = crossedTiers(claimsCount)
+  const sharesCount = Number.isFinite(link?.filmSharesCount) ? link.filmSharesCount : 0
+  const goal = nextTier(sharesCount)
+  const crossed = crossedTiers(sharesCount)
 
   /* ── The rule line's chain depth (spec §3b.6) — from the same lineage the
      landing thread reads, id-verified collapse included. ── */
@@ -1025,25 +1028,25 @@ export default function ClaimWatch() {
               {/* The record: bar → count → goal label. Squared ends, solid
                   accent fill, progress toward the NEXT tier only. */}
               <section
-                aria-label={`${formatTierNumber(claimsCount)} viewers reached of ${formatTierNumber(goal)} goal`}
+                aria-label={`${formatTierNumber(sharesCount)} tickets shared of ${formatTierNumber(goal)} goal`}
               >
                 <div aria-hidden className="h-[2px] w-full bg-tint-track">
                   <div
                     className="h-full bg-accent"
-                    style={{ width: `${tierFillPercent(claimsCount)}%` }}
+                    style={{ width: `${tierFillPercent(sharesCount)}%` }}
                   />
                 </div>
                 <p
                   aria-hidden
                   className="mt-[1.125rem] font-sans font-semibold text-[2.25rem] leading-none tracking-[0.01em] text-warm"
                 >
-                  {formatTierNumber(claimsCount)}
+                  {formatTierNumber(sharesCount)}
                 </p>
                 <p
                   aria-hidden
                   className="mt-[0.625rem] font-sans font-normal text-[0.8125rem] uppercase leading-[1.6] tracking-[0.18em] text-warm/80"
                 >
-                  Viewers reached of {formatTierNumber(goal)} goal
+                  Tickets shared of {formatTierNumber(goal)} goal
                 </p>
               </section>
 
@@ -1159,7 +1162,7 @@ export default function ClaimWatch() {
                 </svg>
               </div>
               <p className="mx-auto mt-3.5 max-w-[22rem] font-serif-v3 italic text-[1.125rem] leading-[1.7] text-warm/80">
-                Share intentionally. Each ticket admits one person, once.
+                Share intentionally. Each ticket admits one person only.
               </p>
             </div>
           </div>

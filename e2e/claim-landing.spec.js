@@ -36,7 +36,10 @@ const LINK_CREATED = {
   ticketNo: 8,
   ticketsRemaining: null,
   durationSeconds: 1932.5983, // floors to "32 minutes" on the landing letter
-  filmClaimsCount: 847, // the rail's record (three milestones crossed)
+  // The rail's record is the SHARES count (metric switch 2026-07-25); the
+  // two fields differ on purpose so the tests prove which one renders.
+  filmSharesCount: 847, // three milestones crossed
+  filmClaimsCount: 512, // still served; must NOT drive the rail
   lineageForks: [true], // the creator verifiably shared beyond this chain
 }
 
@@ -222,22 +225,25 @@ test.describe('three-page claim arc', () => {
     // modal (redesign Phase 4 — its coverage returns there); no share form
     // lives on the page.
     await expect(page.getByRole('button', { name: 'Pass it on' })).toBeVisible()
-    // The record: the payload's film-wide count, comma-formatted goal.
+    // The record: the payload's film-wide TICKETS-SHARED count (metric
+    // switch 2026-07-25), comma-formatted goal — and never the claims
+    // count, which the fixture deliberately sets to a different number.
     await expect(page.getByText('847', { exact: true })).toBeVisible()
-    await expect(page.getByText('Viewers reached of 1,000 goal')).toBeVisible()
+    await expect(page.getByText('512', { exact: true })).toHaveCount(0)
+    await expect(page.getByText('Tickets shared of 1,000 goal')).toBeVisible()
     await expect(page.getByText('Milestones passed')).toBeVisible()
     // The rule line: fixture lineage ['Ien Chi'] + senderIsCreator → one
     // hand, singular grammar (owner-approved 2026-07-23), numeral kept.
     await expect(
       page.getByText(/This film passed through 1 pair of hands to reach you/)
     ).toBeVisible()
-    // The creed, founder-provided verbatim (2026-07-23 revision).
+    // The creed, founder-provided verbatim (line 3 revised 2026-07-25).
     await expect(
       page.getByText('Films here spread by private invite and real humans only. No algorithms.')
     ).toBeVisible()
     await expect(page.getByText(/won’t reach anyone new, unless/)).toBeVisible()
     await expect(
-      page.getByText('Share intentionally. Each ticket admits one person, once.')
+      page.getByText('Share intentionally. Each ticket admits one person only.')
     ).toBeVisible()
     // The personalized constraint line is CUT from this page (spec §9.4).
     await expect(page.getByText(/this film reached you because/)).toHaveCount(0)
@@ -252,7 +258,10 @@ test.describe('three-page claim arc', () => {
     // ── The modal share cycle: State 1 → generate → State 2 (replacement)
     //    → create another → State 1 again. ──
     await page.getByRole('button', { name: 'Pass it on' }).click()
-    await expect(page.getByText('Pass it on. Make an impact.')).toBeVisible()
+    // The eyebrow reads "Pass it on" alone ("Make an impact." cut
+    // 2026-07-25) — located by id, since the CTA shares the words.
+    await expect(page.locator('#passiton-title')).toHaveText('Pass it on')
+    await expect(page.getByText('Pass it on. Make an impact.')).toHaveCount(0)
     // The lineage emblem: fixture chain ['Ien Chi'] + senderIsCreator → the
     // filmmaker's node, YOU, and the unclaimed next slot reading "?".
     await expect(page.locator('dialog svg text').filter({ hasText: 'IEN' })).toHaveCount(1)
@@ -440,7 +449,7 @@ test.describe('three-page claim arc', () => {
     await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
 
     const cta = page.getByRole('button', { name: 'Pass it on' })
-    const eyebrow = page.getByText('Pass it on. Make an impact.')
+    const eyebrow = page.locator('#passiton-title')
 
     // Closed by default; nothing of the flow leaks onto the page.
     await expect(eyebrow).toHaveCount(0)
@@ -513,12 +522,12 @@ test.describe('three-page claim arc', () => {
       )
     })
     await page.route('**/api/invites/link/**', (route) =>
-      route.fulfill({ json: { ...LINK_CLAIMED, filmClaimsCount: 3 } })
+      route.fulfill({ json: { ...LINK_CLAIMED, filmSharesCount: 3 } })
     )
     await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
 
     await expect(page.getByText('3', { exact: true })).toBeVisible()
-    await expect(page.getByText('Viewers reached of 100 goal')).toBeVisible()
+    await expect(page.getByText('Tickets shared of 100 goal')).toBeVisible()
     await expect(page.getByText('Milestones passed')).toHaveCount(0)
     await expect(page.getByText('✦')).toHaveCount(0)
     expect(jsErrors).toEqual([])
@@ -538,7 +547,7 @@ test.describe('three-page claim arc', () => {
     )
     await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await page.getByRole('button', { name: 'Pass it on' }).click()
-    await expect(page.getByText('Pass it on. Make an impact.')).toBeVisible()
+    await expect(page.locator('#passiton-title')).toHaveText('Pass it on')
     await expect(page.locator('dialog svg text').filter({ hasText: 'YOU' })).toHaveCount(1)
     await expect(page.locator('dialog svg g[data-fork]')).toHaveCount(0)
     expect(jsErrors).toEqual([])

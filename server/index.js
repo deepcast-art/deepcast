@@ -35,7 +35,7 @@ import { claimedSharerSpendDecision, claimedInviteTicketsDisplay } from './claim
 import { nextTicketNo } from './ticketNumbers.js'
 import { firstNameInputError } from '../src/lib/firstNameRule.js'
 import { VOID_INVITE_STATUS } from '../src/lib/inviteExistence.js'
-import { countFilmClaims } from '../src/lib/filmClaims.js'
+import { countFilmClaims, countFilmShares } from '../src/lib/filmClaims.js'
 import { buildLineageForks } from '../src/lib/lineageForks.js'
 import { refundOnVoidDecision } from './voidRules.js'
 
@@ -1229,10 +1229,13 @@ app.get('/api/invites/link/:slug', async (req, res) => {
         filmCreatorId: creatorId,
       }),
       posterUrl,
-      // Film-wide claims count for the watch rail (redesign 2026-07-23):
-      // the shared claimed-stage rule over the who-exists set — voided
-      // links never count, ghosts count only when the film shows them
-      // (show_ghosts). Honest number, no padding, no clamping.
+      // Film-wide counts for the watch rail, both over the who-exists set —
+      // voided links never count, ghosts count only when the film shows
+      // them (show_ghosts). Honest numbers, no padding, no clamping.
+      // filmSharesCount (non-void generated links) is THE rail's number
+      // since the 2026-07-25 metric switch; filmClaimsCount stays served so
+      // an older frontend never reads a missing field during deploy skew.
+      filmSharesCount: countFilmShares(rows, { includeGhosts: showGhosts }),
       filmClaimsCount: countFilmClaims(rows, { includeGhosts: showGhosts }),
       lineageForks,
       // Watch-page needs on revisit (playback is public-policy; invites are

@@ -124,10 +124,11 @@ export default function ShareLinkModal({ open, onClose, filmId, parentInviteId, 
 
         {generated && (
           <div className="mt-7 border-t border-mist/[0.12] pt-6">
-            {/* Owner-approved reveal copy (2026-07-21). */}
+            {/* Owner-approved reveal copy (2026-07-21; "admits one person
+                only" revision 2026-07-25, aligned with creed line 3). */}
             <p className="font-serif-v3 text-base italic leading-relaxed text-smoke">
               Here’s {generated.name}’s ticket. Deliver it with your own words — it admits one
-              person, once.
+              person only.
             </p>
             <p className="mt-4 break-all font-sans text-sm text-mist">{generated.url}</p>
             <button

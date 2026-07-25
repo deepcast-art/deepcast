@@ -1,9 +1,13 @@
 /**
- * The watch-page rail's viewer-count tier ladder (founder-approved redesign,
+ * The watch-page rail's tier ladder (founder-approved redesign,
  * design-refs/watch-page-spec.md §3b; pixel ground truth
  * design-refs/watch-page_24.html). ONE shared, unit-tested computation per
  * the canonical-stats rule — every surface that shows these numbers reads
  * this module, never inline math.
+ *
+ * The counted number is TICKETS SHARED (non-void generated links, film-wide
+ * — the founder's 2026-07-25 metric switch; previously claims). The ladder
+ * itself is metric-agnostic: it ranks whatever count it is fed.
  *
  * The ladder is FIXED. next tier = the smallest ladder value ABOVE the
  * count; crossed tiers = every ladder value at or below it. The bar always
@@ -23,32 +27,32 @@ export const VIEWER_TIER_LADDER = [
 
 const TOP_TIER = VIEWER_TIER_LADDER[VIEWER_TIER_LADDER.length - 1]
 
-/** Sanitize a claims count: non-finite or negative reads as 0 — the honest
+/** Sanitize a count: non-finite or negative reads as 0 — the honest
  *  empty record, never an invented number. */
-const cleanCount = (claimsCount) => {
-  const n = Number(claimsCount)
+const cleanCount = (count) => {
+  const n = Number(count)
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0
 }
 
 /** The smallest ladder value above the count (the bar's goal). Pinned to the
  *  top rung once the count meets or exceeds it. */
-export function nextTier(claimsCount) {
-  const n = cleanCount(claimsCount)
+export function nextTier(count) {
+  const n = cleanCount(count)
   return VIEWER_TIER_LADDER.find((t) => t > n) ?? TOP_TIER
 }
 
 /** Every ladder value the count has reached — the permanent hallmarks. An
  *  empty array means the milestones block is OMITTED from the DOM entirely
  *  (founder amendment B: no label, no placeholder, no celebration). */
-export function crossedTiers(claimsCount) {
-  const n = cleanCount(claimsCount)
+export function crossedTiers(count) {
+  const n = cleanCount(count)
   return VIEWER_TIER_LADDER.filter((t) => t <= n)
 }
 
 /** The tier bar's fill width in percent — geometry only, NEVER rendered as
  *  text. Clamped to [0, 100]. */
-export function tierFillPercent(claimsCount) {
-  const n = cleanCount(claimsCount)
+export function tierFillPercent(count) {
+  const n = cleanCount(count)
   return Math.min((n / nextTier(n)) * 100, 100)
 }
 

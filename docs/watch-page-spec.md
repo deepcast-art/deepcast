@@ -92,14 +92,14 @@ A single left-aligned cluster, **vertically centered against the player**: `.rai
 
 Internal order and spacing (two-tier rhythm: tight *within* a fact, wide *between* facts, widest before the act):
 
-1. **The tier bar** — 2px track (`--tint-track`), squared ends (no border-radius, ever), fill in **solid accent**. Fill width = `claims_count / next_tier` as a percentage (847/1000 → 84.7%), set inline/computed. The bar ALWAYS shows progress toward the NEXT tier only.
-2. `margin-top: 1.125rem` → **the count**: `{claims_count}` — Phoenix 600, 2.25rem, warm, `letter-spacing: 0.01em`, line-height 1.
-3. `margin-top: 0.5rem` (bonded) → **the label**: `Viewers reached of {next_tier} goal` → renders `VIEWERS REACHED OF 1,000 GOAL` — Phoenix 400, 0.8125rem, caps, 0.18em, warm@0.8. Number formatted with comma.
+1. **The tier bar** — 2px track (`--tint-track`), squared ends (no border-radius, ever), fill in **solid accent**. Fill width = `shares_count / next_tier` as a percentage (847/1000 → 84.7%), set inline/computed. The bar ALWAYS shows progress toward the NEXT tier only. **FOUNDER METRIC SWITCH 2026-07-25: the counted number is TICKETS SHARED (film-wide non-void generated links, `filmSharesCount`, shared rule `countFilmShares`), replacing the claims count. The ladder itself is unchanged — 100 stays the first rung.**
+2. `margin-top: 1.125rem` → **the count**: `{shares_count}` — Phoenix 600, 2.25rem, warm, `letter-spacing: 0.01em`, line-height 1.
+3. `margin-top: 0.5rem` (bonded) → **the label**: `Tickets shared of {next_tier} goal` → renders `TICKETS SHARED OF 1,000 GOAL` — Phoenix 400, 0.8125rem, caps, 0.18em, warm@0.8. Number formatted with comma. (Was `Viewers reached of {next_tier} goal` until the 2026-07-25 metric switch.)
 4. `margin-top: 1.75rem` → **`Milestones passed`** (Phoenix 400, 0.8125rem, caps, 0.18em, warm@0.6) and `margin-top: 0.5rem` → the **hallmarks**: `✦ 100   ✦ 250   ✦ 500` — 0.8125rem, 0.14em, numbers warm@0.75, ✦ in accent@0.5. **FOUNDER AMENDMENT 2026-07-23: NO interpunct separators — the groups are separated by spacing alone (~1.25em gap). Do not restore the dots.** Renders every crossed tier (`crossed_tiers`).
 5. `margin-top: 2.25rem` (the column's widest gap — the act keeps its isolation) → **the CTA**: `Pass it on` — full rail width, min-height 52px, **solid accent fill, ink text**, caps 0.8125rem/0.28em, border same accent as fill (seamless hover). Hover: fill/border to `rgba(177,161,128,0.88)`. Focus-visible: 1px accent outline, 3px offset. This is the page's ONLY solid-filled object. Opens the modal.
 6. `margin-top: 1.25rem` → **the rule line**: `This film passed through {chain_length} pairs of hands to reach you. You are its newest link — or its last.` Garamond italic, **1rem (FOUNDER AMENDMENTS 2026-07-23 — raised twice from the replica's 0.875rem, via 0.9375rem; the HTML does NOT win on this one value)**, line-height 1.6, warm@0.65, left-aligned, with `or its last.` in accent. In the markup, bind the dash and closing clause with `&nbsp;` so `— or its last.` never strands at a line start. A chain of 1 reads `1 pair of hands` — singular, numeral kept (owner-approved 2026-07-23).
 
-**The tier ladder (fixed):** 100 / 250 / 500 / 1,000 / 2,500 / 5,000 / 10,000 / 25,000 / 50,000 / 100,000 / 250,000 / 500,000 / 1,000,000. `next_tier` = the smallest ladder value > `claims_count`. `crossed_tiers` = all ladder values ≤ `claims_count`. Numerals always; NO percentages displayed anywhere; no countdowns; no goal-met celebration states.
+**The tier ladder (fixed):** 100 / 250 / 500 / 1,000 / 2,500 / 5,000 / 10,000 / 25,000 / 50,000 / 100,000 / 250,000 / 500,000 / 1,000,000. `next_tier` = the smallest ladder value > `shares_count`. `crossed_tiers` = all ladder values ≤ `shares_count`. Numerals always; NO percentages displayed anywhere; no countdowns; no goal-met celebration states.
 
 ⚠ The `✦` glyph (U+2726) may not exist in Phoenix — verify the rendered glyph; if the system substitutes badly, replace with a tiny inline SVG four-point star matching the `.hm` sizing.
 
@@ -126,7 +126,7 @@ Opened by the CTA. This REPLACES the old always-docked panel (a deliberate found
 
 ### 4a. State 1 — before creating a ticket
 Order, all centered:
-1. Eyebrow: `Pass it on. Make an impact.` (11px caps, 0.32em, muted)
+1. Eyebrow: `Pass it on` (11px caps, 0.32em, muted; "Make an impact." cut by the founder 2026-07-25 — the eyebrow stays the dialog's `aria-labelledby` target)
 2. **The lineage graph** (spec in §5)
 3. **Ticket stubs**: 5 stub SVGs, `data-stub="used"` ones at opacity 0.22, **spent newest-first (rightmost stubs dim first)**, 400ms opacity transition (none under reduced motion). Decorative, `aria-hidden`.
 4. `{tickets_remaining} tickets left.` — whisper caps line (0.75rem/0.24em, muted).
@@ -215,16 +215,16 @@ Copy the SVG from the replica exactly. Its layers and their rules:
 | `deepcast` / `Your dashboard →` | LOCKED |
 | `{film_title}` | per-film |
 | `14 minutes. Headphones recommended.` | LOCKED (runtime dynamic) |
-| `Viewers reached of {next_tier} goal` | FOUNDER |
+| `Tickets shared of {next_tier} goal` | FOUNDER (2026-07-25, replacing `Viewers reached of {next_tier} goal`) |
 | `Milestones passed` | FOUNDER |
 | `Pass it on` (CTA) | FOUNDER |
 | `This film passed through {chain_length} pairs of hands to reach you. You are its newest link — or its last.` | FOUNDER (emphasis on `or its last.` approved) |
 | Creed 1: `Films here spread by private invite and real humans only. No algorithms.` | FOUNDER |
 | Creed 2: `This film won't reach anyone new, unless you pass it on.` | FOUNDER (`you` in accent) |
-| Creed 3: `Share intentionally. Each ticket admits one person, once.` | FOUNDER |
+| Creed 3: `Share intentionally. Each ticket admits one person only.` | FOUNDER (second sentence revised 2026-07-25) |
 | `From the filmmaker` (+ ` · {filmmaker_location}`) | FOUNDER |
 | Story epigraph/body/sign-off | per-film placeholder |
-| Modal eyebrow: `Pass it on. Make an impact.` | FOUNDER |
+| Modal eyebrow: `Pass it on` | FOUNDER (2026-07-25; "Make an impact." cut) |
 | `{n} tickets left.` | founder-directed whittle (was the longer tickets line) — treat as approved |
 | Charge: `Who needs to see this? Not anyone — the one it will matter to.` | FOUNDER (`needs` in accent) |
 | `Their first name` (placeholder) / `Create their invitation` / `Copy their invitation` | LOCKED |
@@ -244,7 +244,7 @@ Retired/removed copy (do NOT resurrect): the personalized constraint line ("Alex
 
 | Variable | Source | Where it renders |
 |---|---|---|
-| `claims_count` | claims total | count numeral; bar fill numerator |
+| `shares_count` | film-wide non-void generated links (`filmSharesCount`; metric switch 2026-07-25) | count numeral; bar fill numerator |
 | `next_tier` | ladder (§3b) | tier label; bar fill denominator |
 | `crossed_tiers` | ladder | hallmarks row |
 | `chain_length` | viewer's claim chain depth | rule line |
