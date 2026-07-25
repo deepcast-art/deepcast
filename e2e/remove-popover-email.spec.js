@@ -153,4 +153,31 @@ test.describe('Remove popover — confirmation email visibility (mocked creator)
     // Wrong/partial text keeps Delete disabled; the popover is still open.
     await expect(page.getByRole('button', { name: 'Delete' })).toBeDisabled()
   })
+
+  test('page-generated scroll never dismisses; user wheel and outside click do', async ({
+    page,
+  }) => {
+    await page.goto('/dashboard')
+    await expect(page.getByText('People in this network')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Remove' }).click()
+    await expect(page.getByText('Remove Elon')).toBeVisible()
+    await page.waitForTimeout(350) // past the 300ms open grace
+
+    // A scroll event with no user gesture behind it (layout shift, image
+    // load, scroll anchoring) must leave the popover open — this used to
+    // close it unprompted.
+    await page.evaluate(() => window.dispatchEvent(new Event('scroll')))
+    await expect(page.getByText('Remove Elon')).toBeVisible()
+
+    // A genuine user wheel gesture still closes it.
+    await page.evaluate(() => window.dispatchEvent(new WheelEvent('wheel')))
+    await expect(page.getByText('Remove Elon')).toHaveCount(0)
+
+    // Click-outside dismissal is unchanged: reopen, click elsewhere, gone.
+    await page.getByRole('button', { name: 'Remove' }).click()
+    await expect(page.getByText('Remove Elon')).toBeVisible()
+    await page.getByText('People in this network').click()
+    await expect(page.getByText('Remove Elon')).toHaveCount(0)
+  })
 })

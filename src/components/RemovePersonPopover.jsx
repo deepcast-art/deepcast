@@ -12,8 +12,8 @@ const norm = (v) => String(v ?? '').trim().toLowerCase()
  * (the server re-verifies independently); unclaimed links confirm with a
  * click (approved — nothing meaningful to type, one dead row).
  *
- * Same fixed-position anchoring and scroll/outside-click closing as the
- * ticket popover (including the trailing-scroll grace after open).
+ * Same fixed-position anchoring and user-scroll/outside-click closing as
+ * the ticket popover (including the 300ms grace after open).
  */
 export default function RemovePersonPopover({ anchorRect, filmId, target, onDeleted, onClose }) {
   const ref = useRef(null)
@@ -26,15 +26,23 @@ export default function RemovePersonPopover({ anchorRect, filmId, target, onDele
     const away = (e) => {
       if (ref.current && !ref.current.contains(e.target)) onClose()
     }
+    // Close on USER scrolling only (wheel / touch drag) — the fixed anchor
+    // would drift under it. The page's self-generated scroll events (layout
+    // shift as images load, scroll anchoring) fire `scroll` without either
+    // gesture, and must never dismiss the popover mid-confirmation — which
+    // is why `scroll` itself is deliberately not listened to. The 300ms
+    // grace still swallows the tail of the gesture that opened it.
     const openedAt = Date.now()
-    const anyScroll = () => {
+    const userScroll = () => {
       if (Date.now() - openedAt > 300) onClose()
     }
     document.addEventListener('pointerdown', away)
-    window.addEventListener('scroll', anyScroll, true)
+    window.addEventListener('wheel', userScroll, true)
+    window.addEventListener('touchmove', userScroll, true)
     return () => {
       document.removeEventListener('pointerdown', away)
-      window.removeEventListener('scroll', anyScroll, true)
+      window.removeEventListener('wheel', userScroll, true)
+      window.removeEventListener('touchmove', userScroll, true)
     }
   }, [onClose])
 

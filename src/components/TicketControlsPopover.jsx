@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from 'react'
  *
  * Anchored position: fixed, because the table scrolls inside its own
  * overflow container which would clip an absolute child. Closes on outside
- * click or any scroll (both discard pending state).
+ * click or user scrolling (both discard pending state).
  */
 export default function TicketControlsPopover({
   anchorRect,
@@ -33,18 +33,22 @@ export default function TicketControlsPopover({
     const away = (e) => {
       if (ref.current && !ref.current.contains(e.target)) onClose()
     }
-    // Scroll closes the popover (its fixed anchor would drift) — but trailing
-    // scroll events from the click that OPENED it can arrive asynchronously
-    // (momentum / scroll-into-view), so the first beat after mount is ignored.
+    // USER scrolling closes the popover (its fixed anchor would drift), so
+    // listen for the gestures themselves — wheel and touch drag. The page's
+    // self-generated scroll events (layout shift, scroll anchoring) must not
+    // dismiss it, so `scroll` is deliberately not listened to; the 300ms
+    // grace still swallows the tail of the gesture that opened it.
     const openedAt = Date.now()
-    const anyScroll = () => {
+    const userScroll = () => {
       if (Date.now() - openedAt > 300) onClose()
     }
     document.addEventListener('pointerdown', away)
-    window.addEventListener('scroll', anyScroll, true)
+    window.addEventListener('wheel', userScroll, true)
+    window.addEventListener('touchmove', userScroll, true)
     return () => {
       document.removeEventListener('pointerdown', away)
-      window.removeEventListener('scroll', anyScroll, true)
+      window.removeEventListener('wheel', userScroll, true)
+      window.removeEventListener('touchmove', userScroll, true)
     }
   }, [onClose])
 
