@@ -5,23 +5,28 @@ import { DEV_HARNESS_ENABLED } from '../../lib/devHarness'
  * NOT a product surface; never part of a production bundle (lazy-loaded
  * behind DEV_HARNESS_ENABLED, same mechanism as DevHarness.jsx).
  *
- * v4 (2026-07-25, the founder's panel-by-panel review of v3):
- *  - GOLD PATH UNIFORMITY (global rule): the realized path is visually
- *    uniform along its whole length — identical width, color, opacity,
- *    style on every segment. The v3 "receding" fainter entry segment is
- *    ABOLISHED.
- *  - COMPRESSED ANCESTRY, new mechanism (replaces the old A/B receding
- *    line): beyond depth 3, hidden generations render as ONE CONDENSED
- *    NODE sitting ON the gold path between the origin and the first
- *    articulated hand — a small tight cluster of gold dots (many people,
- *    not one) with the uniform gold line running through it unbroken.
- *    Two sub-variants, differing only in the count treatment: (i) a
- *    quiet numeral beside the cluster; (ii) the words "5 hands" set
- *    parallel to the gold line, just above it.
- *  - Panel edits: depth 2 gains a downward gray bud off the origin;
- *    depth 3's top-side structures are varied (no two read as copies),
- *    its two near-path nodes moved clearly off, and its bottom side now
- *    forks (buds off buds).
+ * v5 (2026-07-25, founder structural ruling — THE NAMED-CLUSTER
+ * COLLAPSE, same grammar family as src/lib/lineageThread.js):
+ *  - The emblem renders AT MOST THREE articulated stops on the gold
+ *    path — the filmmaker (origin), the viewer's DIRECT SHARER, and
+ *    YOU (plus the dotted-gold "?"). Origin and direct sharer NEVER
+ *    compress — permanent anchors.
+ *  - Everything between the filmmaker and the direct sharer compresses
+ *    into ONE condensed cluster node ON the gold path (the v4 tight
+ *    gold dot-cluster; line through it unbroken and uniform), labeled
+ *    with the NEAREST HIDDEN HAND'S REAL first name plus a count:
+ *    0 hidden hands → NO cluster; 1 hidden → the name alone ("PRIYA");
+ *    2+ hidden → "{name} + {n} more" ("PRIYA + 4 MORE"), numerals
+ *    always. The named person is the hand who shared TO the direct
+ *    sharer — real lineage data, never invented (mock names here).
+ *    The v4 "N hands"/numeral-only treatments are DEAD.
+ *  - Four panels: depths 1 and 2 approved as rendered in v4; depth 3
+ *    collapsed under the rule (cluster "PRIYA") and THINNED (~⅓ of the
+ *    second-generation buds removed — the founder found v4's depth 3
+ *    slightly too complicated); depth 8 in the same silhouette with
+ *    cluster "PRIYA + 4 MORE".
+ * Carried v4 rules: GOLD PATH UNIFORMITY — identical width, color,
+ * opacity, and style on every gold segment, no fading anywhere.
  * Panels are composed and judged ALONE (v3 rule). Composition rules of
  * thumb: gold path never buried, the "?" region kept clear, thin
  * second-generation buds first if crowding.
@@ -108,6 +113,10 @@ function FilmmakerNode({ x, y, name }) {
       >
         {name}
       </text>
+      {/* Role label with parentheses (v5 check, per the founder's
+          parentheses rule — the legacy graph already ships
+          "(filmmaker)"; the live constellation's bare FILMMAKER is a
+          flagged gap, out of scope here). */}
       <text
         x={x}
         y={y + 57}
@@ -117,7 +126,7 @@ function FilmmakerNode({ x, y, name }) {
         letterSpacing="3"
         style={{ fontFamily: LABEL_FONT }}
       >
-        FILMMAKER
+        (FILMMAKER)
       </text>
     </g>
   )
@@ -164,11 +173,11 @@ function TreePanel({ chain, you, next, gray, condensed = null }) {
         )
       })}
 
-      {/* Compressed ancestry (v4): ONE condensed node ON the gold path —
-          a tight cluster of gold dots (many people, not one), the line
-          running through unbroken. The count renders beside it, per
-          sub-variant: a quiet numeral, or "N hands" laid parallel to
-          the line. */}
+      {/* The named-cluster collapse (v5): ONE condensed node ON the gold
+          path — a tight cluster of gold dots (many people, not one), the
+          uniform line running through unbroken. Labeled with the nearest
+          hidden hand's name (+ count when 2+ hidden), horizontal beneath
+          the cluster in the constellation's fine-label treatment. */}
       {condensed && (
         <g>
           {condensed.dots.map(([x, y], i) => (
@@ -178,15 +187,10 @@ function TreePanel({ chain, you, next, gray, condensed = null }) {
             x={condensed.label.x}
             y={condensed.label.y}
             textAnchor="middle"
-            fill="rgba(199,169,107,0.75)"
-            fontSize="8"
+            fill="rgba(199,169,107,0.9)"
+            fontSize="8.5"
             letterSpacing="1.5"
-            style={{ fontFamily: LABEL_FONT }}
-            transform={
-              condensed.label.rotate
-                ? `rotate(${condensed.label.rotate} ${condensed.label.x} ${condensed.label.y})`
-                : undefined
-            }
+            style={{ fontFamily: LABEL_FONT, textTransform: 'uppercase' }}
           >
             {condensed.label.text}
           </text>
@@ -238,51 +242,8 @@ function TreePanel({ chain, you, next, gray, condensed = null }) {
 /* Five panels, each composed alone (v3). Mock first names only — no real
    data. Gray structures branch two levels deep: buds off buds. */
 
-/* Deep-panel off-path composition, shared by both sub-variants: canopy
-   and under-limb at the origin, two down-twigs off the gold path's long
-   first span (kept BELOW it so the count label sits clear above), and
-   forking limbs at both visible hands. Generous v3 density, kept. */
-const DEEP_GRAY = {
-  lines: [
-    // The origin's canopy: a limb that forks, and a fork off the fork.
-    [48, 180, 75, 124],
-    [75, 124, 105, 98],
-    [75, 124, 110, 136],
-    [105, 98, 140, 78],
-    // The origin's under-limb with second growth.
-    [48, 180, 85, 222],
-    [85, 222, 130, 230],
-    // Twigs off the compressed ancestry line (hidden generations' spread).
-    [100, 160, 122, 198],
-    [150, 141, 168, 178],
-    // DEV: an up-limb with a second-generation bud; a down-limb forking.
-    [185, 128, 212, 84],
-    [212, 84, 250, 62],
-    [185, 128, 215, 175],
-    [215, 175, 255, 195],
-    [215, 175, 252, 160],
-    // LENA: a down-limb whose bud buds again.
-    [268, 100, 300, 140],
-    [300, 140, 338, 158],
-  ],
-  dots: [
-    [75, 124],
-    [105, 98],
-    [110, 136],
-    [140, 78],
-    [85, 222],
-    [130, 230],
-    [122, 198],
-    [168, 178],
-    [212, 84],
-    [250, 62],
-    [215, 175],
-    [255, 195],
-    [252, 160],
-    [300, 140],
-    [338, 158],
-  ],
-}
+/* v5: each panel's off-path composition is inline in PANELS below; the
+   deep panel no longer shares data with a sub-variant twin. */
 
 const PANELS = [
   {
@@ -348,101 +309,109 @@ const PANELS = [
   {
     key: 'depth-3',
     caption:
-      'Depth 3 (v4) — top-side structures varied so no two read as copies, near-path nodes moved clear of the gold, and the underside now forks: buds off buds on both sides.',
+      'Depth 3 under the collapse rule — filmmaker → cluster ("PRIYA", the one hidden hand, no count) → Jonas (direct sharer) → you. Thinned from v4: primary limbs kept, ~⅓ of second-generation buds removed.',
     chain: [
       { x: 62, y: 172, name: 'Avery' },
-      { x: 148, y: 133, name: 'Priya' },
       { x: 238, y: 104, name: 'Jonas' },
     ],
     you: { x: 322, y: 82 },
     next: { x: 392, y: 64 },
+    condensed: {
+      dots: [
+        [144, 140],
+        [148, 134],
+        [157, 136],
+      ],
+      label: { text: 'Priya', x: 130, y: 164 },
+    },
     gray: {
       lines: [
-        // The origin's top: one long meandering limb (three links) — a
-        // different character from the forking limbs to its right.
+        // The origin's top: the long meandering limb, now two links.
         [62, 172, 88, 128],
-        [88, 128, 110, 90],
-        [110, 90, 146, 72],
-        // The origin's underside: the chain now forks at its first bud.
+        [88, 128, 114, 92],
+        // The origin's underside: chain + fork (third link removed).
         [62, 172, 95, 215],
         [95, 215, 140, 224],
-        [140, 224, 180, 232],
         [95, 215, 126, 196],
-        // Priya's top: a shorter limb forking at steeper, unequal angles.
-        [148, 133, 186, 96],
-        [186, 96, 232, 76],
-        [186, 96, 204, 58],
-        // Priya's underside: the limb forks two ways.
-        [148, 133, 172, 182],
-        [172, 182, 210, 200],
-        [172, 182, 206, 166],
-        // Jonas: one young top bud; the down-limb forks.
+        // The cluster's top: one limb, one onward bud (second fork gone).
+        [148, 134, 184, 96],
+        [184, 96, 222, 76],
+        // The cluster's underside: the limb forks two ways (kept — it
+        // anchors from the cluster's right dot so the label sits clear).
+        [157, 136, 176, 184],
+        [176, 184, 212, 200],
+        [176, 184, 208, 166],
+        // Jonas: one young top bud; the down-limb (fork removed).
         [238, 104, 272, 62],
         [238, 104, 268, 150],
         [268, 150, 305, 168],
-        [268, 150, 296, 132],
       ],
       dots: [
         [88, 128],
-        [110, 90],
-        [146, 72],
+        [114, 92],
         [95, 215],
         [140, 224],
-        [180, 232],
         [126, 196],
-        [186, 96],
-        [232, 76],
-        [204, 58],
-        [172, 182],
-        [210, 200],
-        [206, 166],
+        [184, 96],
+        [222, 76],
+        [176, 184],
+        [212, 200],
+        [208, 166],
         [272, 62],
         [268, 150],
         [305, 168],
-        [296, 132],
       ],
     },
   },
   {
-    key: 'deep-i',
+    key: 'depth-8',
     caption:
-      'Depth ~8, sub-variant i — hidden generations condensed into one tight cluster ON the gold path (many people, not one); a quiet numeral beside it gives the count.',
+      'Depth ~8 under the collapse rule — filmmaker → cluster ("PRIYA + 4 MORE": Priya shared to Lena; four more hands hidden behind her) → Lena (direct sharer) → you. Same silhouette, thinned density.',
     chain: [
       { x: 48, y: 180, name: 'Avery' },
-      { x: 185, y: 128, name: 'Dev' },
       { x: 268, y: 100, name: 'Lena' },
     ],
     you: { x: 340, y: 78 },
     next: { x: 398, y: 62 },
-    gray: DEEP_GRAY,
     condensed: {
       dots: [
-        [109, 157],
-        [115, 150],
-        [124, 151],
+        [141, 146],
+        [146, 140],
+        [153, 142],
       ],
-      label: { text: '5', x: 104, y: 144 },
+      label: { text: 'Priya + 4 more', x: 168, y: 166 },
     },
-  },
-  {
-    key: 'deep-ii',
-    caption:
-      'Depth ~8, sub-variant ii — the same condensed cluster; the count written as "5 hands", laid parallel to the gold line just above it.',
-    chain: [
-      { x: 48, y: 180, name: 'Avery' },
-      { x: 185, y: 128, name: 'Dev' },
-      { x: 268, y: 100, name: 'Lena' },
-    ],
-    you: { x: 340, y: 78 },
-    next: { x: 398, y: 62 },
-    gray: DEEP_GRAY,
-    condensed: {
-      dots: [
-        [109, 157],
-        [115, 150],
-        [124, 151],
+    gray: {
+      lines: [
+        // The origin's canopy: the meander (fork thinned away).
+        [48, 180, 75, 124],
+        [75, 124, 105, 98],
+        [105, 98, 140, 78],
+        // The origin's under-limb.
+        [48, 180, 85, 222],
+        [85, 222, 130, 230],
+        // One twig off the gold span, left of the cluster label.
+        [96, 163, 118, 200],
+        // The cluster's top limb with onward growth (the hidden hands'
+        // spread), anchored at the cluster's right dot.
+        [153, 142, 190, 96],
+        [190, 96, 226, 74],
+        // Lena: the down-limb whose bud buds again.
+        [268, 100, 300, 140],
+        [300, 140, 338, 158],
       ],
-      label: { text: '5 hands', x: 113, y: 145, rotate: -20.8 },
+      dots: [
+        [75, 124],
+        [105, 98],
+        [140, 78],
+        [85, 222],
+        [130, 230],
+        [118, 200],
+        [190, 96],
+        [226, 74],
+        [300, 140],
+        [338, 158],
+      ],
     },
   },
 ]
@@ -458,14 +427,14 @@ export default function DevEmblemHarness() {
           THROWAWAY DEV HARNESS — not in production
         </p>
         <h1 className="mb-2 font-serif-v3 text-2xl italic">
-          Lineage emblem v4 — uniform gold, condensed ancestry
+          Lineage emblem v5 — the named-cluster collapse
         </h1>
         <p className="mb-8 max-w-2xl font-sans text-sm text-warm/60">
-          Each panel composed alone, growing left to right, branches begetting branches. The
-          gold path is uniform along its whole length; deep chains condense their hidden
-          generations into one cluster on the line. Solid gold = your realized path; dotted
-          gold = the unminted next ticket; dotted gray = the network&rsquo;s other branches,
-          always unlabeled. Mock names, zero real data; the live pass-it-on modal is untouched.
+          At most three articulated stops — filmmaker, your direct sharer, you. Hidden hands
+          between them condense into one cluster on the line, named for the hand nearest your
+          sharer ("Priya", or "Priya + 4 more"). Gold uniform end to end; dotted gold = the
+          unminted next ticket; dotted gray = the network&rsquo;s other branches, always
+          unlabeled. Mock names, zero real data; the live pass-it-on modal is untouched.
         </p>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           {PANELS.map((p) => (
