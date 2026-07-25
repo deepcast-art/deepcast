@@ -1173,7 +1173,7 @@ export default function ClaimWatch() {
             here (no frame, no eyebrow — never invented copy). ══ */}
         {story && (
           <section
-            aria-label="From the filmmaker"
+            aria-label="Filmmaker"
             className="mx-auto mt-12 w-full max-w-[42rem] text-left min-[900px]:mt-[clamp(3rem,6svh,4.5rem)]"
           >
             <div className="flex items-end gap-4">
@@ -1194,15 +1194,22 @@ export default function ClaimWatch() {
                   />
                 )}
               </div>
+              {/* Header restructure (founder-approved 2026-07-25):
+                  "Filmmaker · {name} · {location}" — the name moved up
+                  from the retired sign-off. Each "· phrase" is one
+                  unbreakable unit, so narrow viewports break at the "·"
+                  boundaries, never mid-phrase beside the photo. */}
               <p className="pb-[0.3125rem] font-sans font-normal text-[11px] uppercase tracking-[0.32em] text-muted">
-                From the filmmaker
+                Filmmaker
+                {story.filmmakerName && (
+                  <>
+                    {' '}
+                    <span className="whitespace-nowrap">·{' '}{story.filmmakerName}</span>
+                  </>
+                )}
                 {story.filmmakerLocation && (
                   <>
                     {' '}
-                    {/* The separator stays glued to the location (one
-                        unbreakable unit), but a narrow viewport may now break
-                        before it — the header wraps at the phrase boundary,
-                        never mid-phrase beside the larger photo. */}
                     <span className="whitespace-nowrap">·{' '}{story.filmmakerLocation}</span>
                   </>
                 )}
@@ -1224,9 +1231,8 @@ export default function ClaimWatch() {
               ))}
             </div>
 
-            <p className="mt-8 font-serif-v3 italic text-[1.125rem] text-muted">
-              — {story.filmmakerName}, director
-            </p>
+            {/* The sign-off was CUT 2026-07-25 (founder): the name lives in
+                the header only — the section ends with the body text. */}
           </section>
         )}
       </main>

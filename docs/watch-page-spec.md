@@ -20,7 +20,7 @@ Two families, already in the app (`src/fonts.css`, binaries in `public/fonts/`):
 **Weight law (new, from this redesign):** Phoenix **Light (300) is reserved for body text at reading sizes** (the story body, ~17px). Every small caps-label on the page — tier label, milestones, tickets line, conditions line, buttons, footer/header links, lineage name labels — uses **Regular (400)**. Light at whisper sizes reads frail on ink and was a root cause of the old page feeling cheap. If you see 300 on anything under ~1rem, it's a bug.
 
 **Voice system (which font means what):**
-- **Garamond italic** = the film's and the platform's voice: film title, rule line, creed statements, the modal charge, reveal copy, input placeholder, the generated link, story epigraph and sign-off.
+- **Garamond italic** = the film's and the platform's voice: film title, rule line, creed statements, the modal charge, reveal copy, input placeholder, the generated link, story epigraph. (The story sign-off was cut 2026-07-25 — the filmmaker's name lives in the header now.)
 - **Phoenix tracked caps (400)** = the interface whispering: eyebrows, labels, buttons, metadata, link-buttons.
 - **Phoenix sentence-case (300)** = information at reading size: story body only.
 
@@ -46,7 +46,7 @@ Existing tokens (Tailwind `@theme` in `src/index.css`):
 - `--tint-scrim: rgba(8, 12, 24, 0.82)` — the modal scrim (film faintly visible behind).
 - Shared hairline: `rgba(221, 221, 221, 0.15)` — every 1px rule and border on the page uses this exact value. One rule weight, no exceptions.
 
-**⚠ The muted token caution:** `#a89f94` is a warm beige and reads *gold-ish* on ink. It was deliberately RETIRED from all rail stat labels, hallmark numbers, and the rule line during the redesign. It survives only in: the conditions line, eyebrows, tickets line, footer/header links, story sign-off. Rail/stat text uses **neutral warm-alpha grays** instead:
+**⚠ The muted token caution:** `#a89f94` is a warm beige and reads *gold-ish* on ink. It was deliberately RETIRED from all rail stat labels, hallmark numbers, and the rule line during the redesign. It survives only in: the conditions line, eyebrows (including the story header), tickets line, footer/header links. (The story sign-off, a former holdout, was cut 2026-07-25.) Rail/stat text uses **neutral warm-alpha grays** instead:
 
 | Value | Used for |
 |---|---|
@@ -110,7 +110,7 @@ Three centered columns, each: a small gold mark (accent, opacity 0.45, in a fixe
 3. **The ticket stub** (the original stub path).
 
 ### 3d. The story
-`From the filmmaker · {filmmaker_location}` eyebrow (11px caps, 0.32em, **muted**) with a **3.5rem circular photo frame** to its left (`.story-byline`: flex, `align-items: flex-end`, 1rem gap; eyebrow gets `padding-bottom: 0.3125rem` optical lift so the caps sit on the circle's base). The circle is 1px hairline border + `--tint-track` fill — swap in the filmmaker's `<img>` (`{filmmaker_photo}`), keep the frame. Then: serif-italic epigraph (`clamp(1.25rem, 2vw, 1.4375rem)`, warm@0.9), body paragraphs in **Phoenix Light 300, 1.0625rem, line-height 1.85, warm@0.82, max-width 62ch, left-aligned** (the ONE place Light is correct), sign-off in serif italic muted: `— {filmmaker_name}, director`. Story copy is per-film.
+`Filmmaker · {filmmaker_name} · {filmmaker_location}` eyebrow (11px caps, 0.32em, **muted**; **header restructure 2026-07-25** — was `From the filmmaker · {location}`, and the name moved up from the retired sign-off; each `· phrase` is one unbreakable NBSP-bound unit so narrow screens break only at the `·` boundaries) with a **3.5rem circular photo frame** to its left (`.story-byline`: flex, `align-items: flex-end`, 1rem gap; eyebrow gets `padding-bottom: 0.3125rem` optical lift so the caps sit on the circle's base). The circle is 1px hairline border + `--tint-track` fill — swap in the filmmaker's `<img>` (`{filmmaker_photo}`), keep the frame. Then: serif-italic epigraph (`clamp(1.25rem, 2vw, 1.4375rem)`, warm@0.9), body paragraphs in **Phoenix Light 300, 1.0625rem, line-height 1.85, warm@0.82, max-width 62ch, left-aligned** (the ONE place Light is correct). **The sign-off (`— {filmmaker_name}, director`) is CUT (2026-07-25)** — the section ends with the body text. Story copy is per-film.
 
 ---
 
@@ -222,8 +222,8 @@ Copy the SVG from the replica exactly. Its layers and their rules:
 | Creed 1: `Films here spread by private invite and real humans only. No algorithms.` | FOUNDER |
 | Creed 2: `This film won't reach anyone new, unless you pass it on.` | FOUNDER (`you` in accent) |
 | Creed 3: `Share intentionally. Each ticket admits one person only.` | FOUNDER (second sentence revised 2026-07-25) |
-| `From the filmmaker` (+ ` · {filmmaker_location}`) | FOUNDER |
-| Story epigraph/body/sign-off | per-film placeholder |
+| `Filmmaker · {filmmaker_name} · {filmmaker_location}` | FOUNDER (2026-07-25, replacing `From the filmmaker · {location}`; the sign-off `— {name}, director` is cut) |
+| Story epigraph/body | per-film placeholder |
 | Modal eyebrow: `Pass it on` | FOUNDER (2026-07-25; "Make an impact." cut) |
 | `{n} tickets left.` | founder-directed whittle (was the longer tickets line) — treat as approved |
 | Charge: `Who needs to see this? Not anyone — the one it will matter to.` | FOUNDER (`needs` in accent) |

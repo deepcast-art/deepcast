@@ -251,7 +251,7 @@ test.describe('three-page claim arc', () => {
     await expect(page.getByPlaceholder('Their first name')).toHaveCount(0)
     await expect(page.locator('[data-stub]')).toHaveCount(0)
     // No story section for a film without authored content — never invented.
-    await expect(page.getByText('From the filmmaker')).toHaveCount(0)
+    await expect(page.getByText(/Filmmaker ·/)).toHaveCount(0)
     // Dashboard links: header + footer (the arrow is the nav affordance).
     await expect(page.getByRole('link', { name: /Your dashboard/i })).toHaveCount(2)
 
@@ -570,8 +570,10 @@ test.describe('three-page claim arc', () => {
     )
     await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
 
-    await expect(page.getByText('From the filmmaker · Atlanta, Georgia')).toBeVisible()
-    await expect(page.getByText('— Jon Bregel, director')).toBeVisible()
+    // Header restructure (2026-07-25): the name lives in the header; the
+    // sign-off is gone.
+    await expect(page.getByText('Filmmaker · Jon Bregel · Atlanta, Georgia')).toBeVisible()
+    await expect(page.getByText(/, director/)).toHaveCount(0)
     expect(jsErrors).toEqual([])
   })
 
@@ -600,10 +602,11 @@ test.describe('three-page claim arc', () => {
     // The new video's runtime renders as the 34-minute conditions line.
     await expect(page.getByText('34 minutes. Headphones recommended.')).toBeVisible()
 
-    // The story section carries Ien's sign-off and the real portrait photo,
-    // served from public/ (a broken path would render zero natural width).
-    await expect(page.getByText('From the filmmaker · Atlanta, Georgia')).toBeVisible()
-    await expect(page.getByText('— Ien Chi, director')).toBeVisible()
+    // The story header carries Ien's name (sign-off retired 2026-07-25) and
+    // the real portrait photo, served from public/ (a broken path would
+    // render zero natural width).
+    await expect(page.getByText('Filmmaker · Ien Chi · Atlanta, Georgia')).toBeVisible()
+    await expect(page.getByText(/, director/)).toHaveCount(0)
     const portrait = page.locator('img[src="/portrait-5.jpg"]')
     await expect(portrait).toHaveCount(1)
     await portrait.scrollIntoViewIfNeeded()

@@ -38,7 +38,7 @@ export const FILM_STORIES = {
     body: [
       'Placeholder note — this space is reserved for Ien’s own account of why The New Narrative exists: what it came out of, what it asks of the person watching, and who he made it for. The real text arrives from the founder; nothing in this paragraph ships as-is.',
       'This second paragraph only holds the section at reading length, so the measure, leading, and rhythm of the story block can be judged against the approved design while the real note is being written.',
-      'Third placeholder paragraph, for the same reason. The sign-off beneath carries the real name; the words above it do not, yet.',
+      'Third placeholder paragraph, for the same reason. The header above carries the real name; the words in this note do not, yet.',
     ],
   },
   [MUX_A_SACRED_PAUSE]: {
@@ -50,7 +50,7 @@ export const FILM_STORIES = {
     body: [
       'Placeholder note — this space is reserved for Jon’s own account of why A Sacred Pause exists: what it came out of, what it asks of the person watching, and who he made it for. The real text arrives from the founder; nothing in this paragraph ships as-is.',
       'This second paragraph only holds the section at reading length, so the measure, leading, and rhythm of the story block can be judged against the approved design while the real note is being written.',
-      'Third placeholder paragraph, for the same reason. The sign-off beneath carries the real name; the words above it do not, yet.',
+      'Third placeholder paragraph, for the same reason. The header above carries the real name; the words in this note do not, yet.',
     ],
   },
   [MUX_FAITH_CIRCLE]: {
@@ -62,7 +62,7 @@ export const FILM_STORIES = {
     body: [
       'Placeholder note — this space is reserved for Ien’s own account of why Faith Circle exists: what it came out of, what it asks of the person watching, and who he made it for. The real text arrives from the founder; nothing in this paragraph ships as-is.',
       'This second paragraph only holds the section at reading length, so the measure, leading, and rhythm of the story block can be judged against the approved design while the real note is being written.',
-      'Third placeholder paragraph, for the same reason. The sign-off beneath carries the real name; the words above it do not, yet.',
+      'Third placeholder paragraph, for the same reason. The header above carries the real name; the words in this note do not, yet.',
     ],
   },
 }
