@@ -543,7 +543,7 @@ export default function ViewerDashboardV5({
                             onClick={() => copyTicketLink(t)}
                             className="min-w-0 break-all py-1.5 text-left font-sans text-[0.65rem] uppercase tracking-[0.22em] text-gold transition-colors hover:text-gold-soft"
                           >
-                            {copyFeedback?.id === t.id ? copyFeedback.label : 'Copy invitation link'}
+                            {copyFeedback?.id === t.id ? copyFeedback.label : 'Copy their ticket link'}
                           </button>
                         )}
                       </div>

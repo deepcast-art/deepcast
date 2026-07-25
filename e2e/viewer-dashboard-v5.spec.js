@@ -221,7 +221,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(tickets.getByText('Unopened')).toBeVisible()
     await expect(tickets.getByText('Maya', { exact: true })).toBeVisible()
     await expect(tickets.getByText('Shared to 1 person')).toBeVisible()
-    const copyButtons = page.getByRole('button', { name: 'Copy invitation link' })
+    const copyButtons = page.getByRole('button', { name: 'Copy their ticket link' })
     await expect(copyButtons).toHaveCount(2)
     await copyButtons.first().click()
     // Clipboard success shows "Copied"; a blocked clipboard shows the link
