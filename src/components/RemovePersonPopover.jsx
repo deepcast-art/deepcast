@@ -135,13 +135,21 @@ export default function RemovePersonPopover({ anchorRect, filmId, target, onDele
       )}
 
       {preview && preview.kind === 'person' && (
-        <input
-          type="text"
-          value={typed}
-          onChange={(e) => setTyped(e.target.value)}
-          placeholder={`Type ${preview.email} to confirm`}
-          className="mb-2 w-full rounded-none border border-border bg-bg-page px-2 py-1.5 text-[11px] text-text"
-        />
+        <>
+          {/* The email must OUTLIVE the empty input — a placeholder vanishes at
+              the first keystroke, which left the owner typing an address from
+              memory (the "email disappears" defect, diagnosed 2026-07-24). */}
+          <p className="mb-2 text-[11px] leading-relaxed">
+            To confirm, type <span className="select-all text-text">{preview.email}</span>
+          </p>
+          <input
+            type="text"
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder="Their email"
+            className="mb-2 w-full rounded-none border border-border bg-bg-page px-2 py-1.5 text-[11px] text-text"
+          />
+        </>
       )}
 
       {preview && (
