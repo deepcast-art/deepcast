@@ -7,6 +7,10 @@ import { DEV_HARNESS_ENABLED } from './lib/devHarness'
 // DEV-ONLY harness page. Gated on import.meta.env.DEV so the import() lives in dead code in a
 // production build — Rollup drops the chunk entirely (no DevHarness chunk ships to production).
 const DevHarness = import.meta.env.DEV ? lazy(() => import('./pages/dev/DevHarness.jsx')) : null
+// Throwaway emblem-composition harness (2026-07-25) — same dev-only gating.
+const DevEmblemHarness = import.meta.env.DEV
+  ? lazy(() => import('./pages/dev/DevEmblemHarness.jsx'))
+  : null
 
 const InviteScreening = lazy(() => import('./pages/InviteScreening.jsx'))
 const Signup = lazy(() => import('./pages/Signup.jsx'))
@@ -314,6 +318,16 @@ export default function App() {
           element={
             <Suspense fallback={<RouteFallback />}>
               <DevHarness />
+            </Suspense>
+          }
+        />
+      )}
+      {DEV_HARNESS_ENABLED && DevEmblemHarness && (
+        <Route
+          path="/dev/emblem"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <DevEmblemHarness />
             </Suspense>
           }
         />
