@@ -2,9 +2,10 @@ import { test, expect } from '@playwright/test'
 
 /**
  * The three-page claim arc (final spec 2026-07-16):
- *   PAGE 1  /:slug        — the letter over the film still: greeting, sharer
- *                           line, lineage thread, title, hook, INLINE email +
- *                           Accept, "admits one person, once". NOT here:
+ *   PAGE 1  /:slug        — the letter over the film still: the stamp at the
+ *                           top, headline, lineage thread, title, hook,
+ *                           INLINE email + Accept — nothing below the button
+ *                           (founder reorder 2026-07-25). NOT here:
  *                           concept line, ordinal, conditions line, graph.
  *   PAGE 2  /watch/:slug  — title + conditions threshold, player, and the
  *                           docked share panel (constraint line's home,
@@ -78,15 +79,26 @@ test.describe('three-page claim arc', () => {
     await page.route('**/api/invites/link/**', (route) => route.fulfill({ json: LINK_CREATED }))
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
 
-    // The gifted line (founder redesign 2026-07-21): uniform type, both
+    // The headline (founder wording 2026-07-25): uniform type, both
     // names first-word-trimmed, no "Dear X," greeting anywhere.
-    await expect(page.getByRole('heading', { name: 'Alex, Ien gifted you a film.' })).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'Alex, Ien shared a ticket with you.' })
+    ).toBeVisible()
     await expect(page.getByText(/Dear Alex/)).toHaveCount(0)
-    await expect(page.getByText(/Ien Chi gifted/)).toHaveCount(0)
+    await expect(page.getByText(/Ien Chi shared/)).toHaveCount(0)
+    // The retired 2026-07-21 wording never resurfaces.
+    await expect(page.getByText(/gifted you a film/)).toHaveCount(0)
     // "saw this and thought of you" left this page for the prologue.
     await expect(page.getByText(/saw this and thought of you/)).toHaveCount(0)
-    // The private-invitation line with the permanent ticket number.
-    await expect(page.getByText('By private invitation only · Ticket No. 8')).toBeVisible()
+    // The stamp with the permanent ticket number sits at the TOP of the
+    // letter — above the headline (founder reorder 2026-07-25).
+    const stamp = page.getByText('By private invitation only · Ticket No. 8')
+    await expect(stamp).toBeVisible()
+    const stampBox = await stamp.boundingBox()
+    const headlineBox = await page
+      .getByRole('heading', { name: 'Alex, Ien shared a ticket with you.' })
+      .boundingBox()
+    expect(stampBox.y).toBeLessThan(headlineBox.y)
     // The thread (depth-1) with its context label, and the film block.
     await expect(page.getByText('How this reached you')).toBeVisible()
     await expect(page.getByText('you', { exact: true })).toBeVisible()
@@ -99,7 +111,9 @@ test.describe('three-page claim arc', () => {
     // Inline email — visible immediately, no click-to-reveal.
     await expect(page.getByPlaceholder('you@example.com')).toBeVisible()
     await expect(page.getByRole('button', { name: /Accept your invite/i })).toBeVisible()
-    await expect(page.getByText('This invitation admits one person, once.')).toBeVisible()
+    // "This invitation admits one person, once." is CUT (2026-07-25) —
+    // nothing renders below the button.
+    await expect(page.getByText('This invitation admits one person, once.')).toHaveCount(0)
     // NOT on this page: concept line, ordinal, conditions line.
     await expect(page.getByText(/human hands only/)).toHaveCount(0)
     await expect(page.getByText(/person to be invited to watch this film/)).toHaveCount(0)

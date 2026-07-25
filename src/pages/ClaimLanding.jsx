@@ -364,12 +364,15 @@ function devPreviewChain(searchParams) {
  * founder-approved verbatim): the landing letter over a full-bleed film
  * still. One job: the letter and the claim.
  *
- * Order: "{Receiver}, {Sharer} gifted you a film." (ONE uniform type style —
- * no bolding of names or any word; both names first-word-trimmed; missing
- * receiver drops the prefix, missing sharer reads "Someone") / lineage
- * thread / film title / transmission hook / inline email + Accept CTA /
- * "This invitation admits one person, once." / "By private invitation only
- * · Ticket No. {N}" (the ticket segment renders only when ticketNo exists).
+ * Order (founder reorder 2026-07-25, superseding the 2026-07-24 parked
+ * plan): the stamp "By private invitation only · Ticket No. {N}" at the
+ * TOP of the letter (ticket segment only when ticketNo exists) / headline
+ * "{Receiver}, {Sharer} shared a ticket with you." (ONE uniform type
+ * style — no bolding of names or any word; both names first-word-trimmed;
+ * missing receiver drops the prefix, missing sharer reads "Someone") /
+ * lineage thread / film title / transmission hook / inline email + Accept
+ * CTA. NOTHING renders below the button; "This invitation admits one
+ * person, once." was CUT from this page (2026-07-25).
  * The old "Dear X," greeting is GONE; "saw this and thought of you"
  * moved to the post-claim prologue.
  *
@@ -540,12 +543,12 @@ export default function ClaimLanding() {
   // First word only — legacy accounts may store full names ("Ien Chi"), but
   // the letter register is first-name-only (decided 2026-07-16).
   const sharer = ((sharerName || '').trim() || 'Someone').split(/\s+/)[0]
-  // The gifted line's receiver: first-word-trimmed, and simply OMITTED (with
+  // The headline's receiver: first-word-trimmed, and simply OMITTED (with
   // its comma) when missing — founder rules 2026-07-21, do not improvise.
   const receiver = (inviteeFirstName || '').trim().split(/\s+/)[0] || ''
-  const giftedLine = receiver
-    ? `${receiver}, ${sharer} gifted you a film.`
-    : `${sharer} gifted you a film.`
+  const headline = receiver
+    ? `${receiver}, ${sharer} shared a ticket with you.`
+    : `${sharer} shared a ticket with you.`
 
   if (state.phase === 'prologue') {
     return (
@@ -585,21 +588,30 @@ export default function ClaimLanding() {
       </header>
 
       <main className="relative z-10 mx-auto flex min-h-svh w-full max-w-2xl flex-col items-center justify-center px-6 pb-[max(clamp(1.5rem,3.5svh,4rem),env(safe-area-inset-bottom,0px))] pt-[clamp(4.5rem,8svh,7rem)] text-center">
-        {/* 1. The gifted line — the letter's opening AND the page heading.
-            ONE uniform style: no bolding, no emphasis (founder rule
-            2026-07-21). */}
+        {/* 1. The stamp — moved to the letter's top (founder reorder
+            2026-07-25); copy verbatim, ticket segment only when a number
+            exists. */}
+        {!sharerView && !alreadyHeld && (
+          <p className="mb-5 font-sans text-[10px] uppercase tracking-[0.24em] text-warm/45 dc-rise dc-rise-2">
+            By private invitation only{ticketNo != null ? ` · Ticket No. ${ticketNo}` : ''}
+          </p>
+        )}
+
+        {/* 2. The headline — the letter's opening. ONE uniform style: no
+            bolding, no emphasis (founder rule 2026-07-21; wording revised
+            2026-07-25). */}
         <h1 className="max-w-[15em] font-serif-v3 text-[clamp(2.125rem,5.5vw,3.25rem)] font-normal leading-[1.16] dc-rise dc-rise-2">
-          {giftedLine}
+          {headline}
         </h1>
 
-        {/* 2. Lineage chain — the whisper. */}
+        {/* 3. Lineage chain — the whisper. */}
         <div className="dc-rise dc-rise-3">
           <LineageChain names={chainNames} senderIsCreator={chainSenderIsCreator} />
         </div>
 
         <LetterDivider className="mt-[clamp(1.75rem,3.5svh,3.25rem)] dc-rise dc-rise-3" />
 
-        {/* 3. Film title + 4. transmission hook (per-film data; nothing when NULL) */}
+        {/* 4. Film title + 5. transmission hook (per-film data; nothing when NULL) */}
         <div className="mt-[clamp(1.5rem,3svh,2.75rem)] w-full">
           <h2 className="font-serif-v3 text-[clamp(1.75rem,4vw,2.375rem)] leading-tight dc-rise dc-rise-4">
             {filmTitle || 'a film'}
@@ -629,7 +641,8 @@ export default function ClaimLanding() {
           )}
         </div>
 
-        {/* 5. Inline email + CTA — visible immediately, no click-to-reveal. */}
+        {/* 6. Inline email + CTA — visible immediately, no click-to-reveal;
+            the letter ends at the button. */}
         <div className="mt-[clamp(2rem,4.5svh,3.75rem)] w-full max-w-[26rem] dc-rise dc-rise-6">
           {alreadyHeld ? (
             <p className="font-serif-v3 text-lg italic text-warm">
@@ -667,18 +680,9 @@ export default function ClaimLanding() {
               </button>
             </form>
           )}
-          {/* 6. The single-claim line + the private-invitation/ticket line
-              (same register; ticket segment only when a number exists). */}
-          {!sharerView && !alreadyHeld && (
-            <>
-              <p className="mt-5 font-sans text-[10px] uppercase tracking-[0.24em] text-warm/45">
-                This invitation admits one person, once.
-              </p>
-              <p className="mt-2 font-sans text-[10px] uppercase tracking-[0.24em] text-warm/45">
-                By private invitation only{ticketNo != null ? ` · Ticket No. ${ticketNo}` : ''}
-              </p>
-            </>
-          )}
+          {/* Nothing renders below the button (founder reorder 2026-07-25):
+              the stamp moved to the letter's top and "This invitation
+              admits one person, once." was cut from this page. */}
         </div>
       </main>
     </div>
