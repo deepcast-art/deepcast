@@ -552,6 +552,51 @@ test.describe('three-page claim arc', () => {
     expect(jsErrors).toEqual([])
   })
 
+  test('Faith Circle: story with real photo, pinned poster, 34-minute line', async ({ page }) => {
+    // Keyed by Faith Circle's NEW Mux playback id (src/content/filmStory.js).
+    // All Mux traffic is blocked so the real ids never reach Mux from CI.
+    await page.route('**stream.mux.com/**', (route) => route.abort())
+    await page.route('**image.mux.com/**', (route) => route.abort())
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        'deepcast:claim',
+        JSON.stringify({ slug: 'alex-h4k2', inviteId: 'inv-you', filmId: 'film-1', claimedEmail: 'alex@example.com' })
+      )
+    })
+    await page.route('**/api/invites/link/**', (route) =>
+      route.fulfill({
+        json: {
+          ...LINK_CLAIMED,
+          muxPlaybackId: 'Kr00IsuqtWX301MCA2YX22gFm7IRrCfPiSwFeTcBlf8AY',
+          durationSeconds: 2042.2495,
+        },
+      })
+    )
+    await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
+
+    // The new video's runtime renders as the 34-minute conditions line.
+    await expect(page.getByText('34 minutes. Headphones recommended.')).toBeVisible()
+
+    // The story section carries Ien's sign-off and the real portrait photo,
+    // served from public/ (a broken path would render zero natural width).
+    await expect(page.getByText('From the filmmaker · Atlanta, Georgia')).toBeVisible()
+    await expect(page.getByText('— Ien Chi, director')).toBeVisible()
+    const portrait = page.locator('img[src="/portrait-5.jpg"]')
+    await expect(portrait).toHaveCount(1)
+    await portrait.scrollIntoViewIfNeeded()
+    await expect
+      .poll(async () => portrait.evaluate((img) => img.naturalWidth))
+      .toBeGreaterThan(0)
+
+    // The player poster stays PINNED to the previous video's thumbnail — the
+    // playback-id swap must never silently change the frame.
+    await expect(page.locator('mux-player')).toHaveAttribute(
+      'poster',
+      'https://image.mux.com/4HnHRG3NAf9YYR7V1fNs0143gGJnLUZ9F1umQuXsOaaQ/thumbnail.png?time=1'
+    )
+    expect(jsErrors).toEqual([])
+  })
+
   test('a stranger (no stash) hitting a claimed slug gets the dead-link page', async ({ page }) => {
     await page.route('**/api/invites/link/**', (route) => route.fulfill({ json: LINK_CLAIMED }))
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })

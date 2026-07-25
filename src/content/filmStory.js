@@ -23,6 +23,10 @@
 
 const MUX_THE_NEW_NARRATIVE = 'zLQpzAlaojxoKWAzjnwm1cOGho7p02jHGq802rKwNdzz8'
 const MUX_A_SACRED_PAUSE = '6GMWj01CjP01Y1ee001Vd2qYqUPJtEOgUYz00nG02BYE9F9E'
+const MUX_FAITH_CIRCLE = 'Kr00IsuqtWX301MCA2YX22gFm7IRrCfPiSwFeTcBlf8AY'
+// The film's PREVIOUS playback id (the Faith Dialogues video), kept only to
+// pin the poster in POSTER_OVERRIDES below — never a FILM_STORIES key.
+const MUX_FAITH_CIRCLE_PREVIOUS = '4HnHRG3NAf9YYR7V1fNs0143gGJnLUZ9F1umQuXsOaaQ'
 
 export const FILM_STORIES = {
   [MUX_THE_NEW_NARRATIVE]: {
@@ -49,6 +53,18 @@ export const FILM_STORIES = {
       'Third placeholder paragraph, for the same reason. The sign-off beneath carries the real name; the words above it do not, yet.',
     ],
   },
+  [MUX_FAITH_CIRCLE]: {
+    filmmakerName: 'Ien Chi',
+    filmmakerLocation: 'Atlanta, Georgia', // TEMP location — pending the real one
+    filmmakerPhotoUrl: '/portrait-5.jpg', // real photo, served from public/
+    // TEMP epigraph + body — layout-holding placeholders, not Ien's words.
+    epigraph: 'A few honest words from the filmmaker will live here, in his own voice.',
+    body: [
+      'Placeholder note — this space is reserved for Ien’s own account of why Faith Circle exists: what it came out of, what it asks of the person watching, and who he made it for. The real text arrives from the founder; nothing in this paragraph ships as-is.',
+      'This second paragraph only holds the section at reading length, so the measure, leading, and rhythm of the story block can be judged against the approved design while the real note is being written.',
+      'Third placeholder paragraph, for the same reason. The sign-off beneath carries the real name; the words above it do not, yet.',
+    ],
+  },
 }
 
 /** The story for a film, or null — and null means the watch page omits the
@@ -65,6 +81,10 @@ export function filmStory(muxPlaybackId) {
  */
 const POSTER_OVERRIDES = {
   // [MUX_A_SACRED_PAUSE]: 'https://image.mux.com/…/thumbnail.png?time=123',
+  // Faith Circle (owner direction 2026-07-24): the poster stays PINNED to the
+  // previous video's thumbnail so the playback-id swap can never silently
+  // change the frame. Requires the old Mux asset to stay undeleted.
+  [MUX_FAITH_CIRCLE]: `https://image.mux.com/${MUX_FAITH_CIRCLE_PREVIOUS}/thumbnail.png?time=1`,
 }
 
 export function filmPosterUrl(muxPlaybackId) {
