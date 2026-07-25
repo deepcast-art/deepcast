@@ -181,3 +181,136 @@ test.describe('Remove popover — confirmation email visibility (mocked creator)
     await expect(page.getByText('Remove Elon')).toHaveCount(0)
   })
 })
+
+/**
+ * Film-scoped popover keys (2026-07-24, second Remove-popover defect): the
+ * dashboard renders EVERY film's people table, and a person claimed on two
+ * films used to mount twin stacked popovers — each one's outside-click
+ * watcher saw a click inside the other as "outside" and dismissed both, so
+ * clicking the confirmation input closed the whole popover. Keys are now
+ * scoped by film id; exactly one popover may mount, and it must survive
+ * clicks inside itself. Same guard for the ticket-controls popover, which
+ * tracked its open person by bare user id.
+ */
+const FILM_B = '33333333-3333-4333-8333-333333333333'
+const SHARED_EMAIL = 'kanye@example.dev'
+
+const FILM_B_ROW = {
+  id: FILM_B,
+  title: 'The Second Narrative',
+  status: 'ready',
+  thumbnail_url: 'https://image.mux.com/fake/thumbnail.png',
+  creator_id: OWNER_ID,
+  created_at: '2026-06-01T10:00:00Z',
+}
+
+// The same account holds a claim on BOTH films → its email renders a row in
+// both people tables on the one dashboard page.
+const SHARED_INVITES = [
+  { ...CLAIMED_INVITE, recipient_name: 'Kanye', claimed_email: SHARED_EMAIL },
+  {
+    ...CLAIMED_INVITE,
+    id: 'aaaa1111-0000-4000-8000-000000000002',
+    film_id: FILM_B,
+    recipient_name: 'Kanye',
+    claimed_email: SHARED_EMAIL,
+    link_slug: 'ticket-fghij',
+  },
+]
+
+const SHARED_PREVIEW = {
+  kind: 'person',
+  email: SHARED_EMAIL,
+  repoint: [],
+  inviteCount: 1,
+  watchSessionCount: 0,
+  accountDeleted: false,
+  accountKeptReason: 'account kept — this person also appears on 1 invite(s) in other films',
+}
+
+test.describe('Popover keys are film-scoped — person claimed on two films (mocked creator)', () => {
+  let previewCalls
+
+  test.beforeEach(async ({ page }) => {
+    previewCalls = 0
+    await page.addInitScript(
+      ([key, session]) => {
+        window.localStorage.setItem(key, JSON.stringify(session))
+      },
+      [`sb-${REF}-auth-token`, SESSION]
+    )
+
+    await page.route('**image.mux.com/**', (route) =>
+      route.fulfill({ contentType: 'image/png', body: TINY_PNG })
+    )
+    await page.route('**/auth/v1/user**', (route) => route.fulfill({ json: SESSION.user }))
+    await page.route('**/rest/v1/users**', (route) => {
+      const url = route.request().url()
+      let rows
+      if (url.includes('team_creator_id=eq')) rows = []
+      else if (url.includes('id=in.'))
+        rows = [OWNER_PROFILE, { ...CLAIMANT_USER, email: SHARED_EMAIL, name: 'Kanye' }]
+      else rows = [OWNER_PROFILE]
+      return route.fulfill({ json: rows, headers: RANGE_HEADERS })
+    })
+    await page.route('**/rest/v1/team_invites**', (route) =>
+      route.fulfill({ json: [], headers: RANGE_HEADERS })
+    )
+    await page.route('**/rest/v1/films**', (route) =>
+      route.fulfill({ json: [FILM, FILM_B_ROW], headers: RANGE_HEADERS })
+    )
+    await page.route('**/rest/v1/invites**', (route) =>
+      route.fulfill({ json: SHARED_INVITES, headers: RANGE_HEADERS })
+    )
+    await page.route('**/api/admin/ticket-controls/status', (route) =>
+      route.fulfill({
+        json: {
+          statuses: { [CLAIMANT_ID]: { unlimited: false, ticketsLeft: 4, controllable: true } },
+        },
+      })
+    )
+    await page.route('**/api/admin/delete-person/preview', (route) => {
+      previewCalls += 1
+      return route.fulfill({ json: SHARED_PREVIEW })
+    })
+  })
+
+  test('exactly ONE Remove popover mounts and it survives a click into the input', async ({
+    page,
+  }) => {
+    await page.goto('/dashboard')
+    await expect(page.getByText('People in this network')).toHaveCount(2)
+
+    await page.getByRole('button', { name: 'Remove' }).first().click()
+    await expect(page.getByText(`To confirm, type ${SHARED_EMAIL}`)).toBeVisible()
+
+    // ONE popover — the twin from the other film's table must not mount.
+    await expect(page.getByText('Remove Kanye')).toHaveCount(1)
+    // One instance fetches the preview once (StrictMode dev double-runs the
+    // effect, so allow 2); the twin bug made it 4.
+    expect(previewCalls).toBeLessThanOrEqual(2)
+
+    // The input click that used to dismiss everything.
+    const input = page.getByPlaceholder('Their email')
+    await input.click()
+    await input.pressSequentially('kan')
+    await expect(page.getByText('Remove Kanye')).toHaveCount(1)
+    await expect(page.getByText(`To confirm, type ${SHARED_EMAIL}`)).toBeVisible()
+  })
+
+  test('exactly ONE ticket-controls popover mounts and clicks inside it do not dismiss it', async ({
+    page,
+  }) => {
+    await page.goto('/dashboard')
+    await expect(page.getByText('People in this network')).toHaveCount(2)
+
+    await page.getByRole('button', { name: '4 left' }).first().click()
+    const unlimitedSwitch = page.getByRole('switch', { name: 'Unlimited tickets' })
+    await expect(unlimitedSwitch).toHaveCount(1)
+
+    await page.waitForTimeout(350) // past the 300ms open grace
+    await page.getByRole('button', { name: 'One ticket more' }).click()
+    await expect(unlimitedSwitch).toBeVisible()
+    await expect(page.getByText('+1')).toBeVisible()
+  })
+})

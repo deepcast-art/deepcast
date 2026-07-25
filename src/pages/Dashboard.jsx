@@ -1225,17 +1225,21 @@ export default function Dashboard() {
                                                 // null by the time the updater runs.
                                                 const rect = e.currentTarget.getBoundingClientRect()
                                                 setControlsError('')
+                                                // Film-scoped like the Remove key: the same
+                                                // account can hold claims on several films.
                                                 setControlsOpenFor((open) =>
-                                                  open?.userId === person.userId
+                                                  open?.userId === person.userId &&
+                                                  open?.filmId === film.id
                                                     ? null
-                                                    : { userId: person.userId, rect }
+                                                    : { userId: person.userId, filmId: film.id, rect }
                                                 )
                                               }}
                                               className="cursor-pointer rounded-full border border-border px-2.5 py-0.5 text-[9px] uppercase tracking-[0.18em] text-text-muted transition-colors hover:border-text-muted hover:text-text"
                                             >
                                               {status.unlimited ? '∞' : `${status.ticketsLeft ?? 0} left`}
                                             </button>
-                                            {controlsOpenFor?.userId === person.userId && (
+                                            {controlsOpenFor?.userId === person.userId &&
+                                              controlsOpenFor?.filmId === film.id && (
                                               <TicketControlsPopover
                                                 anchorRect={controlsOpenFor.rect}
                                                 firstName={first}
@@ -1260,7 +1264,12 @@ export default function Dashboard() {
                                           </>
                                         )
                                       })()}
-                                      {removeAffordance(`person-${email}`, {
+                                      {/* Key is FILM-SCOPED: every film's table renders on
+                                          this page, so a person claimed on two films would
+                                          otherwise mount twin stacked popovers whose
+                                          outside-click watchers dismiss each other (the
+                                          2026-07-24 "closes on input click" defect). */}
+                                      {removeAffordance(`person-${film.id}-${email}`, {
                                         kind: 'person',
                                         email,
                                         name: person.name,
