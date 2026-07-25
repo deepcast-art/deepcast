@@ -1,45 +1,70 @@
 import { DEV_HARNESS_ENABLED } from '../../lib/devHarness'
 
 /**
- * THROWAWAY DEV HARNESS — sparse lineage-emblem composition candidates.
+ * THROWAWAY DEV HARNESS v2 — lineage-emblem TREE-GRAMMAR candidates.
  * NOT a product surface; never part of a production bundle (lazy-loaded
  * behind DEV_HARNESS_ENABLED, same mechanism as DevHarness.jsx).
  *
- * Purpose (2026-07-25): the pass-it-on modal's emblem reads empty for
- * shallow chains. Before any redesign ships, the founder chooses between
- * RENDERED compositions — this page draws the founder-approved DIRECTION
- * at four chain depths, side by side, with mock names and zero real data:
+ * v2 (2026-07-25, founder-directed): the composition is a BRANCHING TREE
+ * with a direction of growth — one origin (the filmmaker) at the left,
+ * the network growing rightward, arms forking organically with buds top
+ * and bottom. Left-to-right reads as time. ONE tree grammar, four growth
+ * stages: every panel renders the SAME per-generation branch templates —
+ * each depth is the same underlying form one generation further grown,
+ * not four unrelated drawings.
  *
- *  - the emblem is styled as a FRAGMENT OF THE DASHBOARD CONSTELLATION
- *    (colors, line weights, node and label treatment lifted verbatim from
- *    ConstellationMap.jsx — if that file changes, re-lift);
- *  - the viewer's direct path (filmmaker → … → you) is highlighted gold;
- *    everything off-path is the constellation's dim-web treatment;
- *  - off-path forks are decorative context ONLY: unlabeled dots — never
- *    named, never invented people (in the real implementation the server's
- *    lineageForks booleans govern which forks exist);
- *  - at depth 1 the filmmaker carries a fork ABOVE as well (other branches
- *    of the film's spread), so the emblem never reads as two lonely dots.
+ * LINE GRAMMAR (founder-stamped 2026-07-25):
+ *  - filmmaker → … → YOU (realized path): SOLID GOLD;
+ *  - YOU → "?" (the unminted next ticket): DOTTED GOLD;
+ *  - all off-path branches and nodes: DOTTED GRAY, faded, UNLABELED —
+ *    never invented people (real forks come from lineageForks server
+ *    booleans in the eventual implementation).
+ *  Color carries whose story it is (gold = yours); texture carries what
+ *  is real yet (solid = happened, dotted = not yet). The "?" is the only
+ *  node on a gold dotted line: hollow, slightly larger, gold-ringed.
  *
- * The live modal (LineageEmblem in ClaimWatch.jsx) is untouched — the real
- * implementation is its own session, after the founder picks.
+ * Depth 4+ renders AS the mature three-generation form with compressed
+ * ancestry entering from the left as a receding line — shown BOTH ways
+ * (bare, and carrying the existing "⋯ N hands ⋯" collapse label) for the
+ * founder to choose.
+ *
+ * Visual vocabulary is the dashboard constellation's, verbatim from
+ * ConstellationMap.jsx (if that file changes, re-lift): the emblem is one
+ * limb of that star system. The live modal (LineageEmblem in
+ * ClaimWatch.jsx) is untouched — implementation is its own session.
  */
 
 const LABEL_FONT = "'Phoenix', system-ui, sans-serif"
 
 /* Verbatim constellation grammar (ConstellationMap.jsx). */
-const DIM_EDGE = { stroke: 'rgba(234,231,224,0.16)', strokeWidth: 1, strokeDasharray: '2 5' }
-const DIM_DOT = { fill: 'rgba(234,231,224,0.7)', r: 2.2 }
-const GOLD_EDGE = { stroke: 'rgba(199,169,107,0.8)', strokeWidth: 1.4 }
+const GOLD = 'rgba(199,169,107,0.8)'
+const GRAY_EDGE = { stroke: 'rgba(234,231,224,0.16)', strokeWidth: 1, strokeDasharray: '2 5' }
+const GRAY_DOT = { fill: 'rgba(234,231,224,0.7)', r: 2.2 }
 const PATH_NODE = { fill: '#C7A96B', r: 3.5 }
 const PATH_LABEL = { fill: 'rgba(199,169,107,0.9)', fontSize: 9, letterSpacing: 2 }
-const YOU_NODE = { fill: '#D8C79A', r: 6 }
-const YOU_HALO = { stroke: 'rgba(216,199,154,0.4)', r: 12 }
 const YOU_LABEL = { fill: '#D8C79A', fontSize: 11.5, letterSpacing: 2 }
-const NEXT_NODE = { stroke: '#C7A96B', strokeWidth: 1.2, r: 4.5 }
 const NEXT_LABEL = { fill: '#D8C79A', fontSize: 9.5, letterSpacing: 2 }
 
-function Label({ x, y, spec, children }) {
+/**
+ * THE TREE GRAMMAR — one set of per-generation branch templates, reused
+ * by every stage. A template lists this generation's off-path buds as
+ * offsets from the gold node: `d` = the bud dot, optional `sub` = a
+ * second-order bud growing onward from it. All offsets grow rightward
+ * (dx > 0) — time flows left to right; buds alternate above and below
+ * the arm (asymmetric, like a branch growing).
+ */
+const TEMPLATES = [
+  // G0 — the filmmaker's other branches: a canopy above, one limb below.
+  { buds: [{ d: [35, -55], sub: [75, -78] }, { d: [48, 42], sub: [95, 58] }] },
+  // G1 — the first hand's other shares: a limb below with growth, one up.
+  { buds: [{ d: [30, 48], sub: [68, 70] }, { d: [38, -42] }] },
+  // G2 — up with growth, one down.
+  { buds: [{ d: [34, -44], sub: [72, -58] }, { d: [26, 52] }] },
+  // G3 — a single young bud below.
+  { buds: [{ d: [32, 44] }] },
+]
+
+function Label({ x, y, spec, upper = true, children }) {
   return (
     <text
       x={x}
@@ -48,7 +73,7 @@ function Label({ x, y, spec, children }) {
       fill={spec.fill}
       fontSize={spec.fontSize}
       letterSpacing={spec.letterSpacing}
-      style={{ fontFamily: LABEL_FONT, textTransform: 'uppercase' }}
+      style={{ fontFamily: LABEL_FONT, ...(upper ? { textTransform: 'uppercase' } : {}) }}
     >
       {children}
     </text>
@@ -56,7 +81,7 @@ function Label({ x, y, spec, children }) {
 }
 
 /** The filmmaker as the constellation's central film node (camera glyph),
- *  at a smaller emblem scale (×0.62) so it reads as a fragment of the map. */
+ *  at emblem scale (×0.62) — the origin the tree grows from. */
 function FilmmakerNode({ x, y, name }) {
   const s = 0.62
   return (
@@ -97,39 +122,88 @@ function FilmmakerNode({ x, y, name }) {
   )
 }
 
+/** One generation's off-path growth: dotted-gray limbs to unlabeled dots. */
+function Buds({ node, gen }) {
+  const t = TEMPLATES[Math.min(gen, TEMPLATES.length - 1)]
+  return (
+    <g>
+      {t.buds.map((b, i) => {
+        const bx = node.x + b.d[0]
+        const by = node.y + b.d[1]
+        return (
+          <g key={i}>
+            <line x1={node.x} y1={node.y} x2={bx} y2={by} {...GRAY_EDGE} />
+            <circle cx={bx} cy={by} {...GRAY_DOT} />
+            {b.sub && (
+              <>
+                <line x1={bx} y1={by} x2={node.x + b.sub[0]} y2={node.y + b.sub[1]} {...GRAY_EDGE} />
+                <circle cx={node.x + b.sub[0]} cy={node.y + b.sub[1]} {...GRAY_DOT} />
+              </>
+            )}
+          </g>
+        )
+      })}
+    </g>
+  )
+}
+
 /**
- * One emblem panel. `chain` = [{x, y, name}] from the filmmaker to the hand
- * before YOU; `you`/`next` = positions; `offPath` = decorative context —
- * faded, UNLABELED lines/dots (never people with names):
- * `{ lines: [[x1,y1,x2,y2]], dots: [[x,y]] }`.
+ * One growth stage of the tree. `chain` = gold nodes from the filmmaker
+ * through the hands (YOU excluded); `receding` renders the FIRST gold
+ * segment as compressed ancestry (long, fading toward the origin), with
+ * an optional `hiddenHands` count carrying the "⋯ N hands ⋯" collapse
+ * grammar (numerals always).
  */
-function EmblemPanel({ chain, you, next, offPath, entry }) {
+function TreePanel({ chain, you, next, receding = false, hiddenHands = null }) {
   const filmmaker = chain[0]
   const named = chain.slice(1)
-  const pathPoints = [...chain, you]
+  const goldPoints = [...chain, you]
+  const mid = {
+    x: (chain[0].x + chain[1]?.x) / 2 || 0,
+    y: (chain[0].y + chain[1]?.y) / 2 || 0,
+  }
   return (
     <svg viewBox="0 0 420 240" className="block w-full" aria-hidden>
-      {/* Off-path context first — under the gold. */}
-      <g>
-        {offPath.lines.map(([x1, y1, x2, y2], i) => (
-          <line key={`l${i}`} x1={x1} y1={y1} x2={x2} y2={y2} {...DIM_EDGE} />
-        ))}
-        {offPath.dots.map(([x, y], i) => (
-          <circle key={`d${i}`} cx={x} cy={y} {...DIM_DOT} />
-        ))}
-      </g>
+      {/* Off-path growth first, under the gold — the same generation
+          templates at every stage (the one tree grammar). */}
+      {chain.map((p, g) => (
+        <Buds key={`b${g}`} node={p} gen={g} />
+      ))}
 
-      {/* Entry stroke — the chain running deeper than the hands shown. */}
-      {entry && (
-        <line x1={entry[0]} y1={entry[1]} x2={filmmaker.x} y2={filmmaker.y} {...GOLD_EDGE} opacity="0.35" />
+      {/* The realized path: SOLID GOLD. A receding first segment carries
+          the compressed ancestry at reduced presence. */}
+      {goldPoints.slice(0, -1).map((p, i) => {
+        const q = goldPoints[i + 1]
+        const isEntry = receding && i === 0
+        return (
+          <line
+            key={`g${i}`}
+            x1={p.x}
+            y1={p.y}
+            x2={q.x}
+            y2={q.y}
+            stroke={GOLD}
+            strokeWidth="1.4"
+            opacity={isEntry ? 0.4 : 1}
+          />
+        )
+      })}
+      {receding && hiddenHands != null && (
+        <Label x={mid.x} y={mid.y - 12} spec={{ fill: 'rgba(234,231,224,0.45)', fontSize: 8.5, letterSpacing: 1.5 }} upper={false}>
+          {`⋯ ${hiddenHands} hands ⋯`}
+        </Label>
       )}
 
-      {/* The direct path, highlighted. */}
-      {pathPoints.slice(0, -1).map((p, i) => {
-        const q = pathPoints[i + 1]
-        return <line key={`g${i}`} x1={p.x} y1={p.y} x2={q.x} y2={q.y} {...GOLD_EDGE} />
-      })}
-      <line x1={you.x} y1={you.y} x2={next.x} y2={next.y} {...GOLD_EDGE} opacity="0.6" />
+      {/* The unminted next ticket: DOTTED GOLD to the growing tip. */}
+      <line
+        x1={you.x}
+        y1={you.y}
+        x2={next.x}
+        y2={next.y}
+        stroke={GOLD}
+        strokeWidth="1.4"
+        strokeDasharray="2 4"
+      />
 
       <FilmmakerNode x={filmmaker.x} y={filmmaker.y} name={filmmaker.name} />
 
@@ -143,15 +217,17 @@ function EmblemPanel({ chain, you, next, offPath, entry }) {
       ))}
 
       <g>
-        <circle cx={you.x} cy={you.y} {...YOU_NODE} />
-        <circle cx={you.x} cy={you.y} fill="none" strokeWidth="1" {...YOU_HALO} />
+        <circle cx={you.x} cy={you.y} r="6" fill="#D8C79A" />
+        <circle cx={you.x} cy={you.y} r="12" fill="none" stroke="rgba(216,199,154,0.4)" strokeWidth="1" />
         <Label x={you.x} y={you.y - 18} spec={YOU_LABEL}>
           YOU
         </Label>
       </g>
 
+      {/* The growing tip: hollow, slightly larger than off-path dots,
+          gold-ringed — the only node on a gold dotted line. */}
       <g>
-        <circle cx={next.x} cy={next.y} fill="transparent" {...NEXT_NODE} />
+        <circle cx={next.x} cy={next.y} r="4.5" fill="transparent" stroke="#C7A96B" strokeWidth="1.2" />
         <Label x={next.x} y={next.y - 12} spec={NEXT_LABEL}>
           ?
         </Label>
@@ -160,103 +236,64 @@ function EmblemPanel({ chain, you, next, offPath, entry }) {
   )
 }
 
-/* Four hand-composed candidates. Mock first names only — no real data. */
+/* Four growth stages of the ONE tree (+ the depth-8 label variant).
+   Mock first names only — no real data. */
 const PANELS = [
   {
     key: 'depth-1',
-    caption: 'Depth 1 — filmmaker → you. The fork ABOVE the filmmaker (other branches of the spread) keeps it from reading as two lonely dots.',
-    chain: [{ x: 130, y: 150, name: 'Avery' }],
-    you: { x: 265, y: 120 },
-    next: { x: 355, y: 150 },
-    offPath: {
-      lines: [
-        [130, 150, 90, 85],
-        [90, 85, 55, 55],
-        [90, 85, 125, 48],
-        [130, 150, 185, 70],
-        [185, 70, 230, 42],
-      ],
-      dots: [
-        [55, 55],
-        [125, 48],
-        [230, 42],
-        [40, 130],
-      ],
-    },
+    caption:
+      'Depth 1 — the young tree: filmmaker → you, the canopy already alive above and below the origin.',
+    chain: [{ x: 75, y: 150, name: 'Avery' }],
+    you: { x: 185, y: 112 },
+    next: { x: 262, y: 88 },
   },
   {
     key: 'depth-2',
-    caption: 'Depth 2 — filmmaker → one hand → you.',
+    caption: 'Depth 2 — one generation further: the same form, one more hand on the arm.',
     chain: [
-      { x: 85, y: 170, name: 'Avery' },
-      { x: 190, y: 115, name: 'Mara' },
+      { x: 70, y: 162, name: 'Avery' },
+      { x: 160, y: 122, name: 'Mara' },
     ],
-    you: { x: 285, y: 90 },
-    next: { x: 365, y: 125 },
-    offPath: {
-      lines: [
-        [85, 170, 60, 95],
-        [60, 95, 95, 55],
-        [190, 115, 235, 165],
-      ],
-      dots: [
-        [95, 55],
-        [45, 70],
-        [235, 165],
-      ],
-    },
+    you: { x: 255, y: 95 },
+    next: { x: 330, y: 75 },
   },
   {
     key: 'depth-3',
-    caption: 'Depth 3 — filmmaker → two hands → you.',
+    caption: 'Depth 3 — the mature form: three generations articulated, buds at every hand.',
     chain: [
-      { x: 70, y: 180, name: 'Avery' },
-      { x: 155, y: 130, name: 'Priya' },
-      { x: 245, y: 100, name: 'Jonas' },
+      { x: 62, y: 172, name: 'Avery' },
+      { x: 148, y: 133, name: 'Priya' },
+      { x: 238, y: 104, name: 'Jonas' },
     ],
-    you: { x: 325, y: 75 },
-    next: { x: 390, y: 115 },
-    offPath: {
-      lines: [
-        [70, 180, 45, 105],
-        [45, 105, 75, 62],
-        [155, 130, 185, 190],
-        [245, 100, 290, 155],
-      ],
-      dots: [
-        [75, 62],
-        [30, 80],
-        [185, 190],
-        [290, 155],
-      ],
-    },
+    you: { x: 322, y: 82 },
+    next: { x: 392, y: 64 },
   },
   {
-    key: 'depth-8',
-    caption: 'Depth ~8 — the current design’s home territory: the last three hands named, the entry stroke implying the rest.',
+    key: 'depth-8a',
+    caption:
+      'Depth ~8, variant A — the mature form with compressed ancestry: deeper history enters from the left as a receding line alone.',
     chain: [
-      { x: 95, y: 175, name: 'Avery' },
-      { x: 180, y: 125, name: 'Dev' },
-      { x: 260, y: 95, name: 'Lena' },
+      { x: 48, y: 180, name: 'Avery' },
+      { x: 185, y: 128, name: 'Dev' },
+      { x: 268, y: 100, name: 'Lena' },
     ],
-    you: { x: 335, y: 70 },
-    next: { x: 395, y: 110 },
-    entry: [25, 215],
-    offPath: {
-      lines: [
-        [95, 175, 70, 100],
-        [180, 125, 215, 185],
-        [215, 185, 265, 200],
-        [260, 95, 300, 150],
-      ],
-      dots: [
-        [70, 100],
-        [265, 200],
-        [300, 150],
-        [45, 55],
-        [350, 190],
-      ],
-    },
+    you: { x: 340, y: 78 },
+    next: { x: 398, y: 62 },
+    receding: true,
+  },
+  {
+    key: 'depth-8b',
+    caption:
+      'Depth ~8, variant B — the receding line carries the existing collapse grammar: "⋯ 5 hands ⋯" (numerals always).',
+    chain: [
+      { x: 48, y: 180, name: 'Avery' },
+      { x: 185, y: 128, name: 'Dev' },
+      { x: 268, y: 100, name: 'Lena' },
+    ],
+    you: { x: 340, y: 78 },
+    next: { x: 398, y: 62 },
+    receding: true,
+    hiddenHands: 5,
   },
 ]
 
@@ -271,22 +308,22 @@ export default function DevEmblemHarness() {
           THROWAWAY DEV HARNESS — not in production
         </p>
         <h1 className="mb-2 font-serif-v3 text-2xl italic">
-          Lineage emblem — sparse-composition candidates
+          Lineage emblem v2 — the tree grammar
         </h1>
         <p className="mb-8 max-w-2xl font-sans text-sm text-warm/60">
-          Four chain depths, mock names, zero real data. Styling is lifted verbatim from the
-          dashboard constellation (ConstellationMap.jsx): gold direct path, dim unlabeled
-          context, same nodes and labels. The live pass-it-on modal is untouched.
+          One tree, four growth stages, growing left to right. Solid gold = your realized path;
+          dotted gold = the unminted next ticket; dotted gray = the network&rsquo;s other branches,
+          always unlabeled. Mock names, zero real data; the live pass-it-on modal is untouched.
         </p>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           {PANELS.map((p) => (
             <figure key={p.key} data-panel={p.key} className="border border-mist/[0.12] bg-ink-2 p-3">
-              <EmblemPanel
+              <TreePanel
                 chain={p.chain}
                 you={p.you}
                 next={p.next}
-                offPath={p.offPath}
-                entry={p.entry}
+                receding={p.receding}
+                hiddenHands={p.hiddenHands}
               />
               <figcaption className="mt-2 px-1 font-sans text-xs leading-relaxed text-warm/55">
                 {p.caption}
