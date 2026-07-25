@@ -5,22 +5,6 @@ import { DEV_HARNESS_ENABLED } from '../../lib/devHarness'
  * NOT a product surface; never part of a production bundle (lazy-loaded
  * behind DEV_HARNESS_ENABLED, same mechanism as DevHarness.jsx).
  *
- * v7 (2026-07-25, founder structural ruling): DEPTH 3+ IS ONE
- * DRAWING. The two collapsed panels are no longer separate
- * compositions — from depth 3 onward the emblem is one identical
- * drawing (one shared composition object, rendered twice), and the
- * ONLY variable is the condensed node's label text: exactly 1 hidden
- * hand → the bare name ("PRIYA"); 2+ hidden → "{name} + {n}"
- * ("PRIYA + 4", numerals always). Divergence is impossible by
- * construction. Label consistency (applies to every panel): every
- * gold-path label sits ABOVE its dot in ONE fine-label size
- * (PATH_LABEL) — no per-label sliding, no size variation (v6's
- * condensed label was genuinely smaller, 8.5px/1.5 vs 9px/2 — fixed).
- * When a gray limb collided with a label at the standard position,
- * the LIMB moved: the condensed node's and Jonas's top limbs became a
- * high canopy arcing off the origin's meander, and depth 2's Mara
- * top-bud re-rooted to the origin's up-limb.
- *
  * v6 (2026-07-25): the cluster is ONE DOT — the three-dot knot is
  * dead. The compressed middle renders as a single gold node on the
  * uniform path, same treatment family as the articulated nodes and
@@ -194,18 +178,26 @@ function TreePanel({ chain, you, next, gray, condensed = null }) {
         )
       })}
 
-      {/* The named-cluster collapse (v6/v7): ONE single gold node ON
-          the gold path — the uniform line running through unbroken;
-          subtly smaller than the articulated nodes (r 3.2 vs 3.5),
-          never larger. The label does the counting: the nearest hidden
-          hand's name (+ " + n" when 2+ hidden), ABOVE the dot like
-          every gold-path label, in the ONE fine-label size (v7). */}
+      {/* The named-cluster collapse (v6): ONE single gold node ON the
+          gold path — the uniform line running through unbroken; subtly
+          smaller than the articulated nodes (r 3.2 vs 3.5), never
+          larger. The label does the counting: the nearest hidden hand's
+          name (+ " + n" when 2+ hidden), horizontal beneath, in the
+          constellation's fine-label treatment. */}
       {condensed && (
         <g>
           <circle cx={condensed.dot[0]} cy={condensed.dot[1]} r="3.2" fill="#C7A96B" />
-          <Label x={condensed.dot[0]} y={condensed.dot[1] - 10} spec={PATH_LABEL}>
-            {condensed.labelText}
-          </Label>
+          <text
+            x={condensed.label.x}
+            y={condensed.label.y}
+            textAnchor="middle"
+            fill="rgba(199,169,107,0.9)"
+            fontSize="8.5"
+            letterSpacing="1.5"
+            style={{ fontFamily: LABEL_FONT, textTransform: 'uppercase' }}
+          >
+            {condensed.label.text}
+          </text>
         </g>
       )}
 
@@ -304,9 +296,8 @@ const PANELS = [
         [160, 122, 190, 170],
         [190, 170, 232, 190],
         [190, 170, 228, 152],
-        // The young top bud re-rooted off the origin's up-limb (v7: its
-        // old anchor at Mara collided with her above-dot label).
-        [140, 86, 188, 72],
+        // A small young bud up off Mara.
+        [160, 122, 198, 80],
       ],
       dots: [
         [103, 110],
@@ -315,83 +306,109 @@ const PANELS = [
         [190, 170],
         [232, 190],
         [228, 152],
-        [188, 72],
+        [198, 80],
       ],
     },
   },
-  ...(() => {
-    /* THE SHARED DEPTH-3+ DRAWING (v7): one composition object, rendered
-       twice — same node positions, spacing, and gray canopy; the ONLY
-       difference between the two panels is the condensed node's label
-       text. Divergence is impossible by construction. Canopy notes:
-       labels sit above their dots (v7 rule), so the condensed node and
-       Jonas carry NO top limbs — their old canopy mass is a high arc
-       rooted in the origin's meander, clear of every label band. */
-    const DEPTH3_PLUS = {
-      chain: [
-        { x: 62, y: 172, name: 'Avery' },
-        { x: 238, y: 104, name: 'Jonas' },
-      ],
-      you: { x: 322, y: 82 },
-      next: { x: 392, y: 64 },
+  {
+    key: 'depth-3',
+    caption:
+      'Depth 3 under the collapse rule — filmmaker → the condensed node ("PRIYA", the one hidden hand, no count) → Jonas (direct sharer) → you. Thinned from v4: primary limbs kept, ~⅓ of second-generation buds removed.',
+    chain: [
+      { x: 62, y: 172, name: 'Avery' },
+      { x: 238, y: 104, name: 'Jonas' },
+    ],
+    you: { x: 322, y: 82 },
+    next: { x: 392, y: 64 },
+    condensed: {
       dot: [150, 138],
-      gray: {
-        lines: [
-          // The origin's top: the meander, a fork, and the high canopy
-          // arcing right over the whole composition.
-          [62, 172, 88, 128],
-          [88, 128, 114, 92],
-          [88, 128, 118, 114],
-          [114, 92, 150, 74],
-          [150, 74, 206, 60],
-          [206, 60, 252, 52],
-          // The origin's underside: chain + fork.
-          [62, 172, 95, 215],
-          [95, 215, 140, 224],
-          [95, 215, 126, 196],
-          // The condensed node's underside: the limb forks two ways.
-          [150, 138, 176, 184],
-          [176, 184, 212, 200],
-          [176, 184, 208, 166],
-          // Jonas: the down-limb with second growth.
-          [238, 104, 268, 150],
-          [268, 150, 305, 168],
-        ],
-        dots: [
-          [88, 128],
-          [114, 92],
-          [118, 114],
-          [150, 74],
-          [206, 60],
-          [252, 52],
-          [95, 215],
-          [140, 224],
-          [126, 196],
-          [176, 184],
-          [212, 200],
-          [208, 166],
-          [268, 150],
-          [305, 168],
-        ],
-      },
-    }
-    return [
-      {
-        key: 'depth-3',
-        caption:
-          'Depth 3 — the shared depth-3+ drawing with exactly one hidden hand: the condensed node reads "PRIYA", bare (no count).',
-        ...DEPTH3_PLUS,
-        condensed: { dot: DEPTH3_PLUS.dot, labelText: 'Priya' },
-      },
-      {
-        key: 'depth-3-plus',
-        caption:
-          'Depth ~8 — the IDENTICAL drawing; only the label changes: "PRIYA + 4" (Priya shared to Jonas; four more hands hidden behind her).',
-        ...DEPTH3_PLUS,
-        condensed: { dot: DEPTH3_PLUS.dot, labelText: 'Priya + 4' },
-      },
-    ]
-  })(),
+      label: { text: 'Priya', x: 130, y: 164 },
+    },
+    gray: {
+      lines: [
+        // The origin's top: the long meandering limb, now two links.
+        [62, 172, 88, 128],
+        [88, 128, 114, 92],
+        // The origin's underside: chain + fork (third link removed).
+        [62, 172, 95, 215],
+        [95, 215, 140, 224],
+        [95, 215, 126, 196],
+        // The cluster's top: one limb, one onward bud (second fork gone).
+        [150, 138, 184, 96],
+        [184, 96, 222, 76],
+        // The cluster's underside: the limb forks two ways.
+        [150, 138, 176, 184],
+        [176, 184, 212, 200],
+        [176, 184, 208, 166],
+        // Jonas: one young top bud; the down-limb (fork removed).
+        [238, 104, 272, 62],
+        [238, 104, 268, 150],
+        [268, 150, 305, 168],
+      ],
+      dots: [
+        [88, 128],
+        [114, 92],
+        [95, 215],
+        [140, 224],
+        [126, 196],
+        [184, 96],
+        [222, 76],
+        [176, 184],
+        [212, 200],
+        [208, 166],
+        [272, 62],
+        [268, 150],
+        [305, 168],
+      ],
+    },
+  },
+  {
+    key: 'depth-8',
+    caption:
+      'Depth ~8 under the collapse rule — filmmaker → the condensed node ("PRIYA + 4": Priya shared to Lena; four more hands hidden behind her) → Lena (direct sharer) → you. Same silhouette, thinned density.',
+    chain: [
+      { x: 48, y: 180, name: 'Avery' },
+      { x: 268, y: 100, name: 'Lena' },
+    ],
+    you: { x: 340, y: 78 },
+    next: { x: 398, y: 62 },
+    condensed: {
+      dot: [147, 144],
+      label: { text: 'Priya + 4', x: 155, y: 164 },
+    },
+    gray: {
+      lines: [
+        // The origin's canopy: the meander (fork thinned away).
+        [48, 180, 75, 124],
+        [75, 124, 105, 98],
+        [105, 98, 140, 78],
+        // The origin's under-limb.
+        [48, 180, 85, 222],
+        [85, 222, 130, 230],
+        // One twig off the gold span, left of the cluster label.
+        [96, 163, 118, 200],
+        // The cluster's top limb with onward growth (the hidden hands'
+        // spread).
+        [147, 144, 190, 96],
+        [190, 96, 226, 74],
+        // Lena: the down-limb whose bud buds again.
+        [268, 100, 300, 140],
+        [300, 140, 338, 158],
+      ],
+      dots: [
+        [75, 124],
+        [105, 98],
+        [140, 78],
+        [85, 222],
+        [130, 230],
+        [118, 200],
+        [190, 96],
+        [226, 74],
+        [300, 140],
+        [338, 158],
+      ],
+    },
+  },
 ]
 
 export default function DevEmblemHarness() {
@@ -405,13 +422,12 @@ export default function DevEmblemHarness() {
           THROWAWAY DEV HARNESS — not in production
         </p>
         <h1 className="mb-2 font-serif-v3 text-2xl italic">
-          Lineage emblem v7 — one drawing for depth 3+
+          Lineage emblem v6 — single-dot collapse
         </h1>
         <p className="mb-8 max-w-2xl font-sans text-sm text-warm/60">
-          At most three articulated stops — filmmaker, your direct sharer, you. From depth 3
-          onward the emblem is ONE identical drawing; only the condensed node&rsquo;s label
-          changes ("Priya", or "Priya + 4"). Every gold-path label sits above its dot at one
-          size. Gold uniform end to end; dotted gold = the
+          At most three articulated stops — filmmaker, your direct sharer, you. Hidden hands
+          between them condense into one gold node on the line, named for the hand nearest
+          your sharer ("Priya", or "Priya + 4"). Gold uniform end to end; dotted gold = the
           unminted next ticket; dotted gray = the network&rsquo;s other branches, always
           unlabeled. Mock names, zero real data; the live pass-it-on modal is untouched.
         </p>
