@@ -243,7 +243,16 @@ export default function ViewerDashboardV5({
         </nav>
       )}
 
-      <div className="relative z-[2] mx-auto grid max-w-[90rem] md:min-h-dvh md:grid-cols-[18rem_1fr]">
+      {/* Desktop (≥768px) uses the creator dashboard's architecture
+          (2026-07-25, the parked internally-scrolling-columns task): the
+          grid is viewport-height and clipped, the MAIN column scrolls
+          internally, and the sidebar genuinely holds still. The old
+          `position: sticky` aside was INERT — the app-wide overflow-x
+          wrappers in src/main.jsx and #root are non-scrolling scroll
+          ancestors (they stay: they are the watch page's sideways-scroll
+          protection; the fix is this layout, never removing the guards).
+          Below md everything keeps natural page flow — mobile is untouched. */}
+      <div className="relative z-[2] mx-auto grid max-w-[90rem] md:h-dvh md:grid-cols-[18rem_1fr] md:grid-rows-[minmax(0,1fr)] md:overflow-hidden">
         {/* ── Sidebar (desktop) ── */}
         {/* overflow-x-clip: this column never scrolls sideways, and no real
             content can cross its edge (every child is width-adaptive —
@@ -253,7 +262,7 @@ export default function ViewerDashboardV5({
             scroll range — which macOS always-on scrollbars render as a
             horizontal bar under the menu links (owner-reported). Nothing is
             ever visually clipped by this; it removes only the phantom bar. */}
-        <aside className="sticky top-0 hidden h-dvh flex-col overflow-y-auto overflow-x-clip border-r border-mist/[0.12] px-8 py-8 md:flex">
+        <aside className="hidden min-h-0 flex-col overflow-y-auto overflow-x-clip border-r border-mist/[0.12] px-8 py-8 panel-scroll md:flex">
           <Link to="/" aria-label="Deepcast" className="opacity-90 hover:opacity-100">
             <DeepcastLogo size="text-2xl" className="text-mist" />
           </Link>
@@ -300,8 +309,9 @@ export default function ViewerDashboardV5({
           </div>
         </aside>
 
-        {/* ── Main ── */}
-        <main className="min-w-0 px-[clamp(1.375rem,4vw,3.5rem)] pb-32 pt-6 md:pb-20 md:pt-11">
+        {/* ── Main — the desktop scroll container (internal scroll; the
+            window itself no longer scrolls at md+). ── */}
+        <main className="min-w-0 px-[clamp(1.375rem,4vw,3.5rem)] pb-32 pt-6 panel-scroll md:min-h-0 md:overflow-y-auto md:pb-20 md:pt-11">
           {/* Mobile identity block */}
           <div className="mb-7 md:hidden">
             <p className="font-serif-v3 text-[1.625rem] italic leading-tight text-mist">{name}</p>

@@ -327,6 +327,53 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     }
   })
 
+  test('the sidebar stays PINNED while the main column scrolls', async ({ page }) => {
+    // The formerly-parked done-definition for the internally-scrolling-
+    // columns task (docs/parked-tests/, moved here 2026-07-25 when the
+    // layout shipped). Owner-reported regression guard (2026-07-23): the
+    // left column — name, ticket number, wallet stats, Share CTA, menu
+    // links — must hold still while the main column scrolls; only the
+    // right column travels. No fix (e.g. to the phantom-scrollbar bug) may
+    // ever trade this away silently.
+    //
+    // Adapted per the parked file's header: after the fix the SCROLLER is
+    // the MAIN column (internal scroll), not the window — so we scroll
+    // <main> and assert the aside holds still AND the window never moves.
+    await page.setViewportSize({ width: 1440, height: 500 })
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('A Sacred Pause')).toBeVisible({ timeout: 15000 })
+
+    // The main column must genuinely scroll at this height, or the test is
+    // vacuous.
+    expect(
+      await page.evaluate(() => {
+        const main = document.querySelector('main')
+        return main.scrollHeight > main.clientHeight
+      })
+    ).toBe(true)
+
+    const asideTopBefore = await page.evaluate(
+      () => document.querySelector('aside').getBoundingClientRect().top
+    )
+    await page.evaluate(() => {
+      document.querySelector('main').scrollTop = 300
+    })
+    await expect
+      .poll(() => page.evaluate(() => document.querySelector('main').scrollTop))
+      .toBeGreaterThan(0)
+    const after = await page.evaluate(() => ({
+      asideTop: document.querySelector('aside').getBoundingClientRect().top,
+      mainScrollTop: document.querySelector('main').scrollTop,
+      windowScrollY: window.scrollY,
+    }))
+    expect(after.mainScrollTop).toBeGreaterThan(0)
+    // The window itself never scrolls on desktop — the grid is viewport-
+    // height and the columns scroll internally.
+    expect(after.windowScrollY).toBe(0)
+    // Pinned: the sidebar's on-screen position is unchanged by the scroll.
+    expect(Math.round(after.asideTop)).toBe(Math.round(asideTopBefore))
+  })
+
   test('zero-share state: the journey line names the waiting tickets', async ({ page }) => {
     // Same mocks, but this viewer has generated nothing yet.
     await page.route('**/rest/v1/invites**', (route) => {

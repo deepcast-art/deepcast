@@ -49,7 +49,7 @@ The full post-claim experience, rebuilt through ~30 design rounds and implemente
 
 ## Parked and queued (approved, waiting — do not re-debate)
 
-- **V5 dashboard internally-scrolling columns** — diagnosed (sticky is inert under the app's overflow guards; do not remove those guards), scoped to the creator-dashboard pattern; the parked test at docs/parked-tests/ defines done. Next coding session.
+- ~~**V5 dashboard internally-scrolling columns**~~ — SHIPPED 25 July: desktop now uses the creator-dashboard pattern (viewport-height grid, main column scrolls internally, sidebar genuinely still); the app-wide overflow guards were not touched; the parked done-definition test moved into the live suite and passes on all three engines. Mobile behavior unchanged.
 - **Sparse lineage emblem composition** — the design side's task; the geometry report exists.
 - **Ticket expiry refund** — approved and specced (docs/ticket-expiry-refund-spec.md), not built: after 14 days unclaimed, the sharer's ticket refunds automatically; the link itself never dies, and a late claim still admits the person fully, viewing and sharing alike. No expiry copy appears anywhere in the product until the mechanism exists, because it would be false.
 - **Session-based duplicate detection** — approved direction: a signed-in user merely opening a claim link for a film they already hold is treated as a duplicate immediately (recognition message, void, refund), extending the existing duplicate machinery. Detecting duplicates by IP or by name was considered and explicitly rejected: false positives, and a membership privacy leak. No technique built yet.
