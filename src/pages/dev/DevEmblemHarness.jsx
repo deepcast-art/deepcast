@@ -334,7 +334,7 @@ const PANELS = [
     next: { x: 392, y: 64 },
     condensed: {
       dot: [150, 138],
-      label: { text: 'Priya', x: 130, y: 164 },
+      label: { text: 'Priya', x: 150, y: 164 },
     },
     gray: {
       lines: [
