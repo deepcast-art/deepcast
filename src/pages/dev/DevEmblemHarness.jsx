@@ -1,9 +1,20 @@
+import { useState } from 'react'
 import { DEV_HARNESS_ENABLED } from '../../lib/devHarness'
 
 /**
  * THROWAWAY DEV HARNESS v6 — lineage-emblem TREE-GRAMMAR candidates.
  * NOT a product surface; never part of a production bundle (lazy-loaded
  * behind DEV_HARNESS_ENABLED, same mechanism as DevHarness.jsx).
+ *
+ * v8 (2026-07-25, founder approval of the v6 compositions + two
+ * surgical changes, NO design changes): the deep panel is DELETED —
+ * the depth-3 composition (v6's, exactly as rendered) is THE drawing
+ * for every depth from 3 onward; for deeper chains the ONLY variable
+ * is the condensed node's label suffix (1 hidden → bare name; 2+ →
+ * "{name} + {n}", numerals always), demonstrated here by a label
+ * toggle on the unchanged depth-3 drawing. And the condensed label's
+ * SIZE now matches the named labels exactly (9px/2.0 — it had rendered
+ * at 8.5px/1.5); its v6 pocket position is unchanged.
  *
  * v6 (2026-07-25): the cluster is ONE DOT — the three-dot knot is
  * dead. The compressed middle renders as a single gold node on the
@@ -192,8 +203,8 @@ function TreePanel({ chain, you, next, gray, condensed = null }) {
             y={condensed.label.y}
             textAnchor="middle"
             fill="rgba(199,169,107,0.9)"
-            fontSize="8.5"
-            letterSpacing="1.5"
+            fontSize="9"
+            letterSpacing="2"
             style={{ fontFamily: LABEL_FONT, textTransform: 'uppercase' }}
           >
             {condensed.label.text}
@@ -313,7 +324,8 @@ const PANELS = [
   {
     key: 'depth-3',
     caption:
-      'Depth 3 under the collapse rule — filmmaker → the condensed node ("PRIYA", the one hidden hand, no count) → Jonas (direct sharer) → you. Thinned from v4: primary limbs kept, ~⅓ of second-generation buds removed.',
+      'Depth 3+ — THE drawing for every depth from 3 onward (v8): filmmaker → the condensed node → Jonas (direct sharer) → you. Only the label changes with depth: "PRIYA" (one hidden hand) or "PRIYA + {n}" (numerals always). Toggle above to preview both.',
+    labelStates: { one: 'Priya', many: 'Priya + 4' },
     chain: [
       { x: 62, y: 172, name: 'Avery' },
       { x: 238, y: 104, name: 'Jonas' },
@@ -362,58 +374,30 @@ const PANELS = [
       ],
     },
   },
-  {
-    key: 'depth-8',
-    caption:
-      'Depth ~8 under the collapse rule — filmmaker → the condensed node ("PRIYA + 4": Priya shared to Lena; four more hands hidden behind her) → Lena (direct sharer) → you. Same silhouette, thinned density.',
-    chain: [
-      { x: 48, y: 180, name: 'Avery' },
-      { x: 268, y: 100, name: 'Lena' },
-    ],
-    you: { x: 340, y: 78 },
-    next: { x: 398, y: 62 },
-    condensed: {
-      dot: [147, 144],
-      label: { text: 'Priya + 4', x: 155, y: 164 },
-    },
-    gray: {
-      lines: [
-        // The origin's canopy: the meander (fork thinned away).
-        [48, 180, 75, 124],
-        [75, 124, 105, 98],
-        [105, 98, 140, 78],
-        // The origin's under-limb.
-        [48, 180, 85, 222],
-        [85, 222, 130, 230],
-        // One twig off the gold span, left of the cluster label.
-        [96, 163, 118, 200],
-        // The cluster's top limb with onward growth (the hidden hands'
-        // spread).
-        [147, 144, 190, 96],
-        [190, 96, 226, 74],
-        // Lena: the down-limb whose bud buds again.
-        [268, 100, 300, 140],
-        [300, 140, 338, 158],
-      ],
-      dots: [
-        [75, 124],
-        [105, 98],
-        [140, 78],
-        [85, 222],
-        [130, 230],
-        [118, 200],
-        [190, 96],
-        [226, 74],
-        [300, 140],
-        [338, 158],
-      ],
-    },
-  },
 ]
 
 export default function DevEmblemHarness() {
+  /* The depth-3+ label preview (v8): switches ONLY the condensed node's
+     label text on the unchanged drawing — nothing in the composition
+     moves. */
+  const [depthState, setDepthState] = useState('one')
+
   // Defense in depth: the route is already gated, but never render otherwise.
   if (!DEV_HARNESS_ENABLED) return null
+
+  const toggleBtn = (state, label) => (
+    <button
+      type="button"
+      onClick={() => setDepthState(state)}
+      className={`border px-2 py-0.5 font-sans text-[10px] uppercase tracking-[0.14em] transition-colors ${
+        depthState === state
+          ? 'border-gold text-gold-soft'
+          : 'border-mist/[0.2] text-warm/50 hover:text-warm'
+      }`}
+    >
+      {label}
+    </button>
+  )
 
   return (
     <div className="min-h-dvh bg-bg-page p-6 text-warm">
@@ -422,30 +406,48 @@ export default function DevEmblemHarness() {
           THROWAWAY DEV HARNESS — not in production
         </p>
         <h1 className="mb-2 font-serif-v3 text-2xl italic">
-          Lineage emblem v6 — single-dot collapse
+          Lineage emblem v8 — three panels, one drawing from depth 3 on
         </h1>
         <p className="mb-8 max-w-2xl font-sans text-sm text-warm/60">
           At most three articulated stops — filmmaker, your direct sharer, you. Hidden hands
           between them condense into one gold node on the line, named for the hand nearest
-          your sharer ("Priya", or "Priya + 4"). Gold uniform end to end; dotted gold = the
+          your sharer ("Priya", or "Priya + 4"). The depth-3 drawing serves every deeper
+          chain; only the label suffix changes. Gold uniform end to end; dotted gold = the
           unminted next ticket; dotted gray = the network&rsquo;s other branches, always
           unlabeled. Mock names, zero real data; the live pass-it-on modal is untouched.
         </p>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          {PANELS.map((p) => (
-            <figure key={p.key} data-panel={p.key} className="border border-mist/[0.12] bg-ink-2 p-3">
-              <TreePanel
-                chain={p.chain}
-                you={p.you}
-                next={p.next}
-                gray={p.gray}
-                condensed={p.condensed}
-              />
-              <figcaption className="mt-2 px-1 font-sans text-xs leading-relaxed text-warm/55">
-                {p.caption}
-              </figcaption>
-            </figure>
-          ))}
+          {PANELS.map((p) => {
+            const condensed = p.labelStates
+              ? {
+                  ...p.condensed,
+                  label: { ...p.condensed.label, text: p.labelStates[depthState] },
+                }
+              : p.condensed
+            return (
+              <figure key={p.key} data-panel={p.key} className="border border-mist/[0.12] bg-ink-2 p-3">
+                {p.labelStates && (
+                  <div className="mb-2 flex items-center gap-2 px-1" data-toggle>
+                    <span className="font-sans text-[10px] uppercase tracking-[0.14em] text-warm/40">
+                      Hidden hands:
+                    </span>
+                    {toggleBtn('one', '1 — "Priya"')}
+                    {toggleBtn('many', '5 — "Priya + 4"')}
+                  </div>
+                )}
+                <TreePanel
+                  chain={p.chain}
+                  you={p.you}
+                  next={p.next}
+                  gray={p.gray}
+                  condensed={condensed}
+                />
+                <figcaption className="mt-2 px-1 font-sans text-xs leading-relaxed text-warm/55">
+                  {p.caption}
+                </figcaption>
+              </figure>
+            )
+          })}
         </div>
       </div>
     </div>
