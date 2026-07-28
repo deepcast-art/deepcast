@@ -57,12 +57,12 @@ export const FILM_STORIES = {
     filmmakerName: 'Ien Chi',
     filmmakerLocation: 'Atlanta, Georgia', // TEMP location — pending the real one
     filmmakerPhotoUrl: '/portrait-5.jpg', // real photo, served from public/
-    // TEMP epigraph + body — layout-holding placeholders, not Ien's words.
-    epigraph: 'A few honest words from the filmmaker will live here, in his own voice.',
+    epigraph: 'These days, I’ve been reflecting on something: did not Christ come to speak about life itself, and not a religion?',
     body: [
-      'Placeholder note — this space is reserved for Ien’s own account of why Faith Circle exists: what it came out of, what it asks of the person watching, and who he made it for. The real text arrives from the founder; nothing in this paragraph ships as-is.',
-      'This second paragraph only holds the section at reading length, so the measure, leading, and rhythm of the story block can be judged against the approved design while the real note is being written.',
-      'Third placeholder paragraph, for the same reason. The header above carries the real name; the words in this note do not, yet.',
+      'Yet in so many rooms where faith comes up, the question so often seems to be whether one believes or not, whether one is saved or not, whether one is in or out — dividing lines between those who believe and those who don’t.',
+      'For all my problems with mainstream Christianity and evangelical culture, through trial and tribulation, I parted much from the Christian faith and came back again to find nothing more compelling than the teachings of Christ.',
+      'And so I took it upon myself, in a too often corny faith-media landscape lacking true universal humanity, to create something that feels authentic and tasteful.',
+      'Though I’m not sure I’ve succeeded, I hope this piece feels inviting to all — that it can stir hearts towards the beauty of the universal Christ in a nonjudgmental, tender way — and to the inner transformation Christ can bring to everyone, not just the religious.',
     ],
   },
 }
