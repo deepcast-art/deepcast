@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from './lib/auth'
+import ChunkErrorBoundary from './components/ChunkErrorBoundary'
 import { captureAuthLinkErrorFromLocation } from './lib/authLinkError'
 import './fonts.css'
 import './index.css'
@@ -33,11 +34,16 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <div className="min-h-dvh overflow-x-hidden">
       <div className="dc-tactile-grain" aria-hidden />
-      <BrowserRouter>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
-      </BrowserRouter>
+      {/* One boundary around the whole router (2026-07-31): a failed lazy
+          chunk fetch self-heals with a one-time reload instead of unmounting
+          the app to a blank ink screen. See ChunkErrorBoundary. */}
+      <ChunkErrorBoundary>
+        <BrowserRouter>
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </BrowserRouter>
+      </ChunkErrorBoundary>
     </div>
   </StrictMode>,
 )
