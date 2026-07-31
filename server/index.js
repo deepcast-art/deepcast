@@ -33,7 +33,7 @@ import {
 } from './filmWallet.js'
 import { claimedSharerSpendDecision, claimedInviteTicketsDisplay } from './claimantWallet.js'
 import { nextTicketNo } from './ticketNumbers.js'
-import { firstNameInputError, fullNameInputError, FULL_NAME_MESSAGE } from '../src/lib/firstNameRule.js'
+import { firstNameInputError, fullNameInputError, splitFullName, FULL_NAME_MESSAGE } from '../src/lib/firstNameRule.js'
 import { sanitizeClaimContext } from '../src/lib/claimContext.js'
 import { VOID_INVITE_STATUS } from '../src/lib/inviteExistence.js'
 import { countFilmClaims, countFilmShares } from '../src/lib/filmClaims.js'
@@ -1285,9 +1285,8 @@ app.post('/api/invites/claim', async (req, res) => {
     if (typedFullName && fullNameInputError(typedFullName)) {
       return res.status(400).json({ error: FULL_NAME_MESSAGE })
     }
-    const typedNameParts = typedFullName ? typedFullName.split(/\s+/) : []
-    const claimantFirstName = typedNameParts[0] || ''
-    const claimantLastName = typedNameParts.slice(1).join(' ')
+    const { firstName: claimantFirstName, lastName: claimantLastName } =
+      splitFullName(typedFullName)
 
     // Silent context capture (owner-approved 2026-07-31): timezone, browser
     // language, coarse device class — sanitized to known shapes, stamped

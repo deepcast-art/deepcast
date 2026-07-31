@@ -17,6 +17,7 @@ import { computeTicketFunnel } from '../lib/ticketFunnel.js'
 import { buildNetworkPeople } from '../lib/networkPeople.js'
 import { safeLocalStorage, safeSessionStorage } from '../lib/safeStorage.js'
 import { countTicketsGiven } from '../lib/inviteExistence.js'
+import { fullNameInputError, splitFullName } from '../lib/firstNameRule.js'
 import ViewerDashboardV5 from './ViewerDashboardV5'
 import ShareLinkModal from '../components/ShareLinkModal'
 
@@ -569,43 +570,43 @@ export default function Dashboard() {
 
   /**
    * Edit name (passwordless platform — replaces the old change-password link).
-   * Propagates everywhere the name appears: the profile (future share emails use
-   * profile.name for the sender display + subject), invites this user sent
-   * (sender labels), and invites addressed to them (their node label in every
-   * network graph).
+   * FULL-NAME editor since 2026-07-31, matching the claim form: the shared
+   * mechanical rule validates, the shared split rule divides — first word →
+   * users.name (the display name everywhere), remainder → users.last_name
+   * (DATA, never display). Propagation to invite rows is UNCHANGED and
+   * FIRST-NAME-ONLY: recipient_name/sender_name stamps carry the first word,
+   * exactly as every display surface expects.
    */
   const handleSaveName = async () => {
     const newName = nameDraft.trim()
-    if (!newName) {
-      setNameError('First name cannot be empty.')
+    const validationError = fullNameInputError(newName)
+    if (validationError) {
+      setNameError(validationError)
       return
     }
-    if (newName.length > 50) {
-      setNameError('Please keep your name under 50 characters.')
-      return
-    }
+    const { firstName, lastName } = splitFullName(newName)
     setNameBusy(true)
     setNameError('')
     try {
       const { error } = await supabase
         .from('users')
-        .update({ name: newName, first_name: newName })
+        .update({ name: firstName, first_name: firstName, last_name: lastName })
         .eq('id', profile.id)
       if (error) throw error
 
       const email = (profile.email || '').trim()
       await Promise.all([
-        supabase.from('invites').update({ sender_name: newName }).eq('sender_id', profile.id),
+        supabase.from('invites').update({ sender_name: firstName }).eq('sender_id', profile.id),
         // Canonical-name rule (2026-07-23): claim-flow invites store
         // recipient_email NULL — the rows addressed to me are found by
         // claimed_by (primary) and claimed_email (degraded no-account
         // claims). recipient_email still reaches legacy email invites.
-        supabase.from('invites').update({ recipient_name: newName }).eq('claimed_by', profile.id),
+        supabase.from('invites').update({ recipient_name: firstName }).eq('claimed_by', profile.id),
         email
-          ? supabase.from('invites').update({ recipient_name: newName }).ilike('recipient_email', email)
+          ? supabase.from('invites').update({ recipient_name: firstName }).ilike('recipient_email', email)
           : Promise.resolve(),
         email
-          ? supabase.from('invites').update({ recipient_name: newName }).ilike('claimed_email', email)
+          ? supabase.from('invites').update({ recipient_name: firstName }).ilike('claimed_email', email)
           : Promise.resolve(),
       ])
 
@@ -650,7 +651,9 @@ export default function Dashboard() {
             busy: nameBusy,
             error: nameError,
             start: () => {
-              setNameDraft(profile.name || '')
+              // Prefill with the account's full name — first + last, one
+              // space, trailing space trimmed when the last name is empty.
+              setNameDraft([profile.name, profile.last_name].filter(Boolean).join(' ').trim())
               setNameError('')
               setEditingName(true)
             },

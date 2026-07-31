@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   firstNameInputError,
   fullNameInputError,
+  splitFullName,
   FIRST_NAME_EMAIL_MESSAGE,
   FIRST_NAME_REQUIRED_MESSAGE,
   FULL_NAME_MESSAGE,
@@ -94,5 +95,30 @@ describe('fullNameInputError (the claim form field)', () => {
     expect(fullNameInputError('test31')).toBe(FULL_NAME_MESSAGE)
     expect(fullNameInputError('www.me')).toBe(FULL_NAME_MESSAGE)
     expect(fullNameInputError('A'.repeat(41))).toBe(FULL_NAME_MESSAGE)
+  })
+})
+
+describe('splitFullName — the one split rule (claim + dashboard editor)', () => {
+  it('first word becomes the first name, remainder the last name', () => {
+    expect(splitFullName('Ien Chi')).toEqual({ firstName: 'Ien', lastName: 'Chi' })
+    expect(splitFullName('Anne-Marie de la Cruz')).toEqual({
+      firstName: 'Anne-Marie',
+      lastName: 'de la Cruz',
+    })
+  })
+
+  it('a single word is a full name — the last name is simply empty', () => {
+    expect(splitFullName('Ien')).toEqual({ firstName: 'Ien', lastName: '' })
+  })
+
+  it('collapses whitespace runs and trims the edges', () => {
+    expect(splitFullName('  Ien   Chi  ')).toEqual({ firstName: 'Ien', lastName: 'Chi' })
+  })
+
+  it('empty or null input yields empty parts, never a throw', () => {
+    expect(splitFullName('')).toEqual({ firstName: '', lastName: '' })
+    expect(splitFullName('   ')).toEqual({ firstName: '', lastName: '' })
+    expect(splitFullName(null)).toEqual({ firstName: '', lastName: '' })
+    expect(splitFullName(undefined)).toEqual({ firstName: '', lastName: '' })
   })
 })

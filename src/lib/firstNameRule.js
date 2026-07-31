@@ -47,9 +47,19 @@ export function firstNameInputError(value) {
 
 /** The claim form's "Your full name" field: same mechanical checks, the
  *  claimant-facing message for every rejection (empty included). A
- *  single-word entry is explicitly acceptable. */
+ *  single-word entry is explicitly acceptable. Also used by the dashboard's
+ *  full-name editor (2026-07-31). */
 export function fullNameInputError(value) {
   const s = String(value ?? '').trim()
   if (!s || mechanicalNameProblem(s)) return FULL_NAME_MESSAGE
   return null
+}
+
+/** THE one split rule for a typed full name (claim route + dashboard
+ *  editor): first word → the first name (the display name everywhere),
+ *  remainder — possibly empty, single words are fine — → the last name,
+ *  which is DATA and never display. Whitespace runs collapse. */
+export function splitFullName(value) {
+  const parts = String(value ?? '').trim().split(/\s+/).filter(Boolean)
+  return { firstName: parts[0] || '', lastName: parts.slice(1).join(' ') }
 }

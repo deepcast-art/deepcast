@@ -28,20 +28,22 @@ const BUG_REPORT_SUBJECT = 'Deepcast bug report'
 const sideLinkClass =
   'text-left font-sans text-[0.6875rem] uppercase tracking-[0.22em] text-smoke transition-colors hover:text-mist'
 
-/** Inline first-name editor — same behavior as before the redesign; rendered in
- *  the desktop sidebar and inside the mobile menu overlay (one visible at a time). */
+/** Inline FULL-NAME editor (2026-07-31, matching the claim form's "Your full
+ *  name"): first word becomes the display name everywhere, the remainder is
+ *  data only. Rendered in the desktop sidebar and inside the mobile menu
+ *  overlay (one visible at a time). */
 function NameEditor({ editor }) {
   if (!editor.editing) {
     return (
       <button type="button" onClick={editor.start} className={sideLinkClass}>
-        Edit your first name
+        Edit your full name
       </button>
     )
   }
   return (
     <div className="flex w-full max-w-xs flex-col gap-2.5 text-left">
       <span className="font-sans text-[0.5625rem] uppercase tracking-[0.22em] text-smoke">
-        First name
+        Full name
       </span>
       <input
         type="text"
@@ -53,9 +55,9 @@ function NameEditor({ editor }) {
         }}
         maxLength={50}
         autoFocus
-        aria-label="First name"
+        aria-label="Full name"
         className="w-full border-b border-mist/20 bg-transparent pb-1 font-serif-v3 text-base italic text-mist placeholder-mist/30 focus:border-gold/60 focus:outline-none"
-        placeholder="First name"
+        placeholder="Full name"
       />
       <p className="font-serif-v3 text-xs italic text-smoke">
         This is how your name appears on the network.
