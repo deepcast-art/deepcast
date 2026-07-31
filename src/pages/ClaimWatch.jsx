@@ -1087,15 +1087,18 @@ export default function ClaimWatch() {
                   aria-controls="passiton-modal"
                   onClick={() => setShareOpen(true)}
                   /* Resting keyline (founder decision 2026-07-25, superseding
-                     the same-day hover-only stamp): the button ALWAYS wears
-                     the printed-ticket double frame — 1px solid-accent
-                     border (the keyline) around a slightly deeper gold fill.
-                     Hover only steps the fill ~7% brighter; the keyline
-                     stays. Fills are EXPLICIT SOLIDS (no alpha, no
-                     compositing accidents): #9d8f74 = accent at 88% over
-                     ink, #a7987a = accent at 94% over ink, precomputed. No
-                     other motion — the no-engagement-mechanics law holds. */
-                  className="mt-6 block min-h-[52px] w-full cursor-pointer touch-manipulation border border-accent bg-[#9d8f74] px-6 py-[0.9375rem] font-sans font-normal text-[0.8125rem] uppercase tracking-[0.28em] text-ink transition-colors duration-300 hover:bg-[#a7987a] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[3px] focus-visible:outline-accent min-[900px]:mt-9"
+                     the same-day hover-only stamp; ring brightened one
+                     deliberate step 2026-07-31 — the accent-on-gold ring
+                     read as invisible on phone screens): the button ALWAYS
+                     wears the printed-ticket double frame — a 1px #d5c9a6
+                     ring (lightened gold, the ONE tuning knob for the ring's
+                     visibility) around the same deeper gold fill. Hover only
+                     steps the fill ~7% brighter; the ring stays. Fills are
+                     EXPLICIT SOLIDS (no alpha, no compositing accidents):
+                     #9d8f74 = accent at 88% over ink, #a7987a = accent at
+                     94% over ink, precomputed. No other motion — the
+                     no-engagement-mechanics law holds. */
+                  className="mt-6 block min-h-[52px] w-full cursor-pointer touch-manipulation border border-[#d5c9a6] bg-[#9d8f74] px-6 py-[0.9375rem] font-sans font-normal text-[0.8125rem] uppercase tracking-[0.28em] text-ink transition-colors duration-300 hover:bg-[#a7987a] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[3px] focus-visible:outline-accent min-[900px]:mt-9"
                 >
                   Pass it on
                 </button>
