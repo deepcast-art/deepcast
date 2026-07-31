@@ -301,30 +301,43 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore)
   })
 
-  test('mobile constellation: gold names readable, dim names reveal past the zoom threshold', async ({ page }) => {
-    // The 2026-07-25 diagnosis, fixed 2026-07-31: (a) labels were sized in
-    // map units and painted 3–5px on phones — they now counter-scale to a
-    // minimum readable on-screen size; (b) dim-web names were hidden outright
-    // under 760px — they now reveal once the viewer zooms past the threshold.
-    // The shared fixture has no dim-web person, so this test adds one (Zed,
-    // invited by the creator — off the viewer's gold path).
-    const DIM_ROW = {
-      id: 'aaaa1111-0000-4000-8000-000000000007',
-      film_id: FILM_ID,
-      sender_id: CREATOR_ID,
-      recipient_name: 'Zed',
-      recipient_email: null,
-      status: 'watched',
-      link_slug: 'zed-dim1',
-      created_at: '2026-07-15T10:00:00Z',
-      parent_invite_id: null,
-    }
-    await page.route('**/rest/v1/invites**', (route) => {
+  // ── Collision-based label visibility (founder principle 2026-07-31: the
+  // names ARE the product — a label hides only when it would physically
+  // collide with another, never by a blanket rule). Helpers shared by the
+  // three constellation-label tests below. ──
+  const DIM_ROW = {
+    id: 'aaaa1111-0000-4000-8000-000000000007',
+    film_id: FILM_ID,
+    sender_id: CREATOR_ID,
+    recipient_name: 'Zed',
+    recipient_email: null,
+    status: 'watched',
+    link_slug: 'zed-dim1',
+    created_at: '2026-07-15T10:00:00Z',
+    parent_invite_id: null,
+  }
+  // A crowded dim web: ~40 more people invited by the creator, off the
+  // viewer's gold path (two-letter names, no digits).
+  const CROWD = Array.from({ length: 40 }, (_, i) => ({
+    id: `aaaa1111-0000-4000-8000-0000000001${String(i).padStart(2, '0')}`,
+    film_id: FILM_ID,
+    sender_id: CREATOR_ID,
+    recipient_name:
+      String.fromCharCode(65 + Math.floor(i / 26)) + String.fromCharCode(65 + (i % 26)) + 'ra',
+    recipient_email: null,
+    status: 'watched',
+    link_slug: `crowd-${String.fromCharCode(97 + Math.floor(i / 26))}${String.fromCharCode(97 + (i % 26))}q`,
+    created_at: '2026-07-14T10:00:00Z',
+    parent_invite_id: null,
+  }))
+
+  const routeInvitesWith = (page, dimRows) =>
+    page.route('**/rest/v1/invites**', (route) => {
       const url = route.request().url()
       let rows
       if (url.includes('sender_id=')) rows = [...SENT, VOIDED_SENT]
       else if (url.includes('film_id=eq'))
-        rows = [...SENT, VOIDED_SENT, ...RECEIVED, ...DOWNSTREAM, DIM_ROW]
+        rows = [...SENT, VOIDED_SENT, ...RECEIVED, ...DOWNSTREAM, ...dimRows]
       else rows = RECEIVED
       return route.fulfill({
         json: rows,
@@ -335,18 +348,43 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
       })
     })
 
-    await page.setViewportSize({ width: 375, height: 812 })
+  const labelCounts = (page) =>
+    page.evaluate(() => ({
+      gold: document.querySelectorAll('svg.dc-constellation text.lineage').length,
+      dim: document.querySelectorAll('svg.dc-constellation text.dim-label').length,
+    }))
+
+  test('phone, sparse map: EVERY name renders at rest — no blanket hiding', async ({ page }) => {
+    await routeInvitesWith(page, [DIM_ROW])
+    await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
     const map = page.locator('svg.dc-constellation')
     await expect(map).toBeVisible({ timeout: 15000 })
     await map.scrollIntoViewIfNeeded()
 
-    // (a) Every gold-path name paints at a readable size: the SVG screen
-    // transform × font-size is the ACTUAL on-screen pixel size.
+    // EVERY person's name renders at rest — dim web included. On a sparse
+    // map nothing collides, so nothing hides.
+    for (const name of ['Dan', 'Maya', 'Lea', 'Zed']) {
+      await expect(
+        page.locator('svg.dc-constellation text').filter({ hasText: name })
+      ).toHaveCount(1)
+    }
+
+    // And zooming in changes nothing — there was nothing hidden to reveal.
+    const rest = await labelCounts(page)
+    expect(rest.dim).toBeGreaterThan(0)
+    await page.getByRole('button', { name: 'Zoom in' }).click()
+    await page.getByRole('button', { name: 'Zoom in' }).click()
+    await page.waitForTimeout(250)
+    expect(await labelCounts(page)).toEqual(rest)
+    await page.getByRole('button', { name: 'Reset zoom' }).click()
+
+    // Readability floor still holds: painted size = screen transform ×
+    // font-size, for every label on the map.
     await expect
       .poll(async () =>
         page.evaluate(() => {
-          const texts = [...document.querySelectorAll('svg.dc-constellation text.lineage')]
+          const texts = [...document.querySelectorAll('svg.dc-constellation text')]
           if (!texts.length) return null
           return Math.min(
             ...texts.map((t) => t.getScreenCTM().a * parseFloat(t.getAttribute('font-size')))
@@ -354,28 +392,48 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
         })
       )
       .toBeGreaterThanOrEqual(10.5)
+  })
 
-    // (b) The dim web's name exists but stays hidden at 1:1 on a phone…
-    const dimDisplay = () =>
-      page.evaluate(() => {
-        const el = document.querySelector('svg.dc-constellation text.dim-label')
-        return el ? getComputedStyle(el).display : null
-      })
-    expect(await dimDisplay()).toBe('none')
+  test('phone, crowded map: gold names always render; dim names appear as zooming creates room', async ({ page }) => {
+    await routeInvitesWith(page, CROWD)
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    const map = page.locator('svg.dc-constellation')
+    await expect(map).toBeVisible({ timeout: 15000 })
+    await map.scrollIntoViewIfNeeded()
 
-    // …and reveals once zoomed past the threshold (two + presses ≈ 1.82×),
-    // painting at the same readable minimum.
+    // At rest: every gold name renders; the crowd is thinned by collisions
+    // only — some dim names show (room exists), not all 40 (they'd overlap).
+    await expect.poll(async () => (await labelCounts(page)).gold).toBeGreaterThan(0)
+    const rest = await labelCounts(page)
+    expect(rest.dim).toBeGreaterThan(0)
+    expect(rest.dim).toBeLessThan(CROWD.length)
+
+    // Zooming in creates room — MORE dim names appear, and the gold count
+    // never drops (gold is never hidden by the collision rule).
     await page.getByRole('button', { name: 'Zoom in' }).click()
     await page.getByRole('button', { name: 'Zoom in' }).click()
-    await expect.poll(dimDisplay).not.toBe('none')
-    await expect
-      .poll(async () =>
-        page.evaluate(() => {
-          const el = document.querySelector('svg.dc-constellation text.dim-label')
-          return el ? el.getScreenCTM().a * parseFloat(el.getAttribute('font-size')) : null
-        })
-      )
-      .toBeGreaterThanOrEqual(10.5)
+    await page.getByRole('button', { name: 'Zoom in' }).click()
+    await expect.poll(async () => (await labelCounts(page)).dim).toBeGreaterThan(rest.dim)
+    expect((await labelCounts(page)).gold).toBe(rest.gold)
+  })
+
+  test('desktop, sparse map: visually identical to before — all names showing at rest', async ({ page }) => {
+    await routeInvitesWith(page, [DIM_ROW])
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('svg.dc-constellation')).toBeVisible({ timeout: 15000 })
+
+    // Every person's name renders at rest, exactly as this page always
+    // showed on desktop — the collision rule changes nothing on a sparse map.
+    for (const name of ['Dan', 'Maya', 'Lea', 'Zed']) {
+      await expect(
+        page.locator('svg.dc-constellation text').filter({ hasText: name })
+      ).toHaveCount(1)
+    }
+    const counts = await labelCounts(page)
+    expect(counts.dim).toBeGreaterThan(0)
+    expect(counts.gold).toBeGreaterThan(0)
   })
 
   test('side links stay ON SCREEN without scrolling, even at short/zoomed heights', async ({ page }) => {

@@ -10,12 +10,19 @@
  *  - Labels never paint below a readable on-screen size: sizes are in map
  *    units but counter-scaled against the RENDERED map scale
  *    (src/lib/constellationLabels.js — the mobile-labels fix, 2026-07-31).
- *  - Web ("dim") labels on phones stay hidden at 1:1 (crowding) and reveal
- *    once the viewer zooms past the threshold; wide screens always show
- *    them, exactly as before.
+ *  - Label visibility is COLLISION-BASED at every viewport (founder
+ *    principle, 2026-07-31: the names ARE the product — a label hides only
+ *    when it would physically collide with another, never by a blanket
+ *    rule). Gold-path names always render; dim-web names fill whatever
+ *    room remains, closer-to-YOU first, and appear progressively as
+ *    zooming in creates space. Recomputed on zoom/pan/resize.
  */
-import { useEffect, useRef, useState } from 'react'
-import { labelFontSize, dimLabelsRevealed } from '../lib/constellationLabels'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  labelFontSize,
+  labelScreenRect,
+  labelVisibility,
+} from '../lib/constellationLabels'
 
 const MIN_ZOOM_DIV = 4 // deepest zoom-in shows 1/4 of the canvas
 /** How far (as a fraction of the current view) the map may be dragged past
@@ -23,6 +30,12 @@ const MIN_ZOOM_DIV = 4 // deepest zoom-in shows 1/4 of the canvas
 const PAN_OVERSHOOT = 0.4
 
 const LABEL_FONT = "'Phoenix', system-ui, sans-serif"
+
+/** Base design sizes (map units) per node kind — one map so the collision
+ *  rects and the rendered text can never disagree. Invitee kinds
+ *  (unopened / opened / watched / shared) share one size. */
+const LABEL_SIZES = { you: 11.5, path: 9, downstream: 8, other: 8, invitee: 9.5 }
+const labelSizeFor = (kind) => LABEL_SIZES[kind] ?? LABEL_SIZES.invitee
 
 /**
  * NOTE for callers: pass a `key` derived from the layout's width×height so a
@@ -58,6 +71,81 @@ export default function ConstellationMap({ layout }) {
 
   const W = layout?.width ?? 0
   const H = layout?.height ?? 0
+
+  /** Every label's collision inputs, viewport-independent: map position,
+   *  anchor, name, design size, gold-path membership, and distance to YOU
+   *  (the dim-web priority). The film node's two center labels join as gold
+   *  obstacles so dim names can never sit on top of them. */
+  const labelItems = useMemo(() => {
+    if (!layout) return []
+    const you = layout.nodes.find((n) => n.kind === 'you')
+    const items = []
+    for (const n of layout.nodes) {
+      if (n.kind === 'film') {
+        if (layout.creatorLabel) {
+          items.push({
+            id: `${n.id}::creator`,
+            x: n.x,
+            y: n.y + 42,
+            anchor: 'middle',
+            name: layout.creatorLabel,
+            baseSize: 11,
+            letterSpacing: 2.5,
+            gold: true,
+            dist: 0,
+          })
+        }
+        items.push({
+          id: `${n.id}::role`,
+          x: n.x,
+          y: n.y + 57,
+          anchor: 'middle',
+          name: 'FILMMAKER',
+          baseSize: 7.5,
+          letterSpacing: 3,
+          gold: true,
+          dist: 0,
+        })
+        continue
+      }
+      if (!n.label) continue
+      items.push({
+        id: n.id,
+        x: n.label.x,
+        y: n.label.y,
+        anchor: n.label.anchor,
+        name: n.name,
+        baseSize: labelSizeFor(n.kind),
+        gold: n.kind !== 'other',
+        dist: you ? Math.hypot(n.x - you.x, n.y - you.y) : 0,
+      })
+    }
+    return items
+  }, [layout])
+
+  /** Collision pass — cheap AABB over tens of labels, recomputed whenever
+   *  the view changes (zoom, pan, resize). Gold ids are always present. */
+  const { visibleIds, goldOverlaps } = useMemo(() => {
+    if (!vb || !labelItems.length) {
+      return { visibleIds: new Set(labelItems.map((it) => it.id)), goldOverlaps: [] }
+    }
+    const scale = renderedWidth > 0 && vb.w > 0 ? renderedWidth / vb.w : 0
+    const view = { vbX: vb.x, vbY: vb.y, scale }
+    return labelVisibility(
+      labelItems.map((it) => ({ ...it, rect: labelScreenRect(it, view) }))
+    )
+  }, [labelItems, vb, renderedWidth])
+
+  /** Founder rule: two GOLD labels colliding is an edge case to REPORT, not
+   *  something this rule may silently resolve — both stay rendered. */
+  useEffect(() => {
+    if (goldOverlaps.length) {
+      console.warn(
+        '[constellation] gold-path labels overlap (both kept rendered — report this layout):',
+        goldOverlaps
+      )
+    }
+  }, [goldOverlaps])
 
   /** Wheel/trackpad zoom, centered on the pointer. Registered natively with
    *  passive:false — React's synthetic wheel can't preventDefault, and the
@@ -147,11 +235,10 @@ export default function ConstellationMap({ layout }) {
 
   /** CSS pixels per map unit, zoom included — feeds the label counter-scale. */
   const mapScale = renderedWidth > 0 && vb.w > 0 ? renderedWidth / vb.w : 0
-  /** Zoom factor (1 = whole map in view) — gates the dim labels on phones. */
-  const zoomFactor = vb.w > 0 ? W / vb.w : 1
 
   const label = (n, fill, size, cls) =>
-    n.label && (
+    n.label &&
+    visibleIds.has(n.id) && (
       <text
         key={`label-${n.id}`}
         x={n.label.x}
@@ -183,16 +270,10 @@ export default function ConstellationMap({ layout }) {
         .dc-constellation .star { animation: dc-twinkle 5s ease-in-out infinite alternate; }
         @keyframes dc-twinkle { from { opacity: 0.55; } to { opacity: 1; } }
         @media (prefers-reduced-motion: reduce) { .dc-constellation .star { animation: none; } }
-        /* Phones: the dim web's names appear only once the viewer zooms in
-           past the threshold (.dim-hidden drops off the svg) — at 1:1 they
-           would crowd the squeezed map. Wide screens never hide them. */
-        @media (max-width: 760px) { .dc-constellation.dim-hidden .dim-label { display: none; } }
       `}</style>
       <svg
         ref={svgRef}
-        className={`dc-constellation block h-[23rem] w-full md:h-[clamp(26rem,64vh,38rem)]${
-          dimLabelsRevealed(zoomFactor) ? '' : ' dim-hidden'
-        }`}
+        className="dc-constellation block h-[23rem] w-full md:h-[clamp(26rem,64vh,38rem)]"
         viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
         role="img"
         aria-label="A radial constellation of everyone who has held this film, with the filmmaker at the center and the gold path running to you and onward through your invitations. Hovering the wider web lights the whole constellation gold."
@@ -253,13 +334,15 @@ export default function ConstellationMap({ layout }) {
                   strokeWidth="1.2"
                   strokeLinejoin="round"
                 />
+                {/* The center labels ride the same readability floor as every
+                    node label (2026-07-31) — the filmmaker's name is a name. */}
                 {layout.creatorLabel && (
                   <text
                     x={n.x}
                     y={n.y + 42}
                     textAnchor="middle"
                     fill="#D8C79A"
-                    fontSize="11"
+                    fontSize={labelFontSize(11, mapScale)}
                     letterSpacing="2.5"
                     style={{ fontFamily: LABEL_FONT, textTransform: 'uppercase' }}
                   >
@@ -271,7 +354,7 @@ export default function ConstellationMap({ layout }) {
                   y={n.y + 57}
                   textAnchor="middle"
                   fill="#9A9890"
-                  fontSize="7.5"
+                  fontSize={labelFontSize(7.5, mapScale)}
                   letterSpacing="3"
                   style={{ fontFamily: LABEL_FONT }}
                 >
@@ -285,7 +368,7 @@ export default function ConstellationMap({ layout }) {
               <g key={n.id}>
                 <circle cx={n.x} cy={n.y} r="6" fill="#D8C79A" className="lineage" />
                 <circle cx={n.x} cy={n.y} r="12" fill="none" stroke="rgba(216,199,154,0.4)" strokeWidth="1" className="lineage" />
-                {label(n, '#D8C79A', 11.5, 'lineage')}
+                {label(n, '#D8C79A', labelSizeFor(n.kind), 'lineage')}
               </g>
             )
           }
@@ -293,7 +376,7 @@ export default function ConstellationMap({ layout }) {
             return (
               <g key={n.id}>
                 <circle cx={n.x} cy={n.y} r="3.5" fill="#C7A96B" className="lineage" />
-                {label(n, 'rgba(199,169,107,0.9)', 9, 'lineage')}
+                {label(n, 'rgba(199,169,107,0.9)', labelSizeFor(n.kind), 'lineage')}
               </g>
             )
           }
@@ -301,7 +384,7 @@ export default function ConstellationMap({ layout }) {
             return (
               <g key={n.id}>
                 <circle cx={n.x} cy={n.y} r="2.6" fill="rgba(199,169,107,0.65)" className="lineage" />
-                {label(n, 'rgba(199,169,107,0.6)', 8, 'lineage')}
+                {label(n, 'rgba(199,169,107,0.6)', labelSizeFor(n.kind), 'lineage')}
               </g>
             )
           }
@@ -315,7 +398,7 @@ export default function ConstellationMap({ layout }) {
                   className="web-dot star"
                   style={{ animationDelay: `${n.twinkleDelay ?? 0}s` }}
                 />
-                {label(n, null, 8, 'web-label dim-label')}
+                {label(n, null, labelSizeFor(n.kind), 'web-label dim-label')}
               </g>
             )
           }
@@ -334,7 +417,7 @@ export default function ConstellationMap({ layout }) {
                 strokeWidth="1.2"
                 className="lineage"
               />
-              {label(n, '#D8C79A', 9.5, 'lineage')}
+              {label(n, '#D8C79A', labelSizeFor(n.kind), 'lineage')}
             </g>
           )
         })}
