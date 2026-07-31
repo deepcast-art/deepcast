@@ -934,13 +934,16 @@ export default function ClaimWatch() {
 
   return (
     <div className={`relative min-h-dvh bg-bg-page text-warm${arrivalFade ? ' dc-watch-arrival' : ''}`}>
-      {/* ══ Header — wordmark left, quiet dashboard link right; below 540px
-          the wordmark centers and the link yields to the footer's. ══ */}
-      <header className="relative z-10 flex items-center justify-center px-4 pt-[max(1.25rem,env(safe-area-inset-top,0px))] min-[540px]:justify-between min-[540px]:px-[clamp(1.5rem,4vw,3rem)]">
+      {/* ══ Header — wordmark left, quiet dashboard link right, at EVERY
+          width (2026-07-31: the link used to hide below 540px, leaving
+          phones no way to the dashboard without scrolling to the footer).
+          Below 540px the link's tracking tightens a step so the pair clears
+          360px without wrapping or crowding the wordmark. ══ */}
+      <header className="relative z-10 flex items-center justify-between gap-3 px-4 pt-[max(1.25rem,env(safe-area-inset-top,0px))] min-[540px]:px-[clamp(1.5rem,4vw,3rem)]">
         <DeepcastLogo variant="wordmark" size="text-2xl" className="text-warm opacity-90" />
         <Link
           to="/dashboard"
-          className="hidden font-sans font-normal text-xs uppercase tracking-[0.26em] text-muted transition-colors hover:text-warm min-[540px]:inline-block"
+          className="shrink-0 font-sans font-normal text-xs uppercase tracking-[0.18em] text-muted transition-colors hover:text-warm min-[540px]:tracking-[0.26em]"
         >
           Your dashboard →
         </Link>

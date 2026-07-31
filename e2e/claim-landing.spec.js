@@ -443,11 +443,13 @@ test.describe('three-page claim arc', () => {
     expect(jsErrors).toEqual([])
   })
 
-  test('responsive: edge-to-edge player and no sideways scroll at 600px; centered wordmark at 375px', async ({ page }) => {
+  test('responsive: edge-to-edge player and no sideways scroll at 600px; header dashboard link at 360px', async ({ page }) => {
     // Redesign §6: below 900px the page is one column in natural order and
     // the player goes full-bleed — which must never introduce horizontal
-    // scroll; below 540px the header centers the wordmark and its dashboard
-    // link yields to the footer's.
+    // scroll. Since 2026-07-31 the header's dashboard link renders at EVERY
+    // width (phones previously had no path to the dashboard above the fold);
+    // at 360px it must share the header row with the wordmark without
+    // wrapping or overlap.
     await page.addInitScript(() => {
       window.localStorage.setItem(
         'deepcast:claim',
@@ -474,18 +476,25 @@ test.describe('three-page claim arc', () => {
     // The header dashboard link is present above 540px.
     await expect(page.locator('header').getByRole('link', { name: /Your dashboard/i })).toBeVisible()
 
-    await page.setViewportSize({ width: 375, height: 812 })
-    // Below 540px the header link hides (the footer's covers phones) and the
-    // wordmark centers.
-    await expect(page.locator('header').getByRole('link', { name: /Your dashboard/i })).toBeHidden()
-    const logo = await page.locator('header').first().boundingBox()
+    await page.setViewportSize({ width: 360, height: 800 })
+    // The header dashboard link renders on phones too (2026-07-31) — on one
+    // row beside the wordmark, no wrap, no overlap, no sideways scroll.
+    const headerLink = page.locator('header').getByRole('link', { name: /Your dashboard/i })
+    await expect(headerLink).toBeVisible()
+    const linkBox = await headerLink.boundingBox()
     const wordmark = await page.getByText('deepcast', { exact: true }).first().boundingBox()
-    expect(Math.abs(wordmark.x + wordmark.width / 2 - (logo.x + logo.width / 2))).toBeLessThan(3)
-    const at375 = await page.evaluate(() => ({
+    // Same row: vertical centers within a few pixels (a wrap would stack them).
+    expect(
+      Math.abs(linkBox.y + linkBox.height / 2 - (wordmark.y + wordmark.height / 2))
+    ).toBeLessThan(4)
+    // No crowding: clear daylight between wordmark and link, link fully on-screen.
+    expect(linkBox.x).toBeGreaterThan(wordmark.x + wordmark.width + 8)
+    expect(linkBox.x + linkBox.width).toBeLessThanOrEqual(360)
+    const at360 = await page.evaluate(() => ({
       docScrollWidth: document.documentElement.scrollWidth,
       innerWidth: window.innerWidth,
     }))
-    expect(at375.docScrollWidth).toBeLessThanOrEqual(at375.innerWidth)
+    expect(at360.docScrollWidth).toBeLessThanOrEqual(at360.innerWidth)
     expect(jsErrors).toEqual([])
   })
 
