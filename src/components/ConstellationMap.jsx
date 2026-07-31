@@ -7,9 +7,15 @@
  *    hovering anywhere OFF your gold lineage lights the whole web gold.
  *  - Background stars twinkle (disabled under prefers-reduced-motion).
  *  - Zoom (+ / − / 1:1) and drag-to-pan, scoped to the map.
- *  - Web ("dim") labels hide on phones; the gold path keeps its names.
+ *  - Labels never paint below a readable on-screen size: sizes are in map
+ *    units but counter-scaled against the RENDERED map scale
+ *    (src/lib/constellationLabels.js — the mobile-labels fix, 2026-07-31).
+ *  - Web ("dim") labels on phones stay hidden at 1:1 (crowding) and reveal
+ *    once the viewer zooms past the threshold; wide screens always show
+ *    them, exactly as before.
  */
 import { useEffect, useRef, useState } from 'react'
+import { labelFontSize, dimLabelsRevealed } from '../lib/constellationLabels'
 
 const MIN_ZOOM_DIV = 4 // deepest zoom-in shows 1/4 of the canvas
 /** How far (as a fraction of the current view) the map may be dragged past
@@ -34,6 +40,21 @@ export default function ConstellationMap({ layout }) {
   useEffect(() => {
     vbRef.current = vb
   }, [vb])
+
+  /** The map's rendered CSS width — the denominator of the label
+   *  counter-scaling. 0 until the first measurement (labels then render at
+   *  their base design sizes for that first paint). */
+  const [renderedWidth, setRenderedWidth] = useState(0)
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect?.width
+      if (w) setRenderedWidth(w)
+    })
+    ro.observe(svg)
+    return () => ro.disconnect()
+  }, [])
 
   const W = layout?.width ?? 0
   const H = layout?.height ?? 0
@@ -124,6 +145,11 @@ export default function ConstellationMap({ layout }) {
   }
   const onMouseLeave = () => svgRef.current?.classList.remove('lit')
 
+  /** CSS pixels per map unit, zoom included — feeds the label counter-scale. */
+  const mapScale = renderedWidth > 0 && vb.w > 0 ? renderedWidth / vb.w : 0
+  /** Zoom factor (1 = whole map in view) — gates the dim labels on phones. */
+  const zoomFactor = vb.w > 0 ? W / vb.w : 1
+
   const label = (n, fill, size, cls) =>
     n.label && (
       <text
@@ -131,7 +157,7 @@ export default function ConstellationMap({ layout }) {
         x={n.label.x}
         y={n.label.y}
         textAnchor={n.label.anchor}
-        fontSize={size}
+        fontSize={labelFontSize(size, mapScale)}
         letterSpacing="2"
         fill={fill || undefined}
         className={cls}
@@ -157,11 +183,16 @@ export default function ConstellationMap({ layout }) {
         .dc-constellation .star { animation: dc-twinkle 5s ease-in-out infinite alternate; }
         @keyframes dc-twinkle { from { opacity: 0.55; } to { opacity: 1; } }
         @media (prefers-reduced-motion: reduce) { .dc-constellation .star { animation: none; } }
-        @media (max-width: 760px) { .dc-constellation .dim-label { display: none; } }
+        /* Phones: the dim web's names appear only once the viewer zooms in
+           past the threshold (.dim-hidden drops off the svg) — at 1:1 they
+           would crowd the squeezed map. Wide screens never hide them. */
+        @media (max-width: 760px) { .dc-constellation.dim-hidden .dim-label { display: none; } }
       `}</style>
       <svg
         ref={svgRef}
-        className="dc-constellation block h-[23rem] w-full md:h-[clamp(26rem,64vh,38rem)]"
+        className={`dc-constellation block h-[23rem] w-full md:h-[clamp(26rem,64vh,38rem)]${
+          dimLabelsRevealed(zoomFactor) ? '' : ' dim-hidden'
+        }`}
         viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
         role="img"
         aria-label="A radial constellation of everyone who has held this film, with the filmmaker at the center and the gold path running to you and onward through your invitations. Hovering the wider web lights the whole constellation gold."

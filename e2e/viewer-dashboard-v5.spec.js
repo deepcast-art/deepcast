@@ -301,6 +301,83 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore)
   })
 
+  test('mobile constellation: gold names readable, dim names reveal past the zoom threshold', async ({ page }) => {
+    // The 2026-07-25 diagnosis, fixed 2026-07-31: (a) labels were sized in
+    // map units and painted 3–5px on phones — they now counter-scale to a
+    // minimum readable on-screen size; (b) dim-web names were hidden outright
+    // under 760px — they now reveal once the viewer zooms past the threshold.
+    // The shared fixture has no dim-web person, so this test adds one (Zed,
+    // invited by the creator — off the viewer's gold path).
+    const DIM_ROW = {
+      id: 'aaaa1111-0000-4000-8000-000000000007',
+      film_id: FILM_ID,
+      sender_id: CREATOR_ID,
+      recipient_name: 'Zed',
+      recipient_email: null,
+      status: 'watched',
+      link_slug: 'zed-dim1',
+      created_at: '2026-07-15T10:00:00Z',
+      parent_invite_id: null,
+    }
+    await page.route('**/rest/v1/invites**', (route) => {
+      const url = route.request().url()
+      let rows
+      if (url.includes('sender_id=')) rows = [...SENT, VOIDED_SENT]
+      else if (url.includes('film_id=eq'))
+        rows = [...SENT, VOIDED_SENT, ...RECEIVED, ...DOWNSTREAM, DIM_ROW]
+      else rows = RECEIVED
+      return route.fulfill({
+        json: rows,
+        headers: {
+          'content-range': `0-${Math.max(rows.length - 1, 0)}/${rows.length}`,
+          'access-control-expose-headers': 'Content-Range',
+        },
+      })
+    })
+
+    await page.setViewportSize({ width: 375, height: 812 })
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    const map = page.locator('svg.dc-constellation')
+    await expect(map).toBeVisible({ timeout: 15000 })
+    await map.scrollIntoViewIfNeeded()
+
+    // (a) Every gold-path name paints at a readable size: the SVG screen
+    // transform × font-size is the ACTUAL on-screen pixel size.
+    await expect
+      .poll(async () =>
+        page.evaluate(() => {
+          const texts = [...document.querySelectorAll('svg.dc-constellation text.lineage')]
+          if (!texts.length) return null
+          return Math.min(
+            ...texts.map((t) => t.getScreenCTM().a * parseFloat(t.getAttribute('font-size')))
+          )
+        })
+      )
+      .toBeGreaterThanOrEqual(10.5)
+
+    // (b) The dim web's name exists but stays hidden at 1:1 on a phone…
+    const dimDisplay = () =>
+      page.evaluate(() => {
+        const el = document.querySelector('svg.dc-constellation text.dim-label')
+        return el ? getComputedStyle(el).display : null
+      })
+    expect(await dimDisplay()).toBe('none')
+
+    // …and reveals once zoomed past the threshold (two + presses ≈ 1.82×),
+    // painting at the same readable minimum.
+    await page.getByRole('button', { name: 'Zoom in' }).click()
+    await page.getByRole('button', { name: 'Zoom in' }).click()
+    await expect.poll(dimDisplay).not.toBe('none')
+    await expect
+      .poll(async () =>
+        page.evaluate(() => {
+          const el = document.querySelector('svg.dc-constellation text.dim-label')
+          return el ? el.getScreenCTM().a * parseFloat(el.getAttribute('font-size')) : null
+        })
+      )
+      .toBeGreaterThanOrEqual(10.5)
+  })
+
   test('side links stay ON SCREEN without scrolling, even at short/zoomed heights', async ({ page }) => {
     // 900 = the owner's stated bar; 660 ≈ a small laptop window or ~125%
     // browser zoom, where the old sidebar buried the links under an
