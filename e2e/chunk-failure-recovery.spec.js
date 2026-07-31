@@ -139,7 +139,7 @@ test.describe('chunk-failure recovery', () => {
 
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await page.getByPlaceholder('Your full name').fill('Alex Example')
-    await page.getByPlaceholder('you@example.com').fill('alex@example.com')
+    await page.getByPlaceholder('Your email').fill('alex@example.com')
     await page.getByRole('button', { name: /Claim your ticket/ }).click()
 
     // The prologue still plays (its code was already loaded) — the failed

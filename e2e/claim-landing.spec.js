@@ -114,9 +114,9 @@ test.describe('three-page claim arc', () => {
     // Inline name + email — visible immediately, no click-to-reveal. The
     // "Your full name" field (2026-07-31) sits above the email.
     await expect(page.getByPlaceholder('Your full name')).toBeVisible()
-    await expect(page.getByPlaceholder('you@example.com')).toBeVisible()
+    await expect(page.getByPlaceholder('Your email')).toBeVisible()
     const nameBox = await page.getByPlaceholder('Your full name').boundingBox()
-    const emailBox = await page.getByPlaceholder('you@example.com').boundingBox()
+    const emailBox = await page.getByPlaceholder('Your email').boundingBox()
     expect(nameBox.y).toBeLessThan(emailBox.y)
     await expect(page.getByRole('button', { name: /Claim your ticket/i })).toBeVisible()
     // "This invitation admits one person, once." is CUT (2026-07-25) —
@@ -146,7 +146,7 @@ test.describe('three-page claim arc', () => {
     // The observed bug shape: a comma instead of a period. With noValidate,
     // submit reaches OUR handler (the native tooltip would have blocked it),
     // and the message renders in the existing inline error line.
-    await page.getByPlaceholder('you@example.com').fill('ien,chi96+test11@gmail.com')
+    await page.getByPlaceholder('Your email').fill('ien,chi96+test11@gmail.com')
     await page.getByRole('button', { name: /Claim your ticket/i }).click()
     await expect(
       page.getByText('That doesn’t look like an email address — check it and try again.')
@@ -154,7 +154,7 @@ test.describe('three-page claim arc', () => {
     await expect(page).toHaveURL(/\/alex-h4k2$/)
 
     // Empty field: the same single message.
-    await page.getByPlaceholder('you@example.com').fill('')
+    await page.getByPlaceholder('Your email').fill('')
     await page.getByRole('button', { name: /Claim your ticket/i }).click()
     await expect(
       page.getByText('That doesn’t look like an email address — check it and try again.')
@@ -162,7 +162,7 @@ test.describe('three-page claim arc', () => {
     expect(claimCalls).toBe(0)
 
     // A well-formed plus-addressed email proceeds exactly as today.
-    await page.getByPlaceholder('you@example.com').fill('ien.chi96+test11@gmail.com')
+    await page.getByPlaceholder('Your email').fill('ien.chi96+test11@gmail.com')
     await page.getByRole('button', { name: /Claim your ticket/i }).click()
     await expect(page.getByText('That doesn’t look like an email address — check it and try again.')).toHaveCount(0)
     expect(claimCalls).toBe(1)
@@ -178,7 +178,7 @@ test.describe('three-page claim arc', () => {
       return route.fulfill({ json: CLAIM_RESPONSE })
     })
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
-    await page.getByPlaceholder('you@example.com').fill('alex@example.com')
+    await page.getByPlaceholder('Your email').fill('alex@example.com')
 
     // Empty, email-like, digit-carrying, and URL-ish entries all refuse with
     // the one claimant-facing line (founder-approved variant).
@@ -205,11 +205,11 @@ test.describe('three-page claim arc', () => {
     )
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await page.getByPlaceholder('Your full name').fill('Alex Example')
-    await page.getByPlaceholder('you@example.com').fill('returning@example.com')
+    await page.getByPlaceholder('Your email').fill('returning@example.com')
     await page.getByRole('button', { name: /Claim your ticket/i }).click()
     // Founder copy, verbatim — and the claim form is gone.
     await expect(page.getByText('You already hold this film.')).toBeVisible()
-    await expect(page.getByPlaceholder('you@example.com')).toHaveCount(0)
+    await expect(page.getByPlaceholder('Your email')).toHaveCount(0)
     // Duplicate outcomes never see the prologue.
     await expect(page.getByRole('button', { name: 'Continue to the film' })).toHaveCount(0)
     // Lands on the existing dashboard (sign-in page when this browser has
@@ -236,7 +236,7 @@ test.describe('three-page claim arc', () => {
     // PAGE 1 → claim (full name + email since 2026-07-31).
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await page.getByPlaceholder('Your full name').fill('Alex Example')
-    await page.getByPlaceholder('you@example.com').fill('alex@example.com')
+    await page.getByPlaceholder('Your email').fill('alex@example.com')
     await page.getByRole('button', { name: /Claim your ticket/i }).click()
 
     // The claim request carries the typed full name and the silent context
@@ -400,7 +400,7 @@ test.describe('three-page claim arc', () => {
     })
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await page.getByPlaceholder('Your full name').fill('Alex Example')
-    await page.getByPlaceholder('you@example.com').fill('alex@example.com')
+    await page.getByPlaceholder('Your email').fill('alex@example.com')
     await page.getByRole('button', { name: /Claim your ticket/i }).click()
 
     // All three lines appear together, statically.
@@ -687,7 +687,7 @@ test.describe('three-page claim arc', () => {
     await page.route('**/api/invites/link/**', (route) => route.fulfill({ json: LINK_CLAIMED }))
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await expect(page.getByText('This invitation has already been accepted.')).toBeVisible()
-    await expect(page.getByPlaceholder('you@example.com')).toHaveCount(0)
+    await expect(page.getByPlaceholder('Your email')).toHaveCount(0)
     expect(jsErrors).toEqual([])
   })
 
