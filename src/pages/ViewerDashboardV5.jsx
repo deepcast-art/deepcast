@@ -59,8 +59,10 @@ function NameEditor({ editor }) {
         className="w-full border-b border-mist/20 bg-transparent pb-1 font-serif-v3 text-base italic text-mist placeholder-mist/30 focus:border-gold/60 focus:outline-none"
         placeholder="Full name"
       />
+      {/* Founder-stamped 2026-07-31 (was "This is how your name appears on
+          the network." — imprecise beside a full-name field). */}
       <p className="font-serif-v3 text-xs italic text-smoke">
-        This is how your name appears on the network.
+        Only your first name appears on the network.
       </p>
       {editor.error && (
         <p className="font-sans text-[0.5625rem] uppercase tracking-[0.18em] text-error/90">
