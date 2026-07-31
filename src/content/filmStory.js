@@ -15,8 +15,10 @@
  * - The epigraph/body paragraphs below are LAYOUT-HOLDING PLACEHOLDERS,
  *   deliberately self-describing so they can never be mistaken for the
  *   filmmaker's real words. Only the names are real.
- * - Both locations are TEMPORARY (founder direction 2026-07-23), to be
- *   swapped in the same pass as the real epigraphs and photos.
+ * - The New Narrative's and A Sacred Pause's locations are TEMPORARY
+ *   (founder direction 2026-07-23), to be swapped in the same pass as the
+ *   real epigraphs and photos. Faith Circle's location is REAL
+ *   (founder-confirmed 2026-07-31) — that film's entry is fully real.
  * - Photos: null renders the spec's empty circle frame (hairline border +
  *   track fill). Swap in a real image URL per film when photos exist.
  */
@@ -54,8 +56,10 @@ export const FILM_STORIES = {
     ],
   },
   [MUX_FAITH_CIRCLE]: {
+    // FULLY REAL since 2026-07-31: portrait, statement, and location are all
+    // the founder's own — nothing TEMP remains on this film's entry.
     filmmakerName: 'Ien Chi',
-    filmmakerLocation: 'Atlanta, Georgia', // TEMP location — pending the real one
+    filmmakerLocation: 'Atlanta, Georgia', // REAL — founder-confirmed 2026-07-31
     filmmakerPhotoUrl: '/portrait-5.jpg', // real photo, served from public/
     epigraph: 'These days, I’ve been reflecting on something: did not Christ come to speak about life itself, and not a religion?',
     body: [
