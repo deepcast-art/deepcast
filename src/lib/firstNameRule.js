@@ -21,14 +21,12 @@ export const FULL_NAME_MESSAGE = 'Just your name — no email needed.'
 const NAME_MAX_LENGTH = 40
 
 /** URL-ish fragments, as an explicit mechanical list: protocol separators,
- *  the www. prefix, and a dot-TLD ending. The TLD match requires the dot AND
- *  a word boundary after it, so names with periods ("J.R.", "tom.compton")
- *  never trip it. */
-const URLISH_PATTERNS = [
-  /:\/\//,
-  /\bwww\./i,
-  /\.(com|net|org|io|co|app|dev|art|me|tv|ai|xyz)(?=$|[^a-z])/i,
-]
+ *  the www. prefix, and the domain shape itself — a dot followed by 2+
+ *  letters ("bit.ly", "t.co", "deepcast.art"; fixed 2026-07-31 — the old
+ *  fixed TLD list missed shortener domains like .ly, which a failed Vercel
+ *  build exposed). Initials-style dots survive: a dot followed by at most
+ *  ONE letter ("J.R.", "J.R") is not a domain. */
+const URLISH_PATTERNS = [/:\/\//, /\bwww\./i, /\.\p{L}{2,}/u]
 
 /** True when the trimmed string mechanically cannot be a typed name. */
 function mechanicalNameProblem(s) {

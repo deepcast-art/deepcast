@@ -19,8 +19,8 @@ const REAL_NAMES = [
   "O'Brien",
   "D'Angelo",
   'Møller',
-  'J.R.',
-  'tom.compton', // a period is not a URL — the TLD needs a word boundary
+  'J.R.', // initials: every dot is followed by at most one letter
+  'J.R', // initials without the trailing period
   'Art', // a TLD word without the dot is just a name
   'Coco',
   'Ien',
@@ -45,12 +45,18 @@ describe('firstNameInputError', () => {
     expect(firstNameInputError('Jo 2')).toBe(FIRST_NAME_EMAIL_MESSAGE)
   })
 
-  it('rejects URL-ish fragments', () => {
+  it('rejects URL-ish fragments, shortener domains included', () => {
     expect(firstNameInputError('https://x.y')).toBe(FIRST_NAME_EMAIL_MESSAGE)
     expect(firstNameInputError('www.deepcast')).toBe(FIRST_NAME_EMAIL_MESSAGE)
     expect(firstNameInputError('deepcast.art')).toBe(FIRST_NAME_EMAIL_MESSAGE)
     expect(firstNameInputError('bit.ly link')).toBe(FIRST_NAME_EMAIL_MESSAGE)
+    expect(firstNameInputError('bit.ly')).toBe(FIRST_NAME_EMAIL_MESSAGE)
+    expect(firstNameInputError('t.co')).toBe(FIRST_NAME_EMAIL_MESSAGE)
     expect(firstNameInputError('example.com')).toBe(FIRST_NAME_EMAIL_MESSAGE)
+    // The domain SHAPE is the mechanic (a dot followed by 2+ letters), so a
+    // dotted-name-that-looks-like-a-domain is rejected too — mechanically
+    // indistinguishable from bit.ly, and the rule stays heuristic-free.
+    expect(firstNameInputError('tom.compton')).toBe(FIRST_NAME_EMAIL_MESSAGE)
   })
 
   it('rejects past the ~40-character cap, accepts at it', () => {
