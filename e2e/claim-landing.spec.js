@@ -113,7 +113,7 @@ test.describe('three-page claim arc', () => {
     await expect(page.locator('img[src*="image.mux.com"]')).toBeAttached()
     // Inline email — visible immediately, no click-to-reveal.
     await expect(page.getByPlaceholder('you@example.com')).toBeVisible()
-    await expect(page.getByRole('button', { name: /Accept your invite/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Claim your ticket/i })).toBeVisible()
     // "This invitation admits one person, once." is CUT (2026-07-25) —
     // nothing renders below the button.
     await expect(page.getByText('This invitation admits one person, once.')).toHaveCount(0)
@@ -139,7 +139,7 @@ test.describe('three-page claim arc', () => {
     // submit reaches OUR handler (the native tooltip would have blocked it),
     // and the message renders in the existing inline error line.
     await page.getByPlaceholder('you@example.com').fill('ien,chi96+test11@gmail.com')
-    await page.getByRole('button', { name: /Accept your invite/i }).click()
+    await page.getByRole('button', { name: /Claim your ticket/i }).click()
     await expect(
       page.getByText('That doesn’t look like an email address — check it and try again.')
     ).toBeVisible()
@@ -147,7 +147,7 @@ test.describe('three-page claim arc', () => {
 
     // Empty field: the same single message.
     await page.getByPlaceholder('you@example.com').fill('')
-    await page.getByRole('button', { name: /Accept your invite/i }).click()
+    await page.getByRole('button', { name: /Claim your ticket/i }).click()
     await expect(
       page.getByText('That doesn’t look like an email address — check it and try again.')
     ).toBeVisible()
@@ -155,7 +155,7 @@ test.describe('three-page claim arc', () => {
 
     // A well-formed plus-addressed email proceeds exactly as today.
     await page.getByPlaceholder('you@example.com').fill('ien.chi96+test11@gmail.com')
-    await page.getByRole('button', { name: /Accept your invite/i }).click()
+    await page.getByRole('button', { name: /Claim your ticket/i }).click()
     await expect(page.getByText('That doesn’t look like an email address — check it and try again.')).toHaveCount(0)
     expect(claimCalls).toBe(1)
     expect(jsErrors).toEqual([])
@@ -168,7 +168,7 @@ test.describe('three-page claim arc', () => {
     )
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await page.getByPlaceholder('you@example.com').fill('returning@example.com')
-    await page.getByRole('button', { name: /Accept your invite/i }).click()
+    await page.getByRole('button', { name: /Claim your ticket/i }).click()
     // Founder copy, verbatim — and the claim form is gone.
     await expect(page.getByText('You already hold this film.')).toBeVisible()
     await expect(page.getByPlaceholder('you@example.com')).toHaveCount(0)
@@ -196,7 +196,7 @@ test.describe('three-page claim arc', () => {
     // PAGE 1 → claim.
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await page.getByPlaceholder('you@example.com').fill('alex@example.com')
-    await page.getByRole('button', { name: /Accept your invite/i }).click()
+    await page.getByRole('button', { name: /Claim your ticket/i }).click()
 
     // The once-per-claim PROLOGUE (2026-07-21): line 1 fades in immediately;
     // the first tap reveals all three lines instantly; a further tap skips
@@ -350,7 +350,7 @@ test.describe('three-page claim arc', () => {
     })
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await page.getByPlaceholder('you@example.com').fill('alex@example.com')
-    await page.getByRole('button', { name: /Accept your invite/i }).click()
+    await page.getByRole('button', { name: /Claim your ticket/i }).click()
 
     // All three lines appear together, statically.
     await expect(page.getByText('Alex, Ien saw this and thought of you.')).toBeVisible()

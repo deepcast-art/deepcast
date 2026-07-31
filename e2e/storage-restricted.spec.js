@@ -164,7 +164,7 @@ for (const mode of MODES) {
 
       await page.goto('/alex-e2e1', { waitUntil: 'domcontentloaded' })
       await page.getByPlaceholder('you@example.com').fill('alex@example.com')
-      await page.getByRole('button', { name: /Accept your invite/i }).click()
+      await page.getByRole('button', { name: /Claim your ticket/i }).click()
 
       // The post-claim prologue must not depend on storage: it appears and
       // is tap-skippable even with storage blocked (first tap reveals all,

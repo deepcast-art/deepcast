@@ -694,7 +694,7 @@ export default function ClaimLanding() {
                 disabled={claimBusy}
                 className="mt-6 w-full min-h-[52px] touch-manipulation border border-accent/60 px-8 py-4 font-sans text-[0.8125rem] uppercase tracking-[0.28em] text-accent transition-colors duration-300 hover:border-accent hover:bg-accent hover:text-ink focus-visible:border-accent focus-visible:bg-accent focus-visible:text-ink focus-visible:outline-none disabled:opacity-50 cursor-pointer"
               >
-                {claimBusy ? 'One moment…' : 'Accept your invite'}
+                {claimBusy ? 'One moment…' : 'Claim your ticket'}
               </button>
             </form>
           )}

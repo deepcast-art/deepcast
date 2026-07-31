@@ -171,7 +171,7 @@ async function mockBackends(page) {
 async function claimThroughToWatch(page) {
   await page.goto(`/${SLUG}`, { waitUntil: 'domcontentloaded' })
   await page.getByPlaceholder('you@example.com').fill(EMAIL)
-  await page.getByRole('button', { name: /Accept your invite/i }).click()
+  await page.getByRole('button', { name: /Claim your ticket/i }).click()
   const prologue = page.getByRole('button', { name: 'Continue to the film' })
   await expect(prologue).toBeVisible({ timeout: 10_000 })
   await prologue.click()
