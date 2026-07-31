@@ -9,6 +9,7 @@ import { formatRuntimeMinutes } from '../lib/runtime'
 import { saveClaimStash, readClaimStash, isClaimOwner } from '../lib/claimStash'
 import { emailInputError } from '../lib/emailShape'
 import { isInviteWatched } from '../lib/filmStats'
+import { withTimeout } from '../lib/withTimeout'
 
 /** The wordmark variant sizes via its `size` prop (a text-* class), NOT via
  *  h-* utilities — an h-6 on the span leaves the default text-8xl glyphs
@@ -117,6 +118,10 @@ const PROLOGUE_OUT_FADE_MS = 3000
 const PROLOGUE_EXIT_AT_MS = 11500 // line 3 done ~8.5s + ~3s hold
 const PROLOGUE_HOLD_AFTER_REVEAL_MS = 3000
 const PROLOGUE_REDUCED_HOLD_MS = 4000
+
+/** The in-band sign-in exchange gets this long before the claim proceeds
+ *  without it (the claim already stands server-side; sign-in is optional). */
+const OTP_EXCHANGE_TIMEOUT_MS = 8000
 
 function ClaimPrologue({ receiver, sharer, posterUrl, onDone }) {
   const [reduced] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
@@ -463,13 +468,26 @@ export default function ClaimLanding() {
       // (no email, no extra step) — the auth context picks the session up
       // via onAuthStateChange. Non-fatal: a failed exchange still leaves a
       // valid claim (the stash carries the visit; sign-in stays available).
+      // Deadline-bound (2026-07-31): a HUNG exchange must never strand the
+      // claimer on "One moment…" — past the deadline the claim proceeds
+      // exactly as a failed exchange would (src/lib/withTimeout.js).
       if (result.sessionTokenHash && !session) {
-        const { error: otpError } = await supabase.auth.verifyOtp({
-          type: 'magiclink',
-          token_hash: result.sessionTokenHash,
-        })
-        if (otpError) {
-          console.warn('[claim] in-band sign-in failed (claim stands):', otpError.message)
+        try {
+          const { error: otpError } = await withTimeout(
+            supabase.auth.verifyOtp({
+              type: 'magiclink',
+              token_hash: result.sessionTokenHash,
+            }),
+            OTP_EXCHANGE_TIMEOUT_MS
+          )
+          if (otpError) {
+            console.warn('[claim] in-band sign-in failed (claim stands):', otpError.message)
+          }
+        } catch (otpErr) {
+          console.warn(
+            '[claim] in-band sign-in did not complete (claim stands):',
+            otpErr?.message || otpErr
+          )
         }
       }
       saveClaimStash({
