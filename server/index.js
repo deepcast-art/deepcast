@@ -34,6 +34,7 @@ import {
 import { claimedSharerSpendDecision, claimedInviteTicketsDisplay } from './claimantWallet.js'
 import { nextTicketNo } from './ticketNumbers.js'
 import { firstNameInputError, fullNameInputError, FULL_NAME_MESSAGE } from '../src/lib/firstNameRule.js'
+import { sanitizeClaimContext } from '../src/lib/claimContext.js'
 import { VOID_INVITE_STATUS } from '../src/lib/inviteExistence.js'
 import { countFilmClaims, countFilmShares } from '../src/lib/filmClaims.js'
 import { buildLineageForks } from '../src/lib/lineageForks.js'
@@ -1288,6 +1289,12 @@ app.post('/api/invites/claim', async (req, res) => {
     const claimantFirstName = typedNameParts[0] || ''
     const claimantLastName = typedNameParts.slice(1).join(' ')
 
+    // Silent context capture (owner-approved 2026-07-31): timezone, browser
+    // language, coarse device class — sanitized to known shapes, stamped
+    // with the claim, and NON-FATAL end to end (junk is dropped; missing
+    // columns fall back below). Data only, never displayed.
+    const claimContextFields = sanitizeClaimContext(req.body?.claimContext)
+
     const { data: invite, error: lookupError } = await supabase
       .from('invites')
       .select('id, film_id, sender_id, status, claimed_email, recipient_name, films(*)')
@@ -1400,6 +1407,7 @@ app.post('/api/invites/claim', async (req, res) => {
       claimed_at: new Date().toISOString(),
       status: 'claimed',
       claim_ordinal: claimOrdinal,
+      ...claimContextFields,
     }
     let { data: claimedRow, error: claimError } = await supabase
       .from('invites')
@@ -1409,6 +1417,24 @@ app.post('/api/invites/claim', async (req, res) => {
       .is('claimed_email', null)
       .select('id')
       .maybeSingle()
+    if (claimError && /claim_timezone|claim_locale|claim_device/.test(claimError.message || '')) {
+      // Pre-migration fallback: context columns missing — claim WITHOUT the
+      // capture rather than blocking anyone (apply the 20260731 migration).
+      console.warn('[claim] context columns missing — claiming without capture (apply the 20260731 migration)')
+      ;({ data: claimedRow, error: claimError } = await supabase
+        .from('invites')
+        .update({
+          claimed_email: emailNorm,
+          claimed_at: new Date().toISOString(),
+          status: 'claimed',
+          claim_ordinal: claimOrdinal,
+        })
+        .eq('id', invite.id)
+        .eq('status', 'created')
+        .is('claimed_email', null)
+        .select('id')
+        .maybeSingle())
+    }
     if (claimError && /claim_ordinal/.test(claimError.message || '')) {
       console.warn('[claim] ordinal column missing — legacy claim (apply the 20260716 migration)')
       ;({ data: claimedRow, error: claimError } = await supabase

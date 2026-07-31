@@ -9,6 +9,7 @@ import { formatRuntimeMinutes } from '../lib/runtime'
 import { saveClaimStash, readClaimStash, isClaimOwner } from '../lib/claimStash'
 import { emailInputError } from '../lib/emailShape'
 import { fullNameInputError } from '../lib/firstNameRule'
+import { readClaimContext } from '../lib/claimContext'
 import { isInviteWatched } from '../lib/filmStats'
 import { withTimeout } from '../lib/withTimeout'
 
@@ -469,7 +470,10 @@ export default function ClaimLanding() {
         slug,
         trimmed,
         session?.access_token || null,
-        trimmedName
+        trimmedName,
+        // Silent context capture (2026-07-31) — best-effort, never blocking:
+        // readClaimContext cannot throw; missing pieces travel as nulls.
+        readClaimContext()
       )
       if (result.sharerView) {
         setSharerView(true)

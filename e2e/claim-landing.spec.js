@@ -220,11 +220,13 @@ test.describe('three-page claim arc', () => {
 
   test('full arc: claim → prologue → the redesigned watch page → revisit', async ({ page }) => {
     let claimed = false
+    let claimBody = null
     await page.route('**/api/invites/link/**', (route) =>
       route.fulfill({ json: claimed ? LINK_CLAIMED : LINK_CREATED })
     )
     await page.route('**/api/invites/claim', (route) => {
       claimed = true
+      claimBody = route.request().postDataJSON()
       return route.fulfill({ json: CLAIM_RESPONSE })
     })
     await page.route('**/api/invites/create-link', (route) =>
@@ -236,6 +238,15 @@ test.describe('three-page claim arc', () => {
     await page.getByPlaceholder('Your full name').fill('Alex Example')
     await page.getByPlaceholder('you@example.com').fill('alex@example.com')
     await page.getByRole('button', { name: /Claim your ticket/i }).click()
+
+    // The claim request carries the typed full name and the silent context
+    // capture (2026-07-31): timezone + language from the browser, and the
+    // coarse device class ('desktop' — Playwright's fine-pointer viewport).
+    await expect.poll(() => claimBody).not.toBeNull()
+    expect(claimBody.fullName).toBe('Alex Example')
+    expect(claimBody.claimContext.timezone).toBeTruthy()
+    expect(claimBody.claimContext.locale).toBeTruthy()
+    expect(claimBody.claimContext.device).toBe('desktop')
 
     // The once-per-claim PROLOGUE (2026-07-21): line 1 fades in immediately;
     // the first tap reveals all three lines instantly; a further tap skips
