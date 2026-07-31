@@ -119,7 +119,6 @@ const PROLOGUE_LINE_FADE_MS = 2500
 const PROLOGUE_OUT_FADE_MS = 3000
 const PROLOGUE_EXIT_AT_MS = 11500 // line 3 done ~8.5s + ~3s hold
 const PROLOGUE_HOLD_AFTER_REVEAL_MS = 3000
-const PROLOGUE_REDUCED_HOLD_MS = 4000
 
 /** The in-band sign-in exchange gets this long before the claim proceeds
  *  without it (the claim already stands server-side; sign-in is optional). */
@@ -174,10 +173,11 @@ function ClaimPrologue({ receiver, sharer, posterUrl, onDone }) {
   }, [posterUrl])
 
   useEffect(() => {
-    if (reduced) {
-      // Static lines, a ~4s hold, then straight through — no animation.
-      exitTimer.current = setTimeout(finish, PROLOGUE_REDUCED_HOLD_MS)
-    } else {
+    // Reduced motion: static lines that HOLD until the viewer taps (or
+    // presses Enter/Space) — NO timed auto-advance (2026-07-31; the old ~4s
+    // hold was field-verified too short to read three lines). The warm-up
+    // effect above still runs during the hold; the tap path already works.
+    if (!reduced) {
       shownTimer.current = setTimeout(
         () => setAllShown(true),
         PROLOGUE_LINE_DELAYS_MS[2] + PROLOGUE_LINE_FADE_MS
@@ -189,7 +189,7 @@ function ClaimPrologue({ receiver, sharer, posterUrl, onDone }) {
       clearTimeout(shownTimer.current)
       clearTimeout(fadeTimer.current)
     }
-  }, [reduced, finish, beginExit])
+  }, [reduced, beginExit])
 
   /* Tap-to-advance (can never trap): first tap reveals all three lines
      instantly; any tap once all are visible skips to the fade-out. */

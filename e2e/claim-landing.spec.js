@@ -388,7 +388,7 @@ test.describe('three-page claim arc', () => {
     expect(jsErrors).toEqual([])
   })
 
-  test('prologue honors reduced motion: all lines static, then auto-arrival with no taps', async ({ page }) => {
+  test('prologue honors reduced motion: all lines static, HOLDS until a tap — never auto-advances', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' })
     let claimed = false
     await page.route('**/api/invites/link/**', (route) =>
@@ -409,9 +409,19 @@ test.describe('three-page claim arc', () => {
       page.getByText('No algorithm sent you this. A person did.')
     ).toBeVisible()
     await expect(page.getByText(/choose the few people who need it next/)).toBeVisible()
-    // No taps: after the short hold it releases to the watch page on its own.
+
+    // THE HOLD (2026-07-31; the old ~4s auto-advance was field-verified too
+    // short to read three lines): well past the old timer, the prologue is
+    // still here and the watch page has NOT been entered.
+    await page.waitForTimeout(5_500)
+    await expect(page).toHaveURL(/\/alex-h4k2$/)
+    await expect(page.getByText('No algorithm sent you this. A person did.')).toBeVisible()
+
+    // A keypress (or tap — same handler) releases it; reduced motion skips
+    // the fade and goes straight through, with no arrival fade on the watch
+    // page.
+    await page.keyboard.press('Enter')
     await expect(page).toHaveURL(/\/watch\/alex-h4k2$/, { timeout: 8_000 })
-    // Reduced motion: the watch page renders instantly, no arrival fade.
     await expect(page.locator('.dc-watch-arrival')).toHaveCount(0)
     expect(jsErrors).toEqual([])
   })
