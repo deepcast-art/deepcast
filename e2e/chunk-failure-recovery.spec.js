@@ -138,6 +138,7 @@ test.describe('chunk-failure recovery', () => {
     await page.route('**/src/pages/ClaimWatch.jsx*', (route) => route.abort())
 
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
+    await page.getByPlaceholder('Your full name').fill('Alex Example')
     await page.getByPlaceholder('you@example.com').fill('alex@example.com')
     await page.getByRole('button', { name: /Claim your ticket/ }).click()
 

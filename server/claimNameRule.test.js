@@ -64,4 +64,20 @@ describe('claimNameStamp — canonical name at the claim boundary', () => {
       claimNameStamp({ accountCreated: false, accountName: 'Georgie', typedName: null })
     ).toEqual({ stamp: true, name: 'Georgie' })
   })
+  it('a CREATED account born from the CLAIMANT\u2019S typed name stamps it (full-name-at-claim, 2026-07-31)', () => {
+    expect(
+      claimNameStamp({ accountCreated: true, accountName: 'Priya', typedName: 'P', claimantNamed: true })
+    ).toEqual({ stamp: true, name: 'Priya' })
+    // Already matching: no pointless write.
+    expect(
+      claimNameStamp({ accountCreated: true, accountName: 'Bob', typedName: 'Bob', claimantNamed: true })
+    ).toEqual({ stamp: false })
+    // The blank/@ guards hold on this path too.
+    expect(
+      claimNameStamp({ accountCreated: true, accountName: '', typedName: 'Bob', claimantNamed: true })
+    ).toEqual({ stamp: false })
+    expect(
+      claimNameStamp({ accountCreated: true, accountName: 'x@y.z', typedName: 'Bob', claimantNamed: true })
+    ).toEqual({ stamp: false })
+  })
 })

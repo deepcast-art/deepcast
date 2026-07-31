@@ -113,14 +113,15 @@ export const api = {
       body: JSON.stringify({ inviteeFirstName, claimedInviteId, filmId, appUrl, parentInviteId }),
     }),
 
-  // Claim a link invite — the email IS the claim action (one field, no account).
-  // accessToken (when a session exists) lets the server recognize the sharer
-  // opening their own link and refuse to claim it.
-  claimLinkInvite: (slug, email, accessToken = null) =>
+  // Claim a link invite — the email IS the claim action. fullName (added
+  // 2026-07-31) carries the claimant's own typed name; the server derives
+  // first/last from it. accessToken (when a session exists) lets the server
+  // recognize the sharer opening their own link and refuse to claim it.
+  claimLinkInvite: (slug, email, accessToken = null, fullName = null) =>
     request('/invites/claim', {
       method: 'POST',
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-      body: JSON.stringify({ slug, email }),
+      body: JSON.stringify({ slug, email, fullName }),
     }),
 
   // Passwordless invite-first sign-in

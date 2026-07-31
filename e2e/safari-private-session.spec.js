@@ -170,6 +170,7 @@ async function mockBackends(page) {
 /** Claim → prologue → watch page: the journey that worked even during the bug. */
 async function claimThroughToWatch(page) {
   await page.goto(`/${SLUG}`, { waitUntil: 'domcontentloaded' })
+  await page.getByPlaceholder('Your full name').fill('Alex Example')
   await page.getByPlaceholder('you@example.com').fill(EMAIL)
   await page.getByRole('button', { name: /Claim your ticket/i }).click()
   const prologue = page.getByRole('button', { name: 'Continue to the film' })

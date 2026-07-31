@@ -8,6 +8,7 @@ import { buildLineageChain } from '../lib/lineageThread'
 import { formatRuntimeMinutes } from '../lib/runtime'
 import { saveClaimStash, readClaimStash, isClaimOwner } from '../lib/claimStash'
 import { emailInputError } from '../lib/emailShape'
+import { fullNameInputError } from '../lib/firstNameRule'
 import { isInviteWatched } from '../lib/filmStats'
 import { withTimeout } from '../lib/withTimeout'
 
@@ -394,6 +395,7 @@ export default function ClaimLanding() {
   const { session } = useAuth()
   const [searchParams] = useSearchParams()
   const [state, setState] = useState({ phase: 'loading', invite: null })
+  const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [claimBusy, setClaimBusy] = useState(false)
   const [claimError, setClaimError] = useState('')
@@ -444,6 +446,14 @@ export default function ClaimLanding() {
 
   const handleClaim = async (e) => {
     e.preventDefault()
+    // "Your full name" first — it is the top field (2026-07-31). The same
+    // mechanical rule as every name box; one message covers every rejection.
+    const trimmedName = fullName.trim()
+    const nameError = fullNameInputError(trimmedName)
+    if (nameError) {
+      setClaimError(nameError)
+      return
+    }
     const trimmed = email.trim()
     // Our own shape check (the form is noValidate — the browser's grey
     // tooltip never appears). One message covers malformed AND empty.
@@ -455,7 +465,12 @@ export default function ClaimLanding() {
     setClaimBusy(true)
     setClaimError('')
     try {
-      const result = await api.claimLinkInvite(slug, trimmed, session?.access_token || null)
+      const result = await api.claimLinkInvite(
+        slug,
+        trimmed,
+        session?.access_token || null,
+        trimmedName
+      )
       if (result.sharerView) {
         setSharerView(true)
         return
@@ -675,6 +690,22 @@ export default function ClaimLanding() {
             /* noValidate: never the browser's grey tooltip — malformed
                emails get our inline message in the brand's own error line. */
             <form onSubmit={handleClaim} noValidate className="flex flex-col">
+              {/* "Your full name" (founder-approved label, 2026-07-31): the
+                  first word becomes their first name everywhere; the rest is
+                  data only — every display stays first-name-only. */}
+              <label htmlFor="claim-full-name" className="sr-only">
+                Your full name
+              </label>
+              <input
+                id="claim-full-name"
+                type="text"
+                autoComplete="name"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="Your full name"
+                maxLength={50}
+                className="w-full border-b border-warm/20 bg-transparent px-1 py-3 text-center font-sans text-base font-light tracking-[0.06em] text-warm transition-colors duration-300 placeholder:font-serif-v3 placeholder:italic placeholder:tracking-normal placeholder:text-warm/40 focus:border-accent focus:outline-none"
+              />
               <label htmlFor="claim-email" className="sr-only">
                 Your email
               </label>
@@ -684,7 +715,7 @@ export default function ClaimLanding() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="w-full border-b border-warm/20 bg-transparent px-1 py-3 text-center font-sans text-base font-light tracking-[0.06em] text-warm transition-colors duration-300 placeholder:font-serif-v3 placeholder:italic placeholder:tracking-normal placeholder:text-warm/40 focus:border-accent focus:outline-none"
+                className="mt-4 w-full border-b border-warm/20 bg-transparent px-1 py-3 text-center font-sans text-base font-light tracking-[0.06em] text-warm transition-colors duration-300 placeholder:font-serif-v3 placeholder:italic placeholder:tracking-normal placeholder:text-warm/40 focus:border-accent focus:outline-none"
               />
               {claimError && (
                 <p className="mt-3 font-sans text-xs text-error/90">{claimError}</p>

@@ -33,7 +33,7 @@ import {
 } from './filmWallet.js'
 import { claimedSharerSpendDecision, claimedInviteTicketsDisplay } from './claimantWallet.js'
 import { nextTicketNo } from './ticketNumbers.js'
-import { firstNameInputError } from '../src/lib/firstNameRule.js'
+import { firstNameInputError, fullNameInputError, FULL_NAME_MESSAGE } from '../src/lib/firstNameRule.js'
 import { VOID_INVITE_STATUS } from '../src/lib/inviteExistence.js'
 import { countFilmClaims, countFilmShares } from '../src/lib/filmClaims.js'
 import { buildLineageForks } from '../src/lib/lineageForks.js'
@@ -1266,7 +1266,7 @@ app.get('/api/invites/link/:slug', async (req, res) => {
  */
 app.post('/api/invites/claim', async (req, res) => {
   try {
-    const { slug: slugInput, email: emailInput } = req.body || {}
+    const { slug: slugInput, email: emailInput, fullName: fullNameInput } = req.body || {}
     const slug = String(slugInput || '').trim().toLowerCase()
     if (!slug) return res.status(400).json({ error: 'Slug is required' })
 
@@ -1274,6 +1274,19 @@ app.post('/api/invites/claim', async (req, res) => {
     if (!emailNorm || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm)) {
       return res.status(400).json({ error: 'Please enter a valid email address' })
     }
+
+    // "Your full name" (2026-07-31): the claimant's own name, validated by
+    // the same mechanical rule as every other name box. When present, its
+    // first word becomes the account's first name and the remainder (possibly
+    // empty — single-word entries are fine) its last name. Absent → the
+    // legacy behavior, so nothing old can break.
+    const typedFullName = typeof fullNameInput === 'string' ? fullNameInput.trim() : ''
+    if (typedFullName && fullNameInputError(typedFullName)) {
+      return res.status(400).json({ error: FULL_NAME_MESSAGE })
+    }
+    const typedNameParts = typedFullName ? typedFullName.split(/\s+/) : []
+    const claimantFirstName = typedNameParts[0] || ''
+    const claimantLastName = typedNameParts.slice(1).join(' ')
 
     const { data: invite, error: lookupError } = await supabase
       .from('invites')
@@ -1422,12 +1435,18 @@ app.post('/api/invites/claim', async (req, res) => {
     let accountBalance = null
     let sessionTokenHash = null
     try {
-      const firstName = (invite.recipient_name || '').trim() || emailNorm.split('@')[0]
+      // The claimant's own typed first name wins (2026-07-31); the sharer's
+      // typed placeholder, then the email local part, remain the legacy
+      // fallbacks. The last name is DATA, never display (users.name stays
+      // first-name-only); attached accounts are never renamed by this field
+      // (findOrCreatePasswordlessAccount only writes names on CREATE).
+      const firstName =
+        claimantFirstName || (invite.recipient_name || '').trim() || emailNorm.split('@')[0]
       const { userId, created: accountCreated } = await findOrCreatePasswordlessAccount(
         emailNorm,
         firstName,
         undefined,
-        ''
+        claimantLastName
       )
       await supabase.from('invites').update({ claimed_by: userId }).eq('id', invite.id)
       // Per-film wallet (Piece F): claiming THIS film initializes THIS film's
@@ -1447,6 +1466,11 @@ app.post('/api/invites/claim', async (req, res) => {
         accountCreated,
         accountName: acct?.name,
         typedName: invite.recipient_name,
+        // Full-name-at-claim (2026-07-31): a created account born with the
+        // claimant's OWN typed name re-stamps recipient_name — their name is
+        // canonical from the first moment. Email-derived names still never
+        // stamp (claimantNamed false on the legacy path).
+        claimantNamed: Boolean(claimantFirstName),
       })
       if (nameStamp.stamp) {
         await supabase
