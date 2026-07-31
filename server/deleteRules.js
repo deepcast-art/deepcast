@@ -13,7 +13,13 @@ function norm(v) {
   return String(v ?? '').trim().toLowerCase()
 }
 
-/** Protected real users — the teardown-script superset. NEVER deletable. */
+/** Protected real users — kept IDENTICAL to teardown-demo-film.js's list
+ *  (standing rule: update BOTH when a real user is added). NEVER deletable.
+ *  LAUNCH (2026-07-31): the platform has REAL users again — the 24 July
+ *  all-test-data ruling no longer applies to the people below.
+ *  Faith Circle's first real ticket (№2, slug ticket-n2fcx, Oliver) is
+ *  UNCLAIMED as of this writing — add Oliver's email here (and in the
+ *  teardown mirror) the moment he claims. */
 export const PROTECTED_EMAILS = [
   'filmmaker@gmail.com',
   'jbregel@gmail.com',
@@ -21,6 +27,7 @@ export const PROTECTED_EMAILS = [
   'contact@tinamarieolsen.com',
   'clark.austin@gmail.com',
   'georgie.ggtv@gmail.com',
+  'imyme2024@gmail.com', // Young Chi — the founder's mother, real ticket №36 on The New Narrative (2026-07-31)
 ]
 
 /**

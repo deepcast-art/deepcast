@@ -53,6 +53,7 @@ const PROTECTED_EMAILS = [
   'contact@tinamarieolsen.com',
   'clark.austin@gmail.com',
   'georgie.ggtv@gmail.com',
+  'imyme2024@gmail.com', // Young Chi — kept identical to deleteRules.js (standing rule); add Oliver at first claim
 ]
 
 const CONFIRM_PHRASE = 'DELETE DEMO FILM'
