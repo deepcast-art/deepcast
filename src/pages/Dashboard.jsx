@@ -17,7 +17,7 @@ import { computeTicketFunnel } from '../lib/ticketFunnel.js'
 import { buildNetworkPeople } from '../lib/networkPeople.js'
 import { safeLocalStorage, safeSessionStorage } from '../lib/safeStorage.js'
 import { countTicketsGiven } from '../lib/inviteExistence.js'
-import { fullNameInputError, splitFullName } from '../lib/firstNameRule.js'
+import { fullNameInputError } from '../lib/firstNameRule.js'
 import ViewerDashboardV5 from './ViewerDashboardV5'
 import ShareLinkModal from '../components/ShareLinkModal'
 
@@ -570,12 +570,13 @@ export default function Dashboard() {
 
   /**
    * Edit name (passwordless platform — replaces the old change-password link).
-   * FULL-NAME editor since 2026-07-31, matching the claim form: the shared
-   * mechanical rule validates, the shared split rule divides — first word →
-   * users.name (the display name everywhere), remainder → users.last_name
-   * (DATA, never display). Propagation to invite rows is UNCHANGED and
-   * FIRST-NAME-ONLY: recipient_name/sender_name stamps carry the first word,
-   * exactly as every display surface expects.
+   * FIRST-NAME-ONLY editor since 2026-08-06 (matching the email-only claim
+   * form; was full-name 2026-07-31): the entered name — validated by the
+   * shared mechanical rule — IS the display name (users.name/first_name).
+   * users.last_name is existing DATA the editor no longer writes. Propagation
+   * to invite rows is UNCHANGED: the same keyed writes stamp the display name
+   * on sent rows (sender_id) and received rows (claimed_by/claimed_email +
+   * legacy recipient_email), exactly as every display surface expects.
    */
   const handleSaveName = async () => {
     const newName = nameDraft.trim()
@@ -584,29 +585,28 @@ export default function Dashboard() {
       setNameError(validationError)
       return
     }
-    const { firstName, lastName } = splitFullName(newName)
     setNameBusy(true)
     setNameError('')
     try {
       const { error } = await supabase
         .from('users')
-        .update({ name: firstName, first_name: firstName, last_name: lastName })
+        .update({ name: newName, first_name: newName })
         .eq('id', profile.id)
       if (error) throw error
 
       const email = (profile.email || '').trim()
       await Promise.all([
-        supabase.from('invites').update({ sender_name: firstName }).eq('sender_id', profile.id),
+        supabase.from('invites').update({ sender_name: newName }).eq('sender_id', profile.id),
         // Canonical-name rule (2026-07-23): claim-flow invites store
         // recipient_email NULL — the rows addressed to me are found by
         // claimed_by (primary) and claimed_email (degraded no-account
         // claims). recipient_email still reaches legacy email invites.
-        supabase.from('invites').update({ recipient_name: firstName }).eq('claimed_by', profile.id),
+        supabase.from('invites').update({ recipient_name: newName }).eq('claimed_by', profile.id),
         email
-          ? supabase.from('invites').update({ recipient_name: firstName }).ilike('recipient_email', email)
+          ? supabase.from('invites').update({ recipient_name: newName }).ilike('recipient_email', email)
           : Promise.resolve(),
         email
-          ? supabase.from('invites').update({ recipient_name: firstName }).ilike('claimed_email', email)
+          ? supabase.from('invites').update({ recipient_name: newName }).ilike('claimed_email', email)
           : Promise.resolve(),
       ])
 
@@ -651,9 +651,9 @@ export default function Dashboard() {
             busy: nameBusy,
             error: nameError,
             start: () => {
-              // Prefill with the account's full name — first + last, one
-              // space, trailing space trimmed when the last name is empty.
-              setNameDraft([profile.name, profile.last_name].filter(Boolean).join(' ').trim())
+              // First-name-only editor (2026-08-06): prefill with the current
+              // display name alone — last_name is data the editor never shows.
+              setNameDraft((profile.name || '').trim())
               setNameError('')
               setEditingName(true)
             },

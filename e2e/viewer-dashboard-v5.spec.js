@@ -180,7 +180,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(aside.getByRole('button', { name: 'Share this film' })).toBeVisible()
     await expect(aside.getByRole('button', { name: 'About Deepcast' })).toBeVisible()
     await expect(aside.getByRole('link', { name: 'Contact' })).toBeVisible()
-    await expect(aside.getByRole('button', { name: 'Edit your full name' })).toBeVisible()
+    await expect(aside.getByRole('button', { name: 'Edit your name' })).toBeVisible()
     await expect(aside.getByRole('button', { name: 'Sign out' })).toBeVisible()
 
     // Journey line: X = film-wide generated total; Y = the viewer's ENTIRE
@@ -448,7 +448,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
       const aside = page.locator('aside')
       const targets = [
         aside.getByRole('button', { name: 'About Deepcast' }),
-        aside.getByRole('button', { name: 'Edit your full name' }),
+        aside.getByRole('button', { name: 'Edit your name' }),
         aside.getByRole('link', { name: 'Report a bug' }),
         aside.getByRole('link', { name: 'Contact' }),
         aside.getByRole('button', { name: 'Sign out' }),
@@ -542,7 +542,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
   })
 
   test('renaming propagates to claim-flow invites — keyed writes only, never a bare update', async ({ page }) => {
-    // Canonical-name rule (2026-07-23): "Edit your full name" must reach the
+    // Canonical-name rule (2026-07-23): "Edit your name" must reach the
     // invite rows addressed to me by claimed_by/claimed_email — claim-flow
     // rows store recipient_email NULL, so the old email-only match reached
     // nothing. Every recipient_name write must carry a row filter: an
@@ -598,20 +598,19 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(page.getByText('A Sacred Pause')).toBeVisible({ timeout: 15000 })
 
     const aside = page.locator('aside')
-    await aside.getByRole('button', { name: 'Edit your full name' }).click()
-    // Full-name editor (2026-07-31): the field takes the whole name; the
-    // split-and-save rule sends the first word everywhere names display.
-    await aside.getByLabel('Full name').fill('Avalon Rey')
+    await aside.getByRole('button', { name: 'Edit your name' }).click()
+    // First-name-only editor (2026-08-06): the entered name IS the display
+    // name; the editor never writes users.last_name.
+    await aside.getByLabel('Your name').fill('Avalon')
     await aside.getByRole('button', { name: 'Save' }).click()
 
-    // The sidebar re-renders with the account's new FIRST name (fetchProfile
-    // re-read) — displays stay first-name-only.
+    // The sidebar re-renders with the account's new name (fetchProfile
+    // re-read).
     await expect(aside.getByText('Avalon', { exact: true })).toBeVisible()
-    await expect(aside.getByText('Avalon Rey')).toHaveCount(0)
 
-    // The account row carries the split: first word as the display name,
-    // the remainder as data-only last name.
-    expect(userPatchBody).toEqual({ name: 'Avalon', first_name: 'Avalon', last_name: 'Rey' })
+    // The account row carries the display name only — last_name untouched
+    // (the exact-match assertion proves no last_name key was sent).
+    expect(userPatchBody).toEqual({ name: 'Avalon', first_name: 'Avalon' })
 
     // The four keyed propagation writes, all carrying the FIRST name only:
     const patchFor = (marker) => invitePatches.find((p) => p.url.includes(marker))

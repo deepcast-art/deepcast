@@ -28,22 +28,23 @@ const BUG_REPORT_SUBJECT = 'Deepcast bug report'
 const sideLinkClass =
   'text-left font-sans text-[0.6875rem] uppercase tracking-[0.22em] text-smoke transition-colors hover:text-mist'
 
-/** Inline FULL-NAME editor (2026-07-31, matching the claim form's "Your full
- *  name"): first word becomes the display name everywhere, the remainder is
- *  data only. Rendered in the desktop sidebar and inside the mobile menu
- *  overlay (one visible at a time). */
+/** Inline FIRST-NAME editor (first-name-only since 2026-08-06, matching the
+ *  email-only claim form; was the full-name editor of 2026-07-31): the
+ *  entered name IS the display name; users.last_name is data the editor no
+ *  longer touches. Rendered in the desktop sidebar and inside the mobile
+ *  menu overlay (one visible at a time). */
 function NameEditor({ editor }) {
   if (!editor.editing) {
     return (
       <button type="button" onClick={editor.start} className={sideLinkClass}>
-        Edit your full name
+        Edit your name
       </button>
     )
   }
   return (
     <div className="flex w-full max-w-xs flex-col gap-2.5 text-left">
       <span className="font-sans text-[0.5625rem] uppercase tracking-[0.22em] text-smoke">
-        Full name
+        Your name
       </span>
       <input
         type="text"
@@ -55,9 +56,9 @@ function NameEditor({ editor }) {
         }}
         maxLength={50}
         autoFocus
-        aria-label="Full name"
+        aria-label="Your name"
         className="w-full border-b border-mist/20 bg-transparent pb-1 font-serif-v3 text-base italic text-mist placeholder-mist/30 focus:border-gold/60 focus:outline-none"
-        placeholder="Full name"
+        placeholder="Your name"
       />
       {/* Founder-stamped 2026-07-31 (was "This is how your name appears on
           the network." — imprecise beside a full-name field). */}
