@@ -111,13 +111,11 @@ test.describe('three-page claim arc', () => {
     await expect(page.getByText('32 minutes')).toBeVisible()
     // The film still is present.
     await expect(page.locator('img[src*="image.mux.com"]')).toBeAttached()
-    // Inline name + email — visible immediately, no click-to-reveal. The
-    // "Your full name" field (2026-07-31) sits above the email.
-    await expect(page.getByPlaceholder('Your full name')).toBeVisible()
+    // Inline email — visible immediately, no click-to-reveal. The claim
+    // form is EMAIL-ONLY since 2026-08-06: the "Your full name" field
+    // (added 2026-07-31) was removed by founder decision.
     await expect(page.getByPlaceholder('Your email')).toBeVisible()
-    const nameBox = await page.getByPlaceholder('Your full name').boundingBox()
-    const emailBox = await page.getByPlaceholder('Your email').boundingBox()
-    expect(nameBox.y).toBeLessThan(emailBox.y)
+    await expect(page.getByPlaceholder('Your full name')).toHaveCount(0)
     await expect(page.getByRole('button', { name: /Claim your ticket/i })).toBeVisible()
     // "This invitation admits one person, once." is CUT (2026-07-25) —
     // nothing renders below the button.
@@ -139,9 +137,6 @@ test.describe('three-page claim arc', () => {
       return route.fulfill({ json: CLAIM_RESPONSE })
     })
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
-
-    // The name field is valid throughout this test — it checks email shapes.
-    await page.getByPlaceholder('Your full name').fill('Alex Example')
 
     // The observed bug shape: a comma instead of a period. With noValidate,
     // submit reaches OUR handler (the native tooltip would have blocked it),
@@ -169,42 +164,12 @@ test.describe('three-page claim arc', () => {
     expect(jsErrors).toEqual([])
   })
 
-  test('the full-name field: mechanical refusals with the claimant message, real names pass', async ({ page }) => {
-    await page.route('**/api/invites/link/**', (route) => route.fulfill({ json: LINK_CREATED }))
-    // The claim endpoint must never be hit while the name is refused.
-    let claimCalls = 0
-    await page.route('**/api/invites/claim', (route) => {
-      claimCalls += 1
-      return route.fulfill({ json: CLAIM_RESPONSE })
-    })
-    await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
-    await page.getByPlaceholder('Your email').fill('alex@example.com')
-
-    // Empty, email-like, digit-carrying, and URL-ish entries all refuse with
-    // the one claimant-facing line (founder-approved variant).
-    for (const bad of ['', 'alex@example.com', 'test31', 'www.alex']) {
-      await page.getByPlaceholder('Your full name').fill(bad)
-      await page.getByRole('button', { name: /Claim your ticket/i }).click()
-      await expect(page.getByText('Just your name — no email needed.')).toBeVisible()
-      await expect(page).toHaveURL(/\/alex-h4k2$/)
-    }
-    expect(claimCalls).toBe(0)
-
-    // A real single-word name passes (explicit spec) and the claim proceeds.
-    await page.getByPlaceholder('Your full name').fill('José')
-    await page.getByRole('button', { name: /Claim your ticket/i }).click()
-    await expect(page.getByText('Just your name — no email needed.')).toHaveCount(0)
-    expect(claimCalls).toBe(1)
-    expect(jsErrors).toEqual([])
-  })
-
   test('duplicate claim: recognition message, then routed toward the dashboard', async ({ page }) => {
     await page.route('**/api/invites/link/**', (route) => route.fulfill({ json: LINK_CREATED }))
     await page.route('**/api/invites/claim', (route) =>
       route.fulfill({ json: { alreadyHeld: true, filmId: 'film-1' } })
     )
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
-    await page.getByPlaceholder('Your full name').fill('Alex Example')
     await page.getByPlaceholder('Your email').fill('returning@example.com')
     await page.getByRole('button', { name: /Claim your ticket/i }).click()
     // Founder copy, verbatim — and the claim form is gone.
@@ -233,17 +198,17 @@ test.describe('three-page claim arc', () => {
       route.fulfill({ json: CREATE_LINK_RESPONSE })
     )
 
-    // PAGE 1 → claim (full name + email since 2026-07-31).
+    // PAGE 1 → claim (email-only since 2026-08-06).
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
-    await page.getByPlaceholder('Your full name').fill('Alex Example')
     await page.getByPlaceholder('Your email').fill('alex@example.com')
     await page.getByRole('button', { name: /Claim your ticket/i }).click()
 
-    // The claim request carries the typed full name and the silent context
+    // The claim request carries NO typed name (the field is gone — the
+    // server's legacy fallback names the account) and the silent context
     // capture (2026-07-31): timezone + language from the browser, and the
     // coarse device class ('desktop' — Playwright's fine-pointer viewport).
     await expect.poll(() => claimBody).not.toBeNull()
-    expect(claimBody.fullName).toBe('Alex Example')
+    expect(claimBody.fullName).toBeNull()
     expect(claimBody.claimContext.timezone).toBeTruthy()
     expect(claimBody.claimContext.locale).toBeTruthy()
     expect(claimBody.claimContext.device).toBe('desktop')
@@ -399,7 +364,6 @@ test.describe('three-page claim arc', () => {
       return route.fulfill({ json: CLAIM_RESPONSE })
     })
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
-    await page.getByPlaceholder('Your full name').fill('Alex Example')
     await page.getByPlaceholder('Your email').fill('alex@example.com')
     await page.getByRole('button', { name: /Claim your ticket/i }).click()
 

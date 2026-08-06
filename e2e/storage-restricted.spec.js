@@ -163,7 +163,6 @@ for (const mode of MODES) {
       })
 
       await page.goto('/alex-e2e1', { waitUntil: 'domcontentloaded' })
-      await page.getByPlaceholder('Your full name').fill('Alex Example')
       await page.getByPlaceholder('Your email').fill('alex@example.com')
       await page.getByRole('button', { name: /Claim your ticket/i }).click()
 
