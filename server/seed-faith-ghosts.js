@@ -61,10 +61,11 @@ import { createClient } from '@supabase/supabase-js'
 
 const FILM_ID = '6a9c0c79-24f6-427e-ba34-c113acf92d9f' // Circles (formerly Faith Circle / The Faith Dialogues)
 // Identity check only — tracks the film's CURRENT video. Updated 2026-08-06
-// to the recut's playback id (2026-07-24 video: Kr00IsuqtWX301MCA2YX22gFm7
-// IRrCfPiSwFeTcBlf8AY; original Faith Dialogues video:
-// 4HnHRG3NAf9YYR7V1fNs0143gGJnLUZ9F1umQuXsOaaQ).
-const FILM_PLAYBACK_ID = 'cy02v48fVuneae02gDZIkjsqfcTFP00tSLRd4owg1w8Y02U'
+// (second recut) to playback id wAGDrU3… (prior videos: first recut
+// cy02v48fVuneae02gDZIkjsqfcTFP00tSLRd4owg1w8Y02U; 2026-07-24 video
+// Kr00IsuqtWX301MCA2YX22gFm7IRrCfPiSwFeTcBlf8AY; original Faith Dialogues
+// video 4HnHRG3NAf9YYR7V1fNs0143gGJnLUZ9F1umQuXsOaaQ).
+const FILM_PLAYBACK_ID = 'wAGDrU3BiptEx7PfYESFTer00Q7FPasDrM01z0165L3fqA'
 
 // Reserved-TLD ghost domain. MUST stay one of the two domains in
 // src/lib/demoGhosts.js — that module is what makes these rows ghosts

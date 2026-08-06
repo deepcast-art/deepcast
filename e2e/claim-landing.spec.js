@@ -626,8 +626,8 @@ test.describe('three-page claim arc', () => {
       route.fulfill({
         json: {
           ...LINK_CLAIMED,
-          muxPlaybackId: 'cy02v48fVuneae02gDZIkjsqfcTFP00tSLRd4owg1w8Y02U',
-          durationSeconds: 1781.155333,
+          muxPlaybackId: 'wAGDrU3BiptEx7PfYESFTer00Q7FPasDrM01z0165L3fqA',
+          durationSeconds: 1789.4553,
         },
       })
     )
