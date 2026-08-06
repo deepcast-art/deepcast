@@ -1,7 +1,8 @@
 /**
- * Faith Circle ghost seeder — creates a believable, organic share tree of
- * ~50 fake viewers (invite rows) for the EXISTING film "Faith Circle"
- * (named "The Faith Dialogues" when it was seeded on 2026-07-22).
+ * Circles ghost seeder — creates a believable, organic share tree of
+ * ~50 fake viewers (invite rows) for the EXISTING film "Circles"
+ * (named "The Faith Dialogues" when it was seeded on 2026-07-22, then
+ * "Faith Circle" until 2026-08-06).
  * INSERT-ONLY, invites only: unlike seed-demo-film.js (its direct ancestor,
  * whose conventions this mirrors), it NEVER creates a films row — the film
  * was inserted by the owner on 2026-07-22 and this script refuses to run if
@@ -58,7 +59,7 @@ import { createClient } from '@supabase/supabase-js'
 
 /* ----------------------------- configuration ----------------------------- */
 
-const FILM_ID = '6a9c0c79-24f6-427e-ba34-c113acf92d9f' // Faith Circle (formerly The Faith Dialogues)
+const FILM_ID = '6a9c0c79-24f6-427e-ba34-c113acf92d9f' // Circles (formerly Faith Circle / The Faith Dialogues)
 // Identity check only — updated 2026-07-24 to the Faith Circle video's
 // playback id (the original Faith Dialogues video was
 // 4HnHRG3NAf9YYR7V1fNs0143gGJnLUZ9F1umQuXsOaaQ).
@@ -250,7 +251,7 @@ function rootOf(nodes, node) {
 /* --------------------------------- main ---------------------------------- */
 
 async function main() {
-  console.log(`\n=== Faith Circle ghost seed ${EXECUTE ? '(EXECUTE)' : '(DRY RUN — no changes)'} ===`)
+  console.log(`\n=== Circles ghost seed ${EXECUTE ? '(EXECUTE)' : '(DRY RUN — no changes)'} ===`)
 
   const url = process.env.SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -265,11 +266,11 @@ async function main() {
     .eq('id', FILM_ID)
     .maybeSingle()
   if (filmErr) fail(`film lookup failed: ${filmErr.message}`)
-  if (!film) fail(`Film ${FILM_ID} (Faith Circle) not found. The owner inserts the film row first; this script only seeds its ghosts.`)
+  if (!film) fail(`Film ${FILM_ID} (Circles) not found. The owner inserts the film row first; this script only seeds its ghosts.`)
   if (film.mux_playback_id !== FILM_PLAYBACK_ID) {
     fail(
       `Film ${FILM_ID} exists but its mux_playback_id (${film.mux_playback_id}) is not the expected ` +
-        `Faith Circle playback id. Refusing to seed — this may be the wrong database or the wrong row.`
+        `Circles playback id. Refusing to seed — this may be the wrong database or the wrong row.`
     )
   }
 

@@ -611,8 +611,8 @@ test.describe('three-page claim arc', () => {
     expect(jsErrors).toEqual([])
   })
 
-  test('Faith Circle: story with real photo, pinned poster, 29-minute line', async ({ page }) => {
-    // Keyed by Faith Circle's NEW Mux playback id (src/content/filmStory.js).
+  test('Circles: story with real photo, pinned poster, 29-minute line', async ({ page }) => {
+    // Keyed by Circles' NEW Mux playback id (src/content/filmStory.js).
     // All Mux traffic is blocked so the real ids never reach Mux from CI.
     await page.route('**stream.mux.com/**', (route) => route.abort())
     await page.route('**image.mux.com/**', (route) => route.abort())

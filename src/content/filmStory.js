@@ -17,7 +17,7 @@
  *   filmmaker's real words. Only the names are real.
  * - The New Narrative's and A Sacred Pause's locations are TEMPORARY
  *   (founder direction 2026-07-23), to be swapped in the same pass as the
- *   real epigraphs and photos. Faith Circle's location is REAL
+ *   real epigraphs and photos. Circles' location is REAL
  *   (founder-confirmed 2026-07-31) — that film's entry is fully real.
  * - Photos: null renders the spec's empty circle frame (hairline border +
  *   track fill). Swap in a real image URL per film when photos exist.
@@ -86,7 +86,7 @@ export function filmStory(muxPlaybackId) {
  */
 const POSTER_OVERRIDES = {
   // [MUX_A_SACRED_PAUSE]: 'https://image.mux.com/…/thumbnail.png?time=123',
-  // Faith Circle (owner direction 2026-07-24): the poster stays PINNED to the
+  // Circles (owner direction 2026-07-24): the poster stays PINNED to the
   // previous video's thumbnail so the playback-id swap can never silently
   // change the frame. Requires the old Mux asset to stay undeleted.
   [MUX_FAITH_CIRCLE]: `https://image.mux.com/${MUX_FAITH_CIRCLE_PREVIOUS}/thumbnail.png?time=1`,
