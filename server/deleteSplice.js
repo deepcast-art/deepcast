@@ -27,6 +27,8 @@
  * by decision — never renumbered.
  */
 
+import { isProtectedFilm } from './deleteRules.js'
+
 const norm = (v) => String(v ?? '').trim().toLowerCase()
 
 // Dead-end rows the sweep removes with their person: unclaimed links AND
@@ -160,6 +162,9 @@ export async function buildDeletePlan(supabase, { filmId, email }) {
 
   // Participation anywhere else (received, claimed, or SENT) keeps the account.
   let otherFilmCount = 0
+  // Film-level protection (2026-08-06): any of those elsewhere-rows sitting
+  // on a PROTECTED film makes the account undeletable, independent of count.
+  let onProtectedFilmElsewhere = false
   if (uid || emailNorm) {
     const ors = [
       `recipient_email.ilike.${emailNorm}`,
@@ -172,6 +177,7 @@ export async function buildDeletePlan(supabase, { filmId, email }) {
       .neq('film_id', filmId)
       .or(ors.join(','))
     otherFilmCount = (elsewhere || []).length
+    onProtectedFilmElsewhere = (elsewhere || []).some((r) => isProtectedFilm(r.film_id))
   }
 
   const plan = assembleDeletePlan({
@@ -183,7 +189,12 @@ export async function buildDeletePlan(supabase, { filmId, email }) {
   })
   // Per-film wallet cleanup (Piece F) needs the film in the plan.
   plan.filmId = filmId
-  return { plan, targetUser, ownsAnyFilm: (ownedFilms || []).length > 0 }
+  return {
+    plan,
+    targetUser,
+    ownsAnyFilm: (ownedFilms || []).length > 0,
+    onProtectedFilmElsewhere,
+  }
 }
 
 /** Execute in strict order; returns per-step counts for the honest report. */

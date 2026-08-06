@@ -2992,13 +2992,21 @@ async function resolveDeleteRequest(req, res, caller) {
     return { kind: 'ticket', invite }
   }
 
-  const { plan, targetUser, ownsAnyFilm } = await buildDeletePlan(supabase, { filmId, email })
+  const { plan, targetUser, ownsAnyFilm, onProtectedFilmElsewhere } = await buildDeletePlan(
+    supabase,
+    { filmId, email }
+  )
+  // The film-level params ride the SAME shared resolver both routes call, so
+  // preview and execute enforce them independently by construction.
   const decision = deletePersonTargetDecision({
     email,
     targetUser,
     ownsAnyFilm,
     callerId: caller.id,
     hasAnyRows: plan.hasAnyRows,
+    filmId,
+    wouldDeleteAccount: plan.deleteAccount,
+    onProtectedFilmElsewhere,
   })
   if (!decision.ok) {
     res.status(decision.status).json({ error: decision.error })

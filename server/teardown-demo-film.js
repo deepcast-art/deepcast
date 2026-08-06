@@ -53,7 +53,9 @@ const PROTECTED_EMAILS = [
   'contact@tinamarieolsen.com',
   'clark.austin@gmail.com',
   'georgie.ggtv@gmail.com',
-  'imyme2024@gmail.com', // Young Chi — kept identical to deleteRules.js (standing rule); add Oliver at first claim
+  'imyme2024@gmail.com', // Young Chi — kept identical to deleteRules.js (standing rule)
+  'oliver@marionecological.com', // Oliver — Circles №2; film-level protection also covers him (2026-08-06)
+  'bmahan@uchicago.edu', // Brian — Circles №4; film-level protection also covers him (2026-08-06)
 ]
 
 const CONFIRM_PHRASE = 'DELETE DEMO FILM'

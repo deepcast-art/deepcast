@@ -28,7 +28,7 @@
 import 'dotenv/config'
 import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
-import { PROTECTED_EMAILS } from './deleteRules.js'
+import { PROTECTED_EMAILS, isProtectedFilm } from './deleteRules.js'
 
 /* ----------------------------- configuration ----------------------------- */
 
@@ -169,14 +169,27 @@ async function main() {
   ])
   const profiles = mergeById(profByEmail, profById.data).filter((p) => p.id !== filmmaker.id)
 
+  const INVITE_COLS = 'id, film_id, token, recipient_email, sender_email, sender_id, parent_invite_id'
   const [invRecv, invSentEmail, invSentId] = await Promise.all([
-    supabase.from('invites').select('id, token, recipient_email, sender_email, sender_id, parent_invite_id').in('recipient_email', TARGET_EMAILS),
-    supabase.from('invites').select('id, token, recipient_email, sender_email, sender_id, parent_invite_id').in('sender_email', TARGET_EMAILS),
+    supabase.from('invites').select(INVITE_COLS).in('recipient_email', TARGET_EMAILS),
+    supabase.from('invites').select(INVITE_COLS).in('sender_email', TARGET_EMAILS),
     authIds.length
-      ? supabase.from('invites').select('id, token, recipient_email, sender_email, sender_id, parent_invite_id').in('sender_id', authIds)
+      ? supabase.from('invites').select(INVITE_COLS).in('sender_id', authIds)
       : Promise.resolve({ data: [] }),
   ])
   const targetInvites = mergeById(invRecv.data, invSentEmail.data, invSentId.data)
+
+  // FILM-LEVEL SAFETY (founder ruling 2026-08-06): the delete-set is
+  // collected by email across ALL films — if any collected row belongs to a
+  // protected live film (see PROTECTED_FILM_IDS in deleteRules.js), abort
+  // outright. Test emails must never touch a protected film.
+  const protectedFilmHits = targetInvites.filter((i) => isProtectedFilm(i.film_id))
+  if (protectedFilmHits.length) {
+    protectedFilmHits.forEach((i) =>
+      console.error(`   - invite ${i.id} (film ${i.film_id}, recipient ${i.recipient_email || '—'})`)
+    )
+    fail(`SAFETY: ${protectedFilmHits.length} collected invite(s) belong to a protected live film. Aborting.`)
+  }
   const targetInviteIds = targetInvites.map((i) => i.id)
   const targetInviteIdSet = new Set(targetInviteIds)
 

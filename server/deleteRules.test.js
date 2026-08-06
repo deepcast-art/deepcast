@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   PROTECTED_EMAILS,
+  PROTECTED_FILM_IDS,
+  isProtectedFilm,
   deletePersonTargetDecision,
   deleteConfirmDecision,
   deleteTicketTargetDecision,
@@ -37,6 +39,86 @@ describe('deletePersonTargetDecision', () => {
     expect(deletePersonTargetDecision({ ...base, hasAnyRows: false }).status).toBe(404)
     expect(deletePersonTargetDecision({ ...base, targetUser: { id: 'u1', role: 'viewer' } }).ok).toBe(true)
     expect(deletePersonTargetDecision({ ...base }).ok).toBe(true) // ghost, no account
+  })
+})
+
+describe('film-level protection (founder ruling 2026-08-06)', () => {
+  const CIRCLES = PROTECTED_FILM_IDS[0]
+
+  it('isProtectedFilm: exact id match after trim, nothing else', () => {
+    expect(isProtectedFilm(CIRCLES)).toBe(true)
+    expect(isProtectedFilm(` ${CIRCLES} `)).toBe(true)
+    expect(isProtectedFilm('some-other-film')).toBe(false)
+    expect(isProtectedFilm(null)).toBe(false)
+    expect(isProtectedFilm(undefined)).toBe(false)
+    expect(isProtectedFilm('')).toBe(false)
+  })
+
+  it('refuses EVERY person-delete on a protected film — claimed accounts, ghosts, anyone', () => {
+    // A plain viewer with an account.
+    const viewer = deletePersonTargetDecision({
+      ...base,
+      targetUser: { id: 'u1', role: 'viewer' },
+      filmId: CIRCLES,
+    })
+    expect(viewer.ok).toBe(false)
+    expect(viewer.status).toBe(403)
+    // An accountless person (unclaimed recipient) refuses identically.
+    const ghost = deletePersonTargetDecision({ ...base, filmId: CIRCLES })
+    expect(ghost.ok).toBe(false)
+    expect(ghost.status).toBe(403)
+  })
+
+  it('refuses any plan that would delete the ACCOUNT of someone associated with a protected film', () => {
+    const d = deletePersonTargetDecision({
+      ...base,
+      targetUser: { id: 'u1', role: 'viewer' },
+      filmId: 'new-narrative',
+      wouldDeleteAccount: true,
+      onProtectedFilmElsewhere: true,
+    })
+    expect(d.ok).toBe(false)
+    expect(d.status).toBe(403)
+  })
+
+  it('the dual-film account: New Narrative test cleanup proceeds when the account is kept', () => {
+    // The founder's queued test-pile cleanup must NOT be blocked: a person
+    // holding both a Circles claim and New Narrative test data is deletable
+    // ON The New Narrative exactly when the engine keeps their account
+    // (which it does — their Circles rows count as other-film rows).
+    const d = deletePersonTargetDecision({
+      ...base,
+      targetUser: { id: 'u1', role: 'viewer' },
+      filmId: 'new-narrative',
+      wouldDeleteAccount: false,
+      onProtectedFilmElsewhere: true,
+    })
+    expect(d.ok).toBe(true)
+  })
+
+  it('refuses unclaimed-link deletes on a protected film — in-flight tickets are real', () => {
+    // A row that would qualify as a truly dead link on any other film.
+    const d = deleteTicketTargetDecision({
+      invite: { film_id: CIRCLES, status: 'created', claimed_email: null, claimed_by: null },
+      filmId: CIRCLES,
+    })
+    expect(d.ok).toBe(false)
+    expect(d.status).toBe(403)
+  })
+
+  it('the two real Circles claimants are ALSO named in PROTECTED_EMAILS (belt and braces)', () => {
+    expect(PROTECTED_EMAILS).toContain('oliver@marionecological.com')
+    expect(PROTECTED_EMAILS).toContain('bmahan@uchicago.edu')
+  })
+
+  it('decisions without film params behave exactly as before (no film in play)', () => {
+    expect(deletePersonTargetDecision({ ...base, targetUser: { id: 'u1', role: 'viewer' } }).ok).toBe(true)
+    expect(
+      deleteTicketTargetDecision({
+        invite: { film_id: 'f1', status: 'created', claimed_email: null, claimed_by: null },
+        filmId: 'f1',
+      }).ok
+    ).toBe(true)
   })
 })
 
