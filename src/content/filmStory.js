@@ -25,9 +25,10 @@
 
 const MUX_THE_NEW_NARRATIVE = 'zLQpzAlaojxoKWAzjnwm1cOGho7p02jHGq802rKwNdzz8'
 const MUX_A_SACRED_PAUSE = '6GMWj01CjP01Y1ee001Vd2qYqUPJtEOgUYz00nG02BYE9F9E'
-const MUX_FAITH_CIRCLE = 'Kr00IsuqtWX301MCA2YX22gFm7IRrCfPiSwFeTcBlf8AY'
-// The film's PREVIOUS playback id (the Faith Dialogues video), kept only to
-// pin the poster in POSTER_OVERRIDES below — never a FILM_STORIES key.
+const MUX_FAITH_CIRCLE = 'cy02v48fVuneae02gDZIkjsqfcTFP00tSLRd4owg1w8Y02U'
+// The film's ORIGINAL playback id (the Faith Dialogues video), kept only to
+// pin the poster in POSTER_OVERRIDES below — never a FILM_STORIES key. Two
+// recuts later (2026-07-24, 2026-08-06) the poster still points here.
 const MUX_FAITH_CIRCLE_PREVIOUS = '4HnHRG3NAf9YYR7V1fNs0143gGJnLUZ9F1umQuXsOaaQ'
 
 export const FILM_STORIES = {
