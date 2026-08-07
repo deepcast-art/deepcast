@@ -30,7 +30,7 @@ git push origin main
 ## What deploys where
 
 - **Frontend (Vercel):** Connected to this repo. Production = **`main`**. Other branches (e.g. **`staging`**) get **Preview** deployments (unique URLs in the Vercel dashboard).
-- **API (Render):** `deepcast.onrender.com` — confirm in the Render dashboard which branch/commit triggers deploys; many teams deploy **`main`** only.
+- **API (Render):** `deepcast-virginia.onrender.com` — the Virginia service, live since 2026-07-23 (`vercel.json` rewrites `/api/*` to it); deploys from **`main`**. The old Oregon service (`deepcast.onrender.com`) is **suspended** (2026-08-06, config preserved) — resume it in the Render dashboard only for a rollback.
 
 ## Manual production redeploy
 
@@ -64,7 +64,7 @@ You **do not** need to duplicate `RESEND_*`, `MUX_*`, or `SUPABASE_SERVICE_ROLE_
 
 ### Render (API) — required for production
 
-Set these on your **Web Service** (e.g. `deepcast.onrender.com`): **Environment** → add variables → **Save** → **Manual Deploy** (or wait for auto-deploy) so the service restarts.
+Set these on your **Web Service** (`deepcast-virginia.onrender.com`): **Environment** → add variables → **Save** → **Manual Deploy** (or wait for auto-deploy) so the service restarts.
 
 | Variable | Required | Notes |
 |----------|----------|--------|
