@@ -611,7 +611,7 @@ test.describe('three-page claim arc', () => {
     expect(jsErrors).toEqual([])
   })
 
-  test('Circles: story with real photo, pinned poster, 29-minute line', async ({ page }) => {
+  test('Circles: story with real photo, pinned poster, 30-minute line', async ({ page }) => {
     // Keyed by Circles' NEW Mux playback id (src/content/filmStory.js).
     // All Mux traffic is blocked so the real ids never reach Mux from CI.
     await page.route('**stream.mux.com/**', (route) => route.abort())
@@ -626,15 +626,15 @@ test.describe('three-page claim arc', () => {
       route.fulfill({
         json: {
           ...LINK_CLAIMED,
-          muxPlaybackId: 'wAGDrU3BiptEx7PfYESFTer00Q7FPasDrM01z0165L3fqA',
-          durationSeconds: 1789.4553,
+          muxPlaybackId: 'QDUEUyF7WDjjsOtMfeVfqh6M2NVM02arzLHK3IJnwYC00',
+          durationSeconds: 1803.135633,
         },
       })
     )
     await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
 
-    // The new video's runtime renders as the 29-minute conditions line.
-    await expect(page.getByText('29 minutes. Headphones recommended.')).toBeVisible()
+    // The new video's runtime renders as the 30-minute conditions line.
+    await expect(page.getByText('30 minutes. Headphones recommended.')).toBeVisible()
 
     // The story header carries Ien's name (sign-off retired 2026-07-25) and
     // the real portrait photo, served from public/ (a broken path would

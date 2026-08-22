@@ -25,11 +25,31 @@
 
 const MUX_THE_NEW_NARRATIVE = 'zLQpzAlaojxoKWAzjnwm1cOGho7p02jHGq802rKwNdzz8'
 const MUX_A_SACRED_PAUSE = '6GMWj01CjP01Y1ee001Vd2qYqUPJtEOgUYz00nG02BYE9F9E'
-const MUX_FAITH_CIRCLE = 'wAGDrU3BiptEx7PfYESFTer00Q7FPasDrM01z0165L3fqA'
+const MUX_FAITH_CIRCLE = 'wAGDrU3BiptEx7PfYESFTer00Q7FPasDrM01z0165L3fqA' // outgoing second recut — pending removal after the third-cut swap is verified live
+const MUX_CIRCLES_THIRD_CUT = 'QDUEUyF7WDjjsOtMfeVfqh6M2NVM02arzLHK3IJnwYC00'
 // The film's ORIGINAL playback id (the Faith Dialogues video), kept only to
-// pin the poster in POSTER_OVERRIDES below — never a FILM_STORIES key. Two
-// recuts later (2026-07-24, 2026-08-06) the poster still points here.
+// pin the poster in POSTER_OVERRIDES below — never a FILM_STORIES key. Three
+// recuts later (2026-07-24, 2026-08-06 twice, 2026-08-22) the poster still
+// points here.
 const MUX_FAITH_CIRCLE_PREVIOUS = '4HnHRG3NAf9YYR7V1fNs0143gGJnLUZ9F1umQuXsOaaQ'
+
+// Circles' entry, shared verbatim by the outgoing and incoming playback ids
+// so the watch page can never lose its story or poster in the gap between
+// the database write and the deploy, whichever lands first.
+const CIRCLES_STORY = {
+  // FULLY REAL since 2026-07-31: portrait, statement, and location are all
+  // the founder's own — nothing TEMP remains on this film's entry.
+  filmmakerName: 'Ien Chi',
+  filmmakerLocation: 'Atlanta, Georgia', // REAL — founder-confirmed 2026-07-31
+  filmmakerPhotoUrl: '/portrait-5.jpg', // real photo, served from public/
+  epigraph: 'These days, I’ve been reflecting on something: did not Christ come to speak about life itself, and not a religion?',
+  body: [
+    'Yet in so many rooms where faith comes up, the question so often seems to be whether one believes or not, whether one is saved or not, whether one is in or out — dividing lines between those who believe and those who don’t.',
+    'For all my problems with mainstream Christianity and evangelical culture, through trial and tribulation, I parted much from the Christian faith and came back again to find nothing more compelling than the teachings of Christ.',
+    'And so I took it upon myself, in a too often corny faith-media landscape lacking true universal humanity, to create something that feels authentic and tasteful.',
+    'Though I’m not sure I’ve succeeded, I hope this piece feels inviting to all — that it can stir hearts towards the beauty of the universal Christ in a nonjudgmental, tender way — and to the inner transformation Christ can bring to everyone, not just the religious.',
+  ],
+}
 
 export const FILM_STORIES = {
   [MUX_THE_NEW_NARRATIVE]: {
@@ -56,20 +76,8 @@ export const FILM_STORIES = {
       'Third placeholder paragraph, for the same reason. The header above carries the real name; the words in this note do not, yet.',
     ],
   },
-  [MUX_FAITH_CIRCLE]: {
-    // FULLY REAL since 2026-07-31: portrait, statement, and location are all
-    // the founder's own — nothing TEMP remains on this film's entry.
-    filmmakerName: 'Ien Chi',
-    filmmakerLocation: 'Atlanta, Georgia', // REAL — founder-confirmed 2026-07-31
-    filmmakerPhotoUrl: '/portrait-5.jpg', // real photo, served from public/
-    epigraph: 'These days, I’ve been reflecting on something: did not Christ come to speak about life itself, and not a religion?',
-    body: [
-      'Yet in so many rooms where faith comes up, the question so often seems to be whether one believes or not, whether one is saved or not, whether one is in or out — dividing lines between those who believe and those who don’t.',
-      'For all my problems with mainstream Christianity and evangelical culture, through trial and tribulation, I parted much from the Christian faith and came back again to find nothing more compelling than the teachings of Christ.',
-      'And so I took it upon myself, in a too often corny faith-media landscape lacking true universal humanity, to create something that feels authentic and tasteful.',
-      'Though I’m not sure I’ve succeeded, I hope this piece feels inviting to all — that it can stir hearts towards the beauty of the universal Christ in a nonjudgmental, tender way — and to the inner transformation Christ can bring to everyone, not just the religious.',
-    ],
-  },
+  [MUX_FAITH_CIRCLE]: CIRCLES_STORY,
+  [MUX_CIRCLES_THIRD_CUT]: CIRCLES_STORY,
 }
 
 /** The story for a film, or null — and null means the watch page omits the
@@ -87,9 +95,11 @@ export function filmStory(muxPlaybackId) {
 const POSTER_OVERRIDES = {
   // [MUX_A_SACRED_PAUSE]: 'https://image.mux.com/…/thumbnail.png?time=123',
   // Circles (owner direction 2026-07-24): the poster stays PINNED to the
-  // previous video's thumbnail so the playback-id swap can never silently
-  // change the frame. Requires the old Mux asset to stay undeleted.
+  // ORIGINAL video's thumbnail so the playback-id swap can never silently
+  // change the frame. Requires the original Mux asset to stay undeleted.
+  // Both keys carry the identical pinned URL through the third-cut swap.
   [MUX_FAITH_CIRCLE]: `https://image.mux.com/${MUX_FAITH_CIRCLE_PREVIOUS}/thumbnail.png?time=1`,
+  [MUX_CIRCLES_THIRD_CUT]: `https://image.mux.com/${MUX_FAITH_CIRCLE_PREVIOUS}/thumbnail.png?time=1`,
 }
 
 export function filmPosterUrl(muxPlaybackId) {
