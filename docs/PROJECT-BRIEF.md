@@ -1,6 +1,6 @@
 # Deepcast — Project Brief
 
-*Written 24 July 2026, the day the watch page redesign shipped; last reconciled 6 August 2026 — the day the data confirmed the network's first organic onward share. For strategic advisors: decisions and reasoning, not implementation. Supersedes the 22 July brief.*
+*Written 24 July 2026, the day the watch page redesign shipped; last reconciled 22 August 2026 — the day the ledger showed the network growing on its own, in three organic branches. For strategic advisors: decisions and reasoning, not implementation. Supersedes the 22 July brief.*
 
 ## What Deepcast is
 
@@ -21,6 +21,16 @@ Deepcast optimizes for depth over reach. It is an invite-only network where subs
 **The 24 July "everything is a test" ruling, now scoped:** every account from the test era — the previously protected named users (Jon, Trace, Tina, Austin, Georgie) included — remains deletable test data, and the founder-run cleanup of The New Narrative's test pile remains queued (now explicitly excluding Young Chi). The ruling does NOT extend to the launch-era real users. The old "remove the stale protection lists" task is subsumed: the lists are live infrastructure again — updated, never blanket-deleted — and the agent never executes production deletions, per standing law. Three films exist — The New Narrative, A Sacred Pause, and **Faith Circle** (renamed from "The Faith Dialogues" on 24 July). **As of 31 July, Faith Circle is the launch film:** everything on it is real — portrait, director's statement, location, transmission hook — its seeded ghosts are off viewer surfaces, and its ticket ledger has been wiped of tests and reset to open at №1 (see below). The New Narrative remains the designated film for minting test claims, so permanent ticket numbers don't scatter across the catalog. The machine is built, hardened, and polished end to end — and the milestone the whole brief pointed at is no longer ahead: **the first genuine share went out the evening of 31 July. Faith Circle's №2 belongs to Oliver.** The next milestone is his claim — and the first reason a stranger gives for passing the film onward.
 
 **Faith Circle's ledger — RESET, OPENED, AND NOW CARRYING ITS FIRST REAL TICKET (database-verified 31 July evening):** №1 the filmmaker, **№2 Oliver — minted at the reset counter's first click, in flight.** The reset that made this clean opening possible, recorded fully: on launch day the founder removed every remaining test ticket and test account on the film himself via admin Remove — zero tickets and zero test wallets now exist — and then **reset the ticket counter to 1 by explicit ruling.** The reasoning, recorded so it is never misread: the immutability law protects *existing* tickets; with none existing, a reset renumbers nothing and breaks nothing — it simply opens the film's real ledger. The filmmaker holds №1; **the first genuine share will mint №2.** The seeded ghosts were also switched off viewer surfaces the same day (the deliberately-sequenced-last flip), so no real recipient will ever see a ghost. On any film with existing tickets, a counter reset remains forbidden — the old gap-riddled demo ledgers were the law working, and The New Narrative still carries its test pile (№6–31 plus legacy test accounts) awaiting the founder's own cleanup.
+
+## State of the network — 22 August reconciliation
+
+**THE NETWORK GREW WITHOUT US.** Between the 6 August reconciliation and this one, no engineering session touched the product — and the ledger more than doubled anyway. Every row database-verified today, not narrated: the founder sent three more tickets (№6 Yan, №8 Arielle, №9 Marcus), and **two of those recipients became the platform's second and third organic onward sharers** — Yan passed №7 to Christina, and Arielle passed №10 to Joiselle and №11 to Cal. Eleven tickets now exist on Circles (the filmmaker's №1 plus ten real ones, no gaps, no voids); seven people hold accounts; four have watched the film through.
+
+The ledger, verified: №1 the filmmaker · №2 Oliver (claimed 3 Aug, watched) · №3 Steve (in flight, from Oliver) · №4 Brian (claimed 3 Aug, watched, from Oliver) · №5 Katie (in flight, from Oliver) · №6 Yan (claimed 8 Aug, watched) · №7 Christina (in flight, from Yan) · №8 Arielle (claimed 9 Aug) · №9 Marcus (claimed 9 Aug) · №10 Joiselle (claimed 17 Aug, from Arielle) · №11 Cal (claimed 14 Aug, watched, from Arielle). Ticket counter at 11.
+
+Two observations worth keeping. First, the depth mechanic is repeating, not a one-off: three separate people have now chosen to pass the film onward unprompted. Second — **Arielle shared the film twice before finishing it.** The machine measures "watched" at 70%, and she hadn't crossed it when she passed her tickets; conviction outran completion. Recorded as data, not judged: it may be the strongest signal yet that the act the platform optimizes for is felt before the credits roll.
+
+Nothing about the growth required a code change: film-level protection covered every new claimant automatically, exactly as the 6 August ruling designed — the named-email list gained no entries and needed none.
 
 ## What shipped 23–24 July: the watch page redesign
 
@@ -72,6 +82,12 @@ Two branches, twelve commits, all live. The theme: everything a first real viewe
 - **The second recut (later the same day).** The founder recut the film again; Circles now plays it — still reading "29 minutes" — with the story, poster pin, and guards following the new video id exactly as the morning's swap did. The poster has now held the original video's frame through three swaps.
 - **The name editor asks for one name (evening).** "Edit your full name" became "Edit your name": one field, the current first name prefilled, the same mechanical validation, the same helper line. Nobody's stored last name was touched — the product just stopped collecting new ones, completing the simplification the email-only claim form started.
 - **Oregon is suspended (evening).** After a read-only audit confirmed nothing — Mux webhooks (zero exist), the deployed frontend bundle (zero references), auth redirects (frontend-origin only) — still pointed at the old Oregon server, the founder suspended it in the Render dashboard. Config preserved; it can be resumed for a rollback. The month-long migration is fully closed.
+
+## What shipped 22 August
+
+- **The third cut.** Circles' video was swapped again in an owner-approved production update — the film now runs an even "30 minutes," the number read from the stored duration as always, never typed. The founder ran the database write himself and verified the swap live end to end.
+- **The swap got a safety net worth keeping.** For the first time, the transition briefly taught the watch page BOTH video identities — outgoing and incoming — so that whichever landed first, the database write or the deploy, the page could never lose its story or its poster in the gap. Once the founder verified the swap live, the old identity came off in a follow-up commit. This dual-key pattern is now the standing playbook for future swaps.
+- **The poster pin held through its fourth swap.** Still the original video's frame, byte-identical; the original Mux asset still must never be deleted. The ghost seeder's identity guard follows the new video, refusing to run for the right reason.
 
 ## The false-green incident (31 July) — recorded honestly
 
