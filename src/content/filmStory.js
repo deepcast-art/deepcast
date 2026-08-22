@@ -25,7 +25,6 @@
 
 const MUX_THE_NEW_NARRATIVE = 'zLQpzAlaojxoKWAzjnwm1cOGho7p02jHGq802rKwNdzz8'
 const MUX_A_SACRED_PAUSE = '6GMWj01CjP01Y1ee001Vd2qYqUPJtEOgUYz00nG02BYE9F9E'
-const MUX_FAITH_CIRCLE = 'wAGDrU3BiptEx7PfYESFTer00Q7FPasDrM01z0165L3fqA' // outgoing second recut — pending removal after the third-cut swap is verified live
 const MUX_CIRCLES_THIRD_CUT = 'QDUEUyF7WDjjsOtMfeVfqh6M2NVM02arzLHK3IJnwYC00'
 // The film's ORIGINAL playback id (the Faith Dialogues video), kept only to
 // pin the poster in POSTER_OVERRIDES below — never a FILM_STORIES key. Three
@@ -33,9 +32,6 @@ const MUX_CIRCLES_THIRD_CUT = 'QDUEUyF7WDjjsOtMfeVfqh6M2NVM02arzLHK3IJnwYC00'
 // points here.
 const MUX_FAITH_CIRCLE_PREVIOUS = '4HnHRG3NAf9YYR7V1fNs0143gGJnLUZ9F1umQuXsOaaQ'
 
-// Circles' entry, shared verbatim by the outgoing and incoming playback ids
-// so the watch page can never lose its story or poster in the gap between
-// the database write and the deploy, whichever lands first.
 const CIRCLES_STORY = {
   // FULLY REAL since 2026-07-31: portrait, statement, and location are all
   // the founder's own — nothing TEMP remains on this film's entry.
@@ -76,7 +72,6 @@ export const FILM_STORIES = {
       'Third placeholder paragraph, for the same reason. The header above carries the real name; the words in this note do not, yet.',
     ],
   },
-  [MUX_FAITH_CIRCLE]: CIRCLES_STORY,
   [MUX_CIRCLES_THIRD_CUT]: CIRCLES_STORY,
 }
 
@@ -97,8 +92,6 @@ const POSTER_OVERRIDES = {
   // Circles (owner direction 2026-07-24): the poster stays PINNED to the
   // ORIGINAL video's thumbnail so the playback-id swap can never silently
   // change the frame. Requires the original Mux asset to stay undeleted.
-  // Both keys carry the identical pinned URL through the third-cut swap.
-  [MUX_FAITH_CIRCLE]: `https://image.mux.com/${MUX_FAITH_CIRCLE_PREVIOUS}/thumbnail.png?time=1`,
   [MUX_CIRCLES_THIRD_CUT]: `https://image.mux.com/${MUX_FAITH_CIRCLE_PREVIOUS}/thumbnail.png?time=1`,
 }
 
