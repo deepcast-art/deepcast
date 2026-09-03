@@ -56,6 +56,18 @@ import 'dotenv/config'
 import crypto from 'crypto'
 import readline from 'readline'
 import { createClient } from '@supabase/supabase-js'
+import { isProtectedFilm } from './deleteRules.js'
+
+/* ★ RETIRED 2026-09-03 — HARD-REFUSES ANY PROTECTED FILM ★
+   Circles is live and film-level protected (PROTECTED_FILM_IDS in
+   deleteRules.js), and its seeded ghosts are being removed by the founder
+   (server/remove-circles-ghosts.js). Once they are gone, the old "already
+   has ghosts" idempotency guard below would no longer stop this script from
+   re-seeding a LIVE film. So it now refuses outright — before any other
+   check — whenever FILM_ID is a protected film. The script stays committed
+   for the historical record (how the tree was shaped) and as the reference
+   generator for a FUTURE demo film, which would need a NEW, unprotected
+   FILM_ID and playback id here. */
 
 /* ----------------------------- configuration ----------------------------- */
 
@@ -255,6 +267,15 @@ function rootOf(nodes, node) {
 
 async function main() {
   console.log(`\n=== Circles ghost seed ${EXECUTE ? '(EXECUTE)' : '(DRY RUN — no changes)'} ===`)
+
+  // RETIRED (2026-09-03): never seed a protected live film — checked first,
+  // before credentials, before any read.
+  if (isProtectedFilm(FILM_ID)) {
+    fail(
+      `Film ${FILM_ID} is FILM-LEVEL PROTECTED (deleteRules.js). This seeder is retired for it: ` +
+        'a live film never receives ghost rows. Seeding a future demo film needs a new FILM_ID here.'
+    )
+  }
 
   const url = process.env.SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY

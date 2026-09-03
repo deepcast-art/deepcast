@@ -44,7 +44,17 @@ export const PROTECTED_EMAILS = [
  *  one. reset-test-data.js additionally aborts outright if its collected
  *  delete-set touches a protected film.
  *  LAUNCH-DAY DOCTRINE: adding a film's id here is a launch-day step for
- *  any future film going live. */
+ *  any future film going live.
+ *
+ *  THE ONE DOCUMENTED EXCEPTION (founder-approved 2026-09-03, GHOST-ONLY):
+ *  server/remove-circles-ghosts.js deletes Circles' ~50 SEEDED GHOST rows —
+ *  fake `…@demo-deepcast.invalid` recipients, never claimed, never
+ *  ticket-numbered, never people — collected by explicit predicates and
+ *  verified by server/circlesGhostRules.js (unit-tested), founder-run,
+ *  dry-run by default, backed up before deletion. It touches NO person and
+ *  NO numbered ticket; the admin Remove flow's protection below is
+ *  unchanged, and seed-faith-ghosts.js now hard-refuses any film listed
+ *  here so ghosts can never return to a live film. */
 export const PROTECTED_FILM_IDS = [
   '6a9c0c79-24f6-427e-ba34-c113acf92d9f', // Circles — live 2026-07-31, ruling 2026-08-06
 ]
