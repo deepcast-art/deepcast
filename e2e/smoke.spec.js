@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures/test.js'
+import { test, expect, pushJsError } from './fixtures/test.js'
 
 test.describe('API', () => {
   test('GET /api/health returns ok', async ({ request }) => {
@@ -46,7 +46,7 @@ test.describe('Public pages', () => {
    */
   test('open invite route /i/:token renders', async ({ page }) => {
     const jsErrors = []
-    page.on('pageerror', (err) => jsErrors.push(err.message))
+    page.on('pageerror', (err) => pushJsError(jsErrors, err))
     await page.goto('/i/e2e-smoke-invite-token', { waitUntil: 'domcontentloaded' })
     await expect(page.locator('body')).toBeVisible()
     await expect(

@@ -10,7 +10,7 @@
  * Same mocked-creator-session pattern as remove-popover-email.spec.js —
  * no real network, no writes.
  */
-import { test, expect } from './fixtures/test.js'
+import { test, expect, pushJsError } from './fixtures/test.js'
 
 const REF = 'wmtjgpxhjtbocsmutqqc'
 const OWNER_ID = '11111111-1111-4111-8111-111111111111'
@@ -186,7 +186,7 @@ const svgTexts = (page) =>
 test.describe('creator dashboard — "See network graph" (mocked creator)', () => {
   test('opens the VIEWER constellation for the film: filmmaker center, ghosts and voids absent, solid vs hollow, nothing lit at rest', async ({ page }) => {
     const jsErrors = []
-    page.on('pageerror', (err) => jsErrors.push(err.message))
+    page.on('pageerror', (err) => pushJsError(jsErrors, err))
     await mockCreator(page)
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
@@ -417,7 +417,7 @@ test.describe('viewer V5 dashboard — unchanged (mocked viewer)', () => {
 test.describe('creator dashboard — shell (mocked creator)', () => {
   test('no Team members box, no Profile link; sidebar order Upload film · Set password · About · Sign out; the wordmark fits', async ({ page }) => {
     const jsErrors = []
-    page.on('pageerror', (err) => jsErrors.push(err.message))
+    page.on('pageerror', (err) => pushJsError(jsErrors, err))
     await mockCreator(page)
 
     for (const width of [1024, 1440]) {

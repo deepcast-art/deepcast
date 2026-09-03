@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures/test.js'
+import { test, expect, pushJsError } from './fixtures/test.js'
 
 /**
  * Early mount + playback hold (pre-screening prologue).
@@ -96,7 +96,7 @@ test.describe('early mount: player buffers paused behind the prologue', () => {
 
   test.beforeEach(async ({ page }) => {
     jsErrors = []
-    page.on('pageerror', (err) => jsErrors.push(err.message))
+    page.on('pageerror', (err) => pushJsError(jsErrors, err))
 
     // Seed the fake session + instrument every play() call BEFORE any app script runs.
     await page.addInitScript(

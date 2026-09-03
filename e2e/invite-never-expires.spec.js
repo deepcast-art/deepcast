@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures/test.js'
+import { test, expect, pushJsError } from './fixtures/test.js'
 
 /**
  * Product decision (MVP): invite links never expire.
@@ -45,7 +45,7 @@ test.describe('invite links never expire (MVP)', () => {
 
   test.beforeEach(async ({ page }) => {
     jsErrors = []
-    page.on('pageerror', (err) => jsErrors.push(err.message))
+    page.on('pageerror', (err) => pushJsError(jsErrors, err))
     await page.route('**/api/invites/validate/**', (route) =>
       route.fulfill({ json: PAST_DATED_VALIDATE })
     )

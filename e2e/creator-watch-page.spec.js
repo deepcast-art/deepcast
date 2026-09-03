@@ -13,7 +13,7 @@
  *
  * All API traffic is mocked — no production data involved.
  */
-import { test, expect } from './fixtures/test.js'
+import { test, expect, pushJsError } from './fixtures/test.js'
 
 const REF = 'wmtjgpxhjtbocsmutqqc'
 const OWNER_ID = '11111111-1111-4111-8111-111111111111'
@@ -179,7 +179,7 @@ const squashText = (o) => ({ ...o, header: squash(o.header), main: squash(o.main
 test.describe('the slug-based viewer watch page is unchanged by the film-scoped entry', () => {
   test('replays the recorded baseline exactly: page text, links, CTA class, modal, stubs, forks', async ({ page }) => {
     const jsErrors = []
-    page.on('pageerror', (err) => jsErrors.push(err.message))
+    page.on('pageerror', (err) => pushJsError(jsErrors, err))
     await mockMedia(page)
     await page.addInitScript(() => {
       window.localStorage.setItem(
@@ -232,7 +232,7 @@ test.describe('the slug-based viewer watch page is unchanged by the film-scoped 
 test.describe('the filmmaker’s own watch page — /watch/film/:filmId', () => {
   test('creator session: the real page — same rail and numbers, no chain line, origin-only emblem, unlimited ticket window, real numbered share', async ({ page }) => {
     const jsErrors = []
-    page.on('pageerror', (err) => jsErrors.push(err.message))
+    page.on('pageerror', (err) => pushJsError(jsErrors, err))
     await mockMedia(page)
     await mockSession(page, sessionFor(OWNER_ID, OWNER_PROFILE.email), OWNER_PROFILE)
 

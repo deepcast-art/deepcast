@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures/test.js'
+import { test, expect, pushJsError } from './fixtures/test.js'
 
 /**
  * The three-page claim arc (final spec 2026-07-16):
@@ -72,7 +72,7 @@ test.describe('three-page claim arc', () => {
 
   test.beforeEach(async ({ page }) => {
     jsErrors = []
-    page.on('pageerror', (err) => jsErrors.push(err.message))
+    page.on('pageerror', (err) => pushJsError(jsErrors, err))
     await page.route('**image.mux.com/**', (route) =>
       route.fulfill({ contentType: 'image/png', body: TINY_PNG })
     )

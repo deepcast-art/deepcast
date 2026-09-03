@@ -8,7 +8,9 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   workers: process.env.CI ? 1 : undefined,
-  reporter: process.env.CI ? [['html'], ['github']] : [['list'], ['html']],
+  // CI also gets the line reporter so test stdout (e.g. environment.spec.js's
+  // per-engine probe line) appears in the job log, not only in the artifact.
+  reporter: process.env.CI ? [['line'], ['html'], ['github']] : [['list'], ['html']],
   use: {
     baseURL,
     trace: 'on-first-retry',
