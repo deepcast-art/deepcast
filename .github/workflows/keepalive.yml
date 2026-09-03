@@ -10,8 +10,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # The Virginia service (live since 2026-07-23). The old Oregon URL
+      # (deepcast.onrender.com) was SUSPENDED on 2026-08-06 and answers 503,
+      # so this job had been failing every ten minutes since — fixed 2026-09-03.
       - name: Ping Render health endpoint
         run: |
           curl --fail --silent --show-error --max-time 60 \
             --retry 3 --retry-delay 10 --retry-connrefused \
-            https://deepcast.onrender.com/api/health
+            https://deepcast-virginia.onrender.com/api/health

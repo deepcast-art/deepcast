@@ -1,0 +1,135 @@
+# CI — the automatic gate from docs/SHIP-PROTOCOL.md (2026-09-03).
+#
+# Runs on every push to main (Tier 1 ships) and on every pull request
+# (Tier 2 branches — a branch gets its CI run through its PR, so nothing
+# reaches main unchecked). Four gates, in the protocol's order: lint, unit
+# tests, build, then the Playwright e2e suite on chromium, webkit, and
+# firefox — one job per engine, in parallel, so the whole run stays near
+# the ~10-minute target. Branch protection on main (a one-click founder
+# step, protocol task 2) is what turns these from advisory into required.
+#
+# DATABASE ACCESS: none needed, no repository secret required. Every e2e
+# spec mocks its API and Supabase REST traffic in the browser (page.route);
+# the one unmocked API call is the smoke test's /api/health, which touches
+# no service. The API only has to BOOT, and it boots on the placeholder
+# values below (verified locally with every .env name overridden: it logs
+# two warnings and answers /api/health). The frontend's built-in Supabase
+# fallback points at production with the public anon key, exactly as a
+# production visitor's browser does; the specs intercept those calls, and
+# nothing in the suite claims, mints, or submits. If a future spec ever
+# needs real data, add a repository secret, gate that spec's job on
+# `${{ secrets.NAME != '' }}`, and say so here.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch/PR cancels the older run.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  checks:
+    name: Lint · unit · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache node_modules
+        id: modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node${{ env.NODE_VERSION }}-modules-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        if: steps.modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Build
+        run: npm run build
+
+  e2e:
+    name: E2E · ${{ matrix.engine }}
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [chromium, webkit, firefox]
+    env:
+      CI: true
+      # Placeholders only — see the header. Every name that the API reads at
+      # boot is set so it never looks for a .env that does not exist here.
+      SUPABASE_URL: https://example.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
+      MUX_TOKEN_ID: ci-placeholder
+      MUX_TOKEN_SECRET: ci-placeholder
+      RESEND_API_KEY: re_ci_placeholder
+      INVITE_CTX_SECRET: ci-placeholder
+      APP_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache node_modules
+        id: modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node${{ env.NODE_VERSION }}-modules-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        if: steps.modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        id: browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ matrix.engine }}-${{ hashFiles('package-lock.json') }}
+
+      # Browsers come from the cache when it hits; the OS libraries they need
+      # are installed either way (they are not part of the cached directory).
+      - name: Install Playwright browser
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps ${{ matrix.engine }}
+
+      - name: Install Playwright OS dependencies
+        if: steps.browsers.outputs.cache-hit == 'true'
+        run: npx playwright install-deps ${{ matrix.engine }}
+
+      # playwright.config.js starts the dev server itself (npm run dev: the API
+      # on 3001 + Vite on 3000) and waits for http://localhost:3000.
+      - name: E2E (${{ matrix.engine }})
+        run: npx playwright test --project ${{ matrix.engine }}
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.engine }}
+          path: playwright-report/
+          retention-days: 7

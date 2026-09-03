@@ -23,12 +23,29 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      // An underscore prefix marks a deliberately unused parameter too (e.g. a
+      // destructured option kept for API compatibility) — same convention as
+      // the variable pattern.
+      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^_' }],
+      // Hot-reload hygiene, not correctness: three long-standing files export a
+      // hook or helper beside a component on purpose (useAuth beside its
+      // provider; NetworkGraph's re-exports for the legacy screening). CI lint
+      // is a gate since 2026-09-03 (docs/SHIP-PROTOCOL.md), so this stays a
+      // warning — visible, never blocking.
+      'react-refresh/only-export-components': 'warn',
     },
   },
   {
-    // Server-side scripts and Playwright specs run under Node — give them Node globals (process, Buffer, …).
-    files: ['server/**/*.js', 'scripts/**/*.js', 'e2e/**/*.js', 'verify-flow.js'],
+    // Server-side scripts, Playwright specs AND the Playwright configs run under
+    // Node — give them Node globals (process, Buffer, …).
+    files: [
+      'server/**/*.js',
+      'scripts/**/*.js',
+      'e2e/**/*.js',
+      'verify-flow.js',
+      'playwright.config.js',
+      'playwright.local.config.js',
+    ],
     languageOptions: {
       globals: { ...globals.browser, ...globals.node },
     },
