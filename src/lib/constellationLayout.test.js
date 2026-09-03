@@ -283,3 +283,127 @@ describe('buildConstellationLayout', () => {
     ).toEqual(today)
   })
 })
+
+/* ── Explicit no-viewer mode (2026-09-03) + the viewer-mode golden guard ── */
+import golden from './constellationLayout.golden.json'
+
+/** The exact rows the golden snapshot was recorded from (2026-09-03, at
+ *  commit 4096018, before `noViewer` existed) — including a ghost and a
+ *  void that the who-exists rule drops. */
+function goldenRows() {
+  let n = 0
+  const row = (id, senderId, parentId = null, over = {}) => ({
+    id,
+    sender_id: senderId,
+    parent_invite_id: parentId,
+    recipient_name: `P${++n}`,
+    recipient_email: null,
+    status: 'created',
+    created_at: `2026-07-${String(10 + (n % 19)).padStart(2, '0')}T00:00:00Z`,
+    ...over,
+  })
+  return [
+    row('a', CREATOR),
+    row('b', 'user-a', 'a'),
+    row('c1', 'user-b', 'b', { status: 'created' }),
+    row('c2', 'user-b', 'b', { status: 'claimed' }),
+    row('c3', 'user-b', 'b', { status: 'watched' }),
+    row('c4', 'user-b', 'b', { status: 'claimed' }),
+    row('d1', 'user-c4', 'c4'),
+    row('d2', 'user-d1', 'd1'),
+    row('w1', CREATOR),
+    row('w2', 'user-w1', 'w1'),
+    row('w3', 'user-w2', 'w2'),
+    row('g1', CREATOR, null, { recipient_email: 'x.fd01@demo-deepcast.invalid' }),
+    row('v1', 'user-b', 'b', { status: 'void' }),
+  ]
+}
+
+describe('viewer mode is byte-identical to before the no-viewer mode existed', () => {
+  it('matches the recorded golden output exactly (omitted AND explicit false)', () => {
+    const opts = { filmInvites: goldenRows(), creatorId: CREATOR, creatorName: 'Ien', viewerInviteId: 'b' }
+    // JSON round-trip on the live output so -0 / undefined / NaN edge cases
+    // compare the way the snapshot was written.
+    expect(JSON.parse(JSON.stringify(buildConstellationLayout(opts)))).toEqual(golden)
+    expect(JSON.parse(JSON.stringify(buildConstellationLayout({ ...opts, noViewer: false })))).toEqual(golden)
+  })
+
+  it('viewer-mode nodes and edges carry NO no-viewer extras', () => {
+    const layout = buildConstellationLayout({
+      filmInvites: goldenRows(),
+      creatorId: CREATOR,
+      viewerInviteId: 'b',
+    })
+    for (const n of layout.nodes) expect(n).not.toHaveProperty('claimed')
+    for (const e of [...layout.dimEdges, ...layout.goldEdges]) {
+      expect(e).not.toHaveProperty('fromId')
+      expect(e).not.toHaveProperty('toId')
+    }
+  })
+})
+
+describe('no-viewer mode (the creator dashboard graph modal)', () => {
+  const build = (over = {}) =>
+    buildConstellationLayout({
+      filmInvites: goldenRows(),
+      creatorId: CREATOR,
+      creatorName: 'Ien',
+      noViewer: true,
+      ...over,
+    })
+
+  it('ignores viewerInviteId: no YOU, no gold path, no rotation, every person a web node', () => {
+    const layout = build({ viewerInviteId: 'b' })
+    expect(layout.hasYou).toBe(false)
+    expect(layout.goldEdges).toHaveLength(0)
+    expect(layout.viewerDownstreamCount).toBe(0)
+    expect(layout.nodes.filter((n) => n.kind === 'you')).toHaveLength(0)
+    expect(layout.nodes.filter((n) => n.id !== ROOT_ID).every((n) => n.kind === 'other')).toBe(true)
+    // Same geometry as the implicit no-viewer layout (viewerInviteId null).
+    const implicit = buildConstellationLayout({
+      filmInvites: goldenRows(),
+      creatorId: CREATOR,
+      creatorName: 'Ien',
+      viewerInviteId: null,
+    })
+    for (const n of layout.nodes) {
+      const twin = implicit.nodes.find((m) => m.id === n.id)
+      expect([n.x, n.y, n.theta]).toEqual([twin.x, twin.y, twin.theta])
+    }
+    expect(layout.creatorLabel).toBe('Ien')
+  })
+
+  it('stamps `claimed` per person by the shared claimed-stage rule (solid vs hollow)', () => {
+    const layout = build()
+    const claimed = (id) => layout.nodes.find((n) => n.id === id)?.claimed
+    expect(claimed('c1')).toBe(false) // created — in flight
+    expect(claimed('c2')).toBe(true) // claimed
+    expect(claimed('c3')).toBe(true) // watched
+    expect(claimed('a')).toBe(false) // created
+    expect(layout.nodes.find((n) => n.id === ROOT_ID)).not.toHaveProperty('claimed')
+  })
+
+  it('stamps fromId/toId on every edge so a renderer can light one person’s lineage', () => {
+    const layout = build()
+    expect(layout.dimEdges.length).toBeGreaterThan(0)
+    for (const e of layout.dimEdges) {
+      expect(typeof e.fromId).toBe('string')
+      expect(typeof e.toId).toBe('string')
+      const to = layout.nodes.find((n) => n.id === e.toId)
+      expect(to.parentId).toBe(e.fromId)
+    }
+    // film → a, a → b, b → c1..c4, c4 → d1, d1 → d2, film → w1, w1 → w2, w2 → w3 = 11
+    expect(layout.dimEdges).toHaveLength(11)
+  })
+
+  it('reads the same who-exists rule: voids never, ghosts per includeGhosts', () => {
+    const off = build()
+    expect(off.nodes.map((n) => n.id)).not.toContain('v1')
+    expect(off.nodes.map((n) => n.id)).not.toContain('g1')
+    expect(off.inviteCount).toBe(11)
+    const on = build({ includeGhosts: true })
+    expect(on.nodes.map((n) => n.id)).toContain('g1')
+    expect(on.nodes.map((n) => n.id)).not.toContain('v1')
+    expect(on.inviteCount).toBe(12)
+  })
+})

@@ -20,6 +20,7 @@ import { countTicketsGiven } from '../lib/inviteExistence.js'
 import { fullNameInputError } from '../lib/firstNameRule.js'
 import ViewerDashboardV5 from './ViewerDashboardV5'
 import ShareLinkModal from '../components/ShareLinkModal'
+import NetworkGraphModal from '../components/NetworkGraphModal'
 
 export default function Dashboard() {
   const { profile: authProfile, signOut, fetchProfile, profileLoaded } = useAuth()
@@ -37,6 +38,9 @@ export default function Dashboard() {
   const [filmStats, setFilmStats] = useState({})
   const [loading, setLoading] = useState(() => !profileLoaded)
   const [inviteFilmId, setInviteFilmId] = useState(null)
+  /** "See network graph" (2026-09-03): the film whose viewer constellation
+   *  is open in the modal, or null. Mounted only while open. */
+  const [graphFilm, setGraphFilm] = useState(null)
   const [copiedTicketId, setCopiedTicketId] = useState(null)
   const [filmInvitesRaw, setFilmInvitesRaw] = useState({})
   // The users rows already loaded for the films' senders — the admin table
@@ -730,9 +734,6 @@ export default function Dashboard() {
           <Link className="text-warm/40 transition-colors hover:text-warm" to="/profile#set-password">
             Set password
           </Link>
-          <Link className="text-warm/40 transition-colors hover:text-warm" to="/network">
-            Network map
-          </Link>
           {profile.role === 'creator' && (
             <Link className="text-accent transition-colors hover:text-accent-hover" to="/upload">
               Upload film
@@ -977,6 +978,17 @@ export default function Dashboard() {
                           Watch page
                         </Link>
                       )}
+                      {/* The VIEWER constellation for this film — exactly
+                          what viewers see (NetworkGraphModal, 2026-09-03);
+                          replaces the old Network map page. */}
+                      <button
+                        type="button"
+                        aria-haspopup="dialog"
+                        onClick={() => setGraphFilm(film)}
+                        className="cursor-pointer text-xs uppercase tracking-wider text-accent transition-colors hover:text-accent-hover"
+                      >
+                        See network graph
+                      </button>
                       <button
                         type="button"
                         onClick={() => setInviteFilmId(isInviteOpen ? null : film.id)}
@@ -1307,6 +1319,18 @@ export default function Dashboard() {
         )}
         <MvpVersionLabel className="mt-14 self-center pb-2 text-center" />
       </main>
+
+      {/* "See network graph" — the viewer constellation for one film, in a
+          native <dialog> (same contract as the watch page's modal). */}
+      {graphFilm && (
+        <NetworkGraphModal
+          film={graphFilm}
+          invites={filmInvitesRaw[graphFilm.id] || []}
+          creatorId={filmOwnerId || profile.id}
+          creatorName={isTeamMember ? leadCreatorName : profile.name}
+          onClose={() => setGraphFilm(null)}
+        />
+      )}
     </div>
   )
 }

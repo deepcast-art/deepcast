@@ -16,6 +16,18 @@
  *    rule). Gold-path names always render; dim-web names fill whatever
  *    room remains, closer-to-YOU first, and appear progressively as
  *    zooming in creates space. Recomputed on zoom/pan/resize.
+ *
+ * EXPLORE MODE (`explore` prop, 2026-09-03 — the creator dashboard's "See
+ * network graph" modal, fed by the layout's explicit no-viewer mode):
+ *  - the filmmaker is the center; there is no YOU and no fixed gold path;
+ *  - nothing is lit at rest — hover (mouse) or tap (touch/click, toggles)
+ *    on any person lights THAT person's lineage gold: film → them → their
+ *    entire downstream, edges, dots, and labels;
+ *  - node grammar from the lineage emblem: solid dot = claimed, hollow =
+ *    in flight (layout.nodes[].claimed);
+ *  - the whole-web hover lighting is OFF (it would drown the lineage).
+ * Default (explore=false) renders exactly as before — every difference is
+ * gated on the prop.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -42,17 +54,57 @@ const labelSizeFor = (kind) => LABEL_SIZES[kind] ?? LABEL_SIZES.invitee
  * size change (film switch, tree growth) remounts the map with a fresh
  * viewport — the zoom/pan state initializer runs once per mount.
  */
-export default function ConstellationMap({ layout }) {
+export default function ConstellationMap({ layout, explore = false }) {
   const svgRef = useRef(null)
   const [vb, setVb] = useState(() =>
     layout ? { x: 0, y: 0, w: layout.width, h: layout.height } : null
   )
   const dragRef = useRef(null)
+  /** Explore mode: the press that may become a tap (see onPointerDown). */
+  const tapRef = useRef(null)
   /** Mirrors vb for the native wheel listener (kept out of render writes). */
   const vbRef = useRef(vb)
   useEffect(() => {
     vbRef.current = vb
   }, [vb])
+
+  /** Explore mode: the hovered person (mouse only) and the tapped person
+   *  (toggles, survives the pointer leaving). The tapped one wins. */
+  const [hoverId, setHoverId] = useState(null)
+  const [pinnedId, setPinnedId] = useState(null)
+  const litId = explore ? (pinnedId ?? hoverId) : null
+
+  /** Explore mode: children by parent id, for the downstream walk. */
+  const childrenById = useMemo(() => {
+    const map = new Map()
+    if (!explore || !layout) return map
+    for (const n of layout.nodes) {
+      if (!n.parentId) continue
+      if (!map.has(n.parentId)) map.set(n.parentId, [])
+      map.get(n.parentId).push(n.id)
+    }
+    return map
+  }, [explore, layout])
+
+  /** Explore mode: the lit lineage — the person, every ancestor up to the
+   *  film, and every descendant at every depth. Empty at rest. */
+  const litSet = useMemo(() => {
+    const set = new Set()
+    if (!explore || !layout || !litId) return set
+    const byId = new Map(layout.nodes.map((n) => [n.id, n]))
+    let cur = byId.get(litId)
+    while (cur) {
+      set.add(cur.id)
+      cur = cur.parentId ? byId.get(cur.parentId) : null
+    }
+    const stack = [...(childrenById.get(litId) || [])]
+    while (stack.length) {
+      const id = stack.pop()
+      set.add(id)
+      stack.push(...(childrenById.get(id) || []))
+    }
+    return set
+  }, [explore, layout, litId, childrenById])
 
   /** The map's rendered CSS width — the denominator of the label
    *  counter-scaling. 0 until the first measurement (labels then render at
@@ -201,8 +253,17 @@ export default function ConstellationMap({ layout }) {
     })
   }
 
+  /** Explore mode: a press that ends without moving on a person is a TAP
+   *  (toggles the pinned lineage). Detected here, at the SVG, because the
+   *  drag handler takes pointer capture — the release then never reaches
+   *  the person's own element. (tapRef is declared with the other refs
+   *  above the early return.) */
   const onPointerDown = (e) => {
     dragRef.current = { x: e.clientX, y: e.clientY }
+    if (explore) {
+      const person = e.target?.closest?.('[data-node]')
+      tapRef.current = person ? { id: person.getAttribute('data-node'), x: e.clientX, y: e.clientY } : null
+    }
     svgRef.current?.classList.add('panning')
     e.currentTarget.setPointerCapture(e.pointerId)
   }
@@ -221,7 +282,17 @@ export default function ConstellationMap({ layout }) {
     )
     dragRef.current = { x: e.clientX, y: e.clientY }
   }
-  const endDrag = () => {
+  const endDrag = (e) => {
+    const tap = tapRef.current
+    tapRef.current = null
+    if (
+      explore &&
+      tap &&
+      e?.type === 'pointerup' &&
+      Math.hypot((e.clientX ?? tap.x) - tap.x, (e.clientY ?? tap.y) - tap.y) < 6
+    ) {
+      setPinnedId((cur) => (cur === tap.id ? null : tap.id))
+    }
     dragRef.current = null
     svgRef.current?.classList.remove('panning')
   }
@@ -254,6 +325,52 @@ export default function ConstellationMap({ layout }) {
       </text>
     )
 
+  /** Explore mode: a person node — hit area, solid/hollow dot, label. A lit
+   *  person's label always renders (it is the explicit focus); otherwise the
+   *  collision rule applies as everywhere. */
+  const explorePerson = (n) => {
+    const lit = litSet.has(n.id)
+    return (
+      <g
+        key={n.id}
+        data-node={n.id}
+        data-claimed={n.claimed ? 'true' : 'false'}
+        className={lit ? 'lit-person' : undefined}
+        style={{ cursor: 'pointer' }}
+        onPointerEnter={(e) => {
+          if (e.pointerType === 'mouse') setHoverId(n.id)
+        }}
+        onPointerLeave={(e) => {
+          if (e.pointerType === 'mouse') setHoverId((cur) => (cur === n.id ? null : cur))
+        }}
+      >
+        {/* Hit area — the dot itself is too small a target for a finger. */}
+        <circle cx={n.x} cy={n.y} r="10" fill="transparent" />
+        <circle
+          cx={n.x}
+          cy={n.y}
+          r="2.4"
+          className={`web-dot star${n.claimed ? '' : ' hollow'}`}
+          style={{ animationDelay: `${n.twinkleDelay ?? 0}s` }}
+        />
+        {n.label && (visibleIds.has(n.id) || lit) && (
+          <text
+            key={`label-${n.id}`}
+            x={n.label.x}
+            y={n.label.y}
+            textAnchor={n.label.anchor}
+            fontSize={labelFontSize(labelSizeFor(n.kind), mapScale)}
+            letterSpacing="2"
+            className="web-label dim-label"
+            style={{ fontFamily: LABEL_FONT, textTransform: 'uppercase' }}
+          >
+            {n.name}
+          </text>
+        )}
+      </g>
+    )
+  }
+
   return (
     <div className="relative mt-5 overflow-hidden border border-mist/[0.12] bg-ink-2">
       <style>{`
@@ -270,19 +387,29 @@ export default function ConstellationMap({ layout }) {
         .dc-constellation .star { animation: dc-twinkle 5s ease-in-out infinite alternate; }
         @keyframes dc-twinkle { from { opacity: 0.55; } to { opacity: 1; } }
         @media (prefers-reduced-motion: reduce) { .dc-constellation .star { animation: none; } }
+        /* Explore mode (2026-09-03): hollow = in flight; one person's lineage lights on hover/tap. */
+        .dc-constellation.explore .web-dot.hollow { fill: none; stroke: rgba(234,231,224,0.7); stroke-width: 1.1; transition: fill 450ms ease, stroke 450ms ease; }
+        .dc-constellation.explore .lit-person .web-dot { fill: #C7A96B; }
+        .dc-constellation.explore .lit-person .web-dot.hollow { fill: none; stroke: #C7A96B; }
+        .dc-constellation.explore .lit-person .web-label { fill: rgba(216,199,154,0.9); }
+        .dc-constellation.explore .web-edge.lit-edge { stroke: rgba(199,169,107,0.75); }
       `}</style>
       <svg
         ref={svgRef}
-        className="dc-constellation block h-[23rem] w-full md:h-[clamp(26rem,64vh,38rem)]"
+        className={`dc-constellation block h-[23rem] w-full md:h-[clamp(26rem,64vh,38rem)]${explore ? ' explore' : ''}`}
         viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
         role="img"
-        aria-label="A radial constellation of everyone who has held this film, with the filmmaker at the center and the gold path running to you and onward through your invitations. Hovering the wider web lights the whole constellation gold."
+        aria-label={
+          explore
+            ? 'A radial constellation of everyone who has held this film, with the filmmaker at the center. Hover or tap a person to light the path the film took to reach them and everyone it reached through them. A solid dot is a claimed ticket; a hollow dot is one still in flight.'
+            : 'A radial constellation of everyone who has held this film, with the filmmaker at the center and the gold path running to you and onward through your invitations. Hovering the wider web lights the whole constellation gold.'
+        }
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        onMouseMove={onMouseMove}
-        onMouseLeave={onMouseLeave}
+        onMouseMove={explore ? undefined : onMouseMove}
+        onMouseLeave={explore ? undefined : onMouseLeave}
       >
         {layout.rings.map((r) => (
           <circle
@@ -305,7 +432,9 @@ export default function ConstellationMap({ layout }) {
             y2={e.y2}
             strokeWidth="1"
             strokeDasharray="2 5"
-            className="web-edge"
+            className={
+              explore && litSet.has(e.fromId) && litSet.has(e.toId) ? 'web-edge lit-edge' : 'web-edge'
+            }
           />
         ))}
         {layout.goldEdges.map((e, i) => (
@@ -389,6 +518,7 @@ export default function ConstellationMap({ layout }) {
             )
           }
           if (n.kind === 'other') {
+            if (explore) return explorePerson(n)
             return (
               <g key={n.id}>
                 <circle

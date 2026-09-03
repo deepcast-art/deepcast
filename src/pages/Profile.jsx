@@ -34,12 +34,11 @@ function FilmNetworkPreview({ film, invites, creatorName, profileEmail, profileR
 
   if (!graphLayout) return null
 
+  // A plain frame since 2026-09-03: the full-page Network map (and its
+  // /network route) was retired for the creator dashboard's per-film
+  // "See network graph" modal, so there is no page to link to.
   return (
-    <Link
-      to={`/network?filmId=${film.id}`}
-      className="mt-4 block cursor-pointer overflow-hidden border border-faint/40 bg-paper/70 transition-colors hover:border-accent/40"
-    >
-      <span className="sr-only">Open full invitation map for {film.title}</span>
+    <div className="mt-4 block overflow-hidden border border-faint/40 bg-paper/70">
       <div className="h-[min(42svh,260px)] min-h-[200px] w-full sm:h-[260px] sm:min-h-0">
         <NetworkGraph
           fillHeight
@@ -57,7 +56,7 @@ function FilmNetworkPreview({ film, invites, creatorName, profileEmail, profileR
           showLegend={false}
         />
       </div>
-    </Link>
+    </div>
   )
 }
 
@@ -224,16 +223,6 @@ export default function Profile() {
               </p>
               <p className="text-text-muted text-xs uppercase tracking-wider">invites</p>
             </div>
-            <Link
-              to={
-                profile.role === 'viewer' && watchedFilms.length > 0
-                  ? `/network?filmId=${watchedFilms[0].id}`
-                  : '/network'
-              }
-              className="text-text-muted text-xs uppercase tracking-wider hover:text-text transition-colors"
-            >
-              Network map
-            </Link>
             {(profile.role === 'creator' || profile.role === 'team_member') && (
               <Link
                 to="/dashboard"

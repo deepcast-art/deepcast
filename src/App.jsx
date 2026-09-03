@@ -18,7 +18,6 @@ const Login = lazy(() => import('./pages/Login.jsx'))
 const Profile = lazy(() => import('./pages/Profile.jsx'))
 const Dashboard = lazy(() => import('./pages/Dashboard.jsx'))
 const Upload = lazy(() => import('./pages/Upload.jsx'))
-const NetworkMap = lazy(() => import('./pages/NetworkMap.jsx'))
 const TeamJoin = lazy(() => import('./pages/TeamJoin.jsx'))
 const Unsubscribe = lazy(() => import('./pages/Unsubscribe.jsx'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword.jsx'))
@@ -312,18 +311,6 @@ export default function App() {
             <Suspense fallback={<RouteFallback />}>
               <Upload />
             </Suspense>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/network"
-        element={
-          <ProtectedRoute>
-            <ViewerShareGate>
-              <Suspense fallback={<RouteFallback />}>
-                <NetworkMap />
-              </Suspense>
-            </ViewerShareGate>
           </ProtectedRoute>
         }
       />

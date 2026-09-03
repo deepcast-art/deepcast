@@ -25,6 +25,7 @@
 import { resolveInviteParents } from './graphLayout.js'
 import { existingInvites } from './inviteExistence.js'
 import { isInviteWatched } from './filmStats.js'
+import { isInviteClaimedStage } from './ticketFunnel.js'
 import { safeFirstName } from './displayName.js'
 
 export const ROOT_ID = 'film-root'
@@ -58,11 +59,21 @@ export function buildConstellationLayout({
   // true renders the seeded ghosts as ordinary nodes — same node path, same
   // counts — for staging/demo films only. Default false = today's behavior.
   includeGhosts = false,
+  // EXPLICIT NO-VIEWER MODE (2026-09-03, the creator dashboard's "See
+  // network graph" modal): the filmmaker is the center and there is no YOU
+  // — `viewerInviteId` is ignored, rule 4's rotation does not apply, every
+  // person is a web node, and the output additionally carries what a
+  // lineage-on-hover renderer needs: `claimed` on every person node (the
+  // ticket funnel's shared claimed-stage rule — solid vs hollow) and
+  // `fromId`/`toId` on every edge. Default false = the viewer dashboard's
+  // output, byte-identical (golden-tested in constellationLayout.test.js).
+  noViewer = false,
 } = {}) {
   // Shared existence rule: no voided links ever; ghosts only when the film's
   // flag asks for them (inviteExistence.js).
   const invites = existingInvites(filmInvites, { includeGhosts })
   if (!invites.length) return null
+  if (noViewer) viewerInviteId = null
 
   const { parentByInviteId, memberNodes, isCreatorSender } = resolveInviteParents({
     filmInvites: invites,
@@ -278,6 +289,13 @@ export function buildConstellationLayout({
     }
   }
 
+  // No-viewer extras only: claimed-stage per person (the funnel's shared
+  // rule; team-member nodes are account holders, so solid; the film root
+  // has no ticket to claim).
+  const claimedById = noViewer
+    ? new Map(invites.map((i) => [i.id, isInviteClaimedStage(i)]))
+    : null
+
   const outNodes = []
   const dimEdges = []
   const goldEdges = []
@@ -295,10 +313,15 @@ export function buildConstellationLayout({
       y,
       label: n.kind === 'film' ? null : makeLabel(n, x, y),
       twinkleDelay: n.kind === 'other' ? twinkleDelay(n.id) : null,
+      ...(noViewer && n.id !== ROOT_ID
+        ? { claimed: claimedById.has(n.id) ? claimedById.get(n.id) : true }
+        : {}),
     })
     for (const c of n.children) {
       const B = pos(c)
-      const edge = { x1: x, y1: y, x2: B.x, y2: B.y }
+      const edge = noViewer
+        ? { x1: x, y1: y, x2: B.x, y2: B.y, fromId: n.id, toId: c.id }
+        : { x1: x, y1: y, x2: B.x, y2: B.y }
       ;(isLineage(n) && isLineage(c) ? goldEdges : dimEdges).push(edge)
     }
   }
