@@ -106,6 +106,23 @@ export function collectGhostDeleteSet(rows = [], filmId = CIRCLES_FILM_ID) {
   return { ghosts, excluded, aborts }
 }
 
+/**
+ * Protected-email guard for the collected set: a row is a hit only if its
+ * RECIPIENT or CLAIMANT is a protected person — the emails that identify
+ * whose ticket the row is. The SENDER is deliberately NOT checked
+ * (founder ruling 2026-09-03, after the first execute aborted on it): the
+ * six first-ring ghosts were seeded with the filmmaker as their sender, and
+ * deleting an invite row never touches the sender's account — the row
+ * belongs to its recipient, so a protected sender on a ghost row means
+ * nothing.
+ */
+export function protectedEmailHits(rows = [], protectedEmails = []) {
+  const protectedSet = new Set((protectedEmails || []).map(norm).filter(Boolean))
+  return (Array.isArray(rows) ? rows : []).filter((r) =>
+    [r?.recipient_email, r?.claimed_email].some((e) => e != null && protectedSet.has(norm(e)))
+  )
+}
+
 /** The dry-run count printed earlier must match the fresh collection at
  *  execute time — anything else means the data moved underneath us. */
 export function countMatchesDryRun(printedCount, freshCount) {

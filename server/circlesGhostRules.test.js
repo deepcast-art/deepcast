@@ -4,6 +4,7 @@ import {
   isCirclesGhostCandidate,
   collectGhostDeleteSet,
   countMatchesDryRun,
+  protectedEmailHits,
 } from './circlesGhostRules.js'
 
 const CIRCLES = CIRCLES_FILM_ID
@@ -137,5 +138,32 @@ describe('countMatchesDryRun', () => {
     expect(countMatchesDryRun(50, 51)).toBe(false)
     expect(countMatchesDryRun(null, 0)).toBe(false)
     expect(countMatchesDryRun(undefined, undefined)).toBe(false)
+  })
+})
+
+describe('protectedEmailHits — recipient / claimant only, never the sender (founder ruling 2026-09-03)', () => {
+  const PROTECTED = ['filmmaker@gmail.com', 'oliver@marionecological.com']
+
+  it('(a) a ghost whose SENDER is a protected address is NOT a hit — it stays in the delete set', () => {
+    const firstRing = ghost('g0', { sender_email: 'filmmaker@gmail.com', parent_invite_id: null })
+    expect(protectedEmailHits([firstRing], PROTECTED)).toEqual([])
+    const { ghosts, aborts } = collectGhostDeleteSet([firstRing])
+    expect(ghosts.map((r) => r.id)).toEqual(['g0'])
+    expect(aborts).toEqual([])
+  })
+
+  it('(b) a row whose RECIPIENT or CLAIMANT email is protected is a hit (case-insensitive)', () => {
+    const byRecipient = ghost('r', { recipient_email: 'Oliver@MarionEcological.com' })
+    const byClaimant = ghost('c', { claimed_email: 'filmmaker@gmail.com' })
+    const clean = ghost('ok', { sender_email: 'filmmaker@gmail.com' })
+    const hits = protectedEmailHits([byRecipient, byClaimant, clean], PROTECTED)
+    expect(hits.map((r) => r.id)).toEqual(['r', 'c'])
+  })
+
+  it('null emails and empty inputs never hit', () => {
+    expect(protectedEmailHits([ghost('g', { recipient_email: null })], PROTECTED)).toEqual([])
+    expect(protectedEmailHits([], PROTECTED)).toEqual([])
+    expect(protectedEmailHits(undefined, PROTECTED)).toEqual([])
+    expect(protectedEmailHits([ghost('g')], [])).toEqual([])
   })
 })

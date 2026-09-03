@@ -23,9 +23,13 @@
  *   3. HARD-ABORTS (prints why, exits non-zero, deletes nothing) if any
  *      collected row has a ticket number, is claimed, carries a non-ghost
  *      email, or is referenced by ANY row outside the set (invites on any
- *      film, or watch_sessions by token); if any collected row's emails hit
- *      PROTECTED_EMAILS; or, at execute time, if the fresh collection's
- *      count differs from the dry-run count it printed;
+ *      film, or watch_sessions by token); if any collected row's RECIPIENT
+ *      or CLAIMANT email is in PROTECTED_EMAILS (the sender is deliberately
+ *      not checked — the first-ring ghosts were seeded with the filmmaker
+ *      as sender, and deleting a row never touches its sender; the first
+ *      execute on 2026-09-03 aborted on exactly that, founder-corrected);
+ *      or, at execute time, if the fresh collection's count differs from
+ *      the dry-run count it printed;
  *   4. prints every row it would delete;
  *   5. DRY RUN BY DEFAULT — changes nothing. `--execute` additionally
  *      requires typing the confirmation phrase, writes a JSON BACKUP of every
@@ -55,6 +59,7 @@ import {
   GHOST_EMAIL_SUFFIX,
   collectGhostDeleteSet,
   countMatchesDryRun,
+  protectedEmailHits,
 } from './circlesGhostRules.js'
 
 /* ----------------------------- configuration ----------------------------- */
@@ -130,13 +135,13 @@ async function main() {
   console.log(`  ghost-domain rows:      ${ghostsOnFilm.length}`)
   console.log(`  real rows (people):     ${realOnFilm.length}  (ticket numbers ${realOnFilm.map((r) => r.ticket_no).filter((n) => n != null).sort((a, b) => a - b).join(', ') || '—'})`)
 
-  /* ---- protected-email guard (belt and braces: ghosts never carry a real email) ---- */
-  const protectedHits = ghosts.filter((r) =>
-    [r.recipient_email, r.claimed_email, r.sender_email].some((e) => PROTECTED_EMAILS.includes(norm(e)))
-  )
+  /* ---- protected-email guard: recipient / claimant only (circlesGhostRules.js).
+     The sender is NOT checked — the first-ring ghosts were seeded with the
+     filmmaker as sender, and deleting a row never touches its sender. ---- */
+  const protectedHits = protectedEmailHits(ghosts, PROTECTED_EMAILS)
   if (protectedHits.length) {
-    protectedHits.forEach((r) => console.error(`   - ${r.id} (${r.recipient_email})`))
-    fail(`${protectedHits.length} collected row(s) carry a PROTECTED email.`)
+    protectedHits.forEach((r) => console.error(`   - ${r.id} (${r.recipient_email} / ${r.claimed_email ?? '—'})`))
+    fail(`${protectedHits.length} collected row(s) carry a PROTECTED recipient or claimant email.`)
   }
 
   /* ---- watch_sessions referencing any collected token (outside reference) ---- */
