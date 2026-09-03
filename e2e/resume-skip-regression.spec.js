@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures/test.js'
 
 /**
  * Regression: a stale near-end resume position must NEVER skip the screening.

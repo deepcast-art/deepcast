@@ -13,7 +13,7 @@
  *
  * All API traffic is mocked — no production data involved.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures/test.js'
 
 const REF = 'wmtjgpxhjtbocsmutqqc'
 const OWNER_ID = '11111111-1111-4111-8111-111111111111'
@@ -190,6 +190,13 @@ test.describe('the slug-based viewer watch page is unchanged by the film-scoped 
     await page.route('**/api/invites/link/**', (route) => route.fulfill({ json: LINK_CLAIMED }))
     await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('button', { name: 'Pass it on' })).toBeVisible()
+    // The CTA renders before the payload arrives (the page shell is static);
+    // wait for PAYLOAD-driven content — the rail's tickets-shared number and
+    // the hands line — so the capture can never race its own data (CI run
+    // #1: webkit captured "0 TICKETS SHARED" once, then passed on retry).
+    await expect(page.locator('section[aria-label="847 tickets shared of 1,000 goal"]')).toBeVisible()
+    await expect(page.getByText('Milestones passed')).toBeVisible()
+    await expect(page.getByText(/passed through 3 pairs of hands/)).toBeVisible()
 
     const before = await page.evaluate(() => ({
       header: document.querySelector('header').innerText,

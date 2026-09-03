@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures/test.js'
 
 /**
  * Chunk-failure recovery (2026-07-31) — the fix for the 2026-07-28 mobile

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures/test.js'
 
 /**
  * Restricted-storage regression suite (the Safari private-mode bug).

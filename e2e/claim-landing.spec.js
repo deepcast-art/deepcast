@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures/test.js'
 
 /**
  * The three-page claim arc (final spec 2026-07-16):

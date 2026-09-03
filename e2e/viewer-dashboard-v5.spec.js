@@ -8,7 +8,7 @@
  * via CORS or ViewerShareGate's count queries read as zero and bounce to
  * /profile. The claimant (stash) variant is covered by claim-landing.spec.js.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures/test.js'
 
 const REF = 'wmtjgpxhjtbocsmutqqc'
 const USER_ID = '11111111-1111-4111-8111-111111111111'

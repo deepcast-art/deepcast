@@ -20,7 +20,7 @@
  * test proves the same journey in a normal window — guarding against the
  * fix ever regressing normal-mode behavior.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures/test.js'
 
 const USER_ID = '55555555-5555-4555-8555-555555555555'
 const FILM_ID = '66666666-6666-4666-8666-666666666666'

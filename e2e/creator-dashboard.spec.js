@@ -10,7 +10,7 @@
  * Same mocked-creator-session pattern as remove-popover-email.spec.js —
  * no real network, no writes.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures/test.js'
 
 const REF = 'wmtjgpxhjtbocsmutqqc'
 const OWNER_ID = '11111111-1111-4111-8111-111111111111'

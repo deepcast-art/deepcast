@@ -9,7 +9,7 @@
  * no real network, no writes) and asserts the email survives typing.
  * The final Delete is never clicked.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures/test.js'
 
 const REF = 'wmtjgpxhjtbocsmutqqc'
 const OWNER_ID = '11111111-1111-4111-8111-111111111111'

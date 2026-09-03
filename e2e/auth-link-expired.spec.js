@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures/test.js'
 
 /**
  * Used/expired magic link → friendly explanation, never a silent login page.
