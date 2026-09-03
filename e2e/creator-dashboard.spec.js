@@ -412,3 +412,76 @@ test.describe('viewer V5 dashboard — unchanged (mocked viewer)', () => {
     await expect(map).not.toHaveClass(/\blit\b/)
   })
 })
+
+/* ── Phase 4 (2026-09-03): the creator dashboard's shell. ── */
+test.describe('creator dashboard — shell (mocked creator)', () => {
+  test('no Team members box, no Profile link; sidebar order Upload film · Set password · About · Sign out; the wordmark fits', async ({ page }) => {
+    const jsErrors = []
+    page.on('pageerror', (err) => jsErrors.push(err.message))
+    await mockCreator(page)
+
+    for (const width of [1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+      await expect(page.getByText('People in this network')).toBeVisible({ timeout: 15000 })
+
+      // The Team members box is gone (UI only).
+      await expect(page.getByText('Team members')).toHaveCount(0)
+      await expect(page.getByPlaceholder('Teammate email')).toHaveCount(0)
+      await expect(page.getByRole('button', { name: 'Add teammate' })).toHaveCount(0)
+
+      // Sidebar: stats, then exactly these four, in this order. No Profile,
+      // no Network map.
+      const aside = page.locator('aside')
+      await expect(aside.getByText('Films', { exact: true })).toBeVisible()
+      await expect(aside.getByText('Tickets generated (all films)')).toBeVisible()
+      await expect(aside.getByText('Unlimited tickets')).toBeVisible()
+      const nav = await aside.locator('nav a, nav button').allTextContents()
+      expect(nav.map((t) => t.trim())).toEqual(['Upload film', 'Set password', 'About', 'Sign out'])
+      await expect(aside.getByRole('link', { name: 'Profile', exact: true })).toHaveCount(0)
+      await expect(aside.locator('a[href="/profile"]')).toHaveCount(0)
+
+      // The wordmark fits inside the sidebar (the clipped "t" defect): its
+      // box ends before the sidebar's inner edge and nothing overflows.
+      const wordmark = aside.getByText('deepcast', { exact: true }).first()
+      await expect(wordmark).toBeVisible()
+      const [wm, as] = await Promise.all([wordmark.boundingBox(), aside.boundingBox()])
+      expect(wm.x + wm.width).toBeLessThanOrEqual(as.x + as.width - 8)
+      const overflow = await aside.evaluate((el) => el.scrollWidth - el.clientWidth)
+      expect(overflow).toBeLessThanOrEqual(0)
+    }
+    expect(jsErrors).toEqual([])
+  })
+
+  test('"Set password" lands on the password form (scrolled into view, first field focused) — not the top of the Profile page', async ({ page }) => {
+    await mockCreator(page)
+    await page.route('**/rest/v1/watch_sessions**', (route) =>
+      route.fulfill({ json: [], headers: { ...RANGE_HEADERS, 'content-range': '*/0' } })
+    )
+    await page.setViewportSize({ width: 1440, height: 700 })
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('People in this network')).toBeVisible({ timeout: 15000 })
+
+    await page.locator('aside').getByRole('link', { name: 'Set password' }).click()
+    await expect(page).toHaveURL(/\/profile#set-password$/)
+    const section = page.locator('#set-password')
+    await expect(section.getByText('Set your password')).toBeVisible({ timeout: 15000 })
+    const newPassword = page.getByPlaceholder('New password')
+    await expect(newPassword).toBeVisible()
+    // Scrolled INTO the viewport (smooth scroll finishes within the poll),
+    // and the first field holds focus.
+    await expect
+      .poll(async () => {
+        const box = await section.boundingBox()
+        const vh = await page.evaluate(() => window.innerHeight)
+        return box && box.y >= -1 && box.y < vh
+      })
+      .toBe(true)
+    await expect(newPassword).toBeFocused()
+    // The page moved off its top (the old behaviour left it there, at
+    // "Films you've watched"). The mocked page is short, so the heading may
+    // still peek in; what matters is the scroll happened and the form is in
+    // view — asserted above.
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+  })
+})

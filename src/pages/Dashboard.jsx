@@ -48,13 +48,9 @@ export default function Dashboard() {
   const [filmSenderUsers, setFilmSenderUsers] = useState([])
 
   const [leadCreatorName, setLeadCreatorName] = useState('')
-  const [teamEmail, setTeamEmail] = useState('')
-  const [teamName, setTeamName] = useState('')
-  const [teamBusy, setTeamBusy] = useState(false)
-  const [teamMessage, setTeamMessage] = useState('')
-  const [teamInvites, setTeamInvites] = useState([])
+  /** Team members' ids feed the people table's "∞" column — the teammate
+   *  management FORM left this page 2026-09-03 (UI only). */
   const [teamMembers, setTeamMembers] = useState([])
-  const [teamRemoveBusyId, setTeamRemoveBusyId] = useState(null)
   /** Mobile menus always START closed and never auto-open — the dashboard's main
    *  page is the initial view (key stats live in the mobile strip; the menu is
    *  navigation only). Desktop sidebars are always visible and unaffected.
@@ -361,20 +357,11 @@ export default function Dashboard() {
 
   async function loadTeamSection() {
     if (profile?.role !== 'creator') return
-    const { data: pending } = await supabase
-      .from('team_invites')
-      .select('id, email, invited_name, expires_at, created_at')
-      .eq('creator_id', profile.id)
-      .is('accepted_at', null)
-      .order('created_at', { ascending: false })
-
     const { data: members } = await supabase
       .from('users')
       .select('id, name, email, created_at')
       .eq('team_creator_id', profile.id)
       .order('created_at', { ascending: false })
-
-    setTeamInvites(pending || [])
     setTeamMembers(members || [])
   }
 
@@ -683,7 +670,7 @@ export default function Dashboard() {
       {/* Mobile top bar */}
       <div className="flex items-center justify-between border-b border-faint/30 bg-ink/80 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))] lg:hidden">
         <Link to="/" className="inline-block opacity-90 hover:opacity-100">
-          <DeepcastLogo variant="wordmark" className="h-5 w-auto text-warm" />
+          <DeepcastLogo variant="wordmark" size="text-xl" className="text-warm" />
         </Link>
         <button
           type="button"
@@ -704,7 +691,10 @@ export default function Dashboard() {
       <aside className={`${sidebarOpen ? 'flex' : 'hidden'} lg:flex w-full shrink-0 flex-col gap-6 overflow-y-auto border-b border-faint/30 bg-ink/80 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] pt-6 sm:px-6 sm:py-10 panel-scroll lg:w-[22%] lg:min-h-screen lg:border-b-0 lg:border-r lg:px-6 lg:py-10`}>
         <div className="animate-fade-in">
           <Link to="/" className="hidden opacity-90 hover:opacity-100 lg:inline-block">
-            <DeepcastLogo variant="wordmark" className="h-7 w-auto text-warm" />
+            {/* Sized via the `size` prop, NOT h-*: without it the wordmark
+                keeps DeepcastLogo's default text-8xl glyphs and overflows
+                the 22% sidebar (the clipped final "t", fixed 2026-09-03). */}
+            <DeepcastLogo variant="wordmark" size="text-3xl" className="text-warm" />
           </Link>
           <h2 className="font-serif-v3 mt-4 text-xl text-warm">{profile.name}</h2>
           {isTeamMember && leadCreatorName && (
@@ -727,18 +717,18 @@ export default function Dashboard() {
           )}
         </div>
         <div className="hidden h-[0.5px] w-full bg-accent/20 lg:block" />
+        {/* Sidebar links (founder order 2026-09-03): Upload film · Set
+            password · About · Sign out. The Profile link is gone (the
+            /profile route stays live); Network map is gone with its page. */}
         <nav className="flex flex-col gap-3 font-sans text-[10px] uppercase tracking-widest">
-          <Link className="text-warm/40 transition-colors hover:text-warm" to="/profile">
-            Profile
-          </Link>
-          <Link className="text-warm/40 transition-colors hover:text-warm" to="/profile#set-password">
-            Set password
-          </Link>
           {profile.role === 'creator' && (
             <Link className="text-accent transition-colors hover:text-accent-hover" to="/upload">
               Upload film
             </Link>
           )}
+          <Link className="text-warm/40 transition-colors hover:text-warm" to="/profile#set-password">
+            Set password
+          </Link>
           <Link className="text-warm/40 transition-colors hover:text-warm" to="/about">
             About
           </Link>
@@ -772,133 +762,10 @@ export default function Dashboard() {
             <p className="self-end normal-case text-warm/45">Unlimited tickets</p>
           )}
         </div>
-        {profile.role === 'creator' && (
-          <section className="mb-10 animate-fade-in border border-border bg-bg-card p-6">
-            <h2 className="mb-4 text-xs font-medium uppercase tracking-wider text-text-muted">
-              Team members
-            </h2>
-            <p className="mb-4 max-w-xl text-sm text-text-muted">
-              Enter their email. If they don&apos;t have an account yet, we email a registration link.
-              If they already have a <strong>viewer</strong> account, we upgrade them to teammate,
-              grant unlimited invites for your films, and email them a short sign-in reminder.
-            </p>
-            <div className="mb-4 flex flex-col gap-3">
-              <input
-                type="email"
-                placeholder="Teammate email"
-                value={teamEmail}
-                onChange={(e) => setTeamEmail(e.target.value)}
-                className="w-full rounded-none border border-border bg-bg-page px-3 py-2.5 text-sm text-text sm:py-2"
-              />
-              <input
-                type="text"
-                placeholder="Name (optional, for new invites only)"
-                value={teamName}
-                onChange={(e) => setTeamName(e.target.value)}
-                className="w-full rounded-none border border-border bg-bg-page px-3 py-2.5 text-sm text-text sm:py-2"
-              />
-              <button
-                type="button"
-                disabled={teamBusy}
-                onClick={async () => {
-                  setTeamMessage('')
-                  if (!teamEmail.trim().includes('@')) {
-                    setTeamMessage('Enter a valid email.')
-                    return
-                  }
-                  setTeamBusy(true)
-                  try {
-                    const r = await api.sendTeamInvite(
-                      profile.id,
-                      teamEmail.trim(),
-                      teamName.trim(),
-                      window?.location?.origin || null
-                    )
-                    setTeamMessage(
-                      r?.upgradedFromViewer
-                        ? 'Existing viewer added—we sent them a sign-in email.'
-                        : 'Invitation email sent.'
-                    )
-                    setTeamEmail('')
-                    setTeamName('')
-                    await loadTeamSection()
-                  } catch (e) {
-                    setTeamMessage(e.message || 'Could not add teammate.')
-                  } finally {
-                    setTeamBusy(false)
-                  }
-                }}
-                className="shrink-0 cursor-pointer rounded-none bg-accent px-4 py-2 text-xs uppercase tracking-wider text-warm transition-colors hover:bg-accent-hover disabled:opacity-50"
-              >
-                {teamBusy ? 'Working…' : 'Add teammate'}
-              </button>
-            </div>
-            {teamMessage && <p className="mb-4 text-sm text-text-muted">{teamMessage}</p>}
-            {teamInvites.length > 0 && (
-              <div className="mb-4">
-                <p className="mb-2 text-xs uppercase tracking-wider text-text-muted">Pending invites</p>
-                <ul className="space-y-1 text-sm text-text-muted">
-                  {teamInvites.map((t) => (
-                    <li key={t.id}>
-                      {t.email}
-                      {t.invited_name ? ` · ${t.invited_name}` : ''}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {teamMembers.length > 0 && (
-              <div>
-                <p className="mb-2 text-xs uppercase tracking-wider text-text-muted">On your team</p>
-                <ul className="space-y-2 text-sm text-text">
-                  {teamMembers.map((m) => (
-                    <li
-                      key={m.id}
-                      className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2 last:border-b-0"
-                    >
-                      <span>
-                        {m.name}{' '}
-                        <span className="text-text-muted">({m.email})</span>
-                      </span>
-                      <button
-                        type="button"
-                        disabled={teamRemoveBusyId === m.id}
-                        onClick={async () => {
-                          if (
-                            !window.confirm(
-                              `Remove ${m.name || m.email} from your team? They keep their login as a viewer but lose access to your films and team tools until invited again.`
-                            )
-                          ) {
-                            return
-                          }
-                          setTeamMessage('')
-                          setTeamRemoveBusyId(m.id)
-                          try {
-                            const memberId = m.id
-                            const { data: { session } } = await supabase.auth.getSession()
-                            await api.removeTeamMember(memberId, session?.access_token)
-                            setTeamMembers((prev) =>
-                              prev.filter((x) => String(x.id) !== String(memberId))
-                            )
-                            await loadTeamSection()
-                            setTeamMessage('Teammate removed.')
-                          } catch (e) {
-                            setTeamMessage(e.message || 'Could not remove teammate.')
-                          } finally {
-                            setTeamRemoveBusyId(null)
-                          }
-                        }}
-                        className="shrink-0 cursor-pointer text-xs uppercase tracking-wider text-error/90 transition-colors hover:text-error disabled:opacity-50"
-                      >
-                        {teamRemoveBusyId === m.id ? 'Removing…' : 'Remove'}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </section>
-        )}
+        {/* The Team members box (teammate email + name form) was REMOVED
+            2026-09-03 — UI only: /api/team/*, teamRules.js, and existing
+            teammates' access are untouched; their ids still feed the
+            people table's "∞" column via loadTeamSection. */}
 
         {loading ? (
           <div className="flex justify-center py-16">

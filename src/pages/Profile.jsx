@@ -100,11 +100,22 @@ export default function Profile() {
   }
 
   useEffect(() => {
+    // ROOT CAUSE of "Set password lands on the wrong page" (2026-09-03):
+    // this effect ran once, at mount, while the page was still the loading
+    // spinner — the #set-password section only mounts after loadData
+    // finishes — so getElementById found nothing and the founder was left
+    // at the top of the page looking at "Films you've watched". The scroll
+    // now waits for the load, then lands on the form and focuses its
+    // first field.
+    if (loading) return
     if (location.hash === '#set-password') {
       const el = document.getElementById('set-password')
-      if (el) el.scrollIntoView({ behavior: 'smooth' })
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' })
+        el.querySelector('input')?.focus({ preventScroll: true })
+      }
     }
-  }, [location.hash])
+  }, [location.hash, loading])
 
   useEffect(() => {
     if (profile) loadData()
