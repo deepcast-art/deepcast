@@ -964,6 +964,19 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
+                      {/* The filmmaker's own watch page (2026-09-03): the
+                          REAL /watch page every viewer sees, resolved by
+                          film for his session — not a preview. Creator
+                          only: the route and the server both require the
+                          film's creator. */}
+                      {profile.role === 'creator' && (
+                        <Link
+                          to={`/watch/film/${film.id}`}
+                          className="text-xs uppercase tracking-wider text-accent transition-colors hover:text-accent-hover"
+                        >
+                          Watch page
+                        </Link>
+                      )}
                       <button
                         type="button"
                         onClick={() => setInviteFilmId(isInviteOpen ? null : film.id)}

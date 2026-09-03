@@ -36,8 +36,8 @@ import { nextTicketNo } from './ticketNumbers.js'
 import { firstNameInputError, fullNameInputError, splitFullName, FULL_NAME_MESSAGE } from '../src/lib/firstNameRule.js'
 import { sanitizeClaimContext } from '../src/lib/claimContext.js'
 import { VOID_INVITE_STATUS } from '../src/lib/inviteExistence.js'
-import { countFilmClaims, countFilmShares } from '../src/lib/filmClaims.js'
 import { buildLineageForks } from '../src/lib/lineageForks.js'
+import { buildFilmWatchFields, filmWatchDecision } from './watchPayload.js'
 import { refundOnVoidDecision } from './voidRules.js'
 
 const app = express()
@@ -1199,25 +1199,14 @@ app.get('/api/invites/link/:slug', async (req, res) => {
       includeGhosts: showGhosts,
     })
 
-    // Landing still: hand-picked films.poster_url first, else the film's
-    // public Mux poster frame, else null (page falls back to the dark bg).
-    const posterUrl =
-      invite.films?.poster_url ||
-      (invite.films?.mux_playback_id
-        ? `https://image.mux.com/${invite.films.mux_playback_id}/thumbnail.jpg`
-        : null)
-
     return res.json({
+      // Film-level fields — title, hook, runtime, poster, playback id, and
+      // BOTH film-wide rail counts — come from the ONE builder shared with
+      // the filmmaker's film-scoped route below (server/watchPayload.js),
+      // so the two payloads can never drift.
+      ...buildFilmWatchFields(invite.films, rows),
       inviteeFirstName: invite.recipient_name || null,
       sharerName: invite.sender_name || null,
-      filmTitle: invite.films?.title || null,
-      // Per-film C1 hook — null until the filmmaker authors one; the landing
-      // page renders nothing at all for null (no box, no placeholder).
-      transmissionHook: invite.films?.transmission_hook || null,
-      // Runtime from OUR database only (captured once from Mux by the
-      // backfill / upload flow) — never a Mux call at page-view time. NULL
-      // renders nothing.
-      durationSeconds: invite.films?.duration_seconds ?? null,
       status: invite.status,
       inviteOrdinal,
       lineageNames,
@@ -1229,19 +1218,9 @@ app.get('/api/invites/link/:slug', async (req, res) => {
         senderId: invite.sender_id,
         filmCreatorId: creatorId,
       }),
-      posterUrl,
-      // Film-wide counts for the watch rail, both over the who-exists set —
-      // voided links never count, ghosts count only when the film shows
-      // them (show_ghosts). Honest numbers, no padding, no clamping.
-      // filmSharesCount (non-void generated links) is THE rail's number
-      // since the 2026-07-25 metric switch; filmClaimsCount stays served so
-      // an older frontend never reads a missing field during deploy skew.
-      filmSharesCount: countFilmShares(rows, { includeGhosts: showGhosts }),
-      filmClaimsCount: countFilmClaims(rows, { includeGhosts: showGhosts }),
       lineageForks,
       // Watch-page needs on revisit (playback is public-policy; invites are
       // world-readable under RLS, so none of this is a new exposure class).
-      muxPlaybackId: invite.films?.mux_playback_id || null,
       inviteId: invite.id,
       claimOrdinal: invite.claim_ordinal ?? null,
       // Permanent ticket number (minted at generation) — present for
@@ -1252,6 +1231,72 @@ app.get('/api/invites/link/:slug', async (req, res) => {
   } catch (err) {
     console.error('Invite link lookup error:', err)
     return res.status(500).json({ error: 'Failed to look up invite link' })
+  }
+})
+
+/**
+ * The filmmaker's own watch page (2026-09-03): the SAME payload shape as
+ * GET /api/invites/link/:slug, resolved by FILM for a verified session whose
+ * user is the film's creator. He holds №1 through films.creator_ticket_no
+ * and has no invite row, so no slug can ever reach him — this route is the
+ * missing key. Identity comes ONLY from the verified token (the
+ * verified-session pattern); ownership is films.creator_id, decided in
+ * server/watchPayload.js (unit-tested) — never a client-sent id, never a
+ * bare role check. The film-level fields come from the one builder the link
+ * route uses; the invite-level fields are honestly null (no invite exists).
+ */
+app.get('/api/films/:filmId/watch', async (req, res) => {
+  try {
+    const authHeader = req.get('authorization') || ''
+    const jwt = authHeader.replace(/^Bearer\s+/i, '').trim()
+    if (!jwt) return res.status(401).json({ error: 'Not authenticated' })
+    const { data: userData, error: userErr } = await supabase.auth.getUser(jwt)
+    const authUser = userData?.user
+    if (userErr || !authUser?.id) return res.status(401).json({ error: 'Invalid session' })
+
+    const filmId = String(req.params.filmId || '').trim()
+    if (!filmId) return res.status(400).json({ error: 'Film ID is required' })
+    const { data: film, error: filmErr } = await supabase
+      .from('films')
+      .select('*')
+      .eq('id', filmId)
+      .maybeSingle()
+    const decision = filmWatchDecision({ callerId: authUser.id, film: filmErr ? null : film })
+    if (!decision.ok) return res.status(decision.status).json({ error: decision.error })
+
+    const [{ data: filmInvites }, creator] = await Promise.all([
+      supabase
+        .from('invites')
+        .select('id, parent_invite_id, sender_id, sender_name, recipient_name, recipient_email, created_at, status')
+        .eq('film_id', film.id),
+      ensureProfileForUserId(authUser.id),
+    ])
+
+    return res.json({
+      ...buildFilmWatchFields(film, filmInvites || []),
+      inviteeFirstName: null,
+      sharerName: null,
+      status: null,
+      inviteOrdinal: null,
+      // Depth 0: the filmmaker IS the origin — no chain, no forks, nothing
+      // invented. The page's rule line and emblem read this honestly.
+      lineageNames: [],
+      senderIsCreator: false,
+      lineageForks: [],
+      inviteId: null,
+      claimOrdinal: null,
+      // The filmmaker's permanent №1 (films.creator_ticket_no).
+      ticketNo: film.creator_ticket_no ?? null,
+      // Role-unlimited (creator): no finite balance exists. The modal hides
+      // the count and stubs; the reveal reads the unlimited line.
+      ticketsRemaining: null,
+      filmId: film.id,
+      creatorName: (creator?.name || '').trim() || null,
+      ticketsUnlimited: isRoleUnlimitedSharer(creator),
+    })
+  } catch (err) {
+    console.error('Film watch lookup error:', err)
+    return res.status(500).json({ error: 'Failed to look up the film' })
   }
 })
 

@@ -103,6 +103,22 @@ export const api = {
     throw new Error(error.error || 'Request failed')
   },
 
+  // The filmmaker's own watch page (2026-09-03): the link payload's shape,
+  // resolved by FILM for the verified creator session (the server checks
+  // films.creator_id against the token's user — never a client-sent id).
+  getFilmWatch: async (filmId, accessToken) => {
+    const enc = encodeURIComponent(filmId)
+    const res = await fetchWithTimeout(`${API_BASE}/films/${enc}/watch`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    })
+    if (res.ok) return res.json()
+    if (res.status === 401 || res.status === 403) throw new Error('forbidden')
+    if (res.status === 404) throw new Error('invalid')
+    if (res.status === 502 || res.status === 503) throw new Error('server_unavailable')
+    const error = await res.json().catch(() => ({ error: 'Request failed' }))
+    throw new Error(error.error || 'Request failed')
+  },
+
   // Generate a claim link. Sharers pass their claimed invite id (their
   // identity when no session exists) and/or filmId + a session token;
   // parentInviteId lets a session-holding claimant keep exact lineage.

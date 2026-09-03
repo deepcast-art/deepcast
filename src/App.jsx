@@ -282,6 +282,21 @@ export default function App() {
           </DashboardGate>
         }
       />
+      {/* The filmmaker's own watch page (2026-09-03): the SAME ClaimWatch
+          component, resolved by film for the verified creator session — the
+          server enforces films.creator_id against the token's user. Two
+          path segments, so it can never collide with the single-segment
+          slug route below (and "film" is not a slug word). */}
+      <Route
+        path="/watch/film/:filmId"
+        element={
+          <ProtectedRoute requiredRole="creator">
+            <Suspense fallback={<RouteFallback />}>
+              <ClaimWatch />
+            </Suspense>
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/watch/:slug"
         element={

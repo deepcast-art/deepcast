@@ -32,6 +32,11 @@ import { filmStory, filmPosterUrl } from '../content/filmStory'
  *  legacy flow: inside the final 5% the position is ERASED, never saved. */
 const positionKey = (slug) => `screening_position_slug_${slug}`
 const progressKey = (slug) => `screening_progress_slug_${slug}`
+/** Film-scoped keys for the filmmaker's own watch page (2026-09-03) — a
+ *  separate namespace, so his resume spot can never collide with any
+ *  viewer's slug-scoped one in the same browser. */
+const filmPositionKey = (filmId) => `screening_position_film_${filmId}`
+const filmProgressKey = (filmId) => `screening_progress_film_${filmId}`
 
 const MuxPlayer = lazy(() => import('@mux/mux-player-react').then((m) => ({ default: m.default })))
 
@@ -95,9 +100,13 @@ function TicketStubs({ granted, remaining }) {
  * YOU; the faint entry stroke renders only when the chain runs deeper than
  * the three shown.
  */
-function LineageEmblem({ hands, forks = [], nextLabel }) {
+function LineageEmblem({ hands, forks = [], nextLabel, originOnly = false }) {
   const shown = lastHands(hands, 3)
-  if (shown.length === 0) return null
+  // Depth 0 (the filmmaker's own page, 2026-09-03): no predecessors exist
+  // and none are invented — the emblem is YOU (the origin) and the "?" tip
+  // alone. Every viewer chain has ≥1 hand (the server prepends the film's
+  // creator), so this branch never runs on the slug path.
+  if (shown.length === 0 && !originOnly) return null
 
   // Template slots (replica geometry, fixed): position, node size/opacity,
   // and each slot's label anchor.
@@ -184,7 +193,7 @@ function LineageEmblem({ hands, forks = [], nextLabel }) {
      a pure translate — no new composition, no new elements, and the
      far-field dots stay put (full-canvas atmosphere). Full chains (3 shown)
      keep the replica's exact placement. */
-  const xMin = active[0].x
+  const xMin = active.length ? active[0].x : YOU.x
   const xMax = nextLabel ? NEXT.x : YOU.x
   const dx = shown.length < 3 ? Math.round((200 - (xMin + xMax) / 2) * 10) / 10 : 0
 
@@ -361,6 +370,12 @@ function PassItOnModal({
   copied,
   onCopy,
   onAgain,
+  /** Role-unlimited sharer (the filmmaker's own page, 2026-09-03): no
+   *  finite balance exists, so the count line is absent. Default false =
+   *  the viewer path, untouched. */
+  unlimited = false,
+  /** Depth-0 emblem (same page): YOU + the "?" tip, no predecessors. */
+  originOnly = false,
 }) {
   const dialogRef = useRef(null)
   const panelRef = useRef(null)
@@ -441,6 +456,7 @@ function PassItOnModal({
           hands={hands}
           forks={handForks}
           nextLabel={generated ? lineageLabel(generated.name) : outOfTickets ? null : '?'}
+          originOnly={originOnly}
         />
 
         {/* Stubs sit above the tickets/zero line — in the zero state they
@@ -507,12 +523,16 @@ function PassItOnModal({
           </p>
         ) : (
           <>
-            {/* The count — founder-directed whittle ("{n} tickets left."). */}
-            <p
-              className={`${Number.isFinite(remaining) ? 'mt-3.5' : 'mt-8'} font-sans font-normal text-xs uppercase tracking-[0.24em] text-muted`}
-            >
-              {tickets ?? '…'} ticket{tickets === 1 ? '' : 's'} left.
-            </p>
+            {/* The count — founder-directed whittle ("{n} tickets left.").
+                Absent for a role-unlimited sharer (the filmmaker's own
+                page): no finite number exists, so none is claimed. */}
+            {!unlimited && (
+              <p
+                className={`${Number.isFinite(remaining) ? 'mt-3.5' : 'mt-8'} font-sans font-normal text-xs uppercase tracking-[0.24em] text-muted`}
+              >
+                {tickets ?? '…'} ticket{tickets === 1 ? '' : 's'} left.
+              </p>
+            )}
 
             {/* The charge — founder-approved verbatim (2026-07-23, final).
                 NBSP binds "anyone" to the dash so "—" never leads a line. */}
@@ -564,9 +584,20 @@ function PassItOnModal({
  * Only the claimant (recognized by the safeStorage stash or a signed-in
  * session matching claimed_by) lands here; anyone else is bounced to the
  * landing route, which shows the dead-link page for claimed slugs.
+ *
+ * FILM MODE (2026-09-03): mounted at /watch/film/:filmId, the SAME
+ * component renders the filmmaker's own watch page for a film he owns —
+ * fed by the film-scoped route on his verified session (the server decides
+ * ownership), film-scoped resume keys, the claim stash ignored, the
+ * pass-it-on flow on the session path (the card's create-link call). Every
+ * difference is gated on `filmMode`; the slug path is byte-identical
+ * (e2e/creator-watch-page.spec.js replays a recorded baseline).
  */
 export default function ClaimWatch() {
-  const { slug } = useParams()
+  const { slug, filmId } = useParams()
+  const filmMode = Boolean(filmId)
+  const posKey = filmMode ? filmPositionKey(filmId) : positionKey(slug)
+  const progKey = filmMode ? filmProgressKey(filmId) : progressKey(slug)
   const [searchParams] = useSearchParams()
   const location = useLocation()
   /* Arrival-from-prologue fade (owner spec 2026-07-21) — COSMETIC only.
@@ -585,14 +616,18 @@ export default function ClaimWatch() {
       window.history.replaceState({ ...window.history.state, usr: null }, '')
     }
   }, [])
-  const stash = readClaimStash()
+  /* Film mode ignores the claim stash entirely: a viewer's stash in the
+     same browser must never make the filmmaker's page mark THAT invite
+     watched or spend from it. */
+  const stash = filmMode ? null : readClaimStash()
   const stashOwner = isClaimOwner(stash, slug)
   /** Session-based ownership (Piece E return visits): on a new browser there
    *  is no stash, but a signed-in silent-account holder whose claimed_by
    *  matches this slug's invite is the same person. undefined = resolving. */
   const [sessionOwner, setSessionOwner] = useState(stashOwner ? false : undefined)
   useEffect(() => {
-    if (stashOwner) return
+    // Film mode resolves ownership through its own server call below.
+    if (stashOwner || filmMode) return
     let cancelled = false
     ;(async () => {
       try {
@@ -617,18 +652,18 @@ export default function ClaimWatch() {
     return () => {
       cancelled = true
     }
-  }, [slug, stashOwner])
+  }, [slug, stashOwner, filmMode])
   const owner = stashOwner || sessionOwner === true
 
   /** Start position, resolved once at mount: "Watch again" (?again=1) starts
    *  clean and clears the saved spot; otherwise resume where they left off. */
   const [startSeconds] = useState(() => {
     if (searchParams.get('again')) {
-      safeLocalStorage.removeItem(positionKey(slug))
-      safeLocalStorage.removeItem(progressKey(slug))
+      safeLocalStorage.removeItem(posKey)
+      safeLocalStorage.removeItem(progKey)
       return 0
     }
-    const saved = Number(safeLocalStorage.getItem(positionKey(slug)))
+    const saved = Number(safeLocalStorage.getItem(posKey))
     return Number.isFinite(saved) && saved > 0 ? saved : 0
   })
   const lastSavedSecond = useRef(-1)
@@ -775,8 +810,46 @@ export default function ClaimWatch() {
     }
   }
 
+  /** FILM MODE load (2026-09-03): the verified session asks the film-scoped
+   *  route; the SERVER decides ownership (films.creator_id must match the
+   *  token's user). Refused or signed out → not the owner → bounced to the
+   *  dashboard, never a blank page. */
   useEffect(() => {
-    if (!owner) return
+    if (!filmMode) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { data: { session } = {} } = await supabase.auth.getSession()
+        const token = session?.access_token
+        if (!token) {
+          if (!cancelled) setSessionOwner(false)
+          return
+        }
+        const data = await api.getFilmWatch(filmId, token)
+        if (cancelled) return
+        setLink(data)
+        // Role-unlimited sharer: no finite balance — no count line, no
+        // stubs (ticketsUnlimited rides the payload into the modal).
+        setTickets(null)
+        setStubBalance(null)
+        setSessionOwner(true)
+      } catch (err) {
+        if (cancelled) return
+        if (err?.message === 'forbidden' || err?.message === 'invalid') {
+          setSessionOwner(false)
+        } else {
+          setSessionOwner(true)
+          setLoadFailed(true)
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [filmMode, filmId])
+
+  useEffect(() => {
+    if (!owner || filmMode) return
     let cancelled = false
     ;(async () => {
       try {
@@ -794,7 +867,7 @@ export default function ClaimWatch() {
     return () => {
       cancelled = true
     }
-  }, [slug, owner])
+  }, [slug, owner, filmMode])
 
   if (!stashOwner && sessionOwner === undefined) {
     // Ownership still resolving (session lookup) — never flash the dead-link
@@ -808,7 +881,7 @@ export default function ClaimWatch() {
       </div>
     )
   }
-  if (!owner) return <Navigate to={`/${slug}`} replace />
+  if (!owner) return <Navigate to={filmMode ? '/dashboard' : `/${slug}`} replace />
 
   /** ≥70% playback marks the invite watched (same threshold and update
    *  pattern as the legacy screening page), and every whole second the
@@ -826,11 +899,11 @@ export default function ClaimWatch() {
       lastSavedSecond.current = second
       const pos = resumePositionToSave(t, d)
       if (pos == null) {
-        safeLocalStorage.removeItem(positionKey(slug))
-        safeLocalStorage.removeItem(progressKey(slug))
+        safeLocalStorage.removeItem(posKey)
+        safeLocalStorage.removeItem(progKey)
       } else {
-        safeLocalStorage.setItem(positionKey(slug), String(pos))
-        safeLocalStorage.setItem(progressKey(slug), String(Math.min(t / d, 1)))
+        safeLocalStorage.setItem(posKey, String(pos))
+        safeLocalStorage.setItem(progKey, String(Math.min(t / d, 1)))
       }
     }
 
@@ -864,13 +937,24 @@ export default function ClaimWatch() {
       // browser (no stash) the link payload supplies the invite id.
       const ownInviteId = stash?.inviteId || link?.inviteId || null
       const { data: { session } = {} } = await supabase.auth.getSession()
-      const result = await api.createInviteLink(name, {
-        claimedInviteId: ownInviteId,
-        filmId: stash?.filmId || null,
-        parentInviteId: ownInviteId,
-        accessToken: stash?.filmId ? session?.access_token || null : null,
-        appUrl: window.location.origin,
-      })
+      // FILM MODE (2026-09-03): the SAME session-path call the creator
+      // dashboard's "Create an invitation" makes (CreatorLinkPanel) —
+      // bearer token + film id, no claimed-invite reference, no parent. The
+      // server verifies ownership, applies the creator's role-unlimited
+      // quota, and mints the ticket number exactly as from the card.
+      const result = filmMode
+        ? await api.createInviteLink(name, {
+            filmId,
+            accessToken: session?.access_token || null,
+            appUrl: window.location.origin,
+          })
+        : await api.createInviteLink(name, {
+            claimedInviteId: ownInviteId,
+            filmId: stash?.filmId || null,
+            parentInviteId: ownInviteId,
+            accessToken: stash?.filmId ? session?.access_token || null : null,
+            appUrl: window.location.origin,
+          })
       // The reveal keeps its OWN copy of the response balance: null means an
       // unlimited sharer (never a count) — distinct from the healed tickets
       // display state above.
@@ -1281,6 +1365,8 @@ export default function ClaimWatch() {
           copied={copied}
           onCopy={handleCopy}
           onAgain={handleShareAgain}
+          unlimited={link?.ticketsUnlimited === true}
+          originOnly={filmMode}
         />
       )}
     </div>
