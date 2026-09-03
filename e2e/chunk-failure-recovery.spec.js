@@ -139,7 +139,7 @@ test.describe('chunk-failure recovery', () => {
 
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await page.getByPlaceholder('Your email').fill('alex@example.com')
-    await page.getByRole('button', { name: /Claim your ticket/ }).click()
+    await page.getByRole('button', { name: /Watch for free/ }).click()
 
     // The prologue still plays (its code was already loaded) — the failed
     // prefetch stays silent by design.

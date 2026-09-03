@@ -373,11 +373,13 @@ function devPreviewChain(searchParams) {
  * Order (founder reorder 2026-07-25, superseding the 2026-07-24 parked
  * plan): the stamp "By private invitation only · Ticket No. {N}" at the
  * TOP of the letter (ticket segment only when ticketNo exists) / headline
- * "{Receiver}, {Sharer} shared a ticket with you." (ONE uniform type
- * style — no bolding of names or any word; both names first-word-trimmed;
- * missing receiver drops the prefix, missing sharer reads "Someone") /
- * lineage thread / film title / transmission hook / inline email + Accept
- * CTA. NOTHING renders below the button; "This invitation admits one
+ * "{Receiver}, {Sharer} has gifted you a film." (founder decision
+ * 2026-09-03, superseding the 2026-07-25 "shared a ticket with you" and the
+ * 2026-07-31 "do not re-open" note — ONE uniform type style — no bolding of
+ * names or any word; both names first-word-trimmed; missing receiver drops
+ * the prefix, missing sharer reads "Someone") / lineage thread / film title /
+ * transmission hook / inline email + the "Watch for free" CTA (2026-09-03,
+ * replacing "Claim your ticket"). NOTHING renders below the button; "This invitation admits one
  * person, once." was CUT from this page (2026-07-25).
  * The old "Dear X," greeting is GONE; "saw this and thought of you"
  * moved to the post-claim prologue.
@@ -577,8 +579,8 @@ export default function ClaimLanding() {
   // its comma) when missing — founder rules 2026-07-21, do not improvise.
   const receiver = (inviteeFirstName || '').trim().split(/\s+/)[0] || ''
   const headline = receiver
-    ? `${receiver}, ${sharer} shared a ticket with you.`
-    : `${sharer} shared a ticket with you.`
+    ? `${receiver}, ${sharer} has gifted you a film.`
+    : `${sharer} has gifted you a film.`
 
   if (state.phase === 'prologue') {
     return (
@@ -709,7 +711,7 @@ export default function ClaimLanding() {
                 disabled={claimBusy}
                 className="mt-6 w-full min-h-[52px] touch-manipulation border border-accent/60 px-8 py-4 font-sans text-[0.8125rem] uppercase tracking-[0.28em] text-accent transition-colors duration-300 hover:border-accent hover:bg-accent hover:text-ink focus-visible:border-accent focus-visible:bg-accent focus-visible:text-ink focus-visible:outline-none disabled:opacity-50 cursor-pointer"
               >
-                {claimBusy ? 'One moment…' : 'Claim your ticket'}
+                {claimBusy ? 'One moment…' : 'Watch for free'}
               </button>
             </form>
           )}

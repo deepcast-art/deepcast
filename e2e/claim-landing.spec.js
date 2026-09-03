@@ -82,15 +82,16 @@ test.describe('three-page claim arc', () => {
     await page.route('**/api/invites/link/**', (route) => route.fulfill({ json: LINK_CREATED }))
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
 
-    // The headline (founder wording 2026-07-25): uniform type, both
-    // names first-word-trimmed, no "Dear X," greeting anywhere.
+    // The headline (founder decision 2026-09-03 — an explicit reversal of
+    // the 2026-07-25 "shared a ticket with you" wording): uniform type,
+    // both names first-word-trimmed, no "Dear X," greeting anywhere.
     await expect(
-      page.getByRole('heading', { name: 'Alex, Ien shared a ticket with you.' })
+      page.getByRole('heading', { name: 'Alex, Ien has gifted you a film.' })
     ).toBeVisible()
     await expect(page.getByText(/Dear Alex/)).toHaveCount(0)
-    await expect(page.getByText(/Ien Chi shared/)).toHaveCount(0)
-    // The retired 2026-07-21 wording never resurfaces.
-    await expect(page.getByText(/gifted you a film/)).toHaveCount(0)
+    await expect(page.getByText(/Ien Chi has gifted/)).toHaveCount(0)
+    // The retired 2026-07-25 wording never resurfaces.
+    await expect(page.getByText(/shared a ticket with you/)).toHaveCount(0)
     // "saw this and thought of you" left this page for the prologue.
     await expect(page.getByText(/saw this and thought of you/)).toHaveCount(0)
     // The stamp with the permanent ticket number sits at the TOP of the
@@ -99,7 +100,7 @@ test.describe('three-page claim arc', () => {
     await expect(stamp).toBeVisible()
     const stampBox = await stamp.boundingBox()
     const headlineBox = await page
-      .getByRole('heading', { name: 'Alex, Ien shared a ticket with you.' })
+      .getByRole('heading', { name: 'Alex, Ien has gifted you a film.' })
       .boundingBox()
     expect(stampBox.y).toBeLessThan(headlineBox.y)
     // The thread (depth-1) with its context label, and the film block.
@@ -116,7 +117,7 @@ test.describe('three-page claim arc', () => {
     // (added 2026-07-31) was removed by founder decision.
     await expect(page.getByPlaceholder('Your email')).toBeVisible()
     await expect(page.getByPlaceholder('Your full name')).toHaveCount(0)
-    await expect(page.getByRole('button', { name: /Claim your ticket/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Watch for free/i })).toBeVisible()
     // "This invitation admits one person, once." is CUT (2026-07-25) —
     // nothing renders below the button.
     await expect(page.getByText('This invitation admits one person, once.')).toHaveCount(0)
@@ -142,7 +143,7 @@ test.describe('three-page claim arc', () => {
     // submit reaches OUR handler (the native tooltip would have blocked it),
     // and the message renders in the existing inline error line.
     await page.getByPlaceholder('Your email').fill('ien,chi96+test11@gmail.com')
-    await page.getByRole('button', { name: /Claim your ticket/i }).click()
+    await page.getByRole('button', { name: /Watch for free/i }).click()
     await expect(
       page.getByText('That doesn’t look like an email address — check it and try again.')
     ).toBeVisible()
@@ -150,7 +151,7 @@ test.describe('three-page claim arc', () => {
 
     // Empty field: the same single message.
     await page.getByPlaceholder('Your email').fill('')
-    await page.getByRole('button', { name: /Claim your ticket/i }).click()
+    await page.getByRole('button', { name: /Watch for free/i }).click()
     await expect(
       page.getByText('That doesn’t look like an email address — check it and try again.')
     ).toBeVisible()
@@ -158,7 +159,7 @@ test.describe('three-page claim arc', () => {
 
     // A well-formed plus-addressed email proceeds exactly as today.
     await page.getByPlaceholder('Your email').fill('ien.chi96+test11@gmail.com')
-    await page.getByRole('button', { name: /Claim your ticket/i }).click()
+    await page.getByRole('button', { name: /Watch for free/i }).click()
     await expect(page.getByText('That doesn’t look like an email address — check it and try again.')).toHaveCount(0)
     expect(claimCalls).toBe(1)
     expect(jsErrors).toEqual([])
@@ -171,7 +172,7 @@ test.describe('three-page claim arc', () => {
     )
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await page.getByPlaceholder('Your email').fill('returning@example.com')
-    await page.getByRole('button', { name: /Claim your ticket/i }).click()
+    await page.getByRole('button', { name: /Watch for free/i }).click()
     // Founder copy, verbatim — and the claim form is gone.
     await expect(page.getByText('You already hold this film.')).toBeVisible()
     await expect(page.getByPlaceholder('Your email')).toHaveCount(0)
@@ -201,7 +202,7 @@ test.describe('three-page claim arc', () => {
     // PAGE 1 → claim (email-only since 2026-08-06).
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await page.getByPlaceholder('Your email').fill('alex@example.com')
-    await page.getByRole('button', { name: /Claim your ticket/i }).click()
+    await page.getByRole('button', { name: /Watch for free/i }).click()
 
     // The claim request carries NO typed name (the field is gone — the
     // server's legacy fallback names the account) and the silent context
@@ -365,7 +366,7 @@ test.describe('three-page claim arc', () => {
     })
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await page.getByPlaceholder('Your email').fill('alex@example.com')
-    await page.getByRole('button', { name: /Claim your ticket/i }).click()
+    await page.getByRole('button', { name: /Watch for free/i }).click()
 
     // All three lines appear together, statically.
     await expect(page.getByText('Alex, Ien saw this and thought of you.')).toBeVisible()
