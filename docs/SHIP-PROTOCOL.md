@@ -109,7 +109,19 @@ Live walk, every deploy (the verifier, in Chrome, signed in as the founder): `/d
 
 - **Frontend:** Vercel → Deployments → previous READY deployment → "Instant Rollback". Under a minute. The verifier can identify the deployment id; the founder clicks.
 - **API:** Render → Deploys → previous deploy → "Rollback". Or `git revert <sha>` on `main` (Tier 1 push) and let both redeploy.
-- **Database:** there is NO automatic backup on the Supabase free tier (tracker E8). Every data script writes its own JSON backup first, and that is the only net. **Standing recommendation (verifier, 3 September): enable Supabase Pro's daily backups / PITR for the production project.** With real users on Circles this is the single largest uncovered risk in the system; nothing in this protocol substitutes for it.
+- **Database:** the Supabase organization is on the **Pro plan** (verified via the Supabase API, 3 September 2026): automatic daily backups, seven-day retention, restorable from the Supabase dashboard (Project → Database → Backups). Every data script additionally writes its own JSON backup to `~/deepcast-backups/` before writing. Point-in-time recovery is an available add-on, not enabled; revisit if the write volume ever makes a whole-day loss unacceptable.
+
+## Verifier runbook (Claude in Cowork — every session)
+
+What the verifier holds and how to use it, so no session needs to be told:
+
+- **Repo on the founder's Mac:** request folder access to `~/Desktop/deepcast-code` (read, local git; the sandbox has NO network — it cannot push, fetch, or run the test suite against Supabase). `git log origin/main..main` shows what Claude Code has not pushed. Never edit code there; docs and `.claude/settings.local.json` (Claude Code's local permission allowlist — force-push, rebase, hard reset, and branch deletion are DENIED there by design) are the only files the verifier touches, and doc commits use `-c user.name="Ien Chi" -c user.email=ien.chi96@gmail.com`. If git leaves `.git/HEAD.lock` or `tmp_obj_*` behind after a commit from the sandbox, request delete permission and remove them, or the founder's next git command fails.
+- **Database, read-only:** Supabase project `wmtjgpxhjtbocsmutqqc` via the Supabase connector's `execute_sql` — SELECT only, ever. Run the invariants above after every deploy. Never `apply_migration`, never write.
+- **Deploys:** Vercel team `team_TVkU8aGupg9GkYjGLYxVjKxS`, project `prj_uJ7YcmeAjsdiIjb2sDEIvtOSxhPK` (`list_deployments` → the newest `production` entry must be `READY` and its `githubCommitSha` must be the commit just pushed). Render (API, Virginia) has no connector — confirm the API through the live site's behaviour, or the founder reads the Render dashboard.
+- **CI:** `https://github.com/deepcast-art/deepcast/actions/workflows/ci.yml` — read it in the founder's Chrome (the anonymous GitHub API refuses the cloud fetch). Documented flake specs (webkit/firefox resume, webkit auth-link) → rerun the job; anything else red is a Claude Code prompt.
+- **Live walk:** in the founder's Chrome (signed in as the filmmaker): `/dashboard`, "See network graph", "Watch page", one in-flight `ticket-…` landing link — read only, never submit, never claim, never mint. Close the tabs afterwards.
+- **Project docs:** after any doc change in the repo, stage `CLAUDE.md`, `docs/PROJECT-BRIEF.md`, `docs/SHIP-PROTOCOL.md` into the working directory and `project_write` them to the same names (the protocol lives at `claude/SHIP-PROTOCOL.md` in the project), so every future chat starts from the truth. The project instructions never change — anything that can change lives here.
+- **Founder-facing output:** plain English; end with exactly what is his (paste, Merge, or a Tier 3 command) and nothing else.
 
 ## What the founder does, in full
 
