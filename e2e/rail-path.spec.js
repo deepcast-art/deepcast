@@ -137,6 +137,7 @@ test.describe('the rail’s path — the film’s hands under "Pass it on"', () 
         between,
         gap: Math.round(wrap.getBoundingClientRect().top - cta.getBoundingClientRect().bottom),
         marginTop: getComputedStyle(wrap).marginTop,
+        ctaMarginTop: getComputedStyle(cta).marginTop,
         railWidth: Math.round(rail.getBoundingClientRect().width),
         svgWidth: Math.round(svg.getBoundingClientRect().width),
         viewBox: svg.getAttribute('viewBox'),
@@ -151,6 +152,16 @@ test.describe('the rail’s path — the film’s hands under "Pass it on"', () 
     expect(geometry.between).toEqual([])
     expect(geometry.marginTop).toBe('20px')
     expect(geometry.gap).toBe(20)
+    // Rail spacing (founder 2026-09-09): the CTA's desktop margin is 28px, so
+    // the gap above the button equals the gap below it; below 900px the
+    // mobile margin (24px) is untouched.
+    expect(geometry.ctaMarginTop).toBe('28px')
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(page.locator('[data-rail-path]')).toBeVisible()
+    expect(
+      await page.evaluate(() => getComputedStyle(document.querySelector('button[aria-controls="passiton-modal"]')).marginTop)
+    ).toBe('24px')
+    await page.setViewportSize({ width: 1280, height: 720 })
     expect(geometry.svgWidth).toBe(geometry.railWidth)
     expect(geometry.viewBox).toBe('0 0 384 66')
     expect(geometry.par).toBe('xMinYMid meet')

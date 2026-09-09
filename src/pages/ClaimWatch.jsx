@@ -1190,7 +1190,7 @@ export default function ClaimWatch() {
                      #9d8f74 = accent at 88% over ink, #a7987a = accent at
                      94% over ink, precomputed. No other motion — the
                      no-engagement-mechanics law holds. */
-                  className="mt-6 block min-h-[52px] w-full cursor-pointer touch-manipulation border border-[#d5c9a6] bg-[#9d8f74] px-6 py-[0.9375rem] font-sans font-normal text-[0.8125rem] uppercase tracking-[0.28em] text-ink transition-colors duration-300 hover:bg-[#a7987a] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[3px] focus-visible:outline-accent min-[900px]:mt-9"
+                  className="mt-6 block min-h-[52px] w-full cursor-pointer touch-manipulation border border-[#d5c9a6] bg-[#9d8f74] px-6 py-[0.9375rem] font-sans font-normal text-[0.8125rem] uppercase tracking-[0.28em] text-ink transition-colors duration-300 hover:bg-[#a7987a] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[3px] focus-visible:outline-accent min-[900px]:mt-7"
                 >
                   Pass it on
                 </button>
