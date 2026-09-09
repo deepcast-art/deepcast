@@ -78,6 +78,7 @@ Top to bottom:
 3. **Hero grid**: shell `max-width: 80rem`, padding-inline `clamp(1rem, 4vw, 3rem)`. Grid: `minmax(0,1fr) 24rem`, `column-gap: 3.5rem`, `align-items: stretch`. Left = player. Right = the rail.
 4. **Creed band** (full-width): hairline rules top and bottom, three columns, `column-gap: 4rem`.
 5. **Story** — its own centered region below the band, `max-width: 42rem`, internally left-aligned.
+5b. **Comments** (founder addition 2026-09-09, §3e) — the same 42rem column, below the story, before the footer. Renders NOTHING for anyone but a signed-in claimant of this film or its creator.
 6. **Footer** — centered `Your dashboard →`.
 
 The trio band's top edge must crest inside a 1440×900 viewport (it lands ~600px with these values). If any future change pushes it below ~730px, that's a regression.
@@ -111,6 +112,24 @@ Three centered columns, each: a small gold mark (accent, opacity 0.45, in a fixe
 
 ### 3d. The story
 `Filmmaker · {filmmaker_name} · {filmmaker_location}` eyebrow (11px caps, 0.32em, **muted**; **header restructure 2026-07-25** — was `From the filmmaker · {location}`, and the name moved up from the retired sign-off; each `· phrase` is one unbreakable NBSP-bound unit so narrow screens break only at the `·` boundaries) with a **3.5rem circular photo frame** to its left (`.story-byline`: flex, `align-items: flex-end`, 1rem gap; eyebrow gets `padding-bottom: 0.3125rem` optical lift so the caps sit on the circle's base). The circle is 1px hairline border + `--tint-track` fill — swap in the filmmaker's `<img>` (`{filmmaker_photo}`), keep the frame. Then: serif-italic epigraph (`clamp(1.25rem, 2vw, 1.4375rem)`, warm@0.9), body paragraphs in **Phoenix Light 300, 1.0625rem, line-height 1.85, warm@0.82, max-width 62ch, left-aligned** (the ONE place Light is correct). **The sign-off (`— {filmmaker_name}, director`) is CUT (2026-07-25)** — the section ends with the body text. Story copy is per-film.
+
+### 3e. Comments — "Join the conversation" (FOUNDER ADDITION, 9 September 2026)
+
+`src/components/WatchComments.jsx`, mounted by `ClaimWatch.jsx` inside the main column after the story section and before the footer — **never above the player, never on the landing page.** Rules server-side in `server/commentRules.js` (unit-tested); routes `GET`/`POST /api/films/:filmId/comments` and the owner-only `POST /api/admin/comments/remove`; table `comments` (migration `20260910_comments.sql`, service-role-only: RLS on, zero policies, anon/authenticated grants revoked).
+
+**Who sees it.** Claimants of THIS film, signed in, read and write; the film's creator too (his number is `films.creator_ticket_no`). A visitor without a claim on this film sees no section at all — the component fetches only when a session token AND the film id exist, and renders only after the server answered 200. No placeholder, no spinner; an older API or any failure leaves the page as before. **The recorded slug-path baseline (a stash-only, signed-out viewer) therefore holds without re-recording.**
+
+**Product rules.** Text only, up to 1,000 characters (client check + server + database constraint). One level of replies rendered; `parent_comment_id` always points at a top-level comment — a reply to a reply attaches to that reply's top-level comment, so every thread is flat and ordered by time. Oldest first, always. No sorting, votes, reactions, notifications, or photos (decided for later; not scaffolded). No polling: the list loads with the page and refreshes after the viewer posts. Owner-only soft delete (`deleted_at` + `deleted_by`, the `ADMIN_USER_ID` pin): a removed comment disappears for everyone, its replies with it. Identity from the verified session token only; first names resolved at read time through `safeFirstName` and the ticket number from the claimant's invite on this film — nothing else about a person leaves the server, and no second copy of any name is stored. Rate limit, server-side: 10 comments per 10 minutes per person. Timestamps relative, numerals always (`src/lib/relativeTime.js`): "2 hours ago", "Yesterday", "3 days ago"; after seven days, the date. A failed post shows the inline message in `--color-error` under the field, the way name-rule errors read in the share modal; nothing is lost from the field.
+
+**Visual spec** (chosen in the 9 September design pass; only values that already exist on this page — no new colours, weights, or fonts):
+- Section: top hairline `border-warm/15`, `pt-10`; heading in the story-header eyebrow style (Phoenix 400, 11px caps, 0.32em, muted).
+- Composer first: a 40px hairline circle (the filmmaker photo's frame — `border-warm/15`, `bg-tint-track`) holding the commenter's initial in Garamond italic warm/60; beside it a single-line textarea that grows, bottom hairline `border-warm/20` (accent on focus), Phoenix Light 17px, placeholder in serif italic warm/40 reading `Write a comment`; beneath, left: `You’ll appear as {FirstName} · Ticket No. {n}` (Phoenix 400, 11px caps, 0.24em, muted); right: the gold-outline `Post` box (border accent/60, accent text, 0.8125rem caps, 0.28em, min-h 48; `One moment…` while busy). **Gold appears nowhere else in the section.**
+- Each comment: the same 40px circle with the initial — the creator's comments show his portrait from `filmStory.js` instead; name line `SOFIA · Ticket No. 41 · 2 hours ago` — the name in Phoenix 400 12px caps 0.26em warm/90, the rest muted (the ticket segment absent when the claim has no number); body Phoenix Light 17px, line-height 1.85, warm/80, max-width 62ch, newlines kept; then `Reply` as bare tracked-caps text (11px, 0.24em, muted, warm on hover) and, for the owner only, `Remove` beside it — **two clicks (founder, 9 September 2026): the first turns the text to `Confirm remove`, the second removes (soft delete), and clicking anywhere else (or Escape) resets it.** Comments 36px apart.
+- `Reply` reveals the same composer at the end of that thread (32px circle, its own `You’ll appear as` line, focused); pressing `Reply` again hides it. Replies do not offer `Reply` (one level rendered).
+- Replies indent 56px under their parent on a left hairline `border-warm/10`, with a 32px circle, 24px apart.
+- Phone: the same anatomy in the 42rem column; nothing new.
+
+**Affordance-law amendment (founder, 9 September 2026):** an in-place action on a comment is bare tracked-caps text, as the landing chain's expander already is. The §4b law ("a box means act here; an arrow means go there") otherwise stands — `Post` is still a box.
 
 ---
 
@@ -148,7 +167,7 @@ Order, all centered:
    - `0.875rem` (bonded) → **`Share another ticket`** (label 2026-07-25, was `Create another invitation`) — a GOLD-OUTLINE link-button (same affordance family as the form's create button: border accent@0.6, accent text, fills gold on hover, min-height 44px, caps 0.6875rem/0.26em). Action: swap the form state back in — field cleared, charge line restored. The modal cycles.
    - `2rem` (separated) → `See where your ticket went →` — muted arrow-link, warm on hover. Destination: the dashboard (the live share graph — the "big reveal" lives THERE, deliberately last as the exit).
 
-**The affordance law (why the above looks the way it does):** on this page, **a box means "act here"; an arrow means "go there."** Buttons are outlined or filled rectangles; navigation is a text link with `→`. Never style an action as bare text and never put an arrow on an in-place action.
+**The affordance law (why the above looks the way it does):** on this page, **a box means "act here"; an arrow means "go there."** Buttons are outlined or filled rectangles; navigation is a text link with `→`. Never style an action as bare text and never put an arrow on an in-place action. **Founder amendment, 9 September 2026:** an in-place action on a comment (`Reply`, `Remove`) is bare tracked-caps text, as the landing chain's expander already is (§3e).
 
 **Zero state** (all tickets spent — from the original app, keep it): the count line + form are replaced by `You've shared all your tickets for this film.` (verb revised 2026-07-25); stubs remain, all dimmed. Apply the same replacement model.
 
@@ -235,6 +254,16 @@ Copy the SVG from the replica exactly. Its layers and their rules:
 | Zero state: `You've shared all your tickets for this film.` | FOUNDER (verb revised 2026-07-25; was LOCKED "given") |
 | First-name validation message | LOCKED (`firstNameRule.js`) |
 | Lineage labels: real first names, `YOU`, `?` | by rule (§5) |
+| Comments heading: `Join the conversation` | FOUNDER (2026-09-09) |
+| Comments placeholder: `Write a comment` | FOUNDER (2026-09-09) |
+| `You’ll appear as {FirstName} · Ticket No. {n}` | FOUNDER (2026-09-09; the ticket segment absent when the claim has no number) |
+| `Post` / `Reply` / `Remove` → `Confirm remove` (owner only; two clicks) | FOUNDER (2026-09-09) |
+| Comment name line: `{NAME} · Ticket No. {n} · {relative time}` | FOUNDER (2026-09-09) |
+| Relative times: `Just now` / `{n} minute(s) ago` / `{n} hour(s) ago` / `Yesterday` / `{n} days ago` / the date after seven days | FOUNDER examples 2026-09-09 (`2 hours ago`, `Yesterday`, `3 days ago`, numerals always); the under-a-minute `Just now`, the minute forms, and the date's day-month form (year only when it differs) are the builder's — **PENDING** |
+| `One moment…` (Post, while busy) | reused from the share button |
+| Failed post — empty: `Write something first.` · over the cap: `Comments are limited to 1,000 characters.` · rate-limited: `You’ve posted 10 comments in the last 10 minutes. Please wait a little.` | **PENDING** (built and flagged 2026-09-09; `src/lib/commentBody.js`, `server/commentRules.js`) |
+| Failed post — server: `Something went wrong on our side. Please try again in a moment.` | reuses the approved error-state lines |
+| Failed post — refusals a viewer could read inline: `This conversation belongs to the people who hold this film` (no claim on this film) · `That comment is no longer here` (reply to a removed comment) · `Film not found` · `Not authenticated` / `Invalid session` (the session lapsed) | **PENDING** (red-team finding 3, 2026-09-09; `server/commentRules.js`, `server/index.js`) |
 
 Retired/removed copy (do NOT resurrect): the personalized constraint line ("Alex, this film reached you because Dan thought of you…" — see §9), "every one by hand", "Documentary short.", the synopsis line, the lineage caption, "One person, once." stamp, the share-suggestion line.
 
@@ -270,6 +299,7 @@ First names only, everywhere, always (platform display law).
 7. Everything else in the original constraints list still binds: bare link, ticket vocabulary, first-names-only, no gradients/grain, solid ink background, the Garamond double registration.
 8. **FOUNDER REVERSAL, 5 September 2026 (recorded 9 September):** the §2 law ~~**No engagement-mechanic styling anywhere:** no pulsing, badges, red dots, percentage labels, confetti, urgency colors. Ever.~~ is replaced by **"reward, never extract"** with five tests — (1) would it exist if nobody ever came back; (2) does it invite or pressure; (3) is every number true; (4) is the bottom rung dignified; (5) does the wary person feel seen or watched. Streaks, urgency, loss framing, guilt, variable rewards, pull-back notifications, and comparison that shames stay banned. This is the founder's own reversal, in his words as summarised to the builder on 9 September; the framework it belongs to lives in Cowork's project docs and is summarised in `docs/PROJECT-BRIEF.md` ("5 September — the north star").
 
+9. **FOUNDER ADDITION, 9 September 2026 — comments.** §3e adds "Join the conversation" below the story; the affordance law gains the in-place-action-as-bare-text amendment (§4b); the copy ledger gains its strings, the inline error messages PENDING the founder's stamp.
 ## 10. Adjacent product notes (out of scope here, but decided during this work)
 
 - **Poster frames are mandatory** per film (Mux `poster`).
