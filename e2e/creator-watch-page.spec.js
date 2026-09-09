@@ -96,7 +96,11 @@ const LINK_CLAIMED = {
    REMOVED from the rail by founder decision and replaced by the path SVG;
    `main` below is captured WITHOUT the path's SVG text (engines join SVG
    text differently), and the path's labels are pinned separately as
-   `path`. Every other recorded byte is unchanged. */
+   `path`. Every other recorded byte is unchanged.
+   DELIBERATELY RE-RECORDED AGAIN 2026-09-09 (branch `rail-spacing`, founder
+   decision): the CTA's desktop margin is `min-[900px]:mt-7` (was `mt-9`) —
+   ONE token in `ctaClass`, so the gap above the button equals the gap below
+   it, measured glyph-to-button and button-to-dots. Nothing else changed. */
 const BASELINE = {
   before: {
     header: 'deepcast\nYOUR DASHBOARD →',
@@ -105,7 +109,7 @@ const BASELINE = {
     footer: 'YOUR DASHBOARD →',
     dashboardHrefs: ['/dashboard', '/dashboard'],
     ctaClass:
-      'mt-6 block min-h-[52px] w-full cursor-pointer touch-manipulation border border-[#d5c9a6] bg-[#9d8f74] px-6 py-[0.9375rem] font-sans font-normal text-[0.8125rem] uppercase tracking-[0.28em] text-ink transition-colors duration-300 hover:bg-[#a7987a] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[3px] focus-visible:outline-accent min-[900px]:mt-9',
+      'mt-6 block min-h-[52px] w-full cursor-pointer touch-manipulation border border-[#d5c9a6] bg-[#9d8f74] px-6 py-[0.9375rem] font-sans font-normal text-[0.8125rem] uppercase tracking-[0.28em] text-ink transition-colors duration-300 hover:bg-[#a7987a] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[3px] focus-visible:outline-accent min-[900px]:mt-7',
     // The path's labels (three-hand fixture: no collapse), pinned apart from
     // innerText — rail-path, 2026-09-09.
     path: ['IEN', 'PRIYA', 'DAN', 'YOU', '?', '(FILMMAKER)'],
