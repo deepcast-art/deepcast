@@ -155,3 +155,107 @@ describe('labelVisibility — collision as the LAST resort', () => {
     expect(first.visibleIds.has('amy')).toBe(true)
   })
 })
+
+/* ── 2026-09-09: the hard clearance rule's own measures ── */
+import {
+  GLYPH_WIDTHS,
+  LABEL_CLEARANCE,
+  REFERENCE_VIEW,
+  fontScaleFor,
+  labelTextWidth,
+  mapScaleFor,
+} from './constellationLabels.js'
+
+describe('labelTextWidth — glyph by glyph from the Phoenix font', () => {
+  it('sums the uppercase advance widths plus the tracking after each glyph', () => {
+    // "Oliver" at 10.36 with tracking 2: measured 42.88 in the browser
+    // (getBBox); the glyph table gives 43.2 — never narrower.
+    const w = labelTextWidth('Oliver', 10.36, 2)
+    expect(w).toBeGreaterThanOrEqual(42.88)
+    expect(w).toBeLessThan(44)
+    // Case does not matter: the map paints names uppercase.
+    expect(labelTextWidth('oliver', 10.36, 2)).toBe(w)
+  })
+  it('never under-measures a name: W is the widest glyph and the unknown-glyph default', () => {
+    expect(GLYPH_WIDTHS.W).toBe(0.909)
+    expect(Math.max(...Object.values(GLYPH_WIDTHS))).toBe(0.909)
+    expect(labelTextWidth('É', 10, 0)).toBe(9.09)
+    expect(labelTextWidth('I', 10, 0)).toBeCloseTo(1.42, 9)
+    // "MOM" — a real Circles name, M 0.774 + O 0.718 + M 0.774 — is wider
+    // than a 0.62 average would say.
+    expect(labelTextWidth('Mom', 10, 0)).toBeCloseTo(22.66, 6)
+  })
+  it('the empty name is zero wide', () => {
+    expect(labelTextWidth('', 10, 2)).toBe(0)
+    expect(labelTextWidth(null, 10, 2)).toBe(0)
+  })
+})
+
+describe('the two scales', () => {
+  it('fontScaleFor is the rendered width over the viewBox width (the 2026-07-31 floor, kept)', () => {
+    expect(fontScaleFor(1000, 900)).toBeCloseTo(1.111, 3)
+    expect(fontScaleFor(0, 900)).toBe(0)
+    expect(fontScaleFor(1000, 0)).toBe(0)
+  })
+  it('mapScaleFor is the true scale — the smaller of the width and height ratios', () => {
+    // The founder's desktop box shows a 1035² canvas height-limited.
+    expect(mapScaleFor(960, 576, 1035, 1035)).toBeCloseTo(576 / 1035, 9)
+    // A phone shows it width-limited.
+    expect(mapScaleFor(344, 368, 1035, 1035)).toBeCloseTo(344 / 1035, 9)
+    expect(mapScaleFor(0, 576, 1035, 1035)).toBe(0)
+  })
+  it('the reference view is the narrowest desktop map box (the creator modal’s) and the rule is 6px there', () => {
+    expect(REFERENCE_VIEW).toEqual({ w: 960, h: 576 })
+    expect(LABEL_CLEARANCE).toBe(6)
+    expect(LABEL_GAP_PX).toBe(6)
+  })
+})
+
+describe('labelScreenRect with a separate fontScale', () => {
+  it('sizes the font against fontScale and positions against scale', () => {
+    const item = { x: 100, y: 50, anchor: 'start', name: 'Oliver', baseSize: 8 }
+    const widthOnly = labelScreenRect(item, { vbX: 0, vbY: 0, scale: 0.5 })
+    const split = labelScreenRect(item, { vbX: 0, vbY: 0, scale: 0.5, fontScale: 1.1 })
+    // Same on-screen anchor position…
+    expect(split.x).toBeCloseTo(widthOnly.x, 9)
+    // …but the font counter-scaled against 1.1 (→ 10 map units) not 0.5 (→ 22).
+    expect(split.h).toBeCloseTo(labelFontSize(8, 1.1) * 0.5 * 1.2, 6)
+    expect(widthOnly.h).toBeCloseTo(labelFontSize(8, 0.5) * 0.5 * 1.2, 6)
+    // The box is 1.2× the font tall (ascender to descender, measured).
+    expect(split.h / (labelFontSize(8, 1.1) * 0.5)).toBeCloseTo(1.2, 9)
+  })
+})
+
+describe('labelVisibility — dots as obstacles (no painted name across another person’s dot)', () => {
+  const rect = (x, y, w = 40, h = 10) => ({ x, y, w, h })
+  it('hides a dim name whose box crosses another person’s dot, never its own', () => {
+    const items = [
+      { id: 'a', rect: rect(0, 0), gold: false, dist: 0 },
+      { id: 'b', rect: rect(0, 100), gold: false, dist: 0 },
+    ]
+    const obstacles = [
+      { id: 'a', rect: rect(10, 2, 4, 4) }, // a's own dot inside a's box — allowed
+      { id: 'c', rect: rect(20, 102, 4, 4) }, // someone else's dot inside b's box — b hides
+    ]
+    const { visibleIds } = labelVisibility(items, LABEL_GAP_PX, obstacles)
+    expect(visibleIds.has('a')).toBe(true)
+    expect(visibleIds.has('b')).toBe(false)
+  })
+  it('a gold (always-on) name is never hidden by a dot — reported by the caller, not resolved here', () => {
+    const items = [{ id: 'you', rect: rect(0, 0), gold: true, dist: 0 }]
+    const obstacles = [{ id: 'c', rect: rect(5, 2, 4, 4) }]
+    expect(labelVisibility(items, LABEL_GAP_PX, obstacles).visibleIds.has('you')).toBe(true)
+  })
+  it('the 6px gap: two dim names 5px apart cannot both paint; 6px apart they can', () => {
+    const close = [
+      { id: 'a', rect: rect(0, 0), gold: false, dist: 0 },
+      { id: 'b', rect: rect(0, 15), gold: false, dist: 1 }, // 5px below a's box
+    ]
+    expect(labelVisibility(close).visibleIds.has('b')).toBe(false)
+    const clear = [
+      { id: 'a', rect: rect(0, 0), gold: false, dist: 0 },
+      { id: 'b', rect: rect(0, 16.01), gold: false, dist: 1 }, // 6.01px below
+    ]
+    expect(labelVisibility(clear).visibleIds.has('b')).toBe(true)
+  })
+})

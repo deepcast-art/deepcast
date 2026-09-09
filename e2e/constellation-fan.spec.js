@@ -18,7 +18,7 @@
  * creator-dashboard.spec.js and viewer-dashboard-v5.spec.js.
  */
 import { test, expect, pushJsError } from './fixtures/test.js'
-import { PERSON_LABEL_SIZE, labelFontSize } from '../src/lib/constellationLabels.js'
+import { PERSON_LABEL_SIZE, fontScaleFor, labelFontSize } from '../src/lib/constellationLabels.js'
 
 const REF = 'wmtjgpxhjtbocsmutqqc'
 const OWNER_ID = '11111111-1111-4111-8111-111111111111'
@@ -173,16 +173,45 @@ const readGeometry = (page, inDialog) =>
     // width — the one design size, counter-scaled per surface against its
     // own rendered width by the shared readability rule.
     const labelSizes = [...new Set([...svg.querySelectorAll('g[data-node] text')].map((t) => parseFloat(t.getAttribute('font-size'))))].sort((a, b) => a - b)
-    const renderedWidth = svg.getBoundingClientRect().width
-    const viewBoxWidth = parseFloat(svg.getAttribute('viewBox').split(' ')[2])
-    return { rings, cx, cy, persons, labelSizes, renderedWidth, viewBoxWidth }
+    // THE HARD RULE as painted: the smallest gap between any two painted
+    // names' boxes, in screen px, and any painted name crossing another
+    // person's dot. The width is the rendered advance (getComputedTextLength
+    // — the same in every engine, and never more than the font-derived
+    // width the layout planned with), the left edge follows the anchor,
+    // and the height is the ink box the rule measures, 1.2× the font size
+    // from 0.8× above the baseline. (getBBox is NOT used: Firefox pads its
+    // text box by several units of bearings for the same ink, which would
+    // make the measurement engine-dependent.)
+    const ctm = svg.getScreenCTM().a
+    const named = [...svg.querySelectorAll('g[data-node] text')].map((t) => {
+      const width = t.getComputedTextLength()
+      const font = parseFloat(t.getAttribute('font-size'))
+      const baseline = parseFloat(t.getAttribute('y'))
+      const ax = parseFloat(t.getAttribute('x'))
+      const anchor = t.getAttribute('text-anchor')
+      const x = anchor === 'middle' ? ax - width / 2 : anchor === 'end' ? ax - width : ax
+      return { id: t.parentElement.getAttribute('data-node'), b: { x, width, y: baseline - 0.8 * font, height: 1.2 * font } }
+    })
+    const gapOf = (a, b) => Math.max(b.x - (a.x + a.width), a.x - (b.x + b.width), b.y - (a.y + a.height), a.y - (b.y + b.height))
+    let minGapPx = Infinity
+    for (let i = 0; i < named.length; i++) for (let j = i + 1; j < named.length; j++) minGapPx = Math.min(minGapPx, gapOf(named[i].b, named[j].b) * ctm)
+    let namesOverDots = 0
+    for (const n of named) for (const g of svg.querySelectorAll('g[data-node]')) {
+      if (g.getAttribute('data-node') === n.id) continue
+      const d = g.querySelector('circle.web-dot')
+      const r = parseFloat(d.getAttribute('r'))
+      if (gapOf(n.b, { x: parseFloat(d.getAttribute('cx')) - r, y: parseFloat(d.getAttribute('cy')) - r, width: 2 * r, height: 2 * r }) < 0) namesOverDots++
+    }
+    const box = svg.getBoundingClientRect()
+    const vbParts = svg.getAttribute('viewBox').split(' ').map(parseFloat)
+    return { rings, cx, cy, persons, labelSizes, renderedWidth: box.width, renderedHeight: box.height, viewBoxWidth: vbParts[2], viewBoxHeight: vbParts[3], paintedNames: named.length, minGapPx, namesOverDots }
   }, { inDialog })
 const readAngles = async (page) => (await readGeometry(page, true)).persons
 /** Wait until the map has measured its rendered width and counter-scaled
  *  its labels (the first paint uses the base size until the resize
  *  observer fires): exactly ONE label size, equal to the shared rule
  *  applied to the one design size at this surface's rendered width. */
-const expectedLabelSize = (g) => labelFontSize(PERSON_LABEL_SIZE, g.renderedWidth / g.viewBoxWidth)
+const expectedLabelSize = (g) => labelFontSize(PERSON_LABEL_SIZE, fontScaleFor(g.renderedWidth, g.viewBoxWidth))
 const settled = (page, inDialog) =>
   expect
     .poll(async () => {
@@ -295,6 +324,17 @@ test.describe('constellation shape — the fan reversal (5 September 2026)', () 
     expect(modal.labelSizes).toHaveLength(1)
     expect(Math.abs(viewer.labelSizes[0] - expectedLabelSize(viewer))).toBeLessThan(0.02)
     expect(Math.abs(modal.labelSizes[0] - expectedLabelSize(modal))).toBeLessThan(0.02)
+
+    // THE HARD RULE, painted (verifier, 2026-09-09): on both desktop
+    // surfaces every painted name keeps at least 6px from every other and
+    // crosses no other person's dot — measured from the real text boxes,
+    // not the estimator — and every name is painted (the plan settled for
+    // this tree, so nothing had to hide).
+    for (const [label, g] of [['modal', modal], ['viewer', viewer]]) {
+      expect(g.paintedNames, `${label}: every name painted`).toBe(ROWS.length)
+      expect(g.minGapPx, `${label}: smallest painted gap`).toBeGreaterThanOrEqual(6)
+      expect(g.namesOverDots, `${label}: names over dots`).toBe(0)
+    }
 
     // The ONE difference: Lena's thread is gold, both directions — Priya
     // (the hand that reached her), YOU, and her ten — and nobody else.

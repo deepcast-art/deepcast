@@ -20,17 +20,24 @@
  *  - Background stars twinkle (disabled under prefers-reduced-motion).
  *  - Zoom (+ / − / 1:1), wheel/pinch zoom at the pointer, drag-to-pan.
  *  - Labels never paint below a readable on-screen size: sizes are in map
- *    units but counter-scaled against the RENDERED map scale
- *    (src/lib/constellationLabels.js — the mobile-labels fix, 2026-07-31).
+ *    units but counter-scaled against the rendered width over the viewBox
+ *    width (src/lib/constellationLabels.js, `fontScaleFor` — the
+ *    mobile-labels fix, 2026-07-31, kept as is: on a height-limited
+ *    desktop map that paints names a little under the floor, the size the
+ *    founder approved). Screen POSITIONS use the true scale
+ *    (`mapScaleFor`), so the collision pass sees names where they land.
  *  - Label visibility is COLLISION-BASED at every viewport (founder
  *    principle, 2026-07-31: the names ARE the product — a label hides only
  *    when it would physically collide with another, never by a blanket
  *    rule), by ONE rule on every surface: names fill whatever room there
  *    is and appear progressively as zooming in creates space — the
  *    viewer's thread names included (colour never buys a name room the
- *    modal would not give it). The only always-on label is YOU's, the
- *    viewer's marker; an explored (hovered/tapped) person's lineage names
- *    render while explored, as in the modal. Recomputed on zoom/pan/resize.
+ *    modal would not give it). The rule is the verifier's hard one
+ *    (2026-09-09): a painted name keeps LABEL_GAP_PX (6px) from every other
+ *    painted name and never crosses another person's dot. The only
+ *    always-on label is YOU's, the viewer's marker; an explored
+ *    (hovered/tapped) person's lineage names render while explored, as in
+ *    the modal. Recomputed on zoom/pan/resize.
  *
  * The former viewer-only rendering — bigger YOU node with a halo, per-kind
  * node shapes and label sizes, tangential gold labels, the whole-web hover
@@ -45,6 +52,8 @@ import {
   labelFontSize,
   labelScreenRect,
   labelVisibility,
+  fontScaleFor,
+  mapScaleFor,
 } from '../lib/constellationLabels'
 
 const MIN_ZOOM_DIV = 4 // deepest zoom-in shows 1/4 of the canvas
@@ -117,16 +126,17 @@ export default function ConstellationMap({ layout }) {
   /** Everything lit right now: the viewer's thread plus the explored lineage. */
   const litSet = useMemo(() => new Set([...threadSet, ...exploreSet]), [threadSet, exploreSet])
 
-  /** The map's rendered CSS width — the denominator of the label
-   *  counter-scaling. 0 until the first measurement (labels then render at
+  /** The map's rendered CSS box — the label counter-scaling's denominator
+   *  is the TRUE scale (mapScaleFor: the smaller of width and height
+   *  ratios). {0,0} until the first measurement (labels then render at
    *  their base design sizes for that first paint). */
-  const [renderedWidth, setRenderedWidth] = useState(0)
+  const [rendered, setRendered] = useState({ w: 0, h: 0 })
   useEffect(() => {
     const svg = svgRef.current
     if (!svg || typeof ResizeObserver === 'undefined') return
     const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect?.width
-      if (w) setRenderedWidth(w)
+      const rect = entries[0]?.contentRect
+      if (rect?.width && rect?.height) setRendered({ w: rect.width, h: rect.height })
     })
     ro.observe(svg)
     return () => ro.disconnect()
@@ -188,20 +198,38 @@ export default function ConstellationMap({ layout }) {
 
   /** Collision pass — cheap AABB over tens of labels, recomputed whenever
    *  the view changes (zoom, pan, resize). YOU and the center labels are
-   *  always present. */
+   *  always present; every other person's dot is an obstacle a name may
+   *  not cross. */
   const { visibleIds, goldOverlaps } = useMemo(() => {
     if (!vb || !labelItems.length) {
       return { visibleIds: new Set(labelItems.map((it) => it.id)), goldOverlaps: [] }
     }
-    const scale = renderedWidth > 0 && vb.w > 0 ? renderedWidth / vb.w : 0
-    const view = { vbX: vb.x, vbY: vb.y, scale }
+    const scale = mapScaleFor(rendered.w, rendered.h, vb.w, vb.h)
+    const view = { vbX: vb.x, vbY: vb.y, scale, fontScale: fontScaleFor(rendered.w, vb.w) }
+    const obstacles = scale
+      ? layout.nodes
+          .filter((n) => n.kind !== 'film')
+          .map((n) => ({
+            id: n.id,
+            rect: {
+              x: (n.x - PERSON_DOT_R - vb.x) * scale,
+              y: (n.y - PERSON_DOT_R - vb.y) * scale,
+              w: 2 * PERSON_DOT_R * scale,
+              h: 2 * PERSON_DOT_R * scale,
+            },
+          }))
+      : []
     return labelVisibility(
-      labelItems.map((it) => ({ ...it, rect: labelScreenRect(it, view) }))
+      labelItems.map((it) => ({ ...it, rect: labelScreenRect(it, view) })),
+      undefined,
+      obstacles
     )
-  }, [labelItems, vb, renderedWidth])
+  }, [layout, labelItems, vb, rendered])
 
   /** Founder rule: two GOLD labels colliding is an edge case to REPORT, not
-   *  something this rule may silently resolve — both stay rendered. */
+   *  something this rule may silently resolve — both stay rendered. A plan
+   *  that could not settle on a canvas (names then thin by hiding at the
+   *  reference view) is reported the same way. */
   useEffect(() => {
     if (goldOverlaps.length) {
       console.warn(
@@ -209,7 +237,13 @@ export default function ConstellationMap({ layout }) {
         goldOverlaps
       )
     }
-  }, [goldOverlaps])
+    if (layout?.plan && !layout.plan.settled) {
+      console.warn(
+        '[constellation] the clearance plan did not settle for this film — names that would touch at the desktop view are hidden until zoomed (report this layout):',
+        layout.plan
+      )
+    }
+  }, [goldOverlaps, layout])
 
   /** Wheel/trackpad zoom, centered on the pointer. Registered natively with
    *  passive:false — React's synthetic wheel can't preventDefault, and the
@@ -306,8 +340,9 @@ export default function ConstellationMap({ layout }) {
     svgRef.current?.classList.remove('panning')
   }
 
-  /** CSS pixels per map unit, zoom included — feeds the label counter-scale. */
-  const mapScale = renderedWidth > 0 && vb.w > 0 ? renderedWidth / vb.w : 0
+  /** The scale the label counter-scale works against (width over viewBox
+   *  width — see fontScaleFor). */
+  const mapScale = fontScaleFor(rendered.w, vb.w)
 
   /** A person: hit area, solid/hollow dot, radial name. Lit = on the
    *  viewer's thread (gold at rest) or on the explored lineage. An explored

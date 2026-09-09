@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { buildConstellationLayout, ROOT_ID, FAN_STEP, radialLabel } from './constellationLayout.js'
-import { PERSON_LABEL_SIZE, dotRect, labelScreenRect, rectsCollide } from './constellationLabels.js'
+import { buildConstellationLayout, ROOT_ID, FAN_STEP, RING_BUMP, radialLabel } from './constellationLayout.js'
+import { LABEL_CLEARANCE, PERSON_LABEL_SIZE, REFERENCE_VIEW, dotRect, labelScreenRect, mapScaleFor, rectsCollide } from './constellationLabels.js'
 
 const TWO_PI = Math.PI * 2
 const norm = (a) => ((a % TWO_PI) + TWO_PI) % TWO_PI
@@ -12,6 +12,39 @@ const angDiff = (a, b) => {
 }
 const childrenOf = (layout, parentId) =>
   layout.nodes.filter((n) => n.parentId === parentId).sort((x, y) => x.theta - y.theta)
+/** THE HARD RULE, asked of a whole layout in the units its plan was
+ *  measured in (`layout.plan`: the label size the reference view paints and
+ *  6 screen px there, both in map units): the plan SETTLED, every label
+ *  pair is at least the clearance apart, and no label crosses another
+ *  person's dot. Returns the smallest label-to-label gap found in SCREEN
+ *  pixels at the reference view. */
+const planRect = (layout, n) =>
+  labelScreenRect(
+    { x: n.label.x, y: n.label.y, anchor: n.label.anchor, name: n.name, baseSize: layout.plan.fontMap },
+    { vbX: 0, vbY: 0, scale: 1 }
+  )
+const assertClearance = (layout) => {
+  expect(layout.plan.settled, 'the plan settled on a consistent canvas').toBe(true)
+  const { clearance } = layout.plan
+  const persons = layout.nodes.filter((n) => n.kind === 'person')
+  const gap = (a, b) => Math.max(b.x - (a.x + a.w), a.x - (b.x + b.w), b.y - (a.y + a.h), a.y - (b.y + b.h))
+  let min = Infinity
+  for (let i = 0; i < persons.length; i++) {
+    for (let j = i + 1; j < persons.length; j++) {
+      const g = gap(planRect(layout, persons[i]), planRect(layout, persons[j]))
+      min = Math.min(min, g)
+      expect(g, `${persons[i].name} vs ${persons[j].name}`).toBeGreaterThanOrEqual(clearance - 1e-9)
+    }
+  }
+  for (const a of persons) {
+    for (const b of persons) {
+      if (a === b) continue
+      expect(rectsCollide(planRect(layout, a), dotRect(b.x, b.y), 0), `${a.name}'s name over ${b.name}'s dot`).toBe(false)
+    }
+  }
+  const screen = mapScaleFor(REFERENCE_VIEW.w, REFERENCE_VIEW.h, layout.width, layout.height)
+  return min * screen
+}
 /** The design-scale rectangle a node's rendered name occupies (the same
  *  estimate the renderer's collision rule uses). */
 const rectOf = (n) =>
@@ -163,7 +196,9 @@ describe('buildConstellationLayout', () => {
     const kids = childrenOf(layout, 'r1')
     expect(kids).toHaveLength(10)
     const spread = kids[kids.length - 1].theta - kids[0].theta
-    expect(spread).toBeCloseTo(9 * FAN_STEP, 9)
+    // Nine steps of the fixed step, or a little more where the clearance
+    // rule needs it — never a proportional sector.
+    expect(spread).toBeGreaterThanOrEqual(9 * FAN_STEP - 1e-9)
     expect(spread).toBeLessThan(TWO_PI / 8)
     // The neighbour's lone child sits exactly at its parent's angle — the
     // big fan did not push it (no overlap, so no nudge).
@@ -192,54 +227,129 @@ describe('buildConstellationLayout', () => {
     expect(stepTop).toBeLessThan(TWO_PI / 3) // never a proportional sector
   })
 
-  it('rule 2: two parents’ fans that would overlap on one ring are nudged apart minimally — both move, equally, and untouched fans stay put', () => {
-    // Twelve ring-1 tickets, 30° apart. r0 and r1 (neighbours) each share
-    // eight times: two 7-step fans (≈30° each) centered 30° apart overlap,
-    // so each fan is pushed half the deficit away from its parent. r6, on
-    // the far side, shares three times and is not touched.
+  // ── VERIFIER'S RULE (9 September 2026, second round): label clearance is
+  // HARD — no two label boxes within 6px at the reference view, no label
+  // across a dot. A fan uses the empty arc beside it — up to the fans
+  // already placed at the same radius — tightening its step to the
+  // clearance minimum if the fixed step does not fit; if even that is not
+  // enough, it steps outward to the next radius level for that branch. The
+  // former "minimal nudge" (fans moved off their parent's angle), the
+  // parent-midpoint arc (radius-blind — the red-team's blocker) and the
+  // ring compression are gone. ──
+
+  it('THE HARD RULE holds on every layout: no two names within 6px of each other at the reference view, no name across another person’s dot', () => {
+    expect(assertClearance(fixture())).toBeGreaterThanOrEqual(LABEL_CLEARANCE - 1e-9)
+    // A Circles-shaped tree with real-length names.
+    seq = 0
+    const rows = ['Oliver', 'Yan', 'Arielle', 'Marcus', 'Jan', 'Themba', 'Evan', 'Charles', 'Evan'].map((name, i) =>
+      inv(`r${i}`, CREATOR, null, { recipient_name: name })
+    )
+    for (const name of ['Steve', 'Brian', 'Katie']) rows.push(inv(`o-${name}`, 'user-r0', 'r0', { recipient_name: name }))
+    for (const name of ['Joiselle', 'Cal', 'Krist', 'Bianca', 'Donna', 'Steele', 'Daniel']) rows.push(inv(`a-${name}`, 'user-r2', 'r2', { recipient_name: name }))
+    for (const name of ['Daniel', 'Patti', 'Alexander', 'Stacy', 'Dalton', 'Mom', 'Grace', 'Rachael', 'Brooks', 'Taylor']) rows.push(inv(`k-${name}`, 'user-a-Krist', 'a-Krist', { recipient_name: name }))
+    for (const name of ['Zeke', 'Andrea', 'Trey', 'Monika', 'Mark']) rows.push(inv(`x-${name}`, 'user-k-Alexander', 'k-Alexander', { recipient_name: name }))
+    rows.push(inv('c-Jacob', 'user-r7', 'r7', { recipient_name: 'Jacob' }), inv('t-Enrico', 'user-r5', 'r5', { recipient_name: 'Enrico' }), inv('y-Christina', 'user-r1', 'r1', { recipient_name: 'Christina' }))
+    const circles = buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR, creatorName: 'Ien' })
+    expect(assertClearance(circles)).toBeGreaterThanOrEqual(LABEL_CLEARANCE - 1e-9)
+    // Fans stay centered on their parents (never nudged), tight where names stack.
+    const byId = new Map(circles.nodes.map((n) => [n.id, n]))
+    const ten = childrenOf(circles, 'a-Krist')
+    expect(Math.abs(angDiff((ten[0].theta + ten[9].theta) / 2, byId.get('a-Krist').theta))).toBeLessThan(1e-9)
+    expect(ten[9].theta - ten[0].theta).toBeLessThan(Math.PI / 3)
+    // …and the film's NEXT realistic shares still settle: Stacy (one of
+    // Krist's ten) shares three, then four quiet first-ring people share
+    // four each (the red-team's "very next share" case).
+    const grown = [...rows, ...['Rob', 'Kim', 'Lee'].map((name) => inv(`s-${name}`, 'user-k-Stacy', 'k-Stacy', { recipient_name: name }))]
+    expect(assertClearance(buildConstellationLayout({ filmInvites: grown, creatorId: CREATOR, creatorName: 'Ien' }))).toBeGreaterThanOrEqual(LABEL_CLEARANCE - 1e-9)
+    for (const p of ['r3', 'r4', 'r6', 'r5']) for (const name of ['Ines', 'Bram', 'Yusuf', 'Kofi']) grown.push(inv(`${p}-${name}`, `user-${p}`, p, { recipient_name: name }))
+    expect(assertClearance(buildConstellationLayout({ filmInvites: grown, creatorId: CREATOR, creatorName: 'Ien' }))).toBeGreaterThanOrEqual(LABEL_CLEARANCE - 1e-9)
+  })
+
+  it('rule 2: a fan uses the empty arc beside it; a neighbour that cannot share the arc steps out a level — nobody leaves their parent’s angle', () => {
+    // Twelve ring-1 tickets, 30° apart, r0 and r1 (neighbours, at the top
+    // where names sit side by side) each share five times: two fans of
+    // five side-by-side names cannot both sit at ring 2 within 30°, so the
+    // later one steps out to the next radius level — each centered on its
+    // own parent, no nudge. r3 (3 o'clock, where names stack) shares three
+    // times and keeps the fixed step at its ring.
     seq = 0
     const rows = []
     for (let i = 0; i < 12; i++) rows.push(inv(`r${i}`, CREATOR))
-    for (let i = 0; i < 8; i++) rows.push(inv(`a${i}`, 'user-r0', 'r0'))
-    for (let i = 0; i < 8; i++) rows.push(inv(`b${i}`, 'user-r1', 'r1'))
-    for (let i = 0; i < 3; i++) rows.push(inv(`c${i}`, 'user-r6', 'r6'))
+    for (let i = 0; i < 5; i++) rows.push(inv(`a${i}`, 'user-r0', 'r0'))
+    for (let i = 0; i < 5; i++) rows.push(inv(`b${i}`, 'user-r1', 'r1'))
+    for (let i = 0; i < 3; i++) rows.push(inv(`c${i}`, 'user-r3', 'r3'))
     const layout = buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR })
     const byId = new Map(layout.nodes.map((n) => [n.id, n]))
     const centre = (kids) => (kids[0].theta + kids[kids.length - 1].theta) / 2
-    const A = childrenOf(layout, 'r0')
-    const B = childrenOf(layout, 'r1')
-    const C = childrenOf(layout, 'r6')
-    const offA = angDiff(centre(A), byId.get('r0').theta)
-    const offB = angDiff(centre(B), byId.get('r1').theta)
-    expect(offA).toBeLessThan(-1e-6) // pushed away from r1 (which follows r0 clockwise)
-    expect(offB).toBeGreaterThan(1e-6)
-    expect(Math.abs(offA)).toBeCloseTo(Math.abs(offB), 9) // equal shares
-    expect(Math.abs(offA)).toBeLessThan(Math.PI / 6) // minimal: well under a slot
-    const stepA = A[1].theta - A[0].theta
-    const stepB = B[1].theta - B[0].theta
-    expect(angDiff(B[0].theta, A[A.length - 1].theta)).toBeGreaterThanOrEqual(Math.max(stepA, stepB) - 1e-9)
-    expect(angDiff(centre(C), byId.get('r6').theta)).toBeCloseTo(0, 9)
-    const ring2 = layout.nodes.filter((n) => n.depth === 2).map((n) => norm(n.theta)).sort((x, y) => x - y)
-    for (let i = 1; i < ring2.length; i++) expect(ring2[i] - ring2[i - 1]).toBeGreaterThan(1e-6)
-  })
-
-  it('rule 2: a ring that cannot hold its fans at their steps compresses them to fit instead of wrapping', () => {
-    seq = 0
-    const rows = [inv('r0', CREATOR), inv('r1', CREATOR)]
-    for (let i = 0; i < 60; i++) rows.push(inv(`a${i}`, 'user-r0', 'r0'))
-    for (let i = 0; i < 60; i++) rows.push(inv(`b${i}`, 'user-r1', 'r1'))
-    const layout = buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR })
-    const ring2 = layout.nodes.filter((n) => n.depth === 2).map((n) => norm(n.theta)).sort((x, y) => x - y)
-    expect(ring2).toHaveLength(120)
-    for (let i = 1; i < ring2.length; i++) expect(ring2[i] - ring2[i - 1]).toBeGreaterThan(1e-6)
-    const byId = new Map(layout.nodes.map((n) => [n.id, n]))
-    for (const id of ['r0', 'r1']) {
+    for (const id of ['r0', 'r1', 'r3']) {
       const kids = childrenOf(layout, id)
+      expect(angDiff(centre(kids), byId.get(id).theta)).toBeCloseTo(0, 9)
       const gaps = []
       for (let i = 1; i < kids.length; i++) gaps.push(kids[i].theta - kids[i - 1].theta)
       for (const g of gaps) expect(g).toBeCloseTo(gaps[0], 9)
-      expect(angDiff((kids[0].theta + kids[kids.length - 1].theta) / 2, byId.get(id).theta)).toBeCloseTo(0, 9)
     }
+    const A = childrenOf(layout, 'r0')
+    const B = childrenOf(layout, 'r1')
+    const C = childrenOf(layout, 'r3')
+    // One of the two crowded fans stays at its ring, the other steps out a
+    // level (46 units further) — different radii, so they cannot collide.
+    expect(Math.min(A[0].r, B[0].r)).toBe(layout.rings[1])
+    expect(Math.abs(A[0].r - B[0].r)).toBeGreaterThanOrEqual(RING_BUMP - 1e-9)
+    expect(C[0].r).toBe(layout.rings[1]) // r3's three: room to spare, not pushed
+    expect(C[1].theta - C[0].theta).toBeGreaterThanOrEqual(FAN_STEP - 1e-9) // at least the fixed step
+    expect(C[2].theta - C[0].theta).toBeLessThan(Math.PI / 6) // …and nowhere near its arc
+    expect(assertClearance(layout)).toBeGreaterThanOrEqual(LABEL_CLEARANCE - 1e-9)
+  })
+
+  it('rule 2: when the arc at a ring cannot hold a fan, the fan is pushed outward for that branch — and the branch below it follows', () => {
+    // Six ring-1 tickets, 60° apart. r5, r0 and r1 (the top third of the
+    // ring, where names sit side by side) each share four "Christopher"s:
+    // three fans of four wide names cannot all sit at ring 2, so at least
+    // one steps out to a further radius level — the whole fan together,
+    // still centered on its parent — and its grandchild follows it.
+    seq = 0
+    const rows = []
+    for (let i = 0; i < 6; i++) rows.push(inv(`r${i}`, CREATOR))
+    for (const p of ['r5', 'r0', 'r1']) for (let i = 0; i < 4; i++) rows.push(inv(`${p}k${i}`, `user-${p}`, p, { recipient_name: 'Christopher' }))
+    rows.push(inv('g', 'user-r0k3', 'r0k3', { recipient_name: 'Grandchild' }))
+    rows.push(inv('lone', 'user-r3', 'r3', { recipient_name: 'Lone' }))
+    const layout = buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR })
+    const byId = new Map(layout.nodes.map((n) => [n.id, n]))
+    const radii = ['r5', 'r0', 'r1'].map((p) => childrenOf(layout, p)[0].r)
+    expect(Math.max(...radii)).toBeGreaterThanOrEqual(layout.rings[1] + RING_BUMP - 1e-9) // at least one pushed out
+    for (const p of ['r5', 'r0', 'r1']) {
+      const kids = childrenOf(layout, p)
+      for (const k of kids) expect(k.r).toBe(kids[0].r) // the whole fan, together
+      expect(angDiff((kids[0].theta + kids[3].theta) / 2, byId.get(p).theta)).toBeCloseTo(0, 9) // centered
+    }
+    // The branch below follows: the grandchild sits one ring step beyond ITS parent.
+    expect(byId.get('g').r).toBeGreaterThanOrEqual(byId.get('r0k3').r + 46 - 1e-9)
+    // r3's lone child, at the bottom, is not pushed.
+    expect(byId.get('lone').r).toBeCloseTo(layout.rings[1], 9)
+    // The rule holds everywhere (the canvas grows only when a name would leave it).
+    expect(assertClearance(layout)).toBeGreaterThanOrEqual(LABEL_CLEARANCE - 1e-9)
+  })
+
+  it('rule 1: a first ring too crowded for its names moves outward as a whole — still even', () => {
+    seq = 0
+    const rows = []
+    // Twenty-four long names 15° apart: at the top of the ring three of
+    // them sit side by side and cannot clear at 118 units, so the whole
+    // ring moves outward — still even.
+    for (let i = 0; i < 24; i++) rows.push(inv(`r${i}`, CREATOR, null, { recipient_name: 'Marguerite' }))
+    const layout = buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR })
+    const ring1 = layout.nodes.filter((n) => n.parentId === ROOT_ID)
+    expect(ring1[0].r).toBeGreaterThan(118)
+    for (const n of ring1) expect(n.r).toBe(ring1[0].r)
+    expect(layout.rings[0]).toBe(ring1[0].r)
+    const thetas = ring1.map((n) => norm(n.theta)).sort((x, y) => x - y)
+    for (let i = 0; i < 24; i++) {
+      const next = i === 23 ? thetas[0] + TWO_PI : thetas[i + 1]
+      expect(next - thetas[i]).toBeCloseTo(TWO_PI / 24, 9)
+    }
+    // A ring this crowded may or may not settle at the reference view; when
+    // it does, the rule holds there.
+    if (layout.plan.settled) expect(assertClearance(layout)).toBeGreaterThanOrEqual(LABEL_CLEARANCE - 1e-9)
   })
 
   it('rule 2: a name never paints over the neighbouring sibling’s status dot — the viewer’s own fan included (red-team finding, 2026-09-09)', () => {
@@ -275,27 +385,30 @@ describe('buildConstellationLayout', () => {
     expect(check(buildConstellationLayout({ filmInvites: krist, creatorId: CREATOR, viewerInviteId: 'k' }))).toBe(9)
   })
 
-  it('rule 2: the nudge is exact at scale — a ring of many fans, one of them huge, never leaves two nodes on top of each other (red-team finding, 2026-09-09)', () => {
+  it('at scale: a ring of many fans, one of them huge, is placed without a nudge, a throw, or a runaway canvas — and says whether its plan settled', () => {
     seq = 0
     const rows = []
     for (let i = 0; i < 36; i++) rows.push(inv(`r${i}`, CREATOR))
     for (let i = 0; i < 60; i++) rows.push(inv(`big${i}`, 'user-r5', 'r5'))
     for (let i = 0; i < 36; i++) if (i !== 5) rows.push(inv(`one${i}`, `user-r${i}`, `r${i}`))
+    const t0 = performance.now()
     const layout = buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR })
-    const ring2 = layout.nodes.filter((n) => n.depth === 2)
-    expect(ring2).toHaveLength(95)
-    const thetas = ring2.map((n) => norm(n.theta)).sort((x, y) => x - y)
-    let minGap = Infinity
-    for (let i = 0; i < thetas.length; i++) {
-      const next = i === thetas.length - 1 ? thetas[0] + TWO_PI : thetas[i + 1]
-      minGap = Math.min(minGap, next - thetas[i])
-    }
-    const big = childrenOf(layout, 'r5')
-    const step = big[1].theta - big[0].theta
-    expect(step).toBeLessThan(FAN_STEP)
-    expect(minGap * layout.rings[1]).toBeGreaterThanOrEqual(8)
+    expect(performance.now() - t0).toBeLessThan(2000)
     const byId = new Map(layout.nodes.map((n) => [n.id, n]))
-    expect(angDiff((big[0].theta + big[big.length - 1].theta) / 2, byId.get('r5').theta)).toBeCloseTo(0, 9)
+    const big = childrenOf(layout, 'r5')
+    expect(big).toHaveLength(60)
+    expect(angDiff((big[0].theta + big[59].theta) / 2, byId.get('r5').theta)).toBeCloseTo(0, 9)
+    expect(big[0].r).toBeGreaterThan(layout.rings[1]) // pushed outward for that branch
+    for (let i = 0; i < 36; i++) {
+      if (i === 5) continue
+      expect(angDiff(byId.get(`one${i}`).theta, byId.get(`r${i}`).theta)).toBeCloseTo(0, 9) // never nudged
+    }
+    for (const n of layout.nodes) expect(Number.isFinite(n.x) && Number.isFinite(n.y)).toBe(true)
+    expect(layout.width).toBeLessThan(8000)
+    expect(typeof layout.plan.settled).toBe('boolean')
+    // When such a plan settles, the rule holds at its units; when it does
+    // not, the layout says so and the renderer hides what would touch.
+    if (layout.plan.settled) expect(assertClearance(layout)).toBeGreaterThanOrEqual(LABEL_CLEARANCE - 1e-9)
   })
 
   it('sibling order is chronological on every ring, whatever order the rows arrive in', () => {
