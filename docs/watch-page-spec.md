@@ -20,7 +20,7 @@ Two families, already in the app (`src/fonts.css`, binaries in `public/fonts/`):
 **Weight law (new, from this redesign):** Phoenix **Light (300) is reserved for body text at reading sizes** (the story body, ~17px). Every small caps-label on the page — tier label, milestones, tickets line, conditions line, buttons, footer/header links, lineage name labels — uses **Regular (400)**. Light at whisper sizes reads frail on ink and was a root cause of the old page feeling cheap. If you see 300 on anything under ~1rem, it's a bug.
 
 **Voice system (which font means what):**
-- **Garamond italic** = the film's and the platform's voice: film title, rule line, creed statements, the modal charge, reveal copy, input placeholder, the generated link, story epigraph. (The story sign-off was cut 2026-07-25 — the filmmaker's name lives in the header now.)
+- **Garamond italic** = the film's and the platform's voice: film title, ~~rule line~~ (withdrawn 2026-09-09), creed statements, the modal charge, reveal copy, input placeholder, the generated link, story epigraph. (The story sign-off was cut 2026-07-25 — the filmmaker's name lives in the header now.)
 - **Phoenix tracked caps (400)** = the interface whispering: eyebrows, labels, buttons, metadata, link-buttons.
 - **Phoenix sentence-case (300)** = information at reading size: story body only.
 
@@ -53,7 +53,7 @@ Existing tokens (Tailwind `@theme` in `src/index.css`):
 | `rgba(221,221,221,0.9)` | modal reveal copy base (via existing class) |
 | `rgba(221,221,221,0.8)` | tier label, milestones label pairs with 0.6, creed statements, charge base |
 | `rgba(221,221,221,0.75)` | hallmark numbers, lineage name labels |
-| `rgba(221,221,221,0.65)` | rule line text |
+| `rgba(221,221,221,0.65)` | ~~rule line text~~ (the rule line was withdrawn 2026-09-09; the path's names use warm at 0.70) |
 | `rgba(221,221,221,0.6)` | milestones "Milestones passed" label, reveal terms-tier items |
 
 If these neutral grays spread further, promote `rgba(221,221,221,0.65)`-family to a proper token and have the muted-vs-neutral conversation app-wide.
@@ -61,7 +61,7 @@ If these neutral grays spread further, promote `rgba(221,221,221,0.65)`-family t
 **The gold law (strict):** accent gold appears ONLY as *act* or *mark*:
 - Acts: the "Pass it on" CTA (solid fill), "Create their invitation" / "Create another invitation" (gold outline; the invitation vocabulary since 2026-09-09 — they read "Share it with them" / "Share another ticket" from 2026-07-25, and "Create their invitation" / "Create another invitation" before that), the tier bar's fill, input focus underline, hover states.
 - Marks: ticket stubs, ✦ hallmarks, creed mark glyphs, the lineage's gold path/nodes.
-- Approved copy-emphasis exceptions (the ONLY colored words inside copy lines — this overrides the old README's "one uniform type style" rule, founder-approved): `"or its last."` in the rule line, `"you"` in creed line 2, `"needs"` in the modal charge.
+- Approved copy-emphasis exceptions (the ONLY colored words inside copy lines — this overrides the old README's "one uniform type style" rule, founder-approved): ~~`"or its last."` in the rule line~~ (the rule line was withdrawn 2026-09-09, amendment 11), `"you"` in creed line 2, `"needs"` in the modal charge.
 
 Gold never appears on labels, eyebrows, or informational text. No pure `#fff` or `#000` in UI (the player well's black is the video surround, not UI).
 
@@ -98,8 +98,8 @@ Internal order and spacing (two-tier rhythm: tight *within* a fact, wide *betwee
 3. `margin-top: 0.5rem` (bonded) → **the label**: `Tickets shared of {next_tier} goal` → renders `TICKETS SHARED OF 1,000 GOAL` — Phoenix 400, 0.8125rem, caps, 0.18em, warm@0.8. Number formatted with comma. (Was `Viewers reached of {next_tier} goal` until the 2026-07-25 metric switch.)
 4. `margin-top: 1.75rem` → **`Milestones passed`** (Phoenix 400, 0.8125rem, caps, 0.18em, warm@0.6) and `margin-top: 0.5rem` → the **hallmarks**: `✦ 100   ✦ 250   ✦ 500` — 0.8125rem, 0.14em, numbers warm@0.75, ✦ in accent@0.5. **FOUNDER AMENDMENT 2026-07-23: NO interpunct separators — the groups are separated by spacing alone (~1.25em gap). Do not restore the dots.** Renders every crossed tier (`crossed_tiers`).
 5. `margin-top: 2.25rem` (the column's widest gap — the act keeps its isolation) → **the CTA**: `Pass it on` — full rail width, min-height 52px, ink text, caps 0.8125rem/0.28em. **Resting keyline (FOUNDER DECISION 2026-07-25, superseding both the original seamless-solid rest and the same-day hover-only keyline stamp — do not "fix"):** the button ALWAYS wears the printed-ticket double frame — a 1px solid-accent border (the keyline) around a slightly deeper gold fill, on all devices. Fills are explicit precomputed solids (no alpha compositing): rest fill `#9d8f74` (= accent at 88% over ink), hover fill `#a7987a` (= accent at 94% over ink — a ~7% brightness step); the keyline stays through hover. No other motion, no scale, no shadow (the no-engagement-mechanics law held at the time; since 5 September 2026 the same conclusion follows from "reward, never extract" — §2). Focus-visible: 1px accent outline, 3px offset. Still the page's ONLY solid-filled object. Opens the modal. (History: the ring began as an alpha-compositing accident of the original hover, was stamped deliberate-on-hover earlier on 2026-07-25, then promoted to the resting design the same day.)
-5b. ~~The lineage chain between the CTA and the rule line~~ — **BUILT AND WITHDRAWN BY THE FOUNDER, 9 September 2026, pending a design pass:** the landing letter's chain (`LineageChain.jsx`, same rule and type, ending "→ Who’s next?") was placed here in the `story-links-and-copy` batch and rejected on sight; the rail's CTA → rule-line spacing is exactly as before (`margin-top: 1.25rem`). The shared component and the landing page's use of it (with `(filmmaker)`) stay.
-6. `margin-top: 1.25rem` → **the rule line**: `This film passed through {chain_length} pairs of hands to reach you. You are its newest link — or its last.` Garamond italic, **1rem (FOUNDER AMENDMENTS 2026-07-23 — raised twice from the replica's 0.875rem, via 0.9375rem; the HTML does NOT win on this one value)**, line-height 1.6, warm@0.65, left-aligned, with `or its last.` in accent. In the markup, bind the dash and closing clause with `&nbsp;` so `— or its last.` never strands at a line start. A chain of 1 reads `1 pair of hands` — singular, numeral kept (owner-approved 2026-07-23).
+5b. ~~The lineage chain between the CTA and the rule line~~ — **BUILT AND WITHDRAWN BY THE FOUNDER, 9 September 2026, pending a design pass** (the design pass produced THE PATH, item 6, the same day)**:** the landing letter's chain (`LineageChain.jsx`, same rule and type, ending "→ Who’s next?") was placed here in the `story-links-and-copy` batch and rejected on sight; the rail's CTA → rule-line spacing is exactly as before (`margin-top: 1.25rem`). The shared component and the landing page's use of it (with `(filmmaker)`) stay.
+6. `margin-top: 1.25rem` → **THE PATH (FOUNDER DESIGN, 9 September 2026 — from the canvas; replaces the rule line, which is REMOVED, amendment 11).** Exactly where the rule line sat — 1.25rem below the CTA, nothing else between — one inline SVG, full rail width: `viewBox="0 0 384 66"`, `width="100%"`, `preserveAspectRatio="xMinYMid meet"`; no hover, no motion, not a link; absent on the filmmaker's own page (depth 0), as the rule line was. `src/components/RailPath.jsx` draws it; the rule is `src/lib/railPath.js` (unit-tested). **Data:** the chain's first names, origin first, from the same rule the landing chain and the emblem use (`chainHands`), then `you`, then a final next-slot. More than three hands → only the first, a single collapsed entry labelled `⋯ {n} others ⋯` (n = hands − 2), and the last — the row never wraps. Nodes evenly spaced on y=14 with a 30px inset on both sides. **Segments** between named nodes: 1px stroke in accent `#b1a180`, opacity rising from 0.30 at the filmmaker's end to 0.65 at `you` (the constellation's gold-path convention); the segment from `you` to the next slot: 1px, warm `#dddddd` at 0.18, dash `2 4`. **Nodes:** each hand and the collapsed entry r=2.6, fill accent at 0.85; `you` r=3.2, fill accent solid; the next slot r=3.2, no fill, 1px accent stroke. **Labels** on y=41, centred under their node, Phoenix 400, uppercase, letter-spacing 1.8px: hands 10px in warm at 0.70; the collapsed entry 9px in muted `#a89f94`; `YOU` 10px in full warm; the next slot a bare `?` 11px in accent. Under the first node only, on y=56, centred: `(FILMMAKER)` in Phoenix 400, 8px, letter-spacing 1.6px, muted (suppressed over the server's "The filmmaker" fallback, as on the landing chain). **Colour law:** names are neutral warm-alpha, never gold; gold appears only as the path, the nodes and the `?`, which are marks. The SVG carries the accessible sentence the rule line used to (`role="img"`; aria-label = the founder's landing label `How this reached you` + `: ` + the stops joined by ` → ` — the joined form is the builder's, PENDING §7). The collapsed entry renders `⋯ {n} others ⋯` exactly as the founder wrote it (an uppercase OTHERS was tried and measured 0.5px from ALEXANDER on Firefox at the live Circles chain's 81px pitch; the narrower literal stands — the founder's canvas read decides the case, and whether long names take the emblem's 8-character cap). The builder set `overflow="visible"` on the SVG so a long first or last name spills into the gutter rather than clipping at the 30px inset.
 
 **The tier ladder (fixed):** 100 / 250 / 500 / 1,000 / 2,500 / 5,000 / 10,000 / 25,000 / 50,000 / 100,000 / 250,000 / 500,000 / 1,000,000. `next_tier` = the smallest ladder value > `shares_count`. `crossed_tiers` = all ladder values ≤ `shares_count`. Numerals always; NO percentages displayed anywhere; no countdowns; no goal-met celebration states.
 
@@ -179,7 +179,7 @@ Order, all centered:
 
 ## 5. The lineage graph — geometry template + dynamic names
 
-A `<figure>` in the modal, `max-width: 25rem`, full-width SVG `viewBox="0 0 400 160"`, `aria-hidden="true"` (the rule line in the rail carries the accessible fact). **The geometry is a FIXED, hand-composed template — identical for every viewer of every film. Only the text labels (names) and element visibility are dynamic.** This is a string-substitution render; no layout engine.
+A `<figure>` in the modal, `max-width: 25rem`, full-width SVG `viewBox="0 0 400 160"`, `aria-hidden="true"` (the rail's path carries the accessible fact since 2026-09-09; before that, the rule line). **The geometry is a FIXED, hand-composed template — identical for every viewer of every film. Only the text labels (names) and element visibility are dynamic.** This is a string-substitution render; no layout engine.
 
 Copy the SVG from the replica exactly. Its layers and their rules:
 
@@ -202,7 +202,7 @@ Copy the SVG from the replica exactly. Its layers and their rules:
 |---|---|
 | First circle (filmmaker → viewer) | 1 predecessor (the filmmaker's name) → YOU → hollow `?`. No entry stroke, no forks unless real. Sparse = honest = correct. |
 | 2–3 hands | that many named predecessors, no entry stroke until depth > 3 |
-| 4+ hands (any depth) | exactly 3 named predecessors + entry stroke; the rule line's `{chain_length}` carries the true number |
+| 4+ hands (any depth) | exactly 3 named predecessors + entry stroke; the rail's path shows the collapsed entry's count (hands − 2) |
 | Forks/canopy | per-hand booleans, as above |
 
 **Name length:** labels cap at ~8 characters (truncate with a mid-dot, or ease tracking per-label). VERITY fits; ALEXANDRA collides with YOU if unhandled.
@@ -239,7 +239,9 @@ Copy the SVG from the replica exactly. Its layers and their rules:
 | `Tickets shared of {next_tier} goal` | FOUNDER (2026-07-25, replacing `Viewers reached of {next_tier} goal`) |
 | `Milestones passed` | FOUNDER |
 | `Pass it on` (CTA) | FOUNDER |
-| `This film passed through {chain_length} pairs of hands to reach you. You are its newest link — or its last.` | FOUNDER (emphasis on `or its last.` approved) |
+| ~~`This film passed through {chain_length} pairs of hands to reach you. You are its newest link — or its last.`~~ | WITHDRAWN by the founder 2026-09-09 (amendment 11) — the rule line no longer renders; replaced by the path (§3b item 6). `pairsOfHandsPhrase` in `handsChain.js` is dormant |
+| The path's labels: first names uppercase · `⋯ {n} others ⋯` · `YOU` · `?` · `(FILMMAKER)` | FOUNDER design 2026-09-09 (§3b item 6); the collapsed entry's case as the founder wrote it — PENDING his canvas read |
+| The path's aria-label: `How this reached you: {stops joined by →}` | the founder's landing label; the joined sentence is the builder's — **PENDING** |
 | Creed 1: `Films here spread by private invite and real humans only. No algorithms.` | FOUNDER |
 | Creed 2: `This film won't reach anyone new, unless you pass it on.` | FOUNDER (`you` in accent) |
 | Creed 3: `Share intentionally. Each ticket admits one person only.` | FOUNDER (second sentence revised 2026-07-25) |
@@ -280,7 +282,7 @@ Retired/removed copy (do NOT resurrect): the personalized constraint line ("Alex
 | `shares_count` | film-wide non-void generated links (`filmSharesCount`; metric switch 2026-07-25) | count numeral; bar fill numerator |
 | `next_tier` | ladder (§3b) | tier label; bar fill denominator |
 | `crossed_tiers` | ladder | hallmarks row |
-| `chain_length` | viewer's claim chain depth | rule line |
+| `chain_length` / the hands | viewer's claim chain (`chainHands`) | the path (§3b item 6); the emblem's tail |
 | `chain_names` | last `min(3, chain_length)` first names in the viewer's chain | lineage gold-path labels |
 | `recipient_name` | the name typed into the form | lineage next-slot label (State 2); reveal copy |
 | `tickets_remaining` | `ticketRules.js` (grant = 5, `INITIAL_CLAIMANT_TICKETS`) | count lines; stub dim states (newest-first) |
@@ -305,6 +307,7 @@ First names only, everywhere, always (platform display law).
 
 9. **FOUNDER ADDITION, 9 September 2026 — comments.** §3e adds "Join the conversation" below the story; the affordance law gains the in-place-action-as-bare-text amendment (§4b); the copy ledger gains its strings, the inline error messages PENDING the founder's stamp.
 10. **FOUNDER DECISION, 9 September 2026 — the invitation/ticket vocabulary split**. The invitation is the act and the link you make; the ticket is the numbered seat the receiver holds — `Ticket No. {n}` stays everywhere it appears. Changed on this page: `Create their invitation`, the reveal sentence (now the one shared rule `src/lib/revealSentence.js` for both share surfaces), `Copy their invitation link`, `Create another invitation`, `See your impact →`, `{n} invitations left.`, `You’ve used all your invitations for this film.`, and `revealTicketsLine.js`. The viewer dashboard followed (`Invitations remaining` / `Invitations sent` / `Invitations you've sent` / `No invitations sent yet.` / the mobile identity line / `Copy their invitation link`), and — founder decision at the merge, 9 September — so did the CREATOR surfaces (`CreatorLinkPanel`: `Create their invitation` / `Copy their invitation link`; the people table's `Copy their invitation link`; `NetworkGraphModal`'s `No invitations sent yet.`). DELIBERATELY UNCHANGED: the rail label `Tickets shared of {goal} goal`, creed line 3 `Share intentionally. Each ticket admits one person only.`, every `Ticket No. {n}`, and the landing's `By private invitation only`. The 2026-07-25 vocabulary ruling ("ticket" the noun, "shared" the verb) is superseded on these strings and only these. Same day: the story header gained its two link icons (§3d); the rail's lineage chain (§3b 5b) was built in the same batch and WITHDRAWN by the founder on sight, pending a design pass — the CTA → rule-line spacing is unchanged.
+11. **FOUNDER DECISION, 9 September 2026 — the rule line is REMOVED and the path takes its place.** The rail's rule line ~~`This film passed through {chain_length} pairs of hands to reach you. You are its newest link — or its last.`~~ (FOUNDER, 2026-07-23, with the approved `or its last.` emphasis) no longer renders anywhere; in its exact place — 1.25rem under "Pass it on", nothing else between — sits the path, the founder's canvas design of the same day (§3b item 6): the film's hands as one row of nodes, origin first with `(FILMMAKER)` beneath, collapsed beyond three, then `YOU`, then the hollow `?`. The approved copy-emphasis exceptions (§2) drop to two — `you` in creed 2 and `needs` in the charge. The earlier same-day lineage chain (5b) was the withdrawn first attempt; this is the design pass it waited for. Absent at depth 0, as the rule line was. The recorded slug-path baseline was re-recorded deliberately for it (stated in the spec file's header).
 ## 10. Adjacent product notes (out of scope here, but decided during this work)
 
 - **Poster frames are mandatory** per film (Mux `poster`).
@@ -316,7 +319,7 @@ First names only, everywhere, always (platform display law).
 
 1. Load with fonts present AND absent — the title must render italic in both (explicit `font-style: italic` on it).
 2. 1440×900: creed band top edge visible without scrolling.
-3. Rail cluster optically centered against the player; rule line's `— or its last.` never alone-wrapped.
+3. Rail cluster optically centered against the player; the path sits 1.25rem under the CTA on one line, never wrapping (collapsed middle beyond three hands).
 4. Modal: open → focus in field; create → link visible with ZERO scrolling; Tab cycles through the reveal's buttons; Esc/scrim/×/focus-return all work; reduced-motion kills the rise.
 5. Lineage: chain of 1, 3, and 47 all render correctly per the toggle table; long name truncates.
 6. ~600px width: player edge-to-edge, no horizontal scroll; <540px: wordmark centered, modal edge-to-edge.
