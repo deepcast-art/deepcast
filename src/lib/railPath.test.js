@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   railPathNodes,
   railPathPositions,
-  railSegmentOpacity,
+  RAIL_PATH_STROKE_OPACITY,
   railPathDescription,
   collapsedLabel,
   RAIL_PATH_INSET,
@@ -86,16 +86,9 @@ describe('railPathPositions — evenly spaced on one line, 30px inset', () => {
   })
 })
 
-describe('railSegmentOpacity — 0.30 at the filmmaker’s end rising to 0.65 at "you"', () => {
-  it('one segment reads at the bright end', () => {
-    expect(railSegmentOpacity(0, 1)).toBe(0.65)
-  })
-  it('two segments: 0.30 then 0.65', () => {
-    expect(railSegmentOpacity(0, 2)).toBe(0.3)
-    expect(railSegmentOpacity(1, 2)).toBe(0.65)
-  })
-  it('three segments: 0.30, 0.475, 0.65', () => {
-    expect([0, 1, 2].map((i) => railSegmentOpacity(i, 3))).toEqual([0.3, 0.475, 0.65])
+describe('the line rule — one stroke for the whole path', () => {
+  it('every segment reads at 0.55; there is no ramp constant left to drift', () => {
+    expect(RAIL_PATH_STROKE_OPACITY).toBe(0.55)
   })
 })
 

@@ -1,7 +1,7 @@
 import {
   railPathNodes,
   railPathPositions,
-  railSegmentOpacity,
+  RAIL_PATH_STROKE_OPACITY,
   railPathDescription,
   RAIL_PATH_VIEWBOX,
   RAIL_PATH_NODE_Y,
@@ -60,34 +60,22 @@ export default function RailPath({ hands }) {
       overflow="visible"
       className="block h-auto w-full"
     >
-      {/* Segments: gold rising 0.30 → 0.65 toward "you"; then the dashed
-          warm segment to the next slot — not yet walked. */}
-      {nodes.slice(0, -1).map((node, i) =>
-        i < youIndex ? (
-          <line
-            key={`seg-${i}`}
-            x1={xs[i]}
-            y1={Y}
-            x2={xs[i + 1]}
-            y2={Y}
-            stroke={ACCENT}
-            strokeWidth="1"
-            strokeOpacity={railSegmentOpacity(i, youIndex)}
-          />
-        ) : (
-          <line
-            key={`seg-${i}`}
-            x1={xs[i]}
-            y1={Y}
-            x2={xs[i + 1]}
-            y2={Y}
-            stroke={WARM}
-            strokeWidth="1"
-            strokeOpacity="0.18"
-            strokeDasharray="2 4"
-          />
-        )
-      )}
+      {/* One stroke for the whole path (founder line rule 2026-09-09): every
+          segment 1px accent at 0.55, no brightening ramp; the final run from
+          "you" to the next slot — not yet walked — differs only in its dash. */}
+      {nodes.slice(0, -1).map((node, i) => (
+        <line
+          key={`seg-${i}`}
+          x1={xs[i]}
+          y1={Y}
+          x2={xs[i + 1]}
+          y2={Y}
+          stroke={ACCENT}
+          strokeWidth="1"
+          strokeOpacity={RAIL_PATH_STROKE_OPACITY}
+          strokeDasharray={i >= youIndex ? '2 4' : undefined}
+        />
+      ))}
       {/* Nodes: hands and the collapsed entry r2.6 at 0.85; YOU r3.2 solid;
           the next slot r3.2 hollow, 1px accent stroke. */}
       {nodes.map((node, i) =>

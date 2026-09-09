@@ -70,18 +70,10 @@ export function railPathPositions(count, { width = RAIL_PATH_VIEWBOX.width, inse
   return Array.from({ length: n }, (_, i) => Math.round((inset + (span * i) / (n - 1)) * 100) / 100)
 }
 
-/**
- * Opacity of the i-th named segment (0-based) out of `segments` between the
- * origin and "you": rising from 0.30 at the filmmaker's end to 0.65 at
- * "you" — the constellation's gold-path convention. One segment reads at
- * the bright end.
- */
-export function railSegmentOpacity(index, segments) {
-  const n = Number(segments)
-  if (!Number.isInteger(n) || n <= 1) return 0.65
-  const t = Math.min(Math.max(Number(index) / (n - 1), 0), 1)
-  return Math.round((0.3 + (0.65 - 0.3) * t) * 1000) / 1000
-}
+/** One stroke for the whole path (founder line rule 2026-09-09): every
+ *  segment 1px accent at this opacity — no ramp; the next slot's run
+ *  differs only in its dash. */
+export const RAIL_PATH_STROKE_OPACITY = 0.55
 
 /** The accessible sentence the SVG carries (the rule line used to): the
  *  founder's landing label "How this reached you" followed by the stops —

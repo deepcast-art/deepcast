@@ -160,12 +160,14 @@ test.describe('the rail’s path — the film’s hands under "Pass it on"', () 
     expect(geometry.nodes.map((n) => n.kind)).toEqual(['hand', 'hand', 'you', 'next'])
     expect(geometry.nodes.map((n) => n.r)).toEqual([2.6, 2.6, 3.2, 3.2])
     expect(geometry.nodes[3]).toMatchObject({ fill: 'none', stroke: '#b1a180' })
-    // Segments: gold 0.30 → 0.65, then the dashed warm segment to "?".
+    // One stroke for the whole path: every segment 1px accent at 0.55, no
+    // ramp; the run to "?" differs only in its dash (2 4) — never grey.
     expect(geometry.lines).toEqual([
-      { stroke: '#b1a180', opacity: '0.3', dash: null },
-      { stroke: '#b1a180', opacity: '0.65', dash: null },
-      { stroke: '#dddddd', opacity: '0.18', dash: '2 4' },
+      { stroke: '#b1a180', opacity: '0.55', dash: null },
+      { stroke: '#b1a180', opacity: '0.55', dash: null },
+      { stroke: '#b1a180', opacity: '0.55', dash: '2 4' },
     ])
+    expect(await page.evaluate(() => [...document.querySelectorAll('[data-rail-path] line')].map((l) => l.getAttribute('stroke-width')))).toEqual(['1', '1', '1'])
     // Colour law: one grey for every label but YOU (full warm) and "?" (gold) —
     // names and the caption warm at 0.70; the caption 8px on y=56.
     expect(geometry.labels).toEqual([
