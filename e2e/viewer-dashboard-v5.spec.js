@@ -173,8 +173,8 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     // Poll on a settled data-dependent element first (the load pass can run
     // more than once in dev StrictMode before the film arrives).
     await expect(page.getByText('A Sacred Pause')).toBeVisible({ timeout: 15000 })
-    await expect(aside.getByText('Tickets remaining')).toBeVisible()
-    await expect(aside.getByText('Tickets shared')).toBeVisible()
+    await expect(aside.getByText('Invitations remaining')).toBeVisible()
+    await expect(aside.getByText('Invitations sent')).toBeVisible()
     await expect(aside.getByText('3', { exact: true })).toBeVisible()
     await expect(aside.getByText('2', { exact: true })).toBeVisible()
     await expect(aside.getByRole('button', { name: 'Share this film' })).toBeVisible()
@@ -207,8 +207,8 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     // design's status vocabulary and a working copy affordance.
     // Ticket numbers: yours in the sidebar, each link's on its row.
     await expect(aside.getByText('Ticket No. 59')).toBeVisible()
-    const tickets = page.locator('section').filter({ hasText: "Tickets you've shared" })
-    await expect(tickets.getByText("Tickets you've shared")).toBeVisible()
+    const tickets = page.locator('section').filter({ hasText: "Invitations you've sent" })
+    await expect(tickets.getByText("Invitations you've sent")).toBeVisible()
     await expect(tickets.getByText('Ticket No. 60')).toBeVisible()
     await expect(tickets.getByText('Ticket No. 61')).toBeVisible()
 
@@ -221,7 +221,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(tickets.getByText('Unopened')).toBeVisible()
     await expect(tickets.getByText('Maya', { exact: true })).toBeVisible()
     await expect(tickets.getByText('Shared to 1 person')).toBeVisible()
-    const copyButtons = page.getByRole('button', { name: 'Copy their ticket link' })
+    const copyButtons = page.getByRole('button', { name: 'Copy their invitation link' })
     await expect(copyButtons).toHaveCount(2)
     await copyButtons.first().click()
     // Clipboard success shows "Copied"; a blocked clipboard shows the link
@@ -239,16 +239,16 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(dialog.locator('input[type="email"]')).toHaveCount(0)
     // Typing an email into the first-name box is gently refused, client-side.
     await dialog.getByPlaceholder('Their first name').fill('noa@example.com')
-    await dialog.getByRole('button', { name: 'Share it with them' }).click()
+    await dialog.getByRole('button', { name: 'Create their invitation' }).click()
     await expect(dialog.getByText('Just their first name — no email needed.')).toBeVisible()
     await dialog.getByPlaceholder('Their first name').fill('Noa')
-    await dialog.getByRole('button', { name: 'Share it with them' }).click()
+    await dialog.getByRole('button', { name: 'Create their invitation' }).click()
     await expect(dialog.getByText('https://deepcast.art/noa-x9y2').first()).toBeVisible()
     // Bare link only (2026-07-21): no pre-written share message in the modal.
     await expect(dialog.getByText(/I watched this and thought of you/)).toHaveCount(0)
     // Reveal copy (2026-07-21): personal line 1 + counted line 2, numerals.
-    await expect(dialog.getByText(/Here’s Noa’s ticket\. Deliver it with your own words/)).toBeVisible()
-    await expect(dialog.getByText('2 tickets left. Who else needs it?')).toBeVisible()
+    await expect(dialog.getByText(/Here’s Noa’s invitation link — it admits one person only\. Send it to them with why they came to mind\./)).toBeVisible()
+    await expect(dialog.getByText('2 invitations left. Who else needs it?')).toBeVisible()
     await dialog.getByRole('button', { name: 'Close' }).click()
     await expect(page.getByRole('dialog')).toHaveCount(0)
   })
@@ -263,6 +263,14 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(dialog.getByText('What is Deepcast?')).toBeVisible()
     await expect(dialog.getByText('Who is it for?')).toBeVisible()
     await expect(dialog.getByText('Who made this?')).toBeVisible()
+    // The founder's two link icons beside his name (2026-09-09): Instagram
+    // + website, new tab, rel noopener; the copy itself is untouched.
+    const aboutLinks = dialog.locator('[data-filmmaker-links] a')
+    await expect(aboutLinks).toHaveCount(2)
+    await expect(aboutLinks.nth(0)).toHaveAttribute('href', 'https://www.instagram.com/ienthekorean/')
+    await expect(aboutLinks.nth(1)).toHaveAttribute('href', 'https://www.ienchi.com/')
+    await expect(aboutLinks.nth(0)).toHaveAttribute('rel', /noopener/)
+    await expect(dialog.getByText(/I did — Ien Chi/)).toBeVisible()
     // Still on the dashboard — the popup replaced the old page navigation.
     await expect(page).toHaveURL(/\/dashboard$/)
     await dialog.getByRole('button', { name: 'Close' }).click()
@@ -547,8 +555,8 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
       )
     ).toBeVisible({ timeout: 15000 })
     // The section always renders — at zero links it shows the empty state.
-    await expect(page.getByText("Tickets you've shared")).toBeVisible()
-    await expect(page.getByText('No tickets shared yet.')).toBeVisible()
+    await expect(page.getByText("Invitations you've sent")).toBeVisible()
+    await expect(page.getByText('No invitations sent yet.')).toBeVisible()
   })
 
   test('renaming propagates to claim-flow invites — keyed writes only, never a bare update', async ({ page }) => {
@@ -643,7 +651,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await page.setViewportSize({ width: 375, height: 812 })
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
 
-    await expect(page.getByText('Ticket No. 59 · 3 tickets remaining · 2 shared')).toBeVisible()
+    await expect(page.getByText('Ticket No. 59 · 3 invitations remaining · 2 sent')).toBeVisible()
     // Bottom share bar (fixed) — the visible mobile CTA.
     const shareButtons = page.getByRole('button', { name: 'Share this film' })
     await expect(shareButtons.last()).toBeVisible()

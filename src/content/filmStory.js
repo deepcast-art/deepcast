@@ -32,12 +32,20 @@ const MUX_CIRCLES_THIRD_CUT = 'QDUEUyF7WDjjsOtMfeVfqh6M2NVM02arzLHK3IJnwYC00'
 // points here.
 const MUX_FAITH_CIRCLE_PREVIOUS = '4HnHRG3NAf9YYR7V1fNs0143gGJnLUZ9F1umQuXsOaaQ'
 
+/** The founder's links (2026-09-09): the story header's two icons on his
+ *  films, and the About page beside his name. REAL. */
+export const IEN_LINKS = {
+  instagram: 'https://www.instagram.com/ienthekorean/',
+  website: 'https://www.ienchi.com/',
+}
+
 const CIRCLES_STORY = {
   // FULLY REAL since 2026-07-31: portrait, statement, and location are all
   // the founder's own — nothing TEMP remains on this film's entry.
   filmmakerName: 'Ien Chi',
   filmmakerLocation: 'Atlanta, Georgia', // REAL — founder-confirmed 2026-07-31
   filmmakerPhotoUrl: '/portrait-5.jpg', // real photo, served from public/
+  links: IEN_LINKS, // REAL — Instagram + website (2026-09-09)
   epigraph: 'These days, I’ve been reflecting on something: did not Christ come to speak about life itself, and not a religion?',
   body: [
     'Yet in so many rooms where faith comes up, the question so often seems to be whether one believes or not, whether one is saved or not, whether one is in or out — dividing lines between those who believe and those who don’t.',
@@ -52,6 +60,7 @@ export const FILM_STORIES = {
     filmmakerName: 'Ien Chi',
     filmmakerLocation: 'Atlanta, Georgia', // TEMP location — pending the real one
     filmmakerPhotoUrl: null, // empty circle frame until real photos exist
+    links: IEN_LINKS, // REAL — the founder's own film
     // TEMP epigraph + body — layout-holding placeholders, not Ien's words.
     epigraph: 'A few honest words from the filmmaker will live here, in his own voice.',
     body: [

@@ -106,6 +106,18 @@ test.describe('three-page claim arc', () => {
     // The thread (depth-1) with its context label, and the film block.
     await expect(page.getByText('How this reached you')).toBeVisible()
     await expect(page.getByText('you', { exact: true })).toBeVisible()
+    // The link-preview card's title (index.html og block, founder 2026-09-09);
+    // the description is unchanged.
+    await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', 'You’ve been gifted a film.')
+    await expect(page.locator('meta[name="twitter:title"]')).toHaveAttribute('content', 'You’ve been gifted a film.')
+    await expect(page.locator('meta[property="og:description"]')).toHaveAttribute(
+      'content',
+      'A film, passed to you by someone who thought of you.'
+    )
+    // The caption under the filmmaker's name wears its parentheses
+    // (founder decision 2026-09-09) — horizontal layout here.
+    await expect(page.locator('[data-lineage-chain]').getByText('(filmmaker)')).toHaveCount(1)
+    await expect(page.locator('[data-lineage-chain]').getByText('filmmaker', { exact: true })).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'A Sacred Pause' })).toBeVisible()
     await expect(page.getByText('A one-line hook about why this film exists.')).toBeVisible()
     // Runtime floors to whole minutes, from database data only.
@@ -248,11 +260,14 @@ test.describe('three-page claim arc', () => {
     await expect(page.getByText('512', { exact: true })).toHaveCount(0)
     await expect(page.getByText('Tickets shared of 1,000 goal')).toBeVisible()
     await expect(page.getByText('Milestones passed')).toBeVisible()
-    // The rule line: fixture lineage ['Ien Chi'] + senderIsCreator → one
-    // hand, singular grammar (owner-approved 2026-07-23), numeral kept.
-    await expect(
-      page.getByText(/This film passed through 1 pair of hands to reach you/)
-    ).toBeVisible()
+    // The path (founder design 2026-09-09, replacing the rule line):
+    // fixture lineage ['Ien Chi'] + senderIsCreator → one hand — IEN
+    // (FILMMAKER) → YOU → ?. The rule line no longer renders.
+    await expect(page.locator('[data-rail-path]')).toBeVisible()
+    expect(
+      await page.evaluate(() => [...document.querySelectorAll('[data-rail-path] text')].map((t) => t.textContent))
+    ).toEqual(['IEN', 'YOU', '?', '(FILMMAKER)'])
+    await expect(page.getByText(/pairs? of hands/)).toHaveCount(0)
     // The creed, founder-provided verbatim (line 3 revised 2026-07-25).
     await expect(
       page.getByText('Films here spread by private invite and real humans only. No algorithms.')
@@ -288,7 +303,7 @@ test.describe('three-page claim arc', () => {
     await expect(page.locator('dialog svg g[data-fork]')).toHaveCount(1)
 
     await page.getByPlaceholder('Their first name').fill('Jordan')
-    await page.getByRole('button', { name: 'Share it with them' }).click()
+    await page.getByRole('button', { name: 'Create their invitation' }).click()
 
     // THE REPLACEMENT MODEL: the link renders where the field was — the
     // form and charge are gone, no scrolling needed.
@@ -298,11 +313,11 @@ test.describe('three-page claim arc', () => {
     // Stamped reveal copy (amendment A) + the authoritative tickets line;
     // the standalone count line hides in State 2.
     await expect(
-      page.getByText(/Here’s Jordan’s ticket link\. Send it to them with why they came to mind\./)
+      page.getByText(/Here’s Jordan’s invitation link — it admits one person only\. Send it to them with why they came to mind\./)
     ).toBeVisible()
-    await expect(page.getByText('4 tickets left. Who else needs it?')).toBeVisible()
-    await expect(page.getByText('5 tickets left.', { exact: true })).toHaveCount(0)
-    await expect(page.getByText('4 tickets left.', { exact: true })).toHaveCount(0)
+    await expect(page.getByText('4 invitations left. Who else needs it?')).toBeVisible()
+    await expect(page.getByText('5 invitations left.', { exact: true })).toHaveCount(0)
+    await expect(page.getByText('4 invitations left.', { exact: true })).toHaveCount(0)
     // Bare link only: no pre-written message anywhere.
     await expect(page.getByText(/I watched this and thought of you —/)).toHaveCount(0)
     // One more stub dims; the "?" label becomes JORDAN and the node stays
@@ -310,11 +325,11 @@ test.describe('three-page claim arc', () => {
     await expect(page.locator('dialog [data-stub="used"]')).toHaveCount(1)
     await expect(page.locator('dialog svg text').filter({ hasText: 'JORDAN' })).toHaveCount(1)
     await expect(page.locator('dialog svg text').filter({ hasText: '?' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Copy their ticket link' })).toBeVisible()
-    await expect(page.getByRole('link', { name: /See where your ticket went/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Copy their invitation link' })).toBeVisible()
+    await expect(page.getByRole('link', { name: /See your impact/i })).toBeVisible()
 
     // The modal cycles: the form returns, cleared and focused.
-    await page.getByRole('button', { name: 'Share another ticket' }).click()
+    await page.getByRole('button', { name: 'Create another invitation' }).click()
     await expect(page.getByPlaceholder('Their first name')).toBeFocused()
     await expect(page.getByPlaceholder('Their first name')).toHaveValue('')
     await expect(page.getByText(/Who needs to see this\?/)).toBeVisible()
@@ -495,9 +510,9 @@ test.describe('three-page claim arc', () => {
     await expect(page.getByPlaceholder('Their first name')).toBeFocused()
     await expect(page.locator('dialog [data-stub]')).toHaveCount(5)
     await expect(page.locator('dialog [data-stub="used"]')).toHaveCount(0)
-    await expect(page.getByText('5 tickets left.')).toBeVisible()
+    await expect(page.getByText('5 invitations left.')).toBeVisible()
     await expect(page.getByText(/Who needs to see this\? Not anyone/)).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Share it with them' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Create their invitation' })).toBeVisible()
     // Body scroll locks while the modal is open.
     expect(await page.evaluate(() => document.body.style.overflow)).toBe('hidden')
 
@@ -539,7 +554,7 @@ test.describe('three-page claim arc', () => {
     await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
 
     await page.getByRole('button', { name: 'Pass it on' }).click()
-    await expect(page.getByText('You’ve shared all your tickets for this film.')).toBeVisible()
+    await expect(page.getByText('You’ve used all your invitations for this film.')).toBeVisible()
     // The emptied ticket book stays: all five stubs, all dimmed.
     await expect(page.locator('dialog [data-stub="used"]')).toHaveCount(5)
     await expect(page.getByPlaceholder('Their first name')).toHaveCount(0)
@@ -609,6 +624,8 @@ test.describe('three-page claim arc', () => {
     // sign-off is gone.
     await expect(page.getByText('Filmmaker · Jon Bregel · Atlanta, Georgia')).toBeVisible()
     await expect(page.getByText(/, director/)).toHaveCount(0)
+    // A film whose story carries no links renders no icons at all.
+    await expect(page.locator('[data-filmmaker-links]')).toHaveCount(0)
     expect(jsErrors).toEqual([])
   })
 
@@ -642,6 +659,32 @@ test.describe('three-page claim arc', () => {
     // render zero natural width).
     await expect(page.getByText('Filmmaker · Ien Chi · Atlanta, Georgia')).toBeVisible()
     await expect(page.getByText(/, director/)).toHaveCount(0)
+    // The two link icons (founder 2026-09-09): Instagram + website, new tab,
+    // rel noopener, on their own row 14px above the eyebrow's caps line and
+    // centred over the word "Filmmaker".
+    const storyLinks = page.locator('section[aria-label="Filmmaker"] [data-filmmaker-links] a')
+    await expect(storyLinks).toHaveCount(2)
+    await expect(storyLinks.nth(0)).toHaveAttribute('href', 'https://www.instagram.com/ienthekorean/')
+    await expect(storyLinks.nth(1)).toHaveAttribute('href', 'https://www.ienchi.com/')
+    for (const i of [0, 1]) {
+      await expect(storyLinks.nth(i)).toHaveAttribute('target', '_blank')
+      await expect(storyLinks.nth(i)).toHaveAttribute('rel', /noopener/)
+    }
+    const iconGeometry = await page.evaluate(() => {
+      const row = document.querySelector('section[aria-label="Filmmaker"] [data-filmmaker-links]')
+      const word = row.parentElement // the "Filmmaker" span the row hangs over
+      const r = row.getBoundingClientRect()
+      const w = word.getBoundingClientRect()
+      const svg = row.querySelector('svg').getBoundingClientRect()
+      return {
+        iconPx: Math.round(svg.width),
+        gapAboveWord: Math.round(w.top - r.bottom),
+        centreOffset: Math.round(Math.abs(r.left + r.width / 2 - (w.left + w.width / 2))),
+      }
+    })
+    expect(iconGeometry.iconPx).toBe(16)
+    expect(iconGeometry.gapAboveWord).toBe(14)
+    expect(iconGeometry.centreOffset).toBeLessThanOrEqual(1)
     const portrait = page.locator('img[src="/portrait-5.jpg"]')
     await expect(portrait).toHaveCount(1)
     await portrait.scrollIntoViewIfNeeded()

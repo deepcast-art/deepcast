@@ -12,7 +12,9 @@
  * compared (two different people can share a first name).
  */
 
-const ORIGIN_FALLBACK = /^the filmmaker$/i
+/** The server's origin fallback when the creator's name can't be resolved —
+ *  ONE definition, shared with the rail's path (src/lib/railPath.js). */
+export const ORIGIN_FALLBACK = /^the filmmaker$/i
 
 function firstNameOf(value, fallback = 'Someone') {
   const trimmed = String(value || '').trim()
