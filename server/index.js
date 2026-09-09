@@ -37,7 +37,7 @@ import { firstNameInputError, fullNameInputError, splitFullName, FULL_NAME_MESSA
 import { sanitizeClaimContext } from '../src/lib/claimContext.js'
 import { VOID_INVITE_STATUS } from '../src/lib/inviteExistence.js'
 import { buildLineageForks } from '../src/lib/lineageForks.js'
-import { buildFilmWatchFields, filmWatchDecision } from './watchPayload.js'
+import { buildFilmWatchFields, filmWatchDecision, buildOnward } from './watchPayload.js'
 import { refundOnVoidDecision } from './voidRules.js'
 import {
   commentAccessDecision,
@@ -1243,6 +1243,17 @@ app.get('/api/invites/link/:slug', async (req, res) => {
       // unclaimed and claimed links alike; null when the row has none.
       ticketNo: invite.ticket_no ?? null,
       ticketsRemaining: claimedInviteTicketsDisplay(invite, claimAccount, claimFilmWallet),
+      // The rail's path after you share (founder design 2026-09-09): the
+      // people THIS invite's holder shared with directly — first names and
+      // a claimed flag only, oldest first, one hop (server/watchPayload.js,
+      // unit-tested). Older frontends ignore the field. DELIBERATE
+      // EXPOSURE, recorded: this public route already tells whoever holds
+      // the slug the recipient's name, the sharer's name and the upstream
+      // lineage; `onward` adds the holder's DOWNSTREAM first names and
+      // whether each claimed — for an unclaimed slug it is always empty
+      // (children need the claim), and for a claimed one it is what the
+      // film's constellation already shows every claimed viewer.
+      onward: buildOnward({ rows, inviteId: invite.id, includeGhosts: showGhosts }),
     })
   } catch (err) {
     console.error('Invite link lookup error:', err)
@@ -1309,6 +1320,9 @@ app.get('/api/films/:filmId/watch', async (req, res) => {
       filmId: film.id,
       creatorName: (creator?.name || '').trim() || null,
       ticketsUnlimited: isRoleUnlimitedSharer(creator),
+      // Depth 0 has no path, so no onward seat either — the same shape,
+      // honestly empty.
+      onward: [],
     })
   } catch (err) {
     console.error('Film watch lookup error:', err)

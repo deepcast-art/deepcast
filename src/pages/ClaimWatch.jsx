@@ -686,6 +686,11 @@ export default function ClaimWatch() {
   const [shareBusy, setShareBusy] = useState(false)
   const [shareError, setShareError] = useState('')
   const [generated, setGenerated] = useState(null)
+  /* The rail's onward seat (founder design 2026-09-09): invitations this
+     viewer creates IN THIS VISIT join the payload's `onward` list the
+     moment they are created — the path shows the name before anyone
+     claims. Film mode never adds (depth 0 has no path). */
+  const [createdOnward, setCreatedOnward] = useState([])
   const [copied, setCopied] = useState(false)
   const hasMarkedWatched = useRef(false)
   /** The pass-it-on modal (redesign §4). Mounted only while open so its
@@ -861,6 +866,11 @@ export default function ClaimWatch() {
         const data = await api.getLinkInvite(slug)
         if (cancelled) return
         setLink(data)
+        // The server's onward list is authoritative the moment it lands: an
+        // invitation created before the payload arrived (a stash owner can
+        // share before the fetch resolves) is already in it — the local
+        // additions start over so nobody is counted twice (red team, 2026-09-09).
+        setCreatedOnward([])
         // Server value wins; NULL (claimed pre-migration) reads as the full
         // grant — the server heals it on first spend.
         setTickets(data.ticketsRemaining ?? INITIAL_CLAIMANT_TICKETS)
@@ -964,6 +974,7 @@ export default function ClaimWatch() {
       // unlimited sharer (never a count) — distinct from the healed tickets
       // display state above.
       setGenerated({ url: result.url, name, ticketsRemaining: result.ticketsRemaining ?? null })
+      if (!filmMode) setCreatedOnward((prev) => [...prev, { firstName: name, claimed: false }])
       if (result.ticketsRemaining != null) setTickets(result.ticketsRemaining)
       // Same moment the text count decrements, the newest-used stub dims.
       if (Number.isFinite(result.ticketsRemaining)) setStubBalance(result.ticketsRemaining)
@@ -1016,6 +1027,10 @@ export default function ClaimWatch() {
   const handForks = chainForkFlags(link?.lineageForks, link?.lineageNames, {
     senderIsCreator: link?.senderIsCreator,
   })
+  /* The path's onward seat: the server's one-hop list (this invite's
+     non-void children, oldest first) plus whatever this visit created. A
+     payload without the field (an older API) reads as nobody. */
+  const onward = [...(Array.isArray(link?.onward) ? link.onward : []), ...createdOnward]
 
   /* ── Per-film story + poster (founder amendments C/D) — one module,
      src/content/filmStory.js. No entry → no story section, nothing invented. ── */
@@ -1201,7 +1216,7 @@ export default function ClaimWatch() {
                     as the rule line was. */}
                 {chainLength >= 1 && (
                   <div className="mt-5">
-                    <RailPath hands={hands} />
+                    <RailPath hands={hands} onward={onward} />
                   </div>
                 )}
               </div>

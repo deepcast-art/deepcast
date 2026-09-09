@@ -11,7 +11,16 @@
  *  - up to three hands → every hand, in order;
  *  - more than three → the first, ONE collapsed entry "{n} OTHERS"
  *    (n = hands − 2), and the last — so the row never wraps;
- *  - then "you", then the next slot ("?").
+ *  - then "you", then the next slot ("?") — OR, once the viewer has
+ *    created at least one invitation for this film, the ONWARD node in
+ *    that seat (founder design 2026-09-09, second pass): the people they
+ *    shared with directly, as one node, and the path ends there — no "?"
+ *    after it, ever. One person → their first name (as the sharer typed
+ *    it, from the moment the invitation is created); two or more →
+ *    "{n} PEOPLE". The node is hollow with a dashed run while none of them
+ *    has claimed, solid with a solid run the moment any one has. The
+ *    collapse applies to the hands BEFORE "you" only — the onward node is
+ *    never collapsed or counted: five nodes at most.
  *
  * The first node carries the "(filmmaker)" caption — except over the
  * server's "The filmmaker" fallback, where a caption would be redundant
@@ -26,6 +35,7 @@
  */
 
 import { ORIGIN_FALLBACK } from './handsChain.js'
+import { safeFirstName } from './displayName.js'
 
 export const RAIL_PATH_VIEWBOX = { width: 384, height: 66 }
 export const RAIL_PATH_INSET = 30
@@ -39,10 +49,32 @@ export function collapsedLabel(hidden) {
   return `${hidden} OTHERS`
 }
 
-/** The node list for a chain of display-ready hands (origin first). */
-export function railPathNodes(hands) {
+/** The onward node's label: one person → their first name; more → the
+ *  count with the word PEOPLE (founder: PEOPLE, not OTHERS; never
+ *  "1 PERSON"). */
+export function onwardLabel(people) {
+  const list = onwardPeople(people)
+  if (list.length === 0) return ''
+  if (list.length === 1) return list[0].firstName.toUpperCase()
+  return `${list.length} PEOPLE`
+}
+
+/** The link payload's `onward` entries, cleaned: first names through the
+ *  display-name rule (an email fragment is never a name), `claimed` as a
+ *  boolean. Anything that isn't a list reads as nobody. */
+export function onwardPeople(people) {
+  return (Array.isArray(people) ? people : [])
+    .filter((p) => p && typeof p === 'object')
+    .map((p) => ({ firstName: safeFirstName(p.firstName), claimed: p.claimed === true }))
+}
+
+/** The node list for a chain of display-ready hands (origin first), plus
+ *  the viewer's onward people (the link payload's `onward`, or the page's
+ *  own additions the moment an invitation is created). */
+export function railPathNodes(hands, onward = []) {
   const list = (Array.isArray(hands) ? hands : []).map((h) => String(h ?? '').trim()).filter(Boolean)
   if (list.length === 0) return []
+  const people = onwardPeople(onward)
   const handNode = (name, i) => ({
     type: 'hand',
     label: name.toUpperCase(),
@@ -58,7 +90,11 @@ export function railPathNodes(hands) {
       handNode(list[list.length - 1], list.length - 1),
     ]
   }
-  return [...nodes, { type: 'you', label: 'YOU', caption: null }, { type: 'next', label: '?', caption: null }]
+  const seat =
+    people.length > 0
+      ? { type: 'onward', label: onwardLabel(people), caption: null, claimed: people.some((p) => p.claimed) }
+      : { type: 'next', label: '?', caption: null }
+  return [...nodes, { type: 'you', label: 'YOU', caption: null }, seat]
 }
 
 /** Evenly spaced x positions across the viewBox with the inset on both sides. */
@@ -80,7 +116,13 @@ export const RAIL_PATH_STROKE_OPACITY = 0.55
  *  the joined form is the builder's, PENDING the founder's stamp (spec §7). */
 export function railPathDescription(nodes) {
   const parts = (Array.isArray(nodes) ? nodes : []).map((n) =>
-    n.type === 'hand' && n.caption ? `${n.label} ${n.caption.toLowerCase()}` : n.type === 'you' ? 'you' : n.label
+    n.type === 'hand' && n.caption
+      ? `${n.label} ${n.caption.toLowerCase()}`
+      : n.type === 'you'
+        ? 'you'
+        : n.type === 'onward'
+          ? `${n.label}${n.claimed ? '' : ' (not yet claimed)'}`
+          : n.label
   )
   return parts.length ? `How this reached you: ${parts.join(' → ')}` : ''
 }

@@ -39,6 +39,7 @@ const LINK_CREATED = {
   durationSeconds: 1932.5983,
   filmSharesCount: 3,
   lineageForks: [false],
+  onward: [],
 }
 
 const LINK_CLAIMED = { ...LINK_CREATED, status: 'claimed', claimOrdinal: 57, ticketsRemaining: 5 }

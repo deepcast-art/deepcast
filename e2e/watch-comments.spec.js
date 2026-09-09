@@ -64,6 +64,7 @@ const LINK_CLAIMED = {
   filmSharesCount: 12,
   filmClaimsCount: 8,
   lineageForks: [false, false, false],
+  onward: [],
 }
 
 const FILM_WATCH = {
@@ -81,6 +82,7 @@ const FILM_WATCH = {
   lineageNames: [],
   senderIsCreator: false,
   lineageForks: [],
+  onward: [],
   inviteId: null,
   claimOrdinal: null,
   ticketNo: 1,

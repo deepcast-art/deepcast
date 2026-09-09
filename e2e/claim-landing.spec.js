@@ -41,6 +41,7 @@ const LINK_CREATED = {
   filmSharesCount: 847, // three milestones crossed
   filmClaimsCount: 512, // still served; must NOT drive the rail
   lineageForks: [true], // the creator verifiably shared beyond this chain
+  onward: [],
 }
 
 const LINK_CLAIMED = { ...LINK_CREATED, status: 'claimed', claimOrdinal: 57, ticketsRemaining: 5 }
@@ -692,11 +693,13 @@ test.describe('three-page claim arc', () => {
       .poll(async () => portrait.evaluate((img) => img.naturalWidth))
       .toBeGreaterThan(0)
 
-    // The player poster stays PINNED to the previous video's thumbnail — the
-    // playback-id swap must never silently change the frame.
+    // The player poster is the LIVE cut's frame at t=5 (founder decision
+    // 2026-09-09), pinned explicitly by source id + time in filmStory.js —
+    // a playback-id swap re-keys the story but can never silently move
+    // this frame.
     await expect(page.locator('mux-player')).toHaveAttribute(
       'poster',
-      'https://image.mux.com/4HnHRG3NAf9YYR7V1fNs0143gGJnLUZ9F1umQuXsOaaQ/thumbnail.png?time=1'
+      'https://image.mux.com/QDUEUyF7WDjjsOtMfeVfqh6M2NVM02arzLHK3IJnwYC00/thumbnail.png?time=5'
     )
     expect(jsErrors).toEqual([])
   })

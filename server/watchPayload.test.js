@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildFilmWatchFields, filmWatchDecision } from './watchPayload.js'
+import { buildFilmWatchFields, filmWatchDecision, buildOnward } from './watchPayload.js'
 import { countFilmShares, countFilmClaims } from '../src/lib/filmClaims.js'
 
 const FILM = {
@@ -82,5 +82,76 @@ describe('filmWatchDecision — the filmmaker may open only a film he owns', () 
   it('ok only for the exact creator id (string-compared, trimmed)', () => {
     expect(filmWatchDecision({ callerId: 'creator-1', film: FILM })).toEqual({ ok: true })
     expect(filmWatchDecision({ callerId: ' creator-1 ', film: FILM })).toEqual({ ok: true })
+  })
+})
+
+describe('buildOnward — the people this invite’s holder shared with directly (the rail’s path after you share, 2026-09-09)', () => {
+  const YOU = 'inv-you'
+  const rows = [
+    { id: 'inv-you', parent_invite_id: 'inv-parent', recipient_name: 'Alex Hart', status: 'claimed', created_at: '2026-09-01T00:00:00Z' },
+    // your direct invitations, deliberately out of order in the list
+    { id: 'c3', parent_invite_id: YOU, recipient_name: 'Cal', status: 'watched', created_at: '2026-09-05T00:00:00Z' },
+    { id: 'c1', parent_invite_id: YOU, recipient_name: 'Maya Rivera', status: 'created', created_at: '2026-09-02T00:00:00Z' },
+    { id: 'c2', parent_invite_id: YOU, recipient_name: 'Joiselle', status: 'claimed', created_at: '2026-09-03T00:00:00Z' },
+    // a voided duplicate of yours — never exists
+    { id: 'c-void', parent_invite_id: YOU, recipient_name: 'Dup', status: 'void', created_at: '2026-09-04T00:00:00Z' },
+    // somebody else's invitation, and a grandchild through Joiselle — not yours
+    { id: 'other', parent_invite_id: 'inv-parent', recipient_name: 'Sam', status: 'created', created_at: '2026-09-02T00:00:00Z' },
+    { id: 'grand', parent_invite_id: 'c2', recipient_name: 'Deep', status: 'claimed', created_at: '2026-09-06T00:00:00Z' },
+    // a ghost hanging off you (never happens on a real film; the flag decides)
+    { id: 'ghost', parent_invite_id: YOU, recipient_name: 'Ghost', recipient_email: 'g.fd01@demo-deepcast.invalid', status: 'created', created_at: '2026-09-07T00:00:00Z' },
+  ]
+
+  it('returns first names and a claimed flag only, oldest first, one hop', () => {
+    expect(buildOnward({ rows, inviteId: YOU })).toEqual([
+      { firstName: 'Maya', claimed: false },
+      { firstName: 'Joiselle', claimed: true },
+      { firstName: 'Cal', claimed: true },
+    ])
+  })
+
+  it('never carries anything but firstName and claimed', () => {
+    for (const person of buildOnward({ rows, inviteId: YOU })) {
+      expect(Object.keys(person).sort()).toEqual(['claimed', 'firstName'])
+    }
+  })
+
+  it('voids never exist; ghosts only when the film shows them', () => {
+    expect(buildOnward({ rows, inviteId: YOU }).map((p) => p.firstName)).not.toContain('Dup')
+    expect(buildOnward({ rows, inviteId: YOU }).map((p) => p.firstName)).not.toContain('Ghost')
+    expect(buildOnward({ rows, inviteId: YOU, includeGhosts: true }).map((p) => p.firstName)).toEqual([
+      'Maya',
+      'Joiselle',
+      'Cal',
+      'Ghost',
+    ])
+  })
+
+  it('claimed follows the shared claimed-stage rule: claimed and watched are claimed, created is not', () => {
+    const flags = Object.fromEntries(buildOnward({ rows, inviteId: YOU }).map((p) => [p.firstName, p.claimed]))
+    expect(flags).toEqual({ Maya: false, Joiselle: true, Cal: true })
+  })
+
+  it('an email or a blank stored name is never a name', () => {
+    const odd = [
+      { id: 'e', parent_invite_id: YOU, recipient_name: 'someone@example.com', status: 'created', created_at: '2026-09-02T00:00:00Z' },
+      { id: 'b', parent_invite_id: YOU, recipient_name: '  ', status: 'created', created_at: '2026-09-03T00:00:00Z' },
+    ]
+    expect(buildOnward({ rows: odd, inviteId: YOU }).map((p) => p.firstName)).toEqual(['Someone', 'Someone'])
+  })
+
+  it('no invite (the filmmaker’s film-scoped page), no rows, or no children → empty', () => {
+    expect(buildOnward({ rows, inviteId: null })).toEqual([])
+    expect(buildOnward({ rows: undefined, inviteId: YOU })).toEqual([])
+    expect(buildOnward({ rows, inviteId: 'c3' })).toEqual([])
+    expect(buildOnward()).toEqual([])
+  })
+
+  it('ties on created_at break by id, so the order is stable across loads', () => {
+    const same = [
+      { id: 'b', parent_invite_id: YOU, recipient_name: 'Bea', status: 'created', created_at: '2026-09-02T00:00:00Z' },
+      { id: 'a', parent_invite_id: YOU, recipient_name: 'Al', status: 'created', created_at: '2026-09-02T00:00:00Z' },
+    ]
+    expect(buildOnward({ rows: same, inviteId: YOU }).map((p) => p.firstName)).toEqual(['Al', 'Bea'])
   })
 })
