@@ -31,8 +31,10 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  DOT_RADII,
   labelFontSize,
   labelScreenRect,
+  labelSizeFor,
   labelVisibility,
 } from '../lib/constellationLabels'
 
@@ -43,11 +45,10 @@ const PAN_OVERSHOOT = 0.4
 
 const LABEL_FONT = "'Phoenix', system-ui, sans-serif"
 
-/** Base design sizes (map units) per node kind — one map so the collision
- *  rects and the rendered text can never disagree. Invitee kinds
- *  (unopened / opened / watched / shared) share one size. */
-const LABEL_SIZES = { you: 11.5, path: 9, downstream: 8, other: 8, invitee: 9.5 }
-const labelSizeFor = (kind) => LABEL_SIZES[kind] ?? LABEL_SIZES.invitee
+// Label design sizes AND dot radii per node kind live in
+// constellationLabels.js (LABEL_SIZES / labelSizeFor, DOT_RADII) — one map
+// shared with the collision rects AND the layout's fan widening, so none of
+// them can disagree about how big a name or a dot paints.
 
 /**
  * NOTE for callers: pass a `key` derived from the layout's width×height so a
@@ -349,7 +350,7 @@ export default function ConstellationMap({ layout, explore = false }) {
         <circle
           cx={n.x}
           cy={n.y}
-          r="2.4"
+          r={DOT_RADII.explore}
           className={`web-dot star${n.claimed ? '' : ' hollow'}`}
           style={{ animationDelay: `${n.twinkleDelay ?? 0}s` }}
         />
@@ -495,8 +496,8 @@ export default function ConstellationMap({ layout, explore = false }) {
           if (n.kind === 'you') {
             return (
               <g key={n.id}>
-                <circle cx={n.x} cy={n.y} r="6" fill="#D8C79A" className="lineage" />
-                <circle cx={n.x} cy={n.y} r="12" fill="none" stroke="rgba(216,199,154,0.4)" strokeWidth="1" className="lineage" />
+                <circle cx={n.x} cy={n.y} r={DOT_RADII.you} fill="#D8C79A" className="lineage" />
+                <circle cx={n.x} cy={n.y} r={DOT_RADII.youRing} fill="none" stroke="rgba(216,199,154,0.4)" strokeWidth="1" className="lineage" />
                 {label(n, '#D8C79A', labelSizeFor(n.kind), 'lineage')}
               </g>
             )
@@ -504,7 +505,7 @@ export default function ConstellationMap({ layout, explore = false }) {
           if (n.kind === 'path') {
             return (
               <g key={n.id}>
-                <circle cx={n.x} cy={n.y} r="3.5" fill="#C7A96B" className="lineage" />
+                <circle cx={n.x} cy={n.y} r={DOT_RADII.path} fill="#C7A96B" className="lineage" />
                 {label(n, 'rgba(199,169,107,0.9)', labelSizeFor(n.kind), 'lineage')}
               </g>
             )
@@ -512,7 +513,7 @@ export default function ConstellationMap({ layout, explore = false }) {
           if (n.kind === 'downstream') {
             return (
               <g key={n.id}>
-                <circle cx={n.x} cy={n.y} r="2.6" fill="rgba(199,169,107,0.65)" className="lineage" />
+                <circle cx={n.x} cy={n.y} r={DOT_RADII.downstream} fill="rgba(199,169,107,0.65)" className="lineage" />
                 {label(n, 'rgba(199,169,107,0.6)', labelSizeFor(n.kind), 'lineage')}
               </g>
             )
@@ -524,7 +525,7 @@ export default function ConstellationMap({ layout, explore = false }) {
                 <circle
                   cx={n.x}
                   cy={n.y}
-                  r="2.2"
+                  r={DOT_RADII.other}
                   className="web-dot star"
                   style={{ animationDelay: `${n.twinkleDelay ?? 0}s` }}
                 />
@@ -536,12 +537,12 @@ export default function ConstellationMap({ layout, explore = false }) {
           return (
             <g key={n.id}>
               {n.kind === 'shared' && (
-                <circle cx={n.x} cy={n.y} r="9" fill="rgba(199,169,107,0.16)" className="lineage" />
+                <circle cx={n.x} cy={n.y} r={DOT_RADII.sharedHalo} fill="rgba(199,169,107,0.16)" className="lineage" />
               )}
               <circle
                 cx={n.x}
                 cy={n.y}
-                r="4.5"
+                r={DOT_RADII.invitee}
                 fill={n.kind === 'unopened' ? 'transparent' : n.kind === 'opened' ? '#9A9890' : '#C7A96B'}
                 stroke={n.kind === 'opened' ? '#9A9890' : '#C7A96B'}
                 strokeWidth="1.2"

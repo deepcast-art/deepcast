@@ -28,6 +28,55 @@
 export const MIN_LABEL_ON_SCREEN_PX = 11
 export const LABEL_GAP_PX = 3
 
+/** Base design sizes (map units) per node kind — ONE map shared by the
+ *  renderer (ConstellationMap), the collision rects, and the layout's
+ *  label-aware fan widening (constellationLayout.js), so none of the three
+ *  can disagree about how big a name paints. Invitee kinds (unopened /
+ *  opened / watched / shared) share one size. */
+export const LABEL_SIZES = { you: 11.5, path: 9, downstream: 8, other: 8, invitee: 9.5 }
+export const labelSizeFor = (kind) => LABEL_SIZES[kind] ?? LABEL_SIZES.invitee
+
+/** Dot radii (map units) the renderer paints per node kind — the SAME map
+ *  the layout's fan widening reads, so a sibling's name can never be widened
+ *  against a dot size the renderer does not paint. `youRing` is YOU's halo
+ *  ring, `sharedHalo` the glow behind an invitee who shared onward,
+ *  `explore` the person dot in the creator modal's explore mode. */
+export const DOT_RADII = {
+  you: 6,
+  youRing: 12,
+  sharedHalo: 9,
+  invitee: 4.5,
+  path: 3.5,
+  downstream: 2.6,
+  other: 2.2,
+  explore: 2.4,
+}
+/** The OUTERMOST painted radius for a kind — what a neighbouring label must
+ *  clear. Invitee kinds (unopened / opened / watched) are the invitee dot;
+ *  'shared' reaches to its halo; the web dot counts its explore-mode size. */
+export function dotReachFor(kind) {
+  switch (kind) {
+    case 'you':
+      return DOT_RADII.youRing
+    case 'shared':
+      return DOT_RADII.sharedHalo
+    case 'path':
+      return DOT_RADII.path
+    case 'downstream':
+      return DOT_RADII.downstream
+    case 'other':
+      return Math.max(DOT_RADII.other, DOT_RADII.explore)
+    default:
+      return DOT_RADII.invitee
+  }
+}
+/** A dot's axis-aligned square at design scale, for the same overlap test
+ *  the labels use. */
+export function dotRect(x, y, kind) {
+  const r = dotReachFor(kind)
+  return { x: x - r, y: y - r, w: 2 * r, h: 2 * r }
+}
+
 /** Width-per-glyph as a fraction of the font size — an estimate for the
  *  uppercase tracked Phoenix labels (collision needs proximity, not
  *  typographic truth). */
@@ -66,8 +115,10 @@ export function labelScreenRect(item, { vbX, vbY, scale }) {
 }
 
 /** Axis-aligned overlap with the breathing-room gap. Zero-area rects (the
- *  unmeasured first paint) never collide — everything shows for that frame. */
-function rectsCollide(a, b, gap) {
+ *  unmeasured first paint) never collide — everything shows for that frame.
+ *  Exported for the layout's fan widening, which asks the SAME question at
+ *  design scale: would these two sibling names collide? */
+export function rectsCollide(a, b, gap = LABEL_GAP_PX) {
   if (!a.w || !a.h || !b.w || !b.h) return false
   return (
     a.x < b.x + b.w + gap &&
