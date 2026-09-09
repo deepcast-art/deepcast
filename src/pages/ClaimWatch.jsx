@@ -27,7 +27,6 @@ import {
 import { filmStory, filmPosterUrl } from '../content/filmStory'
 import { revealSentence } from '../lib/revealSentence'
 import { NO_TICKETS_MESSAGE } from '../lib/ticketRules'
-import LineageChain from '../components/LineageChain'
 import FilmmakerLinks from '../components/FilmmakerLinks'
 import WatchComments from '../components/WatchComments'
 
@@ -1195,21 +1194,6 @@ export default function ClaimWatch() {
                 >
                   Pass it on
                 </button>
-                {/* The lineage chain (founder addition 2026-09-09): the
-                    landing letter's chain — same rule, same type, same
-                    arrows — the filmmaker first with "(filmmaker)", through
-                    the hands, "you", then an arrow to "Who’s next?". Film
-                    mode has no chain (depth 0) and renders nothing here. */}
-                {!filmMode && chainLength >= 1 && Array.isArray(link?.lineageNames) && (
-                  <div className="mt-5">
-                    <LineageChain
-                      names={link.lineageNames}
-                      senderIsCreator={link?.senderIsCreator}
-                      next="Who’s next?"
-                      align="start"
-                    />
-                  </div>
-                )}
                 {chainLength >= 1 && (
                   <div className="mt-5">
                     {/* Founder amendments 2026-07-23: raised twice from the

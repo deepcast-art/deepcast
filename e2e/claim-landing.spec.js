@@ -260,24 +260,6 @@ test.describe('three-page claim arc', () => {
     await expect(page.getByText('512', { exact: true })).toHaveCount(0)
     await expect(page.getByText('Tickets shared of 1,000 goal')).toBeVisible()
     await expect(page.getByText('Milestones passed')).toBeVisible()
-    // The rail's lineage chain (founder addition 2026-09-09): the landing
-    // chain's rule and type, between "Pass it on" and the rule line —
-    // fixture ['Ien Chi'] + senderIsCreator → IEN (filmmaker) → you →
-    // Who’s next? (muted).
-    const railChain = page.locator('main [data-lineage-chain]')
-    await expect(railChain).toHaveCount(1)
-    await expect(railChain).toContainText('Ien')
-    await expect(railChain.getByText('(filmmaker)')).toHaveCount(1)
-    await expect(railChain.getByText('you', { exact: true })).toBeVisible()
-    await expect(railChain.getByText('Who’s next?')).toBeVisible()
-    const railOrder = await page.evaluate(() => {
-      const cta = document.querySelector('button[aria-controls="passiton-modal"]')
-      const chain = document.querySelector('main [data-lineage-chain]')
-      const rule = [...document.querySelectorAll('main p')].find((p) => /pairs? of hands/.test(p.textContent))
-      const after = (a, b) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
-      return { afterCta: after(cta, chain), beforeRule: after(chain, rule) }
-    })
-    expect(railOrder).toEqual({ afterCta: true, beforeRule: true })
     // The rule line: fixture lineage ['Ien Chi'] + senderIsCreator → one
     // hand, singular grammar (owner-approved 2026-07-23), numeral kept.
     await expect(

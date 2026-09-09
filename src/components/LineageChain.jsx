@@ -13,10 +13,11 @@ const CHAIN_MEDIA_QUERY = '(min-width: 640px)'
  * The lineage chain — the network idea at a whisper: first names joined by
  * arrows (→ on wide screens, ↓ stacked on phones), the film's creator first
  * with a small "(filmmaker)" caption (parentheses: founder decision
- * 2026-09-09), ending in "you". ONE component for the landing letter and,
- * since 2026-09-09, the watch page's rail — same rule (buildLineageChain),
- * same type, same arrows. `next` appends one more arrow to a muted label
- * after "you" (the rail's "Who’s next?"); `align` is the row's alignment.
+ * 2026-09-09), ending in "you". ONE shared component (buildLineageChain,
+ * one type, one set of arrows), rendered by the landing letter. `next`
+ * appends one more arrow to a muted label after "you" and `align` sets the
+ * row's alignment — both built for the watch rail's chain, which the
+ * founder withdrew on 2026-09-09 pending a design pass; kept for it.
  */
 export default function LineageChain({ names, senderIsCreator, next = null, align = 'center' }) {
   const [expanded, setExpanded] = useState(false)
