@@ -25,6 +25,10 @@ import {
   chainForkFlags,
 } from '../lib/handsChain'
 import { filmStory, filmPosterUrl } from '../content/filmStory'
+import { revealSentence } from '../lib/revealSentence'
+import { NO_TICKETS_MESSAGE } from '../lib/ticketRules'
+import LineageChain from '../components/LineageChain'
+import FilmmakerLinks from '../components/FilmmakerLinks'
 
 /** Claim-flow resume keys (slug-scoped — the claimant's public token is never
  *  exposed client-side). Seconds feed the resume; the fraction feeds the
@@ -391,7 +395,7 @@ function PassItOnModal({
     }
   }, [])
 
-  /** The modal cycles: when "Share another ticket" swaps the form back
+  /** The modal cycles: when "Create another invitation" swaps the form back
    *  in, the (re-rendered) field takes focus again. Native <dialog> focus
    *  containment re-covers whatever the reveal adds or removes. */
   useEffect(() => {
@@ -473,10 +477,11 @@ function PassItOnModal({
             key={generated.url}
             className="dc-result-rise mx-auto mt-8 max-w-[30rem] border-t border-warm/15 pt-7"
           >
-            {/* Founder-approved reveal copy (amendment A, 2026-07-23). */}
+            {/* The reveal sentence — ONE shared rule for both share surfaces
+                (src/lib/revealSentence.js; founder 2026-09-09, superseding
+                amendment A of 2026-07-23). */}
             <p className="mx-auto font-serif-v3 italic text-[1.0625rem] leading-[1.7] text-warm/85">
-              Here’s {generated.name}’s ticket link. Send it to them with why they came
-              to mind.
+              {revealSentence(generated.name)}
             </p>
             {/* The bare link — no pre-written message, ever (product law). */}
             <p className="mt-3 break-all font-serif-v3 text-[clamp(1.1875rem,3vw,1.4375rem)] text-paper/90">
@@ -487,7 +492,7 @@ function PassItOnModal({
               onClick={onCopy}
               className="mt-6 min-h-[44px] cursor-pointer touch-manipulation border border-warm/20 px-9 py-3 font-sans font-normal text-xs uppercase tracking-[0.26em] text-warm transition-colors hover:border-accent hover:text-accent focus-visible:border-accent focus-visible:text-accent focus-visible:outline-none"
             >
-              {copied ? 'Copied' : 'Copy their ticket link'}
+              {copied ? 'Copied' : 'Copy their invitation link'}
             </button>
             <p className="mt-7 font-sans font-normal text-xs uppercase tracking-[0.24em] text-muted">
               {revealTicketsLine(generated.ticketsRemaining)}
@@ -502,7 +507,7 @@ function PassItOnModal({
                   onClick={onAgain}
                   className="inline-block min-h-[44px] cursor-pointer touch-manipulation border border-accent/60 px-7 py-[0.6875rem] font-sans font-normal text-[0.6875rem] uppercase tracking-[0.26em] text-accent transition-colors duration-300 hover:border-accent hover:bg-accent hover:text-ink focus-visible:border-accent focus-visible:bg-accent focus-visible:text-ink focus-visible:outline-none"
                 >
-                  Share another ticket
+                  Create another invitation
                 </button>
               </p>
             )}
@@ -511,7 +516,7 @@ function PassItOnModal({
                 to="/dashboard"
                 className="font-sans font-normal text-xs uppercase tracking-[0.24em] text-muted transition-colors hover:text-warm"
               >
-                See where your ticket went →
+                See your impact →
               </Link>
             </p>
           </div>
@@ -519,18 +524,18 @@ function PassItOnModal({
           <p
             className={`${Number.isFinite(remaining) ? 'mt-3.5' : 'mt-8'} font-sans font-normal text-xs uppercase tracking-[0.24em] text-muted`}
           >
-            You’ve shared all your tickets for this film.
+            {NO_TICKETS_MESSAGE}
           </p>
         ) : (
           <>
-            {/* The count — founder-directed whittle ("{n} tickets left.").
+            {/* The count — founder-directed whittle ("{n} invitations left.", vocabulary 2026-09-09).
                 Absent for a role-unlimited sharer (the filmmaker's own
                 page): no finite number exists, so none is claimed. */}
             {!unlimited && (
               <p
                 className={`${Number.isFinite(remaining) ? 'mt-3.5' : 'mt-8'} font-sans font-normal text-xs uppercase tracking-[0.24em] text-muted`}
               >
-                {tickets ?? '…'} ticket{tickets === 1 ? '' : 's'} left.
+                {tickets ?? '…'} invitation{tickets === 1 ? '' : 's'} left.
               </p>
             )}
 
@@ -562,7 +567,7 @@ function PassItOnModal({
                 disabled={shareBusy}
                 className="min-h-[48px] w-full cursor-pointer touch-manipulation border border-accent/60 px-6 py-3.5 font-sans font-normal text-[0.8125rem] uppercase tracking-[0.28em] text-accent transition-colors duration-300 hover:border-accent hover:bg-accent hover:text-ink focus-visible:border-accent focus-visible:bg-accent focus-visible:text-ink focus-visible:outline-none disabled:opacity-50"
               >
-                {shareBusy ? 'One moment…' : 'Share it with them'}
+                {shareBusy ? 'One moment…' : 'Create their invitation'}
               </button>
             </form>
           </>
@@ -971,7 +976,7 @@ export default function ClaimWatch() {
     }
   }
 
-  /** "Share another ticket" — the modal cycles back to State 1: the
+  /** "Create another invitation" — the modal cycles back to State 1: the
    *  reveal clears, the charge and the (empty) field return. */
   const handleShareAgain = () => {
     setGenerated(null)
@@ -1189,6 +1194,21 @@ export default function ClaimWatch() {
                 >
                   Pass it on
                 </button>
+                {/* The lineage chain (founder addition 2026-09-09): the
+                    landing letter's chain — same rule, same type, same
+                    arrows — the filmmaker first with "(filmmaker)", through
+                    the hands, "you", then an arrow to "Who’s next?". Film
+                    mode has no chain (depth 0) and renders nothing here. */}
+                {!filmMode && chainLength >= 1 && Array.isArray(link?.lineageNames) && (
+                  <div className="mt-5">
+                    <LineageChain
+                      names={link.lineageNames}
+                      senderIsCreator={link?.senderIsCreator}
+                      next="Who’s next?"
+                      align="start"
+                    />
+                  </div>
+                )}
                 {chainLength >= 1 && (
                   <div className="mt-5">
                     {/* Founder amendments 2026-07-23: raised twice from the
@@ -1299,7 +1319,19 @@ export default function ClaimWatch() {
                   unbreakable unit, so narrow viewports break at the "·"
                   boundaries, never mid-phrase beside the photo. */}
               <p className="pb-[0.3125rem] font-sans font-normal text-[11px] uppercase tracking-[0.32em] text-muted">
-                Filmmaker
+                {/* The two link icons (founder 2026-09-09): their own row
+                    ABOVE the caps line, 14px above it, centred over the
+                    word "Filmmaker" — absolute, so the eyebrow's baseline
+                    on the photo's edge never moves. */}
+                <span className="relative inline-block">
+                  {story.links && (
+                    <FilmmakerLinks
+                      links={story.links}
+                      className="absolute bottom-full left-1/2 mb-[14px] -translate-x-1/2"
+                    />
+                  )}
+                  Filmmaker
+                </span>
                 {story.filmmakerName && (
                   <>
                     {' '}

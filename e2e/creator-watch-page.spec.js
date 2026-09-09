@@ -84,12 +84,17 @@ const LINK_CLAIMED = {
 
 /* RECORDED before the film-scoped entry existed (2026-09-03, chromium,
    1280×720 default viewport) — do not "update" this by re-recording after
-   a change to the page; a difference here IS the regression. */
+   a change to the page; a difference here IS the regression.
+   DELIBERATELY RE-RECORDED 2026-09-09 (founder batch `story-links-and-copy`):
+   the rail gained the lineage chain between "Pass it on" and the rule line
+   ("IEN (FILMMAKER) → PRIYA → DAN → YOU → WHO’S NEXT?") and the modal's
+   labels took the invitation vocabulary ("5 invitations left." / "Create
+   their invitation"). Every other recorded byte is unchanged. */
 const BASELINE = {
   before: {
     header: 'deepcast\nYOUR DASHBOARD →',
     main:
-      'A Sacred Pause\n\n32 MINUTES. HEADPHONES RECOMMENDED.\n\n847\n\nTICKETS SHARED OF 1,000 GOAL\n\nMILESTONES PASSED\n\n✦100\n✦250\n✦500\n\nPASS IT ON\n\nThis film passed through 3 pairs of hands to reach you. You are its newest link — or its last.\n\nFilms here spread by private invite and real humans only. No algorithms.\n\nThis film won’t reach anyone new, unless you pass it on.\n\nShare intentionally. Each ticket admits one person only.',
+      'A Sacred Pause\n\n32 MINUTES. HEADPHONES RECOMMENDED.\n\n847\n\nTICKETS SHARED OF 1,000 GOAL\n\nMILESTONES PASSED\n\n✦100\n✦250\n✦500\n\nPASS IT ON\n\nIEN\n(FILMMAKER)\n→\nPRIYA\n→\nDAN\n→\nYOU\n→\nWHO’S NEXT?\n\nThis film passed through 3 pairs of hands to reach you. You are its newest link — or its last.\n\nFilms here spread by private invite and real humans only. No algorithms.\n\nThis film won’t reach anyone new, unless you pass it on.\n\nShare intentionally. Each ticket admits one person only.',
     footer: 'YOUR DASHBOARD →',
     dashboardHrefs: ['/dashboard', '/dashboard'],
     ctaClass:
@@ -104,11 +109,11 @@ const BASELINE = {
     eyebrow: 'Pass it on',
     paragraphs: [
       'Pass it on',
-      '5 tickets left.',
+      '5 invitations left.',
       'Who needs to see this? Not anyone — the one it will matter to.',
     ],
     placeholder: 'Their first name',
-    buttons: ['Close', 'Share it with them'],
+    buttons: ['Close', 'Create their invitation'],
     svgTexts: ['IEN', 'PRIYA', 'DAN', 'YOU', '?'],
     stubs: 5,
     forks: 2,
@@ -172,8 +177,12 @@ async function mockSession(page, session, profile) {
 }
 
 /** innerText is engine-specific about blank lines and non-breaking spaces;
- *  the CONTENT is what is pinned, so both sides collapse whitespace. */
-const squash = (s) => String(s).replace(/\s+/g, ' ').trim()
+ *  the CONTENT is what is pinned, so both sides collapse whitespace. WebKit
+ *  also emits no break before the rail chain's absolutely-positioned
+ *  "(filmmaker)" caption ("IEN(FILMMAKER)" where Chromium and Firefox give
+ *  "IEN (FILMMAKER)"), so the space before an opening parenthesis is
+ *  normalised away on both sides too. */
+const squash = (s) => String(s).replace(/\s+/g, ' ').replace(/\s*\(FILMMAKER\)/g, ' (FILMMAKER)').trim()
 const squashText = (o) => ({ ...o, header: squash(o.header), main: squash(o.main), footer: squash(o.footer) })
 
 test.describe('the slug-based viewer watch page is unchanged by the film-scoped entry', () => {
@@ -298,14 +307,16 @@ test.describe('the filmmaker’s own watch page — /watch/film/:filmId', () => 
     ).toEqual(['YOU', '?'])
     await expect(page.locator('dialog svg g[data-fork]')).toHaveCount(0)
     await expect(page.locator('dialog [data-stub]')).toHaveCount(0)
-    await expect(page.getByText(/tickets? left\./)).toHaveCount(0)
+    await expect(page.getByText(/invitations? left\./)).toHaveCount(0)
+    // Depth 0: no lineage chain on the rail either (the !filmMode guard).
+    await expect(page.locator('[data-lineage-chain]')).toHaveCount(0)
     await expect(page.getByText(/Who needs to see this\? Not anyone/)).toBeVisible()
 
     // Generating a ticket here is the SAME session-path create-link call the
     // card's "Create an invitation" makes: bearer token + film id, no
     // claimed-invite reference, no parent — the server numbers it like any.
     await page.getByPlaceholder('Their first name').fill('Noa')
-    await page.getByRole('button', { name: 'Share it with them' }).click()
+    await page.getByRole('button', { name: 'Create their invitation' }).click()
     await expect(page.getByText('http://localhost:3000/ticket-k7m2p')).toBeVisible()
     expect(createCalls).toHaveLength(1)
     expect(createCalls[0].authorization).toBe('Bearer fake-jwt')
@@ -317,9 +328,9 @@ test.describe('the filmmaker’s own watch page — /watch/film/:filmId', () => 
     })
     // The reveal: unlimited wording, the share-again act, the emblem's tip
     // now carries the name (still hollow until they claim).
-    await expect(page.getByText(/Here’s Noa’s ticket link/)).toBeVisible()
+    await expect(page.getByText(/Here’s Noa’s invitation link — it admits one person only/)).toBeVisible()
     await expect(page.getByText('Who else needs it?')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Share another ticket' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Create another invitation' })).toBeVisible()
     expect(
       await page.evaluate(() =>
         [...document.querySelectorAll('dialog svg text')].map((t) => t.textContent)
