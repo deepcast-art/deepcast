@@ -4,17 +4,18 @@ import { buildJourneyLine } from '../lib/journeyLine'
 import ConstellationMap from './ConstellationMap'
 
 /**
- * "See network graph" (creator dashboard, 2026-09-03) — the VIEWER
- * constellation for one film, exactly as viewers see it: the same layout
- * (src/lib/constellationLayout.js) and renderer (ConstellationMap), the
- * same who-exists rule (voided links nowhere, ghosts only per the film's
- * show_ghosts flag), the same names rule (displayName.js), the same
- * collision-based labels. The differences are the explicit NO-VIEWER
- * mode — the filmmaker is the center, there is no YOU and no fixed gold
- * path — and the map's explore behaviour: hover (desktop) or tap (touch)
- * on any person lights THAT person's lineage gold — film → them → their
- * entire downstream — nothing lit at rest. Solid dot = claimed, hollow =
- * in flight (the emblem's grammar).
+ * "See network graph" (creator dashboard, 2026-09-03) — the constellation
+ * for one film, THE SAME drawing viewers see (founder decision
+ * 2026-09-09: one graph on every surface): the one layout
+ * (src/lib/constellationLayout.js) and the one renderer (ConstellationMap),
+ * the same who-exists rule (voided links nowhere, ghosts only per the
+ * film's show_ghosts flag), the same names rule (displayName.js), the same
+ * collision-based labels, the same explore behaviour — hover (desktop) or
+ * tap (touch) on any person lights THAT person's lineage gold, film →
+ * them → their entire downstream. The only difference from a viewer's
+ * dashboard: no viewer is looking, so nothing is lit at rest and no node
+ * reads YOU. Solid dot = claimed, hollow = in flight (the emblem's
+ * grammar).
  *
  * Native <dialog>, same behaviour contract as the watch page's pass-it-on
  * modal: Esc via the cancel event, close on × and on a MOUSEDOWN on the
@@ -42,7 +43,6 @@ export default function NetworkGraphModal({ film, invites, creatorId, creatorNam
         creatorId,
         creatorName,
         includeGhosts: film?.show_ghosts === true,
-        noViewer: true,
       }),
     [invites, creatorId, creatorName, film?.show_ghosts]
   )
@@ -121,7 +121,7 @@ export default function NetworkGraphModal({ film, invites, creatorId, creatorNam
                 )
               )}
             </p>
-            <ConstellationMap key={`${layout.width}x${layout.height}`} layout={layout} explore />
+            <ConstellationMap key={`${layout.width}x${layout.height}`} layout={layout} />
           </>
         ) : (
           <p className="mt-6 font-serif-v3 italic text-warm/60">No invitations sent yet.</p>

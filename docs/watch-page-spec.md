@@ -213,6 +213,26 @@ Copy the SVG from the replica exactly. Its layers and their rules:
 
 ---
 
+## 5b. The dashboard constellation — THE LAW "nothing competes" (founder, 9 September 2026)
+
+*Recorded here at the founder's direction; the implementation notes live in CLAUDE.md's constellation paragraphs. The live, full share graph — the viewer dashboard's constellation and the creator dashboard's "See network graph" modal — is ONE drawing (`src/lib/constellationLayout.js` + `src/components/ConstellationMap.jsx`): layout, geometry, ring radii, dot sizes, type sizes, spacing and label placement are identical on every surface at a given canvas width. The ONLY per-viewer differences are (1) which segments, dots and labels are gold, and (2) on a phone, where the camera opens. Nothing else may vary by viewer or surface.*
+
+**A viewer's thread** — the path from the filmmaker to them AND their own branch, every generation — is what the drawing is about, and nothing may intrude on it. Enforced three ways:
+
+- **(a) Draw order.** Paint in layers: the rings; then every non-thread segment, dot and label; then the thread's segments, dots and labels last. Gold is never under grey.
+- **(b) Contrast.** When a thread exists, everything not on it recedes to ONE quieter level — one constant, `RECEDE_OPACITY` (0.5, the builder's proposal, the founder tunes it), applied to non-thread segments, dots and labels alike — and the thread keeps full strength. Without a thread (the creator surfaces) the drawing is as before.
+- **(c) Collisions.** A label box may not touch ANY line it is not attached to, and a label may not sit on the line leaving or entering its own dot — resolved by label side (a name turns to the inward side of its dot, away from the outgoing branch) or by starting the segment beyond the label box (and ending it before an inward name's box), never by hiding. Label-vs-label, label-vs-dot, label-vs-line: all 6px minimum on real rendered boxes, all in the gap measurement. Lines crossing lines is permitted.
+
+**The phone camera.** On a viewer's phone the graph opens framed on that viewer's thread — the path to them plus their whole branch — scaled so every name on the thread paints at the legible size; if the whole thread cannot fit legibly, the path plus the first generation of their branch, never less. Pinch and drag to pan and zoom; the same +/−/1:1 controls the creator modal has, on every surface at every width; 1:1 = the whole graph fitted. The creator's phone and every desktop open on the whole graph. Names hidden by the legibility floor are allowed only outside the framed thread; inside it nothing is hidden on a plan that settled (on a fallback plan the floor may hide inside it too — the safety net). Implementation truth (9 September): the camera never zooms out below the scale the names were planned for, so when even the path-plus-first-generation frame is wider than the phone at that scale (Krist's ten on Circles) it opens at that scale centred on the PATH — the film and every hand to YOU stay in view, the origin never off-screen — and the viewer pans to the rest; measured on the `-v4` renders: Arielle's whole thread fits her phone; Krist's needs the pan; a phone at 1:1 paints 6 of Circles' 37 names.
+
+**Name size.** Names paint at the readability floor on every surface, measured against the map's TRUE scale (the old width-based formula painted desktop names at ≈7px): 9.5px — the founder asked for names enlarged by half at his desktop and, if the film no longer settled at rest at that size, for the largest size at which it does; measured on Circles under the hard clearance rule, that is 9.5px.
+
+**YOU's label never yields**, on any surface: it is always on. It is placed by the same rule as every other name (the layout measures the viewer's real name, so the geometry is the same whoever is looking) — on a plan that settled it collides with nothing; on a fallback plan a collision with it is reported to the console, never resolved by hiding.
+
+**Dense films.** When a film outgrows what its reference view can hold under (c) at the legible size, the layout reports it (`plan.settled = false`) and the map falls back to hiding the names that would touch, zoom revealing them — accepted by the founder as the safety net (9 September), never the expectation.
+
+---
+
 ## 6. Responsive spec
 
 **< 900px** (single column — natural DOM order, no CSS reordering): masthead → player → rail → creed → story → footer.
