@@ -336,7 +336,7 @@ test.describe('comments — "Join the conversation" on the watch page', () => {
     await api.ready
     await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('button', { name: 'Pass it on' })).toBeVisible()
-    await expect(page.getByText(/passed through 3 pairs of hands/)).toBeVisible()
+    await expect(page.locator('[data-rail-path]')).toBeVisible()
     await expect(page.getByText('Join the conversation')).toHaveCount(0)
     expect(api.calls).toEqual([])
   })

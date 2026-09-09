@@ -260,11 +260,14 @@ test.describe('three-page claim arc', () => {
     await expect(page.getByText('512', { exact: true })).toHaveCount(0)
     await expect(page.getByText('Tickets shared of 1,000 goal')).toBeVisible()
     await expect(page.getByText('Milestones passed')).toBeVisible()
-    // The rule line: fixture lineage ['Ien Chi'] + senderIsCreator → one
-    // hand, singular grammar (owner-approved 2026-07-23), numeral kept.
-    await expect(
-      page.getByText(/This film passed through 1 pair of hands to reach you/)
-    ).toBeVisible()
+    // The path (founder design 2026-09-09, replacing the rule line):
+    // fixture lineage ['Ien Chi'] + senderIsCreator → one hand — IEN
+    // (FILMMAKER) → YOU → ?. The rule line no longer renders.
+    await expect(page.locator('[data-rail-path]')).toBeVisible()
+    expect(
+      await page.evaluate(() => [...document.querySelectorAll('[data-rail-path] text')].map((t) => t.textContent))
+    ).toEqual(['IEN', 'YOU', '?', '(FILMMAKER)'])
+    await expect(page.getByText(/pairs? of hands/)).toHaveCount(0)
     // The creed, founder-provided verbatim (line 3 revised 2026-07-25).
     await expect(
       page.getByText('Films here spread by private invite and real humans only. No algorithms.')

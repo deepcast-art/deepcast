@@ -19,7 +19,6 @@ import {
 } from '../lib/viewerTiers'
 import {
   chainHands,
-  pairsOfHandsPhrase,
   lastHands,
   lineageLabel,
   chainForkFlags,
@@ -28,6 +27,7 @@ import { filmStory, filmPosterUrl } from '../content/filmStory'
 import { revealSentence } from '../lib/revealSentence'
 import { NO_TICKETS_MESSAGE } from '../lib/ticketRules'
 import FilmmakerLinks from '../components/FilmmakerLinks'
+import RailPath from '../components/RailPath'
 import WatchComments from '../components/WatchComments'
 
 /** Claim-flow resume keys (slug-scoped — the claimant's public token is never
@@ -1194,16 +1194,14 @@ export default function ClaimWatch() {
                 >
                   Pass it on
                 </button>
+                {/* The path (founder design 2026-09-09, replacing the rule
+                    line — spec §3b item 6, amendment 11): the film's hands
+                    as one row of nodes, 1.25rem under the CTA, nothing else
+                    between. Absent at depth 0 (the filmmaker's own page),
+                    as the rule line was. */}
                 {chainLength >= 1 && (
                   <div className="mt-5">
-                    {/* Founder amendments 2026-07-23: raised twice from the
-                        replica's 0.875rem — now 1rem. Everything else
-                        unchanged. */}
-                    <p className="font-serif-v3 italic text-[1rem] leading-[1.6] text-warm/65">
-                      This film passed through {pairsOfHandsPhrase(chainLength)} to reach you.
-                      You are its newest link{' '}—{' '}
-                      <span className="text-accent">or{' '}its{' '}last.</span>
-                    </p>
+                    <RailPath hands={hands} />
                   </div>
                 )}
               </div>

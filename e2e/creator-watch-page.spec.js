@@ -89,17 +89,26 @@ const LINK_CLAIMED = {
    the modal's labels took the invitation vocabulary ("5 invitations left." /
    "Create their invitation"). The rail's lineage chain, briefly part of the
    same batch, was withdrawn by the founder the same day pending a design
-   pass, and the rail text below is the ORIGINAL 2026-09-03 recording. Every
-   other recorded byte is unchanged. */
+   pass.
+   DELIBERATELY RE-RECORDED AGAIN 2026-09-09 (branch `rail-path`, the
+   founder's canvas design): the rule line ("This film passed through 3
+   pairs of hands to reach you. You are its newest link — or its last.") is
+   REMOVED from the rail by founder decision and replaced by the path SVG;
+   `main` below is captured WITHOUT the path's SVG text (engines join SVG
+   text differently), and the path's labels are pinned separately as
+   `path`. Every other recorded byte is unchanged. */
 const BASELINE = {
   before: {
     header: 'deepcast\nYOUR DASHBOARD →',
     main:
-      'A Sacred Pause\n\n32 MINUTES. HEADPHONES RECOMMENDED.\n\n847\n\nTICKETS SHARED OF 1,000 GOAL\n\nMILESTONES PASSED\n\n✦100\n✦250\n✦500\n\nPASS IT ON\n\nThis film passed through 3 pairs of hands to reach you. You are its newest link — or its last.\n\nFilms here spread by private invite and real humans only. No algorithms.\n\nThis film won’t reach anyone new, unless you pass it on.\n\nShare intentionally. Each ticket admits one person only.',
+      'A Sacred Pause\n\n32 MINUTES. HEADPHONES RECOMMENDED.\n\n847\n\nTICKETS SHARED OF 1,000 GOAL\n\nMILESTONES PASSED\n\n✦100\n✦250\n✦500\n\nPASS IT ON\n\nFilms here spread by private invite and real humans only. No algorithms.\n\nThis film won’t reach anyone new, unless you pass it on.\n\nShare intentionally. Each ticket admits one person only.',
     footer: 'YOUR DASHBOARD →',
     dashboardHrefs: ['/dashboard', '/dashboard'],
     ctaClass:
       'mt-6 block min-h-[52px] w-full cursor-pointer touch-manipulation border border-[#d5c9a6] bg-[#9d8f74] px-6 py-[0.9375rem] font-sans font-normal text-[0.8125rem] uppercase tracking-[0.28em] text-ink transition-colors duration-300 hover:bg-[#a7987a] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[3px] focus-visible:outline-accent min-[900px]:mt-9',
+    // The path's labels (three-hand fixture: no collapse), pinned apart from
+    // innerText — rail-path, 2026-09-09.
+    path: ['IEN', 'PRIYA', 'DAN', 'YOU', '?', '(FILMMAKER)'],
   },
   modal: {
     // Recorded innerText (chromium): "PASS IT ON / IEN PRIYA DAN YOU ? /
@@ -202,11 +211,23 @@ test.describe('the slug-based viewer watch page is unchanged by the film-scoped 
     // #1: webkit captured "0 TICKETS SHARED" once, then passed on retry).
     await expect(page.locator('section[aria-label="847 tickets shared of 1,000 goal"]')).toBeVisible()
     await expect(page.getByText('Milestones passed')).toBeVisible()
-    await expect(page.getByText(/passed through 3 pairs of hands/)).toBeVisible()
+    await expect(page.locator('[data-rail-path] text').first()).toBeVisible()
 
     const before = await page.evaluate(() => ({
       header: document.querySelector('header').innerText,
-      main: document.querySelector('main').innerText,
+      // The path's SVG text is excluded (engines join SVG text runs
+      // differently) and pinned separately below: the SVG is hidden for the
+      // read and restored — innerText omits display:none content, and
+      // nothing is cloned (a cloned <main> would construct a second player).
+      main: (() => {
+        const svg = document.querySelector('main [data-rail-path]')
+        const prev = svg.style.display
+        svg.style.display = 'none'
+        const text = document.querySelector('main').innerText
+        svg.style.display = prev
+        return text
+      })(),
+      path: [...document.querySelectorAll('main [data-rail-path] text')].map((t) => t.textContent),
       footer: document.querySelector('footer').innerText,
       dashboardHrefs: [...document.querySelectorAll('a')].map((a) => a.getAttribute('href')),
       ctaClass: document.querySelector('button[aria-controls="passiton-modal"]').className,
@@ -286,8 +307,9 @@ test.describe('the filmmaker’s own watch page — /watch/film/:filmId', () => 
     await expect(rail.locator('p').first()).toHaveText('10')
     await expect(page.getByText('Tickets shared of 100 goal')).toBeVisible()
     await expect(page.getByText('Milestones passed')).toHaveCount(0)
-    // Depth 0: the "pairs of hands" line does not render — the filmmaker is
-    // the origin; the film never "reached" him through anyone.
+    // Depth 0: no path renders (as the rule line did not) — the filmmaker
+    // is the origin; the film never "reached" him through anyone.
+    await expect(page.locator('[data-rail-path]')).toHaveCount(0)
     await expect(page.getByText(/pairs? of hands/)).toHaveCount(0)
     // Header + footer links return to the (creator) dashboard.
     const hrefs = await page.evaluate(() =>
