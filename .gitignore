@@ -47,3 +47,8 @@ playwright.local.config.js
 
 # Design reference mockups (local only)
 design-refs/
+
+# Local-only folders that must never be committed (founder decision 2026-09-09):
+# the desktop app's output folder and the screenshot scratch folder.
+Claude outputs/
+screenshots.local/
