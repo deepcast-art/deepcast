@@ -215,7 +215,6 @@ test.describe('creator dashboard — "See network graph" (mocked creator)', () =
 
     const map = dialog.locator('svg.dc-constellation')
     await expect(map).toBeVisible()
-    await expect(map).toHaveClass(/explore/)
     // The filmmaker at the center, named; no YOU anywhere.
     const texts = await svgTexts(page)
     expect(texts).toEqual(expect.arrayContaining(['Ien', 'FILMMAKER', 'Oliver', 'Steve', 'Brian']))
@@ -340,7 +339,7 @@ const VIEWER_SENT = {
 }
 
 test.describe('viewer V5 dashboard — unchanged (mocked viewer)', () => {
-  test('the five sidebar links in order, no creator actions, the constellation keeps its whole-web hover', async ({ page }) => {
+  test('the five sidebar links in order, no creator actions, the constellation is the one graph with the viewer’s thread gold at rest', async ({ page }) => {
     await page.addInitScript(
       ([key, session]) => {
         window.localStorage.setItem(key, JSON.stringify(session))
@@ -353,15 +352,23 @@ test.describe('viewer V5 dashboard — unchanged (mocked viewer)', () => {
     await page.route('**/auth/v1/user**', (route) =>
       route.fulfill({ json: sessionFor(VIEWER_ID, VIEWER_PROFILE.email).user })
     )
+    // The viewer's own profile, except the creator-name lookup (by the
+    // owner's id), which answers with the owner — as production RLS would.
     await page.route('**/rest/v1/users**', (route) =>
-      route.fulfill({ json: [VIEWER_PROFILE], headers: RANGE_HEADERS })
+      route.fulfill({
+        json: route.request().url().includes(`id=eq.${OWNER_ID}`) ? [OWNER_PROFILE] : [VIEWER_PROFILE],
+        headers: RANGE_HEADERS,
+      })
     )
     await page.route('**/rest/v1/film_tickets**', (route) =>
       route.fulfill({ json: [{ balance: 5, unlimited: false }], headers: RANGE_HEADERS })
     )
-    await page.route('**/rest/v1/films**', (route) =>
-      route.fulfill({ json: [FILM], headers: RANGE_HEADERS })
-    )
+    // The selected-film query is `.single()` — it must receive the row as an
+    // object (an array leaves creator_id undefined and the layout guessing).
+    await page.route('**/rest/v1/films**', (route) => {
+      const single = (route.request().headers().accept || '').includes('object')
+      return route.fulfill({ json: single ? FILM : [FILM], headers: RANGE_HEADERS })
+    })
     await page.route('**/rest/v1/invites**', (route) => {
       const url = route.request().url()
       let rows
@@ -398,18 +405,29 @@ test.describe('viewer V5 dashboard — unchanged (mocked viewer)', () => {
     await expect(page.getByText('See network graph')).toHaveCount(0)
     await expect(page.getByText('Network map')).toHaveCount(0)
 
-    // The viewer's constellation is the DEFAULT mode: YOU on the gold path,
-    // no explore class, hovering the dim web lights the whole web.
+    // The viewer's constellation is THE SAME drawing as the creator modal
+    // (founder decision 2026-09-09: one graph on every surface): every
+    // person a data-node with solid/hollow grammar; YOU marked by its label;
+    // the viewer's thread gold at rest — film → Oliver → YOU → Steve — and
+    // the old whole-web hover lighting gone (no `lit` class on the map).
     const map = page.locator('svg.dc-constellation')
     await expect(map).toBeVisible()
-    await expect(map).not.toHaveClass(/explore/)
     await expect(map.getByText('YOU')).toBeVisible()
-    await expect(map.locator('g[data-claimed]')).toHaveCount(0)
+    // Every person carries the solid/hollow grammar, exactly as in the modal.
+    const persons = await map.locator('g[data-node]').count()
+    expect(persons).toBeGreaterThanOrEqual(5)
+    await expect(map.locator('g[data-claimed]')).toHaveCount(persons)
+    // Ava's thread, both directions: film → YOU (Ava) → Dan — two people,
+    // two edges, gold at rest; Oliver's branch is not lit.
+    await expect(map.locator('g.lit-person')).toHaveCount(2)
+    await expect(map.locator(`g[data-node="${VIEWER_RECEIVED.id}"].lit-person text`)).toHaveText('YOU')
+    await expect(map.locator(`g[data-node="${VIEWER_SENT.id}"].lit-person`)).toHaveCount(1)
+    await expect(map.locator(`g[data-node="${INV_OLIVER.id}"].lit-person`)).toHaveCount(0)
+    await expect(map.locator('line.lit-edge')).toHaveCount(2)
     const box = await map.boundingBox()
     await page.mouse.move(box.x + 12, box.y + 12)
-    await expect(map).toHaveClass(/\blit\b/)
-    await page.mouse.move(box.x - 20, box.y - 20)
     await expect(map).not.toHaveClass(/\blit\b/)
+    await expect(map.locator('g.lit-person')).toHaveCount(2)
   })
 })
 

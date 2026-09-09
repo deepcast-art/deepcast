@@ -3,16 +3,22 @@
  * (built 9 September, branch constellation-fan): the first ring is spaced
  * evenly around the full circle, every deeper generation clusters in a
  * tight fan at its parent's angle, and a fan never fills a proportional
- * sector. Rendered end to end on a Circles-shaped tree (one first-ring
- * ticket with a seven-wide branch, one of whose people shared ten times)
- * on BOTH surfaces that read src/lib/constellationLayout.js: the creator
- * dashboard's "See network graph" modal (explore mode — every person is a
- * `g[data-node]`, so the dots can be measured) and the viewer dashboard
- * (YOU still lower-left, the gold path intact). Mocked sessions, no
- * network, no writes — the same harness as creator-dashboard.spec.js and
- * viewer-dashboard-v5.spec.js.
+ * sector. And the founder's decision of 9 September 2026 — "one graph on
+ * every surface; a viewer's own thread in gold, both directions": the
+ * viewer dashboard draws EXACTLY the creator modal's drawing (same rings,
+ * same node positions, same label sizes) and differs only in colour — the
+ * viewer's thread (the path from the filmmaker to them AND everything that
+ * grew from their own tickets) is gold. Rendered end to end on a
+ * Circles-shaped tree (one first-ring ticket with a seven-wide branch, one
+ * of whose people shared ten times) on BOTH surfaces that read
+ * src/lib/constellationLayout.js: the creator dashboard's "See network
+ * graph" modal and the viewer dashboard — every person is a
+ * `g[data-node]` on both, so the dots can be measured and compared. Mocked
+ * sessions, no network, no writes — the same harness as
+ * creator-dashboard.spec.js and viewer-dashboard-v5.spec.js.
  */
 import { test, expect, pushJsError } from './fixtures/test.js'
+import { PERSON_LABEL_SIZE, labelFontSize } from '../src/lib/constellationLabels.js'
 
 const REF = 'wmtjgpxhjtbocsmutqqc'
 const OWNER_ID = '11111111-1111-4111-8111-111111111111'
@@ -72,12 +78,12 @@ const row = (id, senderId, senderName, name, parentId, over = {}) => ({
 })
 const RING1_NAMES = ['Noor', 'Tomas', 'Priya', 'Malik', 'Sana', 'Kofi', 'Ines', 'Bram', 'Yusuf']
 const ROWS = []
-const ring1 = RING1_NAMES.map((name, i) =>
+const ring1Rows = RING1_NAMES.map((name, i) =>
   row(`r${i}`, OWNER_ID, 'Ien', name, null, i === 2 ? { status: 'claimed', claimed_by: PRIYA_ID } : {})
 )
-ROWS.push(...ring1)
-const NOOR = ring1[0]
-const PRIYA = ring1[2]
+ROWS.push(...ring1Rows)
+const NOOR = ring1Rows[0]
+const PRIYA = ring1Rows[2]
 for (const name of ['Wren', 'Otis', 'Suki']) ROWS.push(row(name, 'noor-user', 'Noor', name, NOOR.id))
 const priyaKids = ['Tamsin', 'Rafael', 'Lena', 'Idris', 'Maren', 'Cato', 'Fenna'].map((name) =>
   row(name, PRIYA_ID, 'Priya', name, PRIYA.id, name === 'Lena' ? { status: 'watched', claimed_by: LENA_ID } : {})
@@ -88,6 +94,19 @@ const LENA_KIDS = ['Ezra', 'Nadia', 'Hollis', 'Jude', 'Mira', 'Ravi', 'Zola', 'B
   (name) => row(`k-${name}`, LENA_ID, 'Lena', name, LENA_ROW.id)
 )
 ROWS.push(...LENA_KIDS)
+/* The red-team case: a viewer inside a TOP-of-ring fan, where names sit
+   side by side and the fan's width is bound by name width — Noor's three at
+   12 o'clock. Otis (the middle one) claimed and shared once; his sibling
+   Wren renamed to a long name so the widening is name-bound. */
+const OTIS_ID = '77777777-7777-4777-8777-777777777777'
+const noorKids = ROWS.filter((r) => r.parent_invite_id === NOOR.id)
+noorKids[0].recipient_name = 'Wrenella'
+const OTIS_ROW = noorKids[1]
+OTIS_ROW.status = 'watched'
+OTIS_ROW.claimed_by = OTIS_ID
+const OTIS_KIDS = [row('k-Juno', OTIS_ID, 'Otis', 'Juno', OTIS_ROW.id)]
+ROWS.push(...OTIS_KIDS)
+const OTIS = { id: OTIS_ID, email: 'otis@example.dev', name: 'Otis', role: 'viewer', invite_allocation: 5, unlimited_shares: false, team_creator_id: null }
 
 async function mockCreator(page) {
   await page.addInitScript(([k, s]) => window.localStorage.setItem(k, JSON.stringify(s)), [`sb-${REF}-auth-token`, sessionFor(OWNER_ID, OWNER.email)])
@@ -103,44 +122,76 @@ async function mockCreator(page) {
   await page.route('**/api/admin/ticket-controls/status', (r) => r.fulfill({ status: 403, json: { error: 'Not allowed' } }))
 }
 
-async function mockLena(page) {
-  const received = [{ ...LENA_ROW, token: null }]
-  await page.addInitScript(([k, s]) => window.localStorage.setItem(k, JSON.stringify(s)), [`sb-${REF}-auth-token`, sessionFor(LENA_ID, LENA.email)])
+/** A signed-in viewer: `profile` (id/email/name), `received` = their claimed
+ *  row, `sent` = the rows they created (the dashboard locates YOU by the
+ *  common parent of the viewer's sent tickets). */
+async function mockViewer(page, profile, received, sent) {
+  await page.addInitScript(([k, s]) => window.localStorage.setItem(k, JSON.stringify(s)), [`sb-${REF}-auth-token`, sessionFor(profile.id, profile.email)])
   await page.route('**image.mux.com/**', (r) => r.fulfill({ contentType: 'image/png', body: TINY_PNG }))
-  await page.route('**/auth/v1/user**', (r) => r.fulfill({ json: sessionFor(LENA_ID, LENA.email).user }))
+  await page.route('**/auth/v1/user**', (r) => r.fulfill({ json: sessionFor(profile.id, profile.email).user }))
   await page.route('**/rest/v1/users**', (r) => {
     const url = r.request().url()
-    return r.fulfill({ json: url.includes(OWNER_ID) ? [OWNER] : [LENA], headers: RANGE })
+    return r.fulfill({ json: url.includes(OWNER_ID) ? [OWNER] : [profile], headers: RANGE })
   })
   await page.route('**/rest/v1/film_tickets**', (r) => r.fulfill({ json: [{ balance: 1, unlimited: false }], headers: RANGE }))
   await page.route('**/rest/v1/films**', (r) => r.fulfill({ json: [FILM], headers: RANGE }))
   await page.route('**/rest/v1/invites**', (r) => {
     const url = r.request().url()
     let rows
-    if (url.includes('sender_id=')) rows = LENA_KIDS
+    if (url.includes('sender_id=')) rows = sent
     else if (url.includes('film_id=eq')) rows = ROWS
-    else rows = received
+    else rows = [{ ...received, token: null }]
     return r.fulfill({ json: rows, headers: rangeFor(rows) })
   })
 }
+const mockLena = (page) => mockViewer(page, LENA, LENA_ROW, LENA_KIDS)
 
-/** Every person's angle (radians, SVG +y down) around the ring center, read
- *  from the rendered dots in explore mode. */
-const readAngles = (page) =>
-  page.evaluate(() => {
-    const svg = document.querySelector('dialog svg.dc-constellation')
+/** Every person's angle (radians, SVG +y down) and radius around the ring
+ *  center, plus the ring radii and the set of label font sizes, read from
+ *  the rendered map (inside the dialog when `inDialog`). */
+const readGeometry = (page, inDialog) =>
+  page.evaluate(({ inDialog }) => {
+    const svg = document.querySelector((inDialog ? 'dialog ' : '') + 'svg.dc-constellation')
+    const rings = [...svg.querySelectorAll('circle.web-ring')].map((c) => parseFloat(c.getAttribute('r')))
     const ring = svg.querySelector('circle.web-ring')
     const cx = parseFloat(ring.getAttribute('cx'))
     const cy = parseFloat(ring.getAttribute('cy'))
-    const out = {}
+    const persons = {}
     for (const g of svg.querySelectorAll('g[data-node]')) {
       const dot = g.querySelector('circle.web-dot')
       const x = parseFloat(dot.getAttribute('cx')) - cx
       const y = parseFloat(dot.getAttribute('cy')) - cy
-      out[g.getAttribute('data-node')] = { theta: Math.atan2(y, x), r: Math.hypot(x, y) }
+      persons[g.getAttribute('data-node')] = {
+        theta: Math.atan2(y, x),
+        r: Math.hypot(x, y),
+        dotR: parseFloat(dot.getAttribute('r')),
+        lit: g.classList.contains('lit-person'),
+        thread: g.classList.contains('lineage'),
+      }
     }
-    return out
-  })
+    // Every label's font-size attribute (map units) and the map's rendered
+    // width — the one design size, counter-scaled per surface against its
+    // own rendered width by the shared readability rule.
+    const labelSizes = [...new Set([...svg.querySelectorAll('g[data-node] text')].map((t) => parseFloat(t.getAttribute('font-size'))))].sort((a, b) => a - b)
+    const renderedWidth = svg.getBoundingClientRect().width
+    const viewBoxWidth = parseFloat(svg.getAttribute('viewBox').split(' ')[2])
+    return { rings, cx, cy, persons, labelSizes, renderedWidth, viewBoxWidth }
+  }, { inDialog })
+const readAngles = async (page) => (await readGeometry(page, true)).persons
+/** Wait until the map has measured its rendered width and counter-scaled
+ *  its labels (the first paint uses the base size until the resize
+ *  observer fires): exactly ONE label size, equal to the shared rule
+ *  applied to the one design size at this surface's rendered width. */
+const expectedLabelSize = (g) => labelFontSize(PERSON_LABEL_SIZE, g.renderedWidth / g.viewBoxWidth)
+const settled = (page, inDialog) =>
+  expect
+    .poll(async () => {
+      const g = await readGeometry(page, inDialog)
+      return g.labelSizes.length === 1 && Math.abs(g.labelSizes[0] - expectedLabelSize(g)) < 0.02
+        ? 'settled'
+        : JSON.stringify({ sizes: g.labelSizes, expected: expectedLabelSize(g) })
+    })
+    .toBe('settled')
 const TWO_PI = Math.PI * 2
 const norm = (a) => ((a % TWO_PI) + TWO_PI) % TWO_PI
 const angDiff = (a, b) => {
@@ -165,7 +216,7 @@ test.describe('constellation shape — the fan reversal (5 September 2026)', () 
     const angles = await readAngles(page)
 
     // Rule 1: nine first-ring tickets, nine equal 40° slots, at one radius.
-    const ring1Angles = ring1.map((r) => angles[r.id]).sort((a, b) => a.theta - b.theta)
+    const ring1Angles = ring1Rows.map((r) => angles[r.id]).sort((a, b) => a.theta - b.theta)
     const r1 = ring1Angles[0].r
     for (const a of ring1Angles) expect(Math.abs(a.r - r1)).toBeLessThan(0.5)
     for (let i = 0; i < 9; i++) {
@@ -191,13 +242,105 @@ test.describe('constellation shape — the fan reversal (5 September 2026)', () 
     const noorKids = ROWS.filter((r) => r.parent_invite_id === NOOR.id).map((r) => angles[r.id]).sort((a, b) => a.theta - b.theta)
     expect(Math.abs(angDiff((noorKids[0].theta + noorKids[2].theta) / 2, angles[NOOR.id].theta))).toBeLessThan(1e-3)
 
-    // Explore mode is untouched: hover Lena lights film → Priya → Lena → ten.
+    // Explore is untouched: hover Lena lights film → Priya → Lena → ten.
     await dialog.locator(`g[data-node="${LENA_ROW.id}"]`).hover()
     await expect(dialog.locator('.lit-person')).toHaveCount(12)
     expect(jsErrors).toEqual([])
   })
 
-  test('viewer dashboard as Lena: the first ring is even around YOU’s rotated map, YOU lower-left with the gold path intact, and YOU’s ten fan out around YOU', async ({ page }) => {
+  test('one graph on every surface: the same person lands at the same angle and radius on Lena’s dashboard and in the creator modal, with the same rings and label sizes; only Lena’s thread is gold', async ({ page }) => {
+    const jsErrors = []
+    page.on('pageerror', (err) => pushJsError(jsErrors, err))
+    // The creator modal first.
+    await mockCreator(page)
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('People in this network')).toBeVisible({ timeout: 15000 })
+    await page.getByRole('button', { name: 'See network graph' }).click()
+    await expect(page.locator('dialog#network-graph-modal g[data-node]')).toHaveCount(ROWS.length)
+    await settled(page, true)
+    const modal = await readGeometry(page, true)
+    // Nothing lit at rest in the modal; nobody is on a thread.
+    expect(Object.values(modal.persons).some((p) => p.lit || p.thread)).toBe(false)
+
+    // Then Lena's dashboard — a fresh context with her session.
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
+    await page.context().clearCookies()
+    await mockLena(page)
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    const map = page.locator('svg.dc-constellation')
+    await expect(map).toBeVisible({ timeout: 15000 })
+    await expect(map.locator('g[data-node]')).toHaveCount(ROWS.length)
+    await settled(page, false)
+    const viewer = await readGeometry(page, false)
+
+    // SAME geometry: rings, center, every person's angle and radius, dot
+    // size, and the single label size.
+    expect(viewer.rings).toEqual(modal.rings)
+    expect([viewer.cx, viewer.cy]).toEqual([modal.cx, modal.cy])
+    for (const row of ROWS) {
+      const a = modal.persons[row.id]
+      const b = viewer.persons[row.id]
+      expect(b, row.recipient_name).toBeTruthy()
+      expect(Math.abs(angDiff(b.theta, a.theta))).toBeLessThan(1e-9)
+      expect(Math.abs(b.r - a.r)).toBeLessThan(1e-9)
+      expect(b.dotR).toBe(a.dotR)
+    }
+    // One label size per surface — the ONE design size (PERSON_LABEL_SIZE)
+    // under the ONE readability rule, each counter-scaled against its own
+    // rendered width (the modal's panel and the dashboard's column differ
+    // by a few dozen pixels, so the attribute differs slightly; the design
+    // size and the rule are the same — `settled` proved each one).
+    expect(viewer.labelSizes).toHaveLength(1)
+    expect(modal.labelSizes).toHaveLength(1)
+    expect(Math.abs(viewer.labelSizes[0] - expectedLabelSize(viewer))).toBeLessThan(0.02)
+    expect(Math.abs(modal.labelSizes[0] - expectedLabelSize(modal))).toBeLessThan(0.02)
+
+    // The ONE difference: Lena's thread is gold, both directions — Priya
+    // (the hand that reached her), YOU, and her ten — and nobody else.
+    const threadIds = new Set([PRIYA.id, LENA_ROW.id, ...LENA_KIDS.map((k) => k.id)])
+    for (const row of ROWS) {
+      expect(viewer.persons[row.id].thread, row.recipient_name).toBe(threadIds.has(row.id))
+      expect(viewer.persons[row.id].lit, row.recipient_name).toBe(threadIds.has(row.id))
+    }
+    await expect(map.locator('g.lit-person')).toHaveCount(12)
+    // Gold edges: film → Priya → YOU → ten = 12, and every one lit.
+    await expect(map.locator('line.lineage')).toHaveCount(12)
+    await expect(map.locator('line.lit-edge')).toHaveCount(12)
+    // Each of Lena's ten is a gold (lit) node — its name follows the one
+    // collision rule like everyone's (no room bought by colour) — and each
+    // is in flight, so hollow, exactly as in the modal.
+    for (const k of LENA_KIDS) {
+      await expect(map.locator(`g[data-node="${k.id}"].lit-person`)).toHaveCount(1)
+      await expect(map.locator(`g[data-node="${k.id}"] circle.web-dot.hollow`)).toHaveCount(1)
+    }
+    // YOU is marked by its label alone (the one always-on name) — same dot
+    // size as everyone, solid (claimed).
+    await expect(map.locator(`g[data-node="${LENA_ROW.id}"] text`)).toHaveText('YOU')
+    await expect(map.locator(`g[data-node="${LENA_ROW.id}"] circle.web-dot.hollow`)).toHaveCount(0)
+
+    // The red-team case: Otis, inside Noor's TOP-of-ring fan, whose width is
+    // bound by his sibling's long name. Measured with the label "YOU"
+    // instead of "Otis", his siblings would move on his dashboard.
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
+    await mockViewer(page, OTIS, OTIS_ROW, OTIS_KIDS)
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('svg.dc-constellation g[data-node]')).toHaveCount(ROWS.length)
+    const otis = await readGeometry(page, false)
+    for (const row of ROWS) {
+      const a = modal.persons[row.id]
+      const b = otis.persons[row.id]
+      expect(Math.abs(angDiff(b.theta, a.theta)), row.recipient_name).toBeLessThan(1e-9)
+      expect(Math.abs(b.r - a.r), row.recipient_name).toBeLessThan(1e-9)
+    }
+    await expect(page.locator(`svg.dc-constellation g[data-node="${OTIS_ROW.id}"] text`)).toHaveText('YOU')
+    // His thread: film → YOU → Juno; Noor (his sharer) lit; Wrenella not.
+    await expect(page.locator('svg.dc-constellation g.lit-person')).toHaveCount(3)
+    await expect(page.locator(`svg.dc-constellation g[data-node="${noorKids[0].id}"].lit-person`)).toHaveCount(0)
+    expect(jsErrors).toEqual([])
+  })
+
+  test('viewer dashboard as Lena: the first ring is even, YOU marked by its label where the geometry put it, the gold thread intact, and YOU’s ten fanned around YOU', async ({ page }) => {
     const jsErrors = []
     page.on('pageerror', (err) => pushJsError(jsErrors, err))
     await mockLena(page)
@@ -206,47 +349,24 @@ test.describe('constellation shape — the fan reversal (5 September 2026)', () 
     const map = page.locator('svg.dc-constellation')
     await expect(map).toBeVisible({ timeout: 15000 })
     await expect(map.locator('text').filter({ hasText: 'YOU' })).toHaveCount(1)
-    // The gold path: film → Priya → YOU → ten = 12 gold edges.
+    // The gold thread: film → Priya → YOU → ten = 12 gold edges.
     await expect(map.locator('line.lineage')).toHaveCount(12)
 
-    const geom = await page.evaluate(() => {
-      const svg = document.querySelector('svg.dc-constellation')
-      const ring = svg.querySelector('circle.web-ring')
-      const cx = parseFloat(ring.getAttribute('cx'))
-      const cy = parseFloat(ring.getAttribute('cy'))
-      // YOU is the r=6 solid dot; the ten invitees are the r=4.5 dots.
-      const you = svg.querySelector('circle[r="6"]')
-      const ux = parseFloat(you.getAttribute('cx')) - cx
-      const uy = parseFloat(you.getAttribute('cy')) - cy
-      const kids = [...svg.querySelectorAll('circle[r="4.5"]')].map((c) => {
-        const x = parseFloat(c.getAttribute('cx')) - cx
-        const y = parseFloat(c.getAttribute('cy')) - cy
-        return Math.atan2(y, x)
-      })
-      // The first ring: every dot at the innermost ring's radius (the dim
-      // web dots plus Priya's gold path dot) — nine of them.
-      const r1 = parseFloat(ring.getAttribute('r'))
-      const ring1 = [...svg.querySelectorAll('circle.web-dot, circle[r="3.5"]')]
-        .map((c) => ({ x: parseFloat(c.getAttribute('cx')) - cx, y: parseFloat(c.getAttribute('cy')) - cy }))
-        .filter((p) => Math.abs(Math.hypot(p.x, p.y) - r1) < 0.5)
-        .map((p) => Math.atan2(p.y, p.x))
-        .sort((a, b) => a - b)
-      return { you: Math.atan2(uy, ux), kids: kids.sort((a, b) => a - b), ring1 }
-    })
-    // Rule 1 survives the viewer's rotation: nine first-ring tickets in
-    // nine equal slots (under the old rule Priya's branch owned ~2/3).
-    expect(geom.ring1).toHaveLength(9)
+    const geom = await readGeometry(page, false)
+    // Rule 1: nine first-ring tickets in nine equal slots, the first at
+    // 12 o'clock — the map is NOT rotated for the viewer (rule 4).
+    const ring1 = ring1Rows.map((r) => geom.persons[r.id].theta).sort((a, b) => a - b)
     for (let i = 0; i < 9; i++) {
-      const next = i === 8 ? geom.ring1[0] + TWO_PI : geom.ring1[i + 1]
-      expect(next - geom.ring1[i]).toBeCloseTo(TWO_PI / 9, 3)
+      const next = i === 8 ? ring1[0] + TWO_PI : ring1[i + 1]
+      expect(next - ring1[i]).toBeCloseTo(TWO_PI / 9, 3)
     }
-    // Rule 4: YOU at 3π/4 (lower-left, SVG +y down).
-    expect(Math.abs(angDiff(geom.you, Math.PI * 0.75))).toBeLessThan(1e-3)
+    expect(Math.abs(angDiff(geom.persons[NOOR.id].theta, -Math.PI / 2))).toBeLessThan(1e-6)
     // Rule 2 on the viewer's own fan: ten invitees, centered on YOU
     // (measured as offsets from YOU, so a fan straddling the atan2 seam
     // at ±π reads correctly).
-    expect(geom.kids).toHaveLength(10)
-    const offsets = geom.kids.map((k) => angDiff(k, geom.you)).sort((a, b) => a - b)
+    const you = geom.persons[LENA_ROW.id].theta
+    const offsets = LENA_KIDS.map((k) => angDiff(geom.persons[k.id].theta, you)).sort((a, b) => a - b)
+    expect(offsets).toHaveLength(10)
     expect(Math.abs((offsets[0] + offsets[9]) / 2)).toBeLessThan(1e-3)
     expect(jsErrors).toEqual([])
   })

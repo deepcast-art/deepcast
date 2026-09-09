@@ -13,10 +13,13 @@
  *     below a readable on-screen minimum, at every viewport and zoom.
  *  2. VISIBILITY — every label whose on-screen rectangle fits renders
  *     (`labelVisibility`). Where rectangles would overlap, the minimum
- *     number hide, by priority: the gold path (filmmaker, YOU, the
- *     viewer's chain) ALWAYS renders and is never hidden by this rule;
- *     among dim-web labels, closer-to-YOU wins. Zooming in creates room,
- *     so hidden names appear progressively — there is no threshold.
+ *     number hide: the `gold` items (since 2026-09-09 only the filmmaker's
+ *     center labels and YOU's marker — the viewer's thread names are NOT
+ *     exempt: one rule on every surface) ALWAYS render and are never
+ *     hidden by this rule; the rest are placed greedily by `dist`, then
+ *     id (the renderer passes dist 0 everywhere since 2026-09-09, so the
+ *     order is the same whoever is looking). Zooming in creates room, so
+ *     hidden names appear progressively — there is no threshold.
  *
  * THE TUNING KNOBS (founder verifies on his phone):
  *  - MIN_LABEL_ON_SCREEN_PX — smallest painted label size, in real pixels.
@@ -28,53 +31,19 @@
 export const MIN_LABEL_ON_SCREEN_PX = 11
 export const LABEL_GAP_PX = 3
 
-/** Base design sizes (map units) per node kind — ONE map shared by the
- *  renderer (ConstellationMap), the collision rects, and the layout's
- *  label-aware fan widening (constellationLayout.js), so none of the three
- *  can disagree about how big a name paints. Invitee kinds (unopened /
- *  opened / watched / shared) share one size. */
-export const LABEL_SIZES = { you: 11.5, path: 9, downstream: 8, other: 8, invitee: 9.5 }
-export const labelSizeFor = (kind) => LABEL_SIZES[kind] ?? LABEL_SIZES.invitee
-
-/** Dot radii (map units) the renderer paints per node kind — the SAME map
- *  the layout's fan widening reads, so a sibling's name can never be widened
- *  against a dot size the renderer does not paint. `youRing` is YOU's halo
- *  ring, `sharedHalo` the glow behind an invitee who shared onward,
- *  `explore` the person dot in the creator modal's explore mode. */
-export const DOT_RADII = {
-  you: 6,
-  youRing: 12,
-  sharedHalo: 9,
-  invitee: 4.5,
-  path: 3.5,
-  downstream: 2.6,
-  other: 2.2,
-  explore: 2.4,
-}
-/** The OUTERMOST painted radius for a kind — what a neighbouring label must
- *  clear. Invitee kinds (unopened / opened / watched) are the invitee dot;
- *  'shared' reaches to its halo; the web dot counts its explore-mode size. */
-export function dotReachFor(kind) {
-  switch (kind) {
-    case 'you':
-      return DOT_RADII.youRing
-    case 'shared':
-      return DOT_RADII.sharedHalo
-    case 'path':
-      return DOT_RADII.path
-    case 'downstream':
-      return DOT_RADII.downstream
-    case 'other':
-      return Math.max(DOT_RADII.other, DOT_RADII.explore)
-    default:
-      return DOT_RADII.invitee
-  }
-}
-/** A dot's axis-aligned square at design scale, for the same overlap test
- *  the labels use. */
-export function dotRect(x, y, kind) {
-  const r = dotReachFor(kind)
-  return { x: x - r, y: y - r, w: 2 * r, h: 2 * r }
+/** ONE label size and ONE dot size for every person on every surface
+ *  (founder decision 2026-09-09: "one graph on every surface; a viewer's
+ *  own thread in gold, both directions" — nothing changes size because of
+ *  who is looking). Shared by the renderer (ConstellationMap), the
+ *  collision rects, and the layout's label-aware fan widening, so none of
+ *  the three can disagree about how big a name or a dot paints. The
+ *  filmmaker's two center labels keep their own sizes in the renderer. */
+export const PERSON_LABEL_SIZE = 8
+export const PERSON_DOT_R = 2.4
+/** A person dot's axis-aligned square at design scale, for the same
+ *  overlap test the labels use. */
+export function dotRect(x, y) {
+  return { x: x - PERSON_DOT_R, y: y - PERSON_DOT_R, w: 2 * PERSON_DOT_R, h: 2 * PERSON_DOT_R }
 }
 
 /** Width-per-glyph as a fraction of the font size — an estimate for the
@@ -130,12 +99,15 @@ export function rectsCollide(a, b, gap = LABEL_GAP_PX) {
 
 /**
  * Decide which labels render. `items`: [{ id, rect, gold, dist }] — `rect`
- * from labelScreenRect, `gold` = on the gold path (never hidden), `dist` =
- * map-unit distance to the YOU node (the dim-web tiebreak: closer wins).
+ * from labelScreenRect, `gold` = always-on (since 2026-09-09 the renderer
+ * marks only the filmmaker's center labels and YOU's marker), `dist` = a
+ * priority tiebreak, lower first (the renderer passes 0 for everyone since
+ * 2026-09-09 — one order on every surface — the parameter stays for the
+ * rule's own tests).
  *
  * Returns { visibleIds: Set, goldOverlaps: [[idA, idB], …] }. Gold labels
  * are ALWAYS in visibleIds; a gold-gold collision is REPORTED (the caller
- * logs it), never resolved by hiding — founder rule. Dim labels are placed
+ * logs it), never resolved by hiding — founder rule. The rest are placed
  * greedily in priority order against everything already placed: simple
  * rect-overlap over tens of nodes, deliberately no fancier.
  */

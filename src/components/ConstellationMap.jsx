@@ -1,40 +1,49 @@
 /**
- * The constellation (viewer dashboard V5) — SVG renderer for
- * buildConstellationLayout. Visual grammar ported from
- * design-refs/deepcast-dashboard-v5.html:
+ * The constellation — ONE SVG renderer for buildConstellationLayout, on
+ * every surface: the viewer dashboard (V5) and the creator dashboard's
+ * "See network graph" modal (founder decision 2026-09-09: "one graph on
+ * every surface; a viewer's own thread in gold, both directions"). Visual
+ * grammar ported from design-refs/deepcast-dashboard-v5.html:
  *
- *  - The dim web (everyone outside your lineage) is visible by default;
- *    hovering anywhere OFF your gold lineage lights the whole web gold.
+ *  - The filmmaker at the center; every person a small dot on its ring —
+ *    solid = claimed, hollow = in flight (the lineage emblem's grammar) —
+ *    with its name placed radially at ONE size.
+ *  - Nothing is lit at rest EXCEPT the viewer's own thread when a viewer
+ *    is looking (layout.threadIds): the path from the filmmaker to them
+ *    and everything that grew from their own tickets — edges, dots and
+ *    names in gold. Same stroke, same sizes, same positions as the rest;
+ *    only the colour changes. YOU is marked by its solid node and its
+ *    label, wherever the geometry put it.
+ *  - Explore: hover (mouse) or tap (touch/click, toggles) on any person
+ *    lights THAT person's lineage — film → them → their entire downstream.
+ *    The same on every surface.
  *  - Background stars twinkle (disabled under prefers-reduced-motion).
- *  - Zoom (+ / − / 1:1) and drag-to-pan, scoped to the map.
+ *  - Zoom (+ / − / 1:1), wheel/pinch zoom at the pointer, drag-to-pan.
  *  - Labels never paint below a readable on-screen size: sizes are in map
  *    units but counter-scaled against the RENDERED map scale
  *    (src/lib/constellationLabels.js — the mobile-labels fix, 2026-07-31).
  *  - Label visibility is COLLISION-BASED at every viewport (founder
  *    principle, 2026-07-31: the names ARE the product — a label hides only
  *    when it would physically collide with another, never by a blanket
- *    rule). Gold-path names always render; dim-web names fill whatever
- *    room remains, closer-to-YOU first, and appear progressively as
- *    zooming in creates space. Recomputed on zoom/pan/resize.
+ *    rule), by ONE rule on every surface: names fill whatever room there
+ *    is and appear progressively as zooming in creates space — the
+ *    viewer's thread names included (colour never buys a name room the
+ *    modal would not give it). The only always-on label is YOU's, the
+ *    viewer's marker; an explored (hovered/tapped) person's lineage names
+ *    render while explored, as in the modal. Recomputed on zoom/pan/resize.
  *
- * EXPLORE MODE (`explore` prop, 2026-09-03 — the creator dashboard's "See
- * network graph" modal, fed by the layout's explicit no-viewer mode):
- *  - the filmmaker is the center; there is no YOU and no fixed gold path;
- *  - nothing is lit at rest — hover (mouse) or tap (touch/click, toggles)
- *    on any person lights THAT person's lineage gold: film → them → their
- *    entire downstream, edges, dots, and labels;
- *  - node grammar from the lineage emblem: solid dot = claimed, hollow =
- *    in flight (layout.nodes[].claimed);
- *  - the whole-web hover lighting is OFF (it would drown the lineage).
- * Default (explore=false) renders exactly as before — every difference is
- * gated on the prop.
+ * The former viewer-only rendering — bigger YOU node with a halo, per-kind
+ * node shapes and label sizes, tangential gold labels, the whole-web hover
+ * lighting, thread names exempt from collision, closer-to-YOU priority —
+ * is GONE (2026-09-09). There is no mode prop: the surfaces share this one
+ * path.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  DOT_RADII,
+  PERSON_DOT_R,
+  PERSON_LABEL_SIZE,
   labelFontSize,
   labelScreenRect,
-  labelSizeFor,
   labelVisibility,
 } from '../lib/constellationLabels'
 
@@ -45,23 +54,18 @@ const PAN_OVERSHOOT = 0.4
 
 const LABEL_FONT = "'Phoenix', system-ui, sans-serif"
 
-// Label design sizes AND dot radii per node kind live in
-// constellationLabels.js (LABEL_SIZES / labelSizeFor, DOT_RADII) — one map
-// shared with the collision rects AND the layout's fan widening, so none of
-// them can disagree about how big a name or a dot paints.
-
 /**
  * NOTE for callers: pass a `key` derived from the layout's width×height so a
  * size change (film switch, tree growth) remounts the map with a fresh
  * viewport — the zoom/pan state initializer runs once per mount.
  */
-export default function ConstellationMap({ layout, explore = false }) {
+export default function ConstellationMap({ layout }) {
   const svgRef = useRef(null)
   const [vb, setVb] = useState(() =>
     layout ? { x: 0, y: 0, w: layout.width, h: layout.height } : null
   )
   const dragRef = useRef(null)
-  /** Explore mode: the press that may become a tap (see onPointerDown). */
+  /** The press that may become a tap (see onPointerDown). */
   const tapRef = useRef(null)
   /** Mirrors vb for the native wheel listener (kept out of render writes). */
   const vbRef = useRef(vb)
@@ -69,29 +73,32 @@ export default function ConstellationMap({ layout, explore = false }) {
     vbRef.current = vb
   }, [vb])
 
-  /** Explore mode: the hovered person (mouse only) and the tapped person
+  /** Explore: the hovered person (mouse only) and the tapped person
    *  (toggles, survives the pointer leaving). The tapped one wins. */
   const [hoverId, setHoverId] = useState(null)
   const [pinnedId, setPinnedId] = useState(null)
-  const litId = explore ? (pinnedId ?? hoverId) : null
+  const litId = pinnedId ?? hoverId
 
-  /** Explore mode: children by parent id, for the downstream walk. */
+  /** Children by parent id, for the downstream walk. */
   const childrenById = useMemo(() => {
     const map = new Map()
-    if (!explore || !layout) return map
+    if (!layout) return map
     for (const n of layout.nodes) {
       if (!n.parentId) continue
       if (!map.has(n.parentId)) map.set(n.parentId, [])
       map.get(n.parentId).push(n.id)
     }
     return map
-  }, [explore, layout])
+  }, [layout])
 
-  /** Explore mode: the lit lineage — the person, every ancestor up to the
+  /** The viewer's own thread — lit at rest, in gold, both directions. */
+  const threadSet = useMemo(() => new Set(layout?.threadIds ?? []), [layout])
+
+  /** The explored person's lineage — the person, every ancestor up to the
    *  film, and every descendant at every depth. Empty at rest. */
-  const litSet = useMemo(() => {
+  const exploreSet = useMemo(() => {
     const set = new Set()
-    if (!explore || !layout || !litId) return set
+    if (!layout || !litId) return set
     const byId = new Map(layout.nodes.map((n) => [n.id, n]))
     let cur = byId.get(litId)
     while (cur) {
@@ -105,7 +112,10 @@ export default function ConstellationMap({ layout, explore = false }) {
       stack.push(...(childrenById.get(id) || []))
     }
     return set
-  }, [explore, layout, litId, childrenById])
+  }, [layout, litId, childrenById])
+
+  /** Everything lit right now: the viewer's thread plus the explored lineage. */
+  const litSet = useMemo(() => new Set([...threadSet, ...exploreSet]), [threadSet, exploreSet])
 
   /** The map's rendered CSS width — the denominator of the label
    *  counter-scaling. 0 until the first measurement (labels then render at
@@ -126,12 +136,12 @@ export default function ConstellationMap({ layout, explore = false }) {
   const H = layout?.height ?? 0
 
   /** Every label's collision inputs, viewport-independent: map position,
-   *  anchor, name, design size, gold-path membership, and distance to YOU
-   *  (the dim-web priority). The film node's two center labels join as gold
-   *  obstacles so dim names can never sit on top of them. */
+   *  anchor, name, design size. ONE rule for every name on every surface —
+   *  the only always-on labels are the film node's two center labels and
+   *  YOU's marker; everyone else is placed greedily in the same order the
+   *  modal uses (no viewer-dependent priority). */
   const labelItems = useMemo(() => {
     if (!layout) return []
-    const you = layout.nodes.find((n) => n.kind === 'you')
     const items = []
     for (const n of layout.nodes) {
       if (n.kind === 'film') {
@@ -168,16 +178,17 @@ export default function ConstellationMap({ layout, explore = false }) {
         y: n.label.y,
         anchor: n.label.anchor,
         name: n.name,
-        baseSize: labelSizeFor(n.kind),
-        gold: n.kind !== 'other',
-        dist: you ? Math.hypot(n.x - you.x, n.y - you.y) : 0,
+        baseSize: PERSON_LABEL_SIZE,
+        gold: n.id === layout.youId,
+        dist: 0,
       })
     }
     return items
   }, [layout])
 
   /** Collision pass — cheap AABB over tens of labels, recomputed whenever
-   *  the view changes (zoom, pan, resize). Gold ids are always present. */
+   *  the view changes (zoom, pan, resize). YOU and the center labels are
+   *  always present. */
   const { visibleIds, goldOverlaps } = useMemo(() => {
     if (!vb || !labelItems.length) {
       return { visibleIds: new Set(labelItems.map((it) => it.id)), goldOverlaps: [] }
@@ -254,17 +265,15 @@ export default function ConstellationMap({ layout, explore = false }) {
     })
   }
 
-  /** Explore mode: a press that ends without moving on a person is a TAP
-   *  (toggles the pinned lineage). Detected here, at the SVG, because the
-   *  drag handler takes pointer capture — the release then never reaches
-   *  the person's own element. (tapRef is declared with the other refs
-   *  above the early return.) */
+  /** A press that ends without moving on a person is a TAP (toggles the
+   *  pinned lineage). Detected here, at the SVG, because the drag handler
+   *  takes pointer capture — the release then never reaches the person's
+   *  own element. (tapRef is declared with the other refs above the early
+   *  return.) */
   const onPointerDown = (e) => {
     dragRef.current = { x: e.clientX, y: e.clientY }
-    if (explore) {
-      const person = e.target?.closest?.('[data-node]')
-      tapRef.current = person ? { id: person.getAttribute('data-node'), x: e.clientX, y: e.clientY } : null
-    }
+    const person = e.target?.closest?.('[data-node]')
+    tapRef.current = person ? { id: person.getAttribute('data-node'), x: e.clientX, y: e.clientY } : null
     svgRef.current?.classList.add('panning')
     e.currentTarget.setPointerCapture(e.pointerId)
   }
@@ -287,7 +296,6 @@ export default function ConstellationMap({ layout, explore = false }) {
     const tap = tapRef.current
     tapRef.current = null
     if (
-      explore &&
       tap &&
       e?.type === 'pointerup' &&
       Math.hypot((e.clientX ?? tap.x) - tap.x, (e.clientY ?? tap.y) - tap.y) < 6
@@ -298,45 +306,23 @@ export default function ConstellationMap({ layout, explore = false }) {
     svgRef.current?.classList.remove('panning')
   }
 
-  // Hover: anywhere off the gold lineage lights the whole web gold.
-  const onMouseMove = (e) => {
-    const onLineage = e.target.classList?.contains('lineage')
-    svgRef.current?.classList.toggle('lit', !onLineage)
-  }
-  const onMouseLeave = () => svgRef.current?.classList.remove('lit')
-
   /** CSS pixels per map unit, zoom included — feeds the label counter-scale. */
   const mapScale = renderedWidth > 0 && vb.w > 0 ? renderedWidth / vb.w : 0
 
-  const label = (n, fill, size, cls) =>
-    n.label &&
-    visibleIds.has(n.id) && (
-      <text
-        key={`label-${n.id}`}
-        x={n.label.x}
-        y={n.label.y}
-        textAnchor={n.label.anchor}
-        fontSize={labelFontSize(size, mapScale)}
-        letterSpacing="2"
-        fill={fill || undefined}
-        className={cls}
-        style={{ fontFamily: LABEL_FONT, textTransform: 'uppercase' }}
-      >
-        {n.name}
-      </text>
-    )
-
-  /** Explore mode: a person node — hit area, solid/hollow dot, label. A lit
-   *  person's label always renders (it is the explicit focus); otherwise the
-   *  collision rule applies as everywhere. */
-  const explorePerson = (n) => {
+  /** A person: hit area, solid/hollow dot, radial name. Lit = on the
+   *  viewer's thread (gold at rest) or on the explored lineage. An explored
+   *  person's name renders while explored; otherwise the one collision
+   *  rule decides — thread names included. */
+  const person = (n) => {
+    const onThread = threadSet.has(n.id)
     const lit = litSet.has(n.id)
+    const explored = exploreSet.has(n.id)
     return (
       <g
         key={n.id}
         data-node={n.id}
         data-claimed={n.claimed ? 'true' : 'false'}
-        className={lit ? 'lit-person' : undefined}
+        className={`${lit ? 'lit-person' : ''}${onThread ? ' lineage' : ''}`.trim() || undefined}
         style={{ cursor: 'pointer' }}
         onPointerEnter={(e) => {
           if (e.pointerType === 'mouse') setHoverId(n.id)
@@ -350,19 +336,19 @@ export default function ConstellationMap({ layout, explore = false }) {
         <circle
           cx={n.x}
           cy={n.y}
-          r={DOT_RADII.explore}
+          r={PERSON_DOT_R}
           className={`web-dot star${n.claimed ? '' : ' hollow'}`}
           style={{ animationDelay: `${n.twinkleDelay ?? 0}s` }}
         />
-        {n.label && (visibleIds.has(n.id) || lit) && (
+        {n.label && (visibleIds.has(n.id) || explored) && (
           <text
             key={`label-${n.id}`}
             x={n.label.x}
             y={n.label.y}
             textAnchor={n.label.anchor}
-            fontSize={labelFontSize(labelSizeFor(n.kind), mapScale)}
+            fontSize={labelFontSize(PERSON_LABEL_SIZE, mapScale)}
             letterSpacing="2"
-            className="web-label dim-label"
+            className={onThread ? 'web-label lineage' : 'web-label dim-label'}
             style={{ fontFamily: LABEL_FONT, textTransform: 'uppercase' }}
           >
             {n.name}
@@ -378,39 +364,33 @@ export default function ConstellationMap({ layout, explore = false }) {
         .dc-constellation { cursor: grab; }
         .dc-constellation.panning { cursor: grabbing; }
         .dc-constellation .web-edge { stroke: rgba(234,231,224,0.16); transition: stroke 450ms ease; }
-        .dc-constellation .web-ring { stroke: rgba(234,231,224,0.08); transition: stroke 450ms ease; }
-        .dc-constellation .web-dot  { fill: rgba(234,231,224,0.7); transition: fill 450ms ease; }
+        .dc-constellation .web-ring { stroke: rgba(234,231,224,0.08); }
+        .dc-constellation .web-dot  { fill: rgba(234,231,224,0.7); transition: fill 450ms ease, stroke 450ms ease; }
+        .dc-constellation .web-dot.hollow { fill: none; stroke: rgba(234,231,224,0.7); stroke-width: 1.1; }
         .dc-constellation .web-label{ fill: rgba(234,231,224,0.45); transition: fill 450ms ease; }
-        .dc-constellation.lit .web-edge { stroke: rgba(199,169,107,0.5); }
-        .dc-constellation.lit .web-ring { stroke: rgba(199,169,107,0.18); }
-        .dc-constellation.lit .web-dot  { fill: #C7A96B; }
-        .dc-constellation.lit .web-label{ fill: rgba(216,199,154,0.8); }
         .dc-constellation .star { animation: dc-twinkle 5s ease-in-out infinite alternate; }
         @keyframes dc-twinkle { from { opacity: 0.55; } to { opacity: 1; } }
         @media (prefers-reduced-motion: reduce) { .dc-constellation .star { animation: none; } }
-        /* Explore mode (2026-09-03): hollow = in flight; one person's lineage lights on hover/tap. */
-        .dc-constellation.explore .web-dot.hollow { fill: none; stroke: rgba(234,231,224,0.7); stroke-width: 1.1; transition: fill 450ms ease, stroke 450ms ease; }
-        .dc-constellation.explore .lit-person .web-dot { fill: #C7A96B; }
-        .dc-constellation.explore .lit-person .web-dot.hollow { fill: none; stroke: #C7A96B; }
-        .dc-constellation.explore .lit-person .web-label { fill: rgba(216,199,154,0.9); }
-        .dc-constellation.explore .web-edge.lit-edge { stroke: rgba(199,169,107,0.75); }
+        /* Lit = the viewer's own thread at rest, or the explored lineage: colour only. */
+        .dc-constellation .lit-person .web-dot { fill: #C7A96B; }
+        .dc-constellation .lit-person .web-dot.hollow { fill: none; stroke: #C7A96B; }
+        .dc-constellation .lit-person .web-label { fill: rgba(216,199,154,0.9); }
+        .dc-constellation .web-edge.lit-edge { stroke: rgba(199,169,107,0.75); }
       `}</style>
       <svg
         ref={svgRef}
-        className={`dc-constellation block h-[23rem] w-full md:h-[clamp(26rem,64vh,38rem)]${explore ? ' explore' : ''}`}
+        className="dc-constellation block h-[23rem] w-full md:h-[clamp(26rem,64vh,38rem)]"
         viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
         role="img"
         aria-label={
-          explore
-            ? 'A radial constellation of everyone who has held this film, with the filmmaker at the center. Hover or tap a person to light the path the film took to reach them and everyone it reached through them. A solid dot is a claimed ticket; a hollow dot is one still in flight.'
-            : 'A radial constellation of everyone who has held this film, with the filmmaker at the center and the gold path running to you and onward through your invitations. Hovering the wider web lights the whole constellation gold.'
+          layout.hasYou
+            ? 'A radial constellation of everyone who has held this film, with the filmmaker at the center. Your own thread is gold: the path the film took to reach you, and everyone it reached through you. Hover or tap a person to light the path the film took to reach them and everyone it reached through them. A solid dot is a claimed ticket; a hollow dot is one still in flight.'
+            : 'A radial constellation of everyone who has held this film, with the filmmaker at the center. Hover or tap a person to light the path the film took to reach them and everyone it reached through them. A solid dot is a claimed ticket; a hollow dot is one still in flight.'
         }
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        onMouseMove={explore ? undefined : onMouseMove}
-        onMouseLeave={explore ? undefined : onMouseLeave}
       >
         {layout.rings.map((r) => (
           <circle
@@ -424,32 +404,22 @@ export default function ConstellationMap({ layout, explore = false }) {
             className="web-ring"
           />
         ))}
-        {layout.dimEdges.map((e, i) => (
-          <line
-            key={`dim-${i}`}
-            x1={e.x1}
-            y1={e.y1}
-            x2={e.x2}
-            y2={e.y2}
-            strokeWidth="1"
-            strokeDasharray="2 5"
-            className={
-              explore && litSet.has(e.fromId) && litSet.has(e.toId) ? 'web-edge lit-edge' : 'web-edge'
-            }
-          />
-        ))}
-        {layout.goldEdges.map((e, i) => (
-          <line
-            key={`gold-${i}`}
-            x1={e.x1}
-            y1={e.y1}
-            x2={e.x2}
-            y2={e.y2}
-            stroke="rgba(199,169,107,0.8)"
-            strokeWidth="1.4"
-            className="lineage"
-          />
-        ))}
+        {layout.edges.map((e, i) => {
+          const lit = litSet.has(e.fromId) && litSet.has(e.toId)
+          const onThread = threadSet.has(e.fromId) && threadSet.has(e.toId)
+          return (
+            <line
+              key={`edge-${i}`}
+              x1={e.x1}
+              y1={e.y1}
+              x2={e.x2}
+              y2={e.y2}
+              strokeWidth="1"
+              strokeDasharray="2 5"
+              className={`web-edge${lit ? ' lit-edge' : ''}${onThread ? ' lineage' : ''}`}
+            />
+          )
+        })}
         {layout.nodes.map((n) => {
           if (n.kind === 'film') {
             return (
@@ -493,64 +463,7 @@ export default function ConstellationMap({ layout, explore = false }) {
               </g>
             )
           }
-          if (n.kind === 'you') {
-            return (
-              <g key={n.id}>
-                <circle cx={n.x} cy={n.y} r={DOT_RADII.you} fill="#D8C79A" className="lineage" />
-                <circle cx={n.x} cy={n.y} r={DOT_RADII.youRing} fill="none" stroke="rgba(216,199,154,0.4)" strokeWidth="1" className="lineage" />
-                {label(n, '#D8C79A', labelSizeFor(n.kind), 'lineage')}
-              </g>
-            )
-          }
-          if (n.kind === 'path') {
-            return (
-              <g key={n.id}>
-                <circle cx={n.x} cy={n.y} r={DOT_RADII.path} fill="#C7A96B" className="lineage" />
-                {label(n, 'rgba(199,169,107,0.9)', labelSizeFor(n.kind), 'lineage')}
-              </g>
-            )
-          }
-          if (n.kind === 'downstream') {
-            return (
-              <g key={n.id}>
-                <circle cx={n.x} cy={n.y} r={DOT_RADII.downstream} fill="rgba(199,169,107,0.65)" className="lineage" />
-                {label(n, 'rgba(199,169,107,0.6)', labelSizeFor(n.kind), 'lineage')}
-              </g>
-            )
-          }
-          if (n.kind === 'other') {
-            if (explore) return explorePerson(n)
-            return (
-              <g key={n.id}>
-                <circle
-                  cx={n.x}
-                  cy={n.y}
-                  r={DOT_RADII.other}
-                  className="web-dot star"
-                  style={{ animationDelay: `${n.twinkleDelay ?? 0}s` }}
-                />
-                {label(n, null, labelSizeFor(n.kind), 'web-label dim-label')}
-              </g>
-            )
-          }
-          // Your invitees: unopened / opened / watched / shared.
-          return (
-            <g key={n.id}>
-              {n.kind === 'shared' && (
-                <circle cx={n.x} cy={n.y} r={DOT_RADII.sharedHalo} fill="rgba(199,169,107,0.16)" className="lineage" />
-              )}
-              <circle
-                cx={n.x}
-                cy={n.y}
-                r={DOT_RADII.invitee}
-                fill={n.kind === 'unopened' ? 'transparent' : n.kind === 'opened' ? '#9A9890' : '#C7A96B'}
-                stroke={n.kind === 'opened' ? '#9A9890' : '#C7A96B'}
-                strokeWidth="1.2"
-                className="lineage"
-              />
-              {label(n, '#D8C79A', labelSizeFor(n.kind), 'lineage')}
-            </g>
-          )
+          return person(n)
         })}
       </svg>
       <div className="absolute bottom-3.5 right-3.5 flex gap-1.5" aria-label="Zoom controls">

@@ -354,7 +354,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
       dim: document.querySelectorAll('svg.dc-constellation text.dim-label').length,
     }))
 
-  test('phone, sparse map: EVERY name renders at rest — no blanket hiding', async ({ page }) => {
+  test('phone, sparse map: the same picture as the modal — names thinned only by collision, every name there once zoomed in', async ({ page }) => {
     await routeInvitesWith(page, [DIM_ROW])
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
@@ -362,21 +362,27 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(map).toBeVisible({ timeout: 15000 })
     await map.scrollIntoViewIfNeeded()
 
-    // EVERY person's name renders at rest — dim web included. On a sparse
-    // map nothing collides, so nothing hides.
+    // At rest, no blanket hiding: YOU's marker and at least one other name
+    // render; a name hides ONLY when it would collide (founder decision
+    // 2026-09-09: one rule on every surface — Dan and Maya sit one fan
+    // step apart, so at phone scale their floor-sized names cannot both
+    // fit until the map is zoomed).
+    await expect(page.locator('svg.dc-constellation text').filter({ hasText: 'YOU' })).toHaveCount(1)
+    await expect.poll(async () => (await labelCounts(page)).dim + (await labelCounts(page)).gold).toBeGreaterThan(1)
+    const rest = await labelCounts(page)
+
+    // Zooming in creates room: at the map's deepest zoom (4×, five clicks
+    // of ×1.35) two siblings one fan step apart are ~21px apart on a phone
+    // — EVERY person's name is there; nothing was hidden by anything but
+    // collision.
+    for (let i = 0; i < 5; i++) await page.getByRole('button', { name: 'Zoom in' }).click()
     for (const name of ['Dan', 'Maya', 'Lea', 'Zed']) {
       await expect(
         page.locator('svg.dc-constellation text').filter({ hasText: name })
       ).toHaveCount(1)
     }
-
-    // And zooming in changes nothing — there was nothing hidden to reveal.
-    const rest = await labelCounts(page)
-    expect(rest.dim).toBeGreaterThan(0)
-    await page.getByRole('button', { name: 'Zoom in' }).click()
-    await page.getByRole('button', { name: 'Zoom in' }).click()
-    await page.waitForTimeout(250)
-    expect(await labelCounts(page)).toEqual(rest)
+    const zoomed = await labelCounts(page)
+    expect(zoomed.dim + zoomed.gold).toBeGreaterThanOrEqual(rest.dim + rest.gold)
     await page.getByRole('button', { name: 'Reset zoom' }).click()
 
     // Readability floor still holds: painted size = screen transform ×
@@ -394,7 +400,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
       .toBeGreaterThanOrEqual(10.5)
   })
 
-  test('phone, crowded map: gold names always render; dim names appear as zooming creates room', async ({ page }) => {
+  test('phone, crowded map: YOU always renders; every other name — thread included — appears as zooming creates room', async ({ page }) => {
     await routeInvitesWith(page, CROWD)
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
@@ -402,20 +408,24 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(map).toBeVisible({ timeout: 15000 })
     await map.scrollIntoViewIfNeeded()
 
-    // At rest: every gold name renders; the crowd is thinned by collisions
+    // At rest: YOU's marker renders (the one always-on name — founder
+    // decision 2026-09-09: one collision rule for everyone else, the
+    // viewer's gold thread included); the crowd is thinned by collisions
     // only — some dim names show (room exists), not all 40 (they'd overlap).
     await expect.poll(async () => (await labelCounts(page)).gold).toBeGreaterThan(0)
+    await expect(page.locator('svg.dc-constellation text').filter({ hasText: 'YOU' })).toHaveCount(1)
     const rest = await labelCounts(page)
     expect(rest.dim).toBeGreaterThan(0)
     expect(rest.dim).toBeLessThan(CROWD.length)
 
     // Zooming in creates room — MORE dim names appear, and the gold count
-    // never drops (gold is never hidden by the collision rule).
+    // never drops (room only grows; YOU is never hidden).
     await page.getByRole('button', { name: 'Zoom in' }).click()
     await page.getByRole('button', { name: 'Zoom in' }).click()
     await page.getByRole('button', { name: 'Zoom in' }).click()
     await expect.poll(async () => (await labelCounts(page)).dim).toBeGreaterThan(rest.dim)
-    expect((await labelCounts(page)).gold).toBe(rest.gold)
+    expect((await labelCounts(page)).gold).toBeGreaterThanOrEqual(rest.gold)
+    await expect(page.locator('svg.dc-constellation text').filter({ hasText: 'YOU' })).toHaveCount(1)
   })
 
   test('desktop, sparse map: visually identical to before — all names showing at rest', async ({ page }) => {
