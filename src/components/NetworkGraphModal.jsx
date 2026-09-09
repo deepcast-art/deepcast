@@ -124,7 +124,7 @@ export default function NetworkGraphModal({ film, invites, creatorId, creatorNam
             <ConstellationMap key={`${layout.width}x${layout.height}`} layout={layout} explore />
           </>
         ) : (
-          <p className="mt-6 font-serif-v3 italic text-warm/60">No tickets shared yet.</p>
+          <p className="mt-6 font-serif-v3 italic text-warm/60">No invitations sent yet.</p>
         )}
       </div>
     </dialog>

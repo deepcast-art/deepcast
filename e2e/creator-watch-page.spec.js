@@ -250,6 +250,12 @@ test.describe('the filmmaker’s own watch page — /watch/film/:filmId', () => 
       watchRequests.push(route.request().headers()['authorization'] || null)
       return route.fulfill({ json: FILM_WATCH })
     })
+    // Comments (2026-09-09) ask their own film-scoped route on this page;
+    // answered hermetically so the test never reaches the live API. The
+    // section itself is proven in e2e/watch-comments.spec.js.
+    await page.route(`**/api/films/${FILM_ID}/comments`, (route) =>
+      route.fulfill({ json: { comments: [], viewer: { firstName: 'Ien', ticketNo: 1, isCreator: true, canModerate: true } } })
+    )
     let linkLookups = 0
     await page.route('**/api/invites/link/**', (route) => {
       linkLookups += 1

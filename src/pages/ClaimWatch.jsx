@@ -29,6 +29,7 @@ import { revealSentence } from '../lib/revealSentence'
 import { NO_TICKETS_MESSAGE } from '../lib/ticketRules'
 import LineageChain from '../components/LineageChain'
 import FilmmakerLinks from '../components/FilmmakerLinks'
+import WatchComments from '../components/WatchComments'
 
 /** Claim-flow resume keys (slug-scoped — the claimant's public token is never
  *  exposed client-side). Seconds feed the resume; the fraction feeds the
@@ -1366,6 +1367,18 @@ export default function ClaimWatch() {
                 the header only — the section ends with the body text. */}
           </section>
         )}
+
+        {/* ══ Comments — "Join the conversation" (founder addition
+            2026-09-09): below the story, before the footer. Renders NOTHING
+            unless a signed-in claimant of this film (or its creator) is
+            here and the server said so — a stash-only visit, a signed-out
+            browser, or any failure leaves the page exactly as before. The
+            film id: the route param in film mode, the link payload on the
+            slug path. ══ */}
+        <WatchComments
+          filmId={filmMode ? filmId : link?.filmId || null}
+          filmmakerPhotoUrl={story?.filmmakerPhotoUrl || null}
+        />
       </main>
 
       {/* ══ Footer — the quiet persistent dashboard link. ══ */}

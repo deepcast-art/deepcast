@@ -111,15 +111,26 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ matrix.engine }}-${{ hashFiles('package-lock.json') }}
 
+      # The runner image ships a Google Chrome apt source
+      # (dl.google.com/linux/chrome-stable) that intermittently answers
+      # "Hash Sum mismatch" for its Packages index, which fails the
+      # `apt-get update` Playwright runs while installing OS dependencies
+      # (PR #4, 2026-09-09: all three e2e jobs died in ~20s at that step).
+      # Playwright's browsers never come from that repo, so its source list
+      # is removed before any apt work below.
+      - name: Remove the runner's Google Chrome apt source
+        run: sudo rm -f /etc/apt/sources.list.d/*google-chrome*
+
       # Browsers come from the cache when it hits; the OS libraries they need
       # are installed either way (they are not part of the cached directory).
       - name: Install Playwright browser
         if: steps.browsers.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps ${{ matrix.engine }}
 
+      # Retried once: a transient apt mirror failure must not fail the job.
       - name: Install Playwright OS dependencies
         if: steps.browsers.outputs.cache-hit == 'true'
-        run: npx playwright install-deps ${{ matrix.engine }}
+        run: npx playwright install-deps ${{ matrix.engine }} || npx playwright install-deps ${{ matrix.engine }}
 
       # playwright.config.js starts the dev server itself (npm run dev: the API
       # on 3001 + Vite on 3000) and waits for http://localhost:3000.
