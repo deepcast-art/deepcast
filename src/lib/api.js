@@ -119,6 +119,45 @@ export const api = {
     throw new Error(error.error || 'Request failed')
   },
 
+  // Comments on the watch page (2026-09-09). The list + how this viewer
+  // appears; 401/403 = no section (a visitor without a claim on this film).
+  getFilmComments: async (filmId, accessToken) => {
+    const enc = encodeURIComponent(filmId)
+    const res = await fetchWithTimeout(`${API_BASE}/films/${enc}/comments`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    })
+    if (res.ok) return res.json()
+    if (res.status === 401 || res.status === 403) throw new Error('forbidden')
+    const error = await res.json().catch(() => ({ error: 'Request failed' }))
+    throw new Error(error.error || 'Request failed')
+  },
+
+  // Post a comment (or a reply — parentCommentId; the server attaches it to
+  // the thread's top-level comment). Errors carry the inline message.
+  // Deadline-bound: a hung request must never leave the Post button on
+  // "One moment…" forever.
+  postFilmComment: async (filmId, { body, parentCommentId = null }, accessToken) => {
+    const res = await fetchWithTimeout(`${API_BASE}/films/${encodeURIComponent(filmId)}/comments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify({ body, parentCommentId }),
+    })
+    if (res.ok) return res.json()
+    const error = await res.json().catch(() => ({ error: 'Request failed' }))
+    throw new Error(error.error || 'Request failed')
+  },
+
+  // Owner-only soft delete (the ADMIN_USER_ID pin, server-enforced).
+  adminRemoveComment: (commentId, accessToken) =>
+    request('/admin/comments/remove', {
+      method: 'POST',
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      body: JSON.stringify({ commentId }),
+    }),
+
   // Generate a claim link. Sharers pass their claimed invite id (their
   // identity when no session exists) and/or filmId + a session token;
   // parentInviteId lets a session-holding claimant keep exact lineage.

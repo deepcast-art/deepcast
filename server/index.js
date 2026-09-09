@@ -39,6 +39,18 @@ import { VOID_INVITE_STATUS } from '../src/lib/inviteExistence.js'
 import { buildLineageForks } from '../src/lib/lineageForks.js'
 import { buildFilmWatchFields, filmWatchDecision } from './watchPayload.js'
 import { refundOnVoidDecision } from './voidRules.js'
+import {
+  commentAccessDecision,
+  commentBodyError,
+  normalizeCommentBody,
+  rateLimitWindowStart,
+  rateLimitDecision,
+  resolveThreadParent,
+  visibleComments,
+  isMissingTableError,
+  COMMENT_UNAVAILABLE_MESSAGE,
+} from './commentRules.js'
+import { safeFirstName } from '../src/lib/displayName.js'
 
 const app = express()
 app.use(cors())
@@ -1222,6 +1234,10 @@ app.get('/api/invites/link/:slug', async (req, res) => {
       // Watch-page needs on revisit (playback is public-policy; invites are
       // world-readable under RLS, so none of this is a new exposure class).
       inviteId: invite.id,
+      // The film's id (2026-09-09): the watch page's comments section asks
+      // the film-scoped comments route with it. Films are publicly
+      // readable, so this exposes nothing new.
+      filmId: invite.film_id,
       claimOrdinal: invite.claim_ordinal ?? null,
       // Permanent ticket number (minted at generation) — present for
       // unclaimed and claimed links alike; null when the row has none.
@@ -1297,6 +1313,226 @@ app.get('/api/films/:filmId/watch', async (req, res) => {
   } catch (err) {
     console.error('Film watch lookup error:', err)
     return res.status(500).json({ error: 'Failed to look up the film' })
+  }
+})
+
+/* ══════════════════════════════════════════════════════════════════════════
+   COMMENTS on the watch page (founder direction 2026-09-09). Rules in
+   server/commentRules.js (unit-tested). Every route: the verified-session
+   pattern — identity ONLY from supabase.auth.getUser(jwt); the client sends
+   no ids about anyone. The table is service-role-only (RLS on, no
+   policies, grants revoked — supabase/migrations/20260910_comments.sql).
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** Verify the Bearer token and load the film + the caller's claims on it.
+ *  Answers the response itself on refusal and returns null. */
+async function requireCommentAccess(req, res) {
+  const authHeader = req.get('authorization') || ''
+  const jwt = authHeader.replace(/^Bearer\s+/i, '').trim()
+  if (!jwt) {
+    res.status(401).json({ error: 'Not authenticated' })
+    return null
+  }
+  const { data: userData, error: userErr } = await supabase.auth.getUser(jwt)
+  const authUser = userData?.user
+  if (userErr || !authUser?.id) {
+    res.status(401).json({ error: 'Invalid session' })
+    return null
+  }
+  const filmId = String(req.params.filmId || '').trim()
+  if (!filmId) {
+    res.status(400).json({ error: 'Film ID is required' })
+    return null
+  }
+  const [{ data: film, error: filmErr }, { data: claims }] = await Promise.all([
+    supabase.from('films').select('id, creator_id, creator_ticket_no, mux_playback_id').eq('id', filmId).maybeSingle(),
+    supabase
+      .from('invites')
+      .select('id, film_id, claimed_by, status, ticket_no, claimed_at, created_at')
+      .eq('film_id', filmId)
+      .eq('claimed_by', authUser.id),
+  ])
+  const decision = commentAccessDecision({
+    callerId: authUser.id,
+    film: filmErr ? null : film,
+    claimedInvites: claims || [],
+  })
+  if (!decision.ok) {
+    res.status(decision.status).json({ error: decision.error })
+    return null
+  }
+  return { authUser, film, access: decision }
+}
+
+/** The owner pin (ADMIN_USER_ID + creator role) as a boolean — for the
+ *  viewer object only; the remove route re-verifies through
+ *  requireAdminCaller like every admin endpoint. */
+async function callerCanModerateComments(authUserId) {
+  const { data: profile } = await supabase.from('users').select('id, role').eq('id', authUserId).maybeSingle()
+  return adminAuthDecision({
+    adminUserId: process.env.ADMIN_USER_ID,
+    callerId: authUserId,
+    callerRole: profile?.role,
+  }).ok
+}
+
+/**
+ * Resolve display facts for a set of commenters AT READ TIME — first name
+ * through the one display rule (safeFirstName: never an email), the ticket
+ * number from that person's claim on THIS film (the creator's is
+ * films.creator_ticket_no). Nothing else about a person leaves the server;
+ * no second copy of any name is stored.
+ */
+async function resolveCommentAuthors(film, userIds) {
+  const ids = [...new Set(userIds.map((v) => String(v || '')).filter(Boolean))]
+  if (!ids.length) return new Map()
+  const [{ data: users }, { data: claims }] = await Promise.all([
+    supabase.from('users').select('id, name').in('id', ids),
+    supabase
+      .from('invites')
+      .select('claimed_by, status, ticket_no, claimed_at, created_at')
+      .eq('film_id', film.id)
+      .in('claimed_by', ids),
+  ])
+  const nameById = new Map((users || []).map((u) => [String(u.id), u.name]))
+  const claimsById = new Map()
+  for (const c of claims || []) {
+    const key = String(c.claimed_by)
+    if (!claimsById.has(key)) claimsById.set(key, [])
+    claimsById.get(key).push(c)
+  }
+  const authors = new Map()
+  for (const id of ids) {
+    const access = commentAccessDecision({ callerId: id, film, claimedInvites: claimsById.get(id) || [] })
+    authors.set(id, {
+      firstName: safeFirstName(nameById.get(id)),
+      ticketNo: access.ok ? access.ticketNo : null,
+      isCreator: access.ok && access.role === 'creator',
+    })
+  }
+  return authors
+}
+
+const serializeComment = (row, author) => ({
+  id: row.id,
+  parentId: row.parent_comment_id || null,
+  body: row.body,
+  createdAt: row.created_at,
+  author: author || { firstName: safeFirstName(null), ticketNo: null, isCreator: false },
+})
+
+/**
+ * GET /api/films/:filmId/comments — the list (oldest first, deleted gone
+ * with their replies) plus how THIS viewer appears. Deploy safety: if the
+ * table does not exist yet, the list is empty — never an error.
+ */
+app.get('/api/films/:filmId/comments', async (req, res) => {
+  try {
+    const ctx = await requireCommentAccess(req, res)
+    if (!ctx) return
+    const { authUser, film, access } = ctx
+
+    const { data: rows, error } = await supabase
+      .from('comments')
+      .select('id, film_id, user_id, parent_comment_id, body, created_at, deleted_at')
+      .eq('film_id', film.id)
+      .order('created_at', { ascending: true })
+    if (error && !isMissingTableError(error)) throw error
+    const visible = visibleComments(error ? [] : rows || [])
+
+    const [authors, canModerate, viewerProfile] = await Promise.all([
+      resolveCommentAuthors(film, visible.map((r) => r.user_id)),
+      callerCanModerateComments(authUser.id),
+      supabase.from('users').select('name').eq('id', authUser.id).maybeSingle(),
+    ])
+
+    return res.json({
+      comments: visible.map((r) => serializeComment(r, authors.get(String(r.user_id)))),
+      viewer: {
+        firstName: safeFirstName(viewerProfile?.data?.name),
+        ticketNo: access.ticketNo,
+        isCreator: access.role === 'creator',
+        canModerate,
+      },
+    })
+  } catch (err) {
+    console.error('comments read error:', err)
+    return res.status(500).json({ error: 'Could not load the conversation' })
+  }
+})
+
+/**
+ * POST /api/films/:filmId/comments — {body, parentCommentId?}. Text only,
+ * the cap, the thread rule, and the rate limit all decided in
+ * commentRules.js; the row stores ONLY the verified user's id.
+ */
+app.post('/api/films/:filmId/comments', async (req, res) => {
+  try {
+    const ctx = await requireCommentAccess(req, res)
+    if (!ctx) return
+    const { authUser, film } = ctx
+
+    const body = normalizeCommentBody(req.body?.body)
+    const bodyError = commentBodyError(body)
+    if (bodyError) return res.status(400).json({ error: bodyError })
+
+    // Thread attachment: always a top-level id (a reply to a reply attaches
+    // to that reply's own top-level comment).
+    let parentId = null
+    const requestedParent = String(req.body?.parentCommentId || '').trim()
+    if (requestedParent) {
+      const { data: parent, error: parentErr } = await supabase
+        .from('comments')
+        .select('id, film_id, parent_comment_id, deleted_at')
+        .eq('id', requestedParent)
+        .maybeSingle()
+      if (parentErr && isMissingTableError(parentErr)) {
+        return res.status(503).json({ error: COMMENT_UNAVAILABLE_MESSAGE })
+      }
+      if (parentErr) throw parentErr
+      let topLevel = null
+      if (parent?.parent_comment_id) {
+        const { data: top } = await supabase
+          .from('comments')
+          .select('id, film_id, parent_comment_id, deleted_at')
+          .eq('id', parent.parent_comment_id)
+          .maybeSingle()
+        topLevel = top || null
+      }
+      const thread = resolveThreadParent({ parent, topLevel, filmId: film.id })
+      if (!thread.ok) return res.status(thread.status).json({ error: thread.error })
+      parentId = thread.parentId
+    }
+
+    // The rate limit: every row this person created in the window, removed
+    // ones included (removal never refills the budget).
+    const { count: recentCount, error: countErr } = await supabase
+      .from('comments')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', authUser.id)
+      .gte('created_at', rateLimitWindowStart())
+    if (countErr && isMissingTableError(countErr)) {
+      return res.status(503).json({ error: COMMENT_UNAVAILABLE_MESSAGE })
+    }
+    if (countErr) throw countErr
+    const rate = rateLimitDecision(recentCount)
+    if (!rate.ok) return res.status(rate.status).json({ error: rate.error })
+
+    const { data: inserted, error: insertErr } = await supabase
+      .from('comments')
+      .insert({ film_id: film.id, user_id: authUser.id, parent_comment_id: parentId, body })
+      .select('id, film_id, user_id, parent_comment_id, body, created_at, deleted_at')
+      .single()
+    if (insertErr && isMissingTableError(insertErr)) {
+      return res.status(503).json({ error: COMMENT_UNAVAILABLE_MESSAGE })
+    }
+    if (insertErr) throw insertErr
+
+    const authors = await resolveCommentAuthors(film, [authUser.id])
+    return res.json({ comment: serializeComment(inserted, authors.get(String(authUser.id))) })
+  } catch (err) {
+    console.error('comments post error:', err)
+    return res.status(500).json({ error: COMMENT_UNAVAILABLE_MESSAGE })
   }
 })
 
@@ -2933,6 +3169,36 @@ function ticketControlStatus(u, wallet) {
     reason: probe.applied ? null : probe.reason || null,
   }
 }
+
+/**
+ * POST /api/admin/comments/remove — {commentId}. Owner-only (the
+ * ADMIN_USER_ID pin, exactly like ticket controls). SOFT delete: stamps
+ * deleted_at + deleted_by; the read route then hides the comment and its
+ * replies for everyone. Idempotent — an already-removed comment answers
+ * the same success.
+ */
+app.post('/api/admin/comments/remove', async (req, res) => {
+  try {
+    const caller = await requireAdminCaller(req, res)
+    if (!caller) return
+    const commentId = String(req.body?.commentId || '').trim()
+    if (!commentId) return res.status(400).json({ error: 'A comment id is required' })
+    const { data: rows, error } = await supabase
+      .from('comments')
+      .update({ deleted_at: new Date().toISOString(), deleted_by: caller.id })
+      .eq('id', commentId)
+      .is('deleted_at', null)
+      .select('id')
+    if (error && isMissingTableError(error)) {
+      return res.status(503).json({ error: COMMENT_UNAVAILABLE_MESSAGE })
+    }
+    if (error) throw error
+    return res.json({ removed: true, changed: (rows || []).length })
+  } catch (err) {
+    console.error('admin comment remove error:', err)
+    return res.status(500).json({ error: 'Could not remove the comment' })
+  }
+})
 
 app.post('/api/admin/ticket-controls/status', async (req, res) => {
   try {
