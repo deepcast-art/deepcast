@@ -10,28 +10,29 @@ import {
 } from '../lib/railPath'
 
 /**
- * The rail's path (founder design from the 9 September 2026 canvas —
+ * The rail's path (founder design from the 9 September 2026 canvas; label
+ * pass the same day: one grey for every label but YOU and the next slot —
  * docs/watch-page-spec.md §3b item 6): one inline SVG, full rail width,
  * 1.25rem under "Pass it on", replacing the rule line. The film's hands as
  * a row of nodes — origin first with "(FILMMAKER)" beneath, through the
  * hands (a single collapsed entry when there are more than three), then
  * "YOU", then the hollow next slot "?". No hover, no motion, not a link.
  *
- * Colour law: names are neutral warm-alpha, never gold; gold appears only
- * as the path, the nodes, and the "?" — marks, not copy. The rule (which
+ * Colour law: one grey for every label but YOU and the next slot — names,
+ * the collapsed "{n} OTHERS" entry, and the "(FILMMAKER)" caption all read
+ * warm at 0.70, never gold, never the muted beige; YOU is full warm, "?"
+ * is accent. Gold appears only as the path, the nodes, and the "?" —
+ * marks, not copy. The rule (which
  * nodes, which labels, the collapse) lives in src/lib/railPath.js; this
  * file only draws it. The SVG carries the accessible sentence the rule
  * line used to (role="img" + aria-label).
  */
 const ACCENT = '#b1a180'
 const WARM = '#dddddd'
-const MUTED = '#a89f94'
 const FONT = { fontFamily: 'var(--font-sans)', fontWeight: 400 }
 
 function labelStyle(node) {
   switch (node.type) {
-    case 'collapsed':
-      return { size: 9, fill: MUTED, opacity: 1 }
     case 'you':
       return { size: 10, fill: WARM, opacity: 1 }
     case 'next':
@@ -117,14 +118,15 @@ export default function RailPath({ hands }) {
           </text>
         )
       })}
-      {/* "(FILMMAKER)" under the first node only. */}
+      {/* "(FILMMAKER)" under the first node only — the same grey as the names. */}
       {nodes[0].caption && (
         <text
           x={xs[0]}
           y={RAIL_PATH_CAPTION_Y}
           textAnchor="middle"
           fontSize="8"
-          fill={MUTED}
+          fill={WARM}
+          fillOpacity="0.7"
           style={{ ...FONT, letterSpacing: '1.6px' }}
           data-label="caption"
         >

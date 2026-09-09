@@ -9,7 +9,7 @@
  * id-verified two-entry collapse applied). Output: the node list.
  *
  *  - up to three hands → every hand, in order;
- *  - more than three → the first, ONE collapsed entry "⋯ {n} others ⋯"
+ *  - more than three → the first, ONE collapsed entry "{n} OTHERS"
  *    (n = hands − 2), and the last — so the row never wraps;
  *  - then "you", then the next slot ("?").
  *
@@ -17,11 +17,10 @@
  * server's "The filmmaker" fallback, where a caption would be redundant
  * (the landing chain's rule).
  *
- * Labels are the DISPLAY strings: hands and "YOU" uppercase; the collapsed
- * entry exactly as the founder wrote it ("⋯ {n} others ⋯" — an uppercase
- * OTHERS measured 0.5px from ALEXANDER on Firefox at the live Circles
- * chain, so the narrower literal stands, flagged for his canvas read);
- * and "?" as written.
+ * Labels are the DISPLAY strings: hands, "YOU", and the collapsed entry
+ * "{n} OTHERS" uppercase (founder decision 2026-09-09, second pass: no
+ * ellipsis marks, the same size and tracking as the names); "?" as
+ * written.
  * Geometry (evenly spaced on one line, 30px inset) lives here too so the
  * drawing and the tests share one source.
  */
@@ -37,7 +36,7 @@ export const RAIL_PATH_MAX_HANDS = 3
 export const FILMMAKER_CAPTION = '(FILMMAKER)'
 
 export function collapsedLabel(hidden) {
-  return `⋯ ${hidden} others ⋯`
+  return `${hidden} OTHERS`
 }
 
 /** The node list for a chain of display-ready hands (origin first). */

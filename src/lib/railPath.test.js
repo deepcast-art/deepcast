@@ -34,19 +34,19 @@ describe('railPathNodes — the collapse rule and the label set (founder design 
     expect(types(nodes)).toEqual(['hand', 'hand', 'hand', 'you', 'next'])
   })
 
-  it('4 hands: the first, "⋯ 2 others ⋯", the last', () => {
+  it('4 hands: the first, "2 OTHERS", the last', () => {
     const nodes = railPathNodes(['Ien', 'Arielle', 'Krist', 'Alexander'])
-    expect(labels(nodes)).toEqual(['IEN', '⋯ 2 others ⋯', 'ALEXANDER', 'YOU', '?'])
+    expect(labels(nodes)).toEqual(['IEN', '2 OTHERS', 'ALEXANDER', 'YOU', '?'])
     expect(types(nodes)).toEqual(['hand', 'collapsed', 'hand', 'you', 'next'])
     expect(nodes[0].caption).toBe('(FILMMAKER)')
     expect(nodes[2].caption).toBeNull()
   })
 
-  it('6 hands: the first, "⋯ 4 others ⋯", the last — the row never grows', () => {
+  it('6 hands: the first, "4 OTHERS", the last — the row never grows', () => {
     const nodes = railPathNodes(['Ien', 'B', 'C', 'D', 'E', 'Zeke'])
-    expect(labels(nodes)).toEqual(['IEN', '⋯ 4 others ⋯', 'ZEKE', 'YOU', '?'])
+    expect(labels(nodes)).toEqual(['IEN', '4 OTHERS', 'ZEKE', 'YOU', '?'])
     expect(nodes).toHaveLength(5)
-    expect(collapsedLabel(4)).toBe('⋯ 4 others ⋯')
+    expect(collapsedLabel(4)).toBe('4 OTHERS')
   })
 
   it('no hands (the filmmaker’s own page, depth 0): nothing', () => {

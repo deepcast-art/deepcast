@@ -3,7 +3,7 @@
  * under "Pass it on" that replaced the rule line. All API traffic mocked.
  *
  *  - a 2-hand viewer sees IEN (FILMMAKER) → THEMBA → YOU → ?;
- *  - a 4-hand viewer sees the collapsed middle ("⋯ 2 others ⋯");
+ *  - a 4-hand viewer sees the collapsed middle ("2 OTHERS");
  *  - the filmmaker's own film-mode page shows no path at all;
  *  - it sits 1.25rem under the CTA with nothing between, is not a link,
  *    and its names are never gold.
@@ -123,6 +123,7 @@ test.describe('the rail’s path — the film’s hands under "Pass it on"', () 
       const labels = [...svg.querySelectorAll('text')].map((t) => ({
         text: t.textContent,
         fill: t.getAttribute('fill'),
+        opacity: t.getAttribute('fill-opacity'),
         size: t.getAttribute('font-size'),
         anchor: t.getAttribute('text-anchor'),
         y: t.getAttribute('y'),
@@ -165,18 +166,19 @@ test.describe('the rail’s path — the film’s hands under "Pass it on"', () 
       { stroke: '#b1a180', opacity: '0.65', dash: null },
       { stroke: '#dddddd', opacity: '0.18', dash: '2 4' },
     ])
-    // Colour law: names warm (never gold), the collapsed entry muted, "?" gold; the caption muted 8px on y=56.
+    // Colour law: one grey for every label but YOU (full warm) and "?" (gold) —
+    // names and the caption warm at 0.70; the caption 8px on y=56.
     expect(geometry.labels).toEqual([
-      { text: 'IEN', fill: '#dddddd', size: '10', anchor: 'middle', y: '41' },
-      { text: 'THEMBA', fill: '#dddddd', size: '10', anchor: 'middle', y: '41' },
-      { text: 'YOU', fill: '#dddddd', size: '10', anchor: 'middle', y: '41' },
-      { text: '?', fill: '#b1a180', size: '11', anchor: 'middle', y: '41' },
-      { text: '(FILMMAKER)', fill: '#a89f94', size: '8', anchor: 'middle', y: '56' },
+      { text: 'IEN', fill: '#dddddd', opacity: '0.7', size: '10', anchor: 'middle', y: '41' },
+      { text: 'THEMBA', fill: '#dddddd', opacity: '0.7', size: '10', anchor: 'middle', y: '41' },
+      { text: 'YOU', fill: '#dddddd', opacity: '1', size: '10', anchor: 'middle', y: '41' },
+      { text: '?', fill: '#b1a180', opacity: '1', size: '11', anchor: 'middle', y: '41' },
+      { text: '(FILMMAKER)', fill: '#dddddd', opacity: '0.7', size: '8', anchor: 'middle', y: '56' },
     ])
     expect(jsErrors).toEqual([])
   })
 
-  test('a 4-hand viewer sees the collapsed middle: IEN ⋯ 2 others ⋯ ALEXANDER → YOU → ?', async ({ page }) => {
+  test('a 4-hand viewer sees the collapsed middle: IEN → 2 OTHERS → ALEXANDER → YOU → ?', async ({ page }) => {
     await mockMedia(page)
     await mockClaimant(page, {
       ...LINK,
@@ -185,10 +187,14 @@ test.describe('the rail’s path — the film’s hands under "Pass it on"', () 
     })
     await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await expect(page.locator('[data-rail-path]')).toBeVisible()
-    expect(await pathTexts(page)).toEqual(['IEN', '⋯ 2 others ⋯', 'ALEXANDER', 'YOU', '?', '(FILMMAKER)'])
+    expect(await pathTexts(page)).toEqual(['IEN', '2 OTHERS', 'ALEXANDER', 'YOU', '?', '(FILMMAKER)'])
+    // One grey for every label but YOU and "?": the collapsed entry is the
+    // names' 10px warm at 0.70, the same tracking, no smaller size.
     const collapsed = page.locator('[data-rail-path] text[data-label="collapsed"]')
-    await expect(collapsed).toHaveAttribute('fill', '#a89f94')
-    await expect(collapsed).toHaveAttribute('font-size', '9')
+    await expect(collapsed).toHaveAttribute('fill', '#dddddd')
+    await expect(collapsed).toHaveAttribute('fill-opacity', '0.7')
+    await expect(collapsed).toHaveAttribute('font-size', '10')
+    expect(await collapsed.evaluate((t) => t.style.letterSpacing)).toBe('1.8px')
     // Five nodes on one line: 30, 111, 192, 273, 354 — the row never wraps.
     expect(
       await page.evaluate(() =>
@@ -219,7 +225,7 @@ test.describe('the rail’s path — the film’s hands under "Pass it on"', () 
     console.log(`[rail-path] smallest label gap, 4 hands — desktop ${desktopGap}px, phone ${phoneGap}px (viewBox units)`)
   })
 
-  test('a 6-hand viewer: still five nodes, "⋯ 4 others ⋯"', async ({ page }) => {
+  test('a 6-hand viewer: still five nodes, "4 OTHERS"', async ({ page }) => {
     await mockMedia(page)
     await mockClaimant(page, {
       ...LINK,
@@ -228,7 +234,7 @@ test.describe('the rail’s path — the film’s hands under "Pass it on"', () 
     })
     await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await expect(page.locator('[data-rail-path]')).toBeVisible()
-    expect(await pathTexts(page)).toEqual(['IEN', '⋯ 4 others ⋯', 'ZEKE', 'YOU', '?', '(FILMMAKER)'])
+    expect(await pathTexts(page)).toEqual(['IEN', '4 OTHERS', 'ZEKE', 'YOU', '?', '(FILMMAKER)'])
   })
 
   test('the filmmaker’s own film-mode page shows no path (depth 0)', async ({ page }) => {
