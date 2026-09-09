@@ -75,17 +75,20 @@ import { existingInvites } from './inviteExistence.js'
 import { isInviteClaimedStage } from './ticketFunnel.js'
 import { safeFirstName } from './displayName.js'
 import {
+  EMBLEM_R,
   LABEL_CLEARANCE,
   MIN_LABEL_ON_SCREEN_PX,
   PERSON_LABEL_SIZE,
   REFERENCE_VIEW,
+  centerLabelLayout,
   dotRect,
-  fontScaleFor,
   labelFontSize,
   labelScreenRect,
   labelTextWidth,
   mapScaleFor,
   rectsCollide,
+  segmentTouchesRect,
+  clipSegment,
 } from './constellationLabels.js'
 
 export const ROOT_ID = 'film-root'
@@ -99,6 +102,21 @@ const MIN_RSTEP = 46
 /** Placement rounds for the reference-view plan (see the loop at the end
  *  of placement) before it falls back to the base canvas's boxes. */
 const MAX_PLAN_ROUNDS = 6
+/** Law (c), third remedy: when a name cannot clear a neighbour's outgoing
+ *  line by turning inward, the fan that neighbour sits in is asked to open
+ *  by this much ON EACH SIDE OF THAT MEMBER (the other gaps keep the fixed
+ *  step) and the placement re-runs — at most this many times per plan
+ *  round. */
+const DEMAND_STEP = 0.04
+const MAX_RESTARTS = 40
+/** The most room one member may ever demand (radians, per side): past
+ *  this the remedy is pushing the fan outward, never a wider fan — an
+ *  unbounded demand once flung a branch to the last level (red team,
+ *  9 September). Two other orders were measured that evening and
+ *  rejected: pushing the line's fan outward before asking (Circles then
+ *  stopped settling at 9.5px) and asking the blocked name's own fan for
+ *  room first (a larger Circles canvas, no growth case gained). */
+const MAX_DEMAND = 0.3
 
 /* ---- The fan knobs (rule 2) ---- */
 /** Where the first ring starts: 12 o'clock, then clockwise in ticket order. */
@@ -119,12 +137,9 @@ const MAX_BUMPS = 24
 const MAX_FIX_PASSES = 1500
 /** Design-scale view for the clearance rule's collision question. */
 const DESIGN_VIEW = { vbX: 0, vbY: 0, scale: 1 }
-/** The filmmaker's two center labels (the renderer's own positions and
- *  sizes) — fixed obstacles the first ring's names must clear. */
-const CENTER_LABELS = [
-  { dy: 42, baseSize: 11, letterSpacing: 2.5, key: 'creator' },
-  { dy: 57, baseSize: 7.5, letterSpacing: 3, key: 'role', name: 'FILMMAKER' },
-]
+/** The film node's emblem, as a square obstacle the first ring's names
+ *  (and any line) must clear. */
+const EMBLEM_RECT = { x: -EMBLEM_R, y: -EMBLEM_R, w: 2 * EMBLEM_R, h: 2 * EMBLEM_R }
 
 /** Deterministic per-id twinkle delay (no Math.random — stable renders). */
 const twinkleDelay = (id) => {
@@ -146,14 +161,20 @@ const byCreated = (a, b) => {
 
 const normAngle = (a) => ((a % TWO_PI) + TWO_PI) % TWO_PI
 
-/** Rule 3, the one label rule: radial — pushed straight outward from the
- *  ring. Exported so the tests can ask the same question the layout asks. */
-export function radialLabel(theta, x, y) {
-  const c = Math.cos(theta)
+/** Rule 3, the one label rule: radial — along the node's own radius,
+ *  pushed straight OUTWARD from the ring by default, or straight INWARD
+ *  (`side` = 'in') when law (c) needs the name off a neighbour's outgoing
+ *  line (the founder's "resolve by label side"). An inward name sits on
+ *  the line entering its own dot, which the renderer ends before the box.
+ *  Exported so the tests can ask the same question the layout asks. */
+export function radialLabel(theta, x, y, side = 'out') {
+  const dir = side === 'in' ? -1 : 1
+  const c = dir * Math.cos(theta)
+  const sn = dir * Math.sin(theta)
   let lx = x + 11 * c
-  let ly = y + 11 * Math.sin(theta)
+  let ly = y + 11 * sn
   const anchor = Math.abs(c) < 0.35 ? 'middle' : c > 0 ? 'start' : 'end'
-  if (Math.abs(c) < 0.35) ly += Math.sin(theta) > 0 ? 7 : -3
+  if (Math.abs(c) < 0.35) ly += sn > 0 ? 7 : -3
   else ly += 3
   return { x: lx, y: ly, anchor }
 }
@@ -173,6 +194,11 @@ export function buildConstellationLayout({
   // true renders the seeded ghosts as ordinary nodes — same node path, same
   // counts — for staging/demo films only. Default false = today's behavior.
   includeGhosts = false,
+  // The readability floor the plan measures names at (screen px at the
+  // reference view). The renderer paints MIN_LABEL_ON_SCREEN_PX; this
+  // parameter exists so the tests can ask "does this film still settle at
+  // a larger size?" — production callers never pass it.
+  labelFloorPx = MIN_LABEL_ON_SCREEN_PX,
 } = {}) {
   // Shared existence rule: no voided links ever; ghosts only when the film's
   // flag asks for them (inviteExistence.js).
@@ -190,7 +216,7 @@ export function buildConstellationLayout({
   /* ---- Tree construction (cycle-guarded) ---- */
   const nodes = new Map() // id -> node
   const addNode = (id, name, createdAt = 0) => {
-    const n = { id, name, children: [], parentId: null, createdAt, r: 0, theta: 0 }
+    const n = { id, name, children: [], parentId: null, createdAt, r: 0, theta: 0, side: 'out' }
     nodes.set(id, n)
     return n
   }
@@ -292,7 +318,10 @@ export function buildConstellationLayout({
    * the placement needs. Called again while the plan (see below) looks for
    * a canvas it is consistent with.
    */
-  const runPlacement = (fontMap, clearance) => {
+  const runPlacement = (fontMap, clearance, scale, demands, allowRestart = true) => {
+    /** Extra angular room demanded on each side of a fan member (law (c)). */
+    const extraOf = (n) => demands.get(n.id) || 0
+    let restart = null
     /** The name a node's box is measured with: its real name, or "YOU" if
      *  that would paint wider — the viewer's node reads "YOU" on screen,
      *  and measuring every node this way keeps the geometry the same
@@ -302,9 +331,9 @@ export function buildConstellationLayout({
     /** The design-scale rectangles a node paints at (r, theta) — its name
      *  (the SAME estimate the renderer's collision rule uses, glyph by
      *  glyph from the font) and its dot — one module for both. */
-    const rectsAt = (n, r, theta) => {
+    const rectsAt = (n, r, theta, side = n.side) => {
       const { x, y } = posAt(r, theta)
-      const l = radialLabel(theta, x, y)
+      const l = radialLabel(theta, x, y, side)
       return {
         label: labelScreenRect(
           { x: l.x, y: l.y, anchor: l.anchor, name: measuredName(n), baseSize: fontMap },
@@ -313,26 +342,45 @@ export function buildConstellationLayout({
         dot: dotRect(x, y),
       }
     }
-    const centerRects = CENTER_LABELS.map((c) =>
-      labelScreenRect(
-        {
-          x: 0,
-          y: c.dy,
-          anchor: 'middle',
-          name: c.name ?? (creatorLabel || 'FILMMAKER'),
-          baseSize: labelFontSize(c.baseSize, fontMap > PERSON_LABEL_SIZE ? MIN_LABEL_ON_SCREEN_PX / fontMap : 1),
-          letterSpacing: c.letterSpacing,
-        },
-        DESIGN_VIEW
-      )
-    )
+    // The film node: its emblem and its two center labels, placed for
+    // this scale by the SAME function the renderer uses — obstacles every
+    // name and every unattached line must clear.
+    const centerRects = [EMBLEM_RECT, ...centerLabelLayout(scale, creatorLabel).map((c) => c.rect)]
 
     /** THE HARD RULE between two placed things: names at least `clearance`
-     *  apart, and neither name across the other's dot. */
+     *  apart, and neither name within `clearance` of the other's dot. */
     const violates = (a, b) =>
       rectsCollide(a.label, b.label, clearance) ||
-      rectsCollide(a.label, b.dot, 0) ||
-      rectsCollide(b.label, a.dot, 0)
+      rectsCollide(a.label, b.dot, clearance) ||
+      rectsCollide(b.label, a.dot, clearance)
+    /** Law (c): a name may not come within `clearance` of a line it is not
+     *  attached to. `seg` = { x1, y1, x2, y2, fromId, toId }. */
+    const labelTouchesLine = (id, label, seg) =>
+      seg.fromId !== id && seg.toId !== id && segmentTouchesRect(seg.x1, seg.y1, seg.x2, seg.y2, label, clearance)
+    /** Law (c) on the line itself: once the renderer starts a segment
+     *  beyond its start's box(es) and ends it before its end's name box —
+     *  by the clearance, exactly as it paints — some of the line must
+     *  remain. (An outward parent name and an inward child name in line
+     *  with each other can otherwise swallow the whole line, and the
+     *  renderer would drop it — red team finding 5.) */
+    const keeps = (seg, startObstacles, endLabel) => {
+      const cut = clipSegment(seg.x1, seg.y1, seg.x2, seg.y2, startObstacles, [endLabel], clearance)
+      return Boolean(cut) && Math.hypot(cut.x2 - cut.x1, cut.y2 - cut.y1) > 1e-6
+    }
+    const segmentKeepsLength = (seg, startObstacles, endLabel) =>
+      keeps(seg, startObstacles, endLabel) ||
+      // A FIRST-RING line is the film node's own: when starting it beyond
+      // the filmmaker's two center labels would leave nothing (a first-ring
+      // dot right under "FILMMAKER"), the renderer starts it beyond the
+      // emblem alone and lets it pass under those labels — the film node's
+      // labels over the film node's line, never a dropped line.
+      (seg.fromId === ROOT_ID && keeps(seg, [EMBLEM_RECT], endLabel))
+    const segmentOf = (n) => {
+      const parent = nodes.get(n.parentId)
+      const a = parent.id === ROOT_ID ? { x: 0, y: 0 } : posAt(parent.r, parent.theta)
+      const b = posAt(n.r, n.theta)
+      return { x1: a.x, y1: a.y, x2: b.x, y2: b.y, fromId: parent.id, toId: n.id }
+    }
 
     /* ---- Rule 2: the step a fan needs at radius r, from a starting step ---- */
     // Widen from `from` until no two ADJACENT siblings break the rule (on an
@@ -356,13 +404,31 @@ export function buildConstellationLayout({
       return cap
     }
 
-    const placeFan = (fan) => {
+    /** A fan's angular offsets from its center: the fixed step between
+     *  neighbours, plus any room demanded on either side of a member —
+     *  the whole fan stays centered on the parent. */
+    const fanOffsets = (fan) => {
       const n = fan.kids.length
+      const gaps = []
+      for (let i = 1; i < n; i++) gaps.push(fan.step + extraOf(fan.kids[i - 1]) + extraOf(fan.kids[i]))
+      const total = gaps.reduce((a, b) => a + b, 0)
+      const offsets = []
+      let at = -total / 2
+      for (let i = 0; i < n; i++) {
+        offsets.push(at)
+        if (i < n - 1) at += gaps[i]
+      }
+      return { offsets, half: total / 2 }
+    }
+    const placeFan = (fan) => {
+      const { offsets } = fanOffsets(fan)
       fan.kids.forEach((c, i) => {
         c.r = fan.r
-        c.theta = fan.center + (i - (n - 1) / 2) * fan.step
+        c.theta = fan.center + offsets[i]
       })
     }
+
+    for (const n of nodes.values()) n.side = 'out'
 
     /* ---- Rule 1: the first ring, even, pushed outward only if its names
             cannot clear each other or the center labels ---- */
@@ -381,9 +447,16 @@ export function buildConstellationLayout({
       }
       let bad = false
       const rects = ring1.map((c) => rectsAt(c, c.r, c.theta))
+      const segs = ring1.map((c) => segmentOf(c))
       for (let i = 0; i < rects.length && !bad; i++) {
         for (const cr of centerRects) if (rectsCollide(rects[i].label, cr, clearance)) bad = true
         for (let j = i + 1; j < rects.length && !bad; j++) if (violates(rects[i], rects[j])) bad = true
+        // Law (c) on the first ring: a name against every OTHER first-ring
+        // line (film → sibling), and its own line must keep a visible
+        // length once the renderer starts it beyond the film node and ends
+        // it before the name.
+        for (let j = 0; j < segs.length && !bad; j++) if (j !== i && labelTouchesLine(ring1[i].id, rects[i].label, segs[j])) bad = true
+        if (!bad && !segmentKeepsLength(segs[i], centerRects, rects[i].label)) bad = true
       }
       if (!bad) break
       r1 += RING_BUMP
@@ -391,6 +464,32 @@ export function buildConstellationLayout({
     root.r = 0
     root.theta = 0
     const placed = [...ring1]
+    // First-ring sharers: the same inward preference, checked against the
+    // film node and each other (no deeper ring exists yet).
+    {
+      const ring1Rects = () => ring1.map((c) => rectsAt(c, c.r, c.theta))
+      for (const c of ring1) {
+        if (!c.children.length) continue
+        const flipped = rectsAt(c, c.r, c.theta, 'in')
+        let ok =
+          !centerRects.some((cr) => rectsCollide(flipped.label, cr, clearance)) &&
+          segmentKeepsLength(segmentOf(c), centerRects, flipped.label)
+        if (ok) {
+          for (const [i, o] of ring1Rects().entries()) {
+            if (ring1[i] === c) continue
+            if (rectsCollide(flipped.label, o.label, clearance) || rectsCollide(flipped.label, o.dot, clearance)) {
+              ok = false
+              break
+            }
+            if (labelTouchesLine(c.id, flipped.label, segmentOf(ring1[i]))) {
+              ok = false
+              break
+            }
+          }
+        }
+        if (ok) c.side = 'in'
+      }
+    }
 
     /* ---- Rule 2: each deeper generation, fitted into radius LEVELS ---- */
     let prev = ring1
@@ -412,7 +511,7 @@ export function buildConstellationLayout({
         a0: 0,
         a1: 0,
       }))
-      const half = (fan) => ((fan.kids.length - 1) * fan.step) / 2
+      const half = (fan) => fanOffsets(fan).half
       /** How far, in angle, a fan's outermost names can reach past its
        *  outermost dots at radius r (a name centered on its dot at the top
        *  of the ring reaches half its width), plus the clearance. */
@@ -490,14 +589,44 @@ export function buildConstellationLayout({
         settle(fan, fan.level + 1)
         return true
       }
+      /** Law (c), first remedy: turn a name to the INWARD side of its dot
+       *  if that clears every name, dot, unattached line and the film node
+       *  — returns true and keeps the flip, else leaves the name as it was. */
+      const everyone = [...placed, ...ringKids]
+      const tryFlip = (n) => {
+        if (n.side === 'in') return false
+        const flipped = rectsAt(n, n.r, n.theta, 'in')
+        for (const cr of centerRects) if (rectsCollide(flipped.label, cr, clearance)) return false
+        for (const other of everyone) {
+          if (other === n) continue
+          const o = rectsAt(other, other.r, other.theta)
+          if (rectsCollide(flipped.label, o.label, clearance) || rectsCollide(flipped.label, o.dot, clearance)) return false
+          const so = segmentOf(other)
+          if (so.fromId !== n.id && so.toId !== n.id && segmentTouchesRect(so.x1, so.y1, so.x2, so.y2, flipped.label, clearance)) return false
+        }
+        // The name's own incoming line must keep a visible length past
+        // its parent's box once the name turns inward.
+        const parent = nodes.get(n.parentId)
+        const startObs = parent.id === ROOT_ID ? centerRects : [rectsAt(parent, parent.r, parent.theta).label]
+        if (!segmentKeepsLength(segmentOf(n), startObs, flipped.label)) return false
+        n.side = 'in'
+        return true
+      }
       let clean = false
       for (let pass = 0; pass < MAX_FIX_PASSES; pass++) {
         let culprit = null
         let widenable = false
+        let flipCandidate = null
+        let lineStart = null
         const rectOf = new Map()
         const rect = (n) => {
           if (!rectOf.has(n.id)) rectOf.set(n.id, rectsAt(n, n.r, n.theta))
           return rectOf.get(n.id)
+        }
+        const segOf = new Map()
+        const seg = (n) => {
+          if (!segOf.has(n.id)) segOf.set(n.id, segmentOf(n))
+          return segOf.get(n.id)
         }
         outer: for (const k of ringKids) {
           const kr = rect(k)
@@ -513,12 +642,51 @@ export function buildConstellationLayout({
               culprit = fanOf.get(k.id)
               break outer
             }
+            // Law (c): this name against an earlier ring's line, and this
+            // ring's incoming line against an earlier ring's name — the
+            // name turns inward first; only if that cannot clear does the
+            // fan move.
+            if (labelTouchesLine(k.id, kr.label, seg(other))) {
+              culprit = fanOf.get(k.id)
+              flipCandidate = k
+              lineStart = seg(other).fromId
+              break outer
+            }
+            if (labelTouchesLine(other.id, rect(other).label, seg(k))) {
+              culprit = fanOf.get(k.id)
+              flipCandidate = other
+              lineStart = seg(k).fromId
+              break outer
+            }
+          }
+          // The incoming line against the film node's emblem and labels
+          // (only a line attached to the film node may pass through them,
+          // and the renderer starts that one beyond them).
+          const ks = seg(k)
+          if (ks.fromId !== ROOT_ID && centerRects.some((cr) => segmentTouchesRect(ks.x1, ks.y1, ks.x2, ks.y2, cr, clearance))) {
+            culprit = fanOf.get(k.id)
+            break outer
+          }
+          // The incoming line must keep a visible length between its
+          // parent's box(es) and this name's box.
+          {
+            const parent = nodes.get(k.parentId)
+            const startObs = parent.id === ROOT_ID ? centerRects : [rect(parent).label]
+            if (!segmentKeepsLength(ks, startObs, kr.label)) {
+              culprit = fanOf.get(k.id)
+              break outer
+            }
           }
           for (const other of ringKids) {
             if (other === k) continue
-            if (violates(kr, rect(other))) {
+            const lineHit = labelTouchesLine(k.id, kr.label, seg(other))
+            if (violates(kr, rect(other)) || lineHit) {
               const fa = fanOf.get(k.id)
               const fb = fanOf.get(other.id)
+              if (lineHit) {
+                flipCandidate = k
+                lineStart = seg(other).fromId
+              }
               if (fa === fb) {
                 culprit = fa
                 widenable = true
@@ -533,10 +701,22 @@ export function buildConstellationLayout({
           clean = true
           break
         }
+        if (flipCandidate && tryFlip(flipCandidate)) continue
+        if (allowRestart && flipCandidate && lineStart && lineStart !== ROOT_ID) {
+          // Neither side of the name clears the line: ask the fan the
+          // line leaves from to open on both sides of that member (up to
+          // MAX_DEMAND — past that the fan is pushed outward instead), and
+          // re-place. (A first-ring member cannot: the first ring is even.)
+          const from = nodes.get(lineStart)
+          if (from && from.parentId && from.parentId !== ROOT_ID && (demands.get(from.id) || 0) < MAX_DEMAND - 1e-12) {
+            restart = { memberId: from.id }
+            break
+          }
+        }
         if (widenable) {
           const widened = culprit.step + FAN_WIDEN
           const budget = freeHalf(culprit, culprit.r)
-          if (((culprit.kids.length - 1) * widened) / 2 <= budget + 1e-12) {
+          if (half({ ...culprit, step: widened }) <= budget + 1e-12) {
             culprit.step = widened
             const m = margin(culprit, culprit.r)
             culprit.a0 = culprit.center - half(culprit) - m
@@ -547,21 +727,43 @@ export function buildConstellationLayout({
         }
         if (!push(culprit)) break
       }
+      if (restart) break
       if (!clean) bestEffort = true
+
+      // Law (c), applied ahead of time: a name on the line leaving its own
+      // dot is resolved "by label side, away from the outgoing branch" —
+      // so a person who shared onward gets their name on the INWARD side
+      // (between them and the hand that reached them; the renderer ends
+      // that incoming line before the box) whenever that side is clear.
+      // Their children then need no pushing past an outward name, which
+      // is what let a deep branch outgrow the reference view.
+      for (const k of ringKids) if (k.children.length) tryFlip(k)
 
       placed.push(...ringKids)
       prev = ringKids
     }
+    if (restart) return { restart }
 
-    /* ---- The canvas this placement needs: every name's box, plus room ---- */
-    let extent = 0
+    /* ---- The canvas this placement needs: every name's box, plus room —
+            centered on the filmmaker, each axis from its own extent (a
+            film whose deep branch runs sideways needs a wide canvas, not a
+            tall one, and the reference view then paints it larger) ---- */
+    let ex = 0
+    let ey = 0
+    const grow = (r) => {
+      ex = Math.max(ex, Math.abs(r.x), Math.abs(r.x + r.w))
+      ey = Math.max(ey, Math.abs(r.y), Math.abs(r.y + r.h))
+    }
     for (const n of nodes.values()) {
       if (n.id === ROOT_ID) continue
-      const { label } = rectsAt(n, n.r, n.theta)
-      extent = Math.max(extent, Math.abs(label.x), Math.abs(label.x + label.w), Math.abs(label.y), Math.abs(label.y + label.h), n.r)
+      const { label, dot } = rectsAt(n, n.r, n.theta)
+      grow(label)
+      grow(dot)
     }
-    const size = Math.ceil(Math.max(Math.min(BASE_W, BASE_H), 2 * (extent + EDGE_PAD)))
-    return { width: Math.max(BASE_W, size), height: Math.max(BASE_H, size), r1, bestEffort }
+    for (const cr of centerRects) grow(cr)
+    const width = Math.max(BASE_W, Math.ceil(2 * (ex + EDGE_PAD)))
+    const height = Math.max(BASE_H, Math.ceil(2 * (ey + EDGE_PAD)))
+    return { width, height, r1, bestEffort, rectsAt, centerRects }
   }
 
   /* ---- Plan for the reference view: the hard rule holds on SCREEN there ----
@@ -579,10 +781,34 @@ export function buildConstellationLayout({
      canvas's boxes (a fixed size, no feedback) and reports `settled:
      false`: the renderer then paints names larger than planned at the
      reference view and hides what would touch, and zooming reveals. */
-  const planFor = (w, h) => ({
-    fontMap: labelFontSize(PERSON_LABEL_SIZE, fontScaleFor(REFERENCE_VIEW.w, w)),
-    clearance: LABEL_CLEARANCE / mapScaleFor(REFERENCE_VIEW.w, REFERENCE_VIEW.h, w, h),
-  })
+  const planFor = (w, h) => {
+    const scale = mapScaleFor(REFERENCE_VIEW.w, REFERENCE_VIEW.h, w, h)
+    return {
+      scale,
+      fontMap: labelFontSize(PERSON_LABEL_SIZE, scale, labelFloorPx),
+      clearance: LABEL_CLEARANCE / scale,
+    }
+  }
+  // Law (c)'s fan demands persist across rounds: they are geometric
+  // needs (a fan opened around a member with a wide branch), not a
+  // property of one canvas size.
+  const demands = new Map()
+  const place = (p) => {
+    let r = null
+    for (let attempt = 0; attempt <= MAX_RESTARTS; attempt++) {
+      r = runPlacement(p.fontMap, p.clearance, p.scale, demands)
+      if (!r.restart) return r
+      if (attempt === MAX_RESTARTS) break
+      demands.set(r.restart.memberId, (demands.get(r.restart.memberId) || 0) + DEMAND_STEP)
+    }
+    // Out of restarts: place once more with every demand as it stands and
+    // no further asking — a REAL placement (every node placed, the canvas
+    // around it, real boxes), best effort. Never a stand-in result: the
+    // old one returned the base canvas with the nodes wherever the last
+    // aborted attempt left them (red team finding 1).
+    r = runPlacement(p.fontMap, p.clearance, p.scale, demands, false)
+    return { ...r, bestEffort: true }
+  }
   let assumed = { width: BASE_W, height: BASE_H }
   let plan = planFor(BASE_W, BASE_H)
   let result = null
@@ -590,7 +816,7 @@ export function buildConstellationLayout({
   let rounds = 0
   for (; rounds < MAX_PLAN_ROUNDS; rounds++) {
     plan = planFor(assumed.width, assumed.height)
-    result = runPlacement(plan.fontMap, plan.clearance)
+    result = place(plan)
     if (!result.bestEffort && result.width <= assumed.width && result.height <= assumed.height) {
       result = { ...result, width: assumed.width, height: assumed.height }
       settled = true
@@ -601,11 +827,52 @@ export function buildConstellationLayout({
   }
   if (!settled) {
     plan = planFor(BASE_W, BASE_H)
-    result = runPlacement(plan.fontMap, plan.clearance)
+    result = place(plan)
   }
   const { width, height, r1 } = result
   const cx = width / 2
   const cy = height / 2
+
+  /* ---- The phone camera's frames (canvas coordinates) ---- */
+  const frameOf = (ids) => {
+    let x0 = Infinity
+    let y0 = Infinity
+    let x1 = -Infinity
+    let y1 = -Infinity
+    const grow = (r) => {
+      x0 = Math.min(x0, r.x)
+      y0 = Math.min(y0, r.y)
+      x1 = Math.max(x1, r.x + r.w)
+      y1 = Math.max(y1, r.y + r.h)
+    }
+    for (const id of ids) {
+      if (id === ROOT_ID) {
+        for (const cr of result.centerRects) grow(cr)
+        continue
+      }
+      const n = nodes.get(id)
+      const { label, dot } = result.rectsAt(n, n.r, n.theta)
+      grow(label)
+      grow(dot)
+    }
+    const pad = plan.clearance
+    return { x: cx + x0 - pad, y: cy + y0 - pad, w: x1 - x0 + 2 * pad, h: y1 - y0 + 2 * pad }
+  }
+  let threadFrame = null
+  if (you) {
+    const pathIds = []
+    let p = you
+    while (p && p.id !== ROOT_ID) {
+      pathIds.push(p.id)
+      p = nodes.get(p.parentId)
+    }
+    pathIds.push(ROOT_ID)
+    threadFrame = {
+      full: frameOf(threadIds),
+      firstGeneration: frameOf([...pathIds, ...you.children.map((c) => c.id)]),
+      path: frameOf(pathIds),
+    }
+  }
 
   /* ---- Output: nodes, labels, edges ---- */
   const pos = (n) => (n.id === ROOT_ID ? { x: cx, y: cy } : { x: cx + n.r * Math.cos(n.theta), y: cy + n.r * Math.sin(n.theta) })
@@ -630,7 +897,8 @@ export function buildConstellationLayout({
       parentId: n.parentId,
       x,
       y,
-      label: isFilm ? null : radialLabel(n.theta, x, y),
+      label: isFilm ? null : radialLabel(n.theta, x, y, n.side),
+      labelSide: isFilm ? null : n.side,
       twinkleDelay: isFilm ? null : twinkleDelay(n.id),
       ...(isFilm ? {} : { claimed: claimedById.has(n.id) ? claimedById.get(n.id) : true }),
     })
@@ -665,11 +933,21 @@ export function buildConstellationLayout({
     inviteCount: invites.length,
     /** The viewer's whole subtree (all depths) — the journey line's Y. */
     viewerDownstreamCount,
-    /** How the hard clearance rule was planned: the label size (map units)
-     *  and clearance (map units) the placement was measured with, whether
-     *  the plan SETTLED on a canvas consistent with them (if not, the
-     *  placement used the base canvas's boxes and the renderer hides what
-     *  would touch at the reference view), and the rounds it took. */
-    plan: { fontMap: plan.fontMap, clearance: plan.clearance, settled, rounds },
+    /** How the hard clearance rule was planned: the reference view's scale
+     *  (CSS px per map unit), the label size (map units) and clearance (map
+     *  units) the placement was measured with, whether the plan SETTLED on
+     *  a canvas consistent with them (if not, the placement used the base
+     *  canvas's boxes and the renderer hides what would touch at the
+     *  reference view), and the rounds it took. */
+    plan: { scale: plan.scale, fontMap: plan.fontMap, clearance: plan.clearance, settled, rounds },
+    /** THE PHONE CAMERA (founder 2026-09-09): the two frames a viewer's
+     *  phone may open on, in canvas coordinates — `full` = the whole
+     *  thread (film, the path to YOU, YOU's entire branch) with every
+     *  name's planned box; `firstGeneration` = the film, the path to YOU
+     *  and YOU's direct tickets only; `path` = the film and the path to
+     *  YOU alone (what the camera keeps in view when even the first
+     *  generation is wider than the phone at the legible scale). Null
+     *  when no viewer is looking. */
+    threadFrame,
   }
 }

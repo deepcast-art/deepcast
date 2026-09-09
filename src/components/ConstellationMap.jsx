@@ -3,56 +3,63 @@
  * every surface: the viewer dashboard (V5) and the creator dashboard's
  * "See network graph" modal (founder decision 2026-09-09: "one graph on
  * every surface; a viewer's own thread in gold, both directions"). Visual
- * grammar ported from design-refs/deepcast-dashboard-v5.html:
+ * grammar ported from design-refs/deepcast-dashboard-v5.html.
  *
+ * THE LAW — "nothing competes" (founder, 9 September 2026), as painted:
+ *  (a) DRAW ORDER — rings; then every non-thread segment, dot and label
+ *      (the `off-thread` group); then the thread's segments, dots and
+ *      labels LAST (the `on-thread` group). Gold is never under grey.
+ *  (b) CONTRAST — with a thread, the off-thread group is painted at
+ *      RECEDE_OPACITY (one constant for segments, dots and labels alike);
+ *      the thread keeps full strength. With no thread, opacity 1.
+ *  (c) COLLISIONS — a segment starts beyond its start node's name box
+ *      (or the film node's emblem and center labels) and ends before its
+ *      end node's name box (clipSegment); a painted name never comes
+ *      within LABEL_GAP_PX of another name, another person's dot, or a
+ *      line it is not attached to — at the reference view the layout
+ *      guarantees it by placement; at every other view the visibility
+ *      pass hides what would touch, and zooming reveals it.
+ *
+ * Everything else, on every surface:
  *  - The filmmaker at the center; every person a small dot on its ring —
- *    solid = claimed, hollow = in flight (the lineage emblem's grammar) —
- *    with its name placed radially at ONE size.
- *  - Nothing is lit at rest EXCEPT the viewer's own thread when a viewer
- *    is looking (layout.threadIds): the path from the filmmaker to them
- *    and everything that grew from their own tickets — edges, dots and
- *    names in gold. Same stroke, same sizes, same positions as the rest;
- *    only the colour changes. YOU is marked by its solid node and its
- *    label, wherever the geometry put it.
+ *    solid = claimed, hollow = in flight — with its name placed radially
+ *    at ONE size, on the side the layout chose (out, or in for a name
+ *    that would otherwise sit on a neighbour's line).
+ *  - Only the viewer's thread is lit at rest (layout.threadIds); YOU is
+ *    marked by its solid node and its always-on label.
  *  - Explore: hover (mouse) or tap (touch/click, toggles) on any person
  *    lights THAT person's lineage — film → them → their entire downstream.
- *    The same on every surface.
  *  - Background stars twinkle (disabled under prefers-reduced-motion).
- *  - Zoom (+ / − / 1:1), wheel/pinch zoom at the pointer, drag-to-pan.
+ *  - Zoom (+ / − / 1:1), wheel/trackpad zoom at the pointer, two-finger
+ *    pinch, drag-to-pan. 1:1 = the whole graph fitted.
+ *  - THE PHONE CAMERA (founder 2026-09-09): on a viewer's phone the map
+ *    opens framed on the viewer's thread — the film, the path to YOU and
+ *    YOU's whole branch — scaled so every name on the thread paints at
+ *    the legible size with nothing hidden inside the frame (the frame's
+ *    scale is at least the reference scale the layout planned for); if
+ *    the whole thread cannot fit that way, the film, the path to YOU and
+ *    YOU's first generation, never less. The creator's phone and every
+ *    desktop open on the whole graph.
  *  - Labels never paint below a readable on-screen size: sizes are in map
- *    units but counter-scaled against the rendered width over the viewBox
- *    width (src/lib/constellationLabels.js, `fontScaleFor` — the
- *    mobile-labels fix, 2026-07-31, kept as is: on a height-limited
- *    desktop map that paints names a little under the floor, the size the
- *    founder approved). Screen POSITIONS use the true scale
- *    (`mapScaleFor`), so the collision pass sees names where they land.
- *  - Label visibility is COLLISION-BASED at every viewport (founder
- *    principle, 2026-07-31: the names ARE the product — a label hides only
- *    when it would physically collide with another, never by a blanket
- *    rule), by ONE rule on every surface: names fill whatever room there
- *    is and appear progressively as zooming in creates space — the
- *    viewer's thread names included (colour never buys a name room the
- *    modal would not give it). The rule is the verifier's hard one
- *    (2026-09-09): a painted name keeps LABEL_GAP_PX (6px) from every other
- *    painted name and never crosses another person's dot. The only
- *    always-on label is YOU's, the viewer's marker; an explored
- *    (hovered/tapped) person's lineage names render while explored, as in
- *    the modal. Recomputed on zoom/pan/resize.
- *
- * The former viewer-only rendering — bigger YOU node with a halo, per-kind
- * node shapes and label sizes, tangential gold labels, the whole-web hover
- * lighting, thread names exempt from collision, closer-to-YOU priority —
- * is GONE (2026-09-09). There is no mode prop: the surfaces share this one
- * path.
+ *    units but counter-scaled against the map's TRUE rendered scale
+ *    (mapScaleFor, since 2026-09-09 — the same size on the modal and the
+ *    dashboard). Label visibility is COLLISION-BASED at every viewport by
+ *    ONE rule on every surface, by tier: the always-on labels; then the
+ *    thread's names, which a non-thread name can never hide; then the rest.
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  EMBLEM_R,
+  LABEL_GAP_PX,
   PERSON_DOT_R,
   PERSON_LABEL_SIZE,
+  PHONE_MAX_WIDTH_PX,
+  RECEDE_OPACITY,
+  centerLabelLayout,
+  clipSegment,
   labelFontSize,
   labelScreenRect,
   labelVisibility,
-  fontScaleFor,
   mapScaleFor,
 } from '../lib/constellationLabels'
 
@@ -62,6 +69,18 @@ const MIN_ZOOM_DIV = 4 // deepest zoom-in shows 1/4 of the canvas
 const PAN_OVERSHOOT = 0.4
 
 const LABEL_FONT = "'Phoenix', system-ui, sans-serif"
+
+/** A frame's viewBox: the frame box grown to the map box's aspect ratio,
+ *  centered on the frame, at a scale of at least `minScale` (px per unit)
+ *  — i.e. no wider than the frame needs, and never zoomed out past the
+ *  scale the layout planned its names for. */
+function frameViewBox(frame, boxW, boxH, minScale) {
+  const scaleToFit = Math.min(boxW / frame.w, boxH / frame.h)
+  const scale = Math.max(scaleToFit, minScale)
+  const w = boxW / scale
+  const h = boxH / scale
+  return { x: frame.x + frame.w / 2 - w / 2, y: frame.y + frame.h / 2 - h / 2, w, h, fits: scaleToFit >= minScale - 1e-9 }
+}
 
 /**
  * NOTE for callers: pass a `key` derived from the layout's width×height so a
@@ -76,11 +95,21 @@ export default function ConstellationMap({ layout }) {
   const dragRef = useRef(null)
   /** The press that may become a tap (see onPointerDown). */
   const tapRef = useRef(null)
+  /** Active touch pointers, for the two-finger pinch. */
+  const pointersRef = useRef(new Map())
+  const pinchRef = useRef(null)
   /** Mirrors vb for the native wheel listener (kept out of render writes). */
   const vbRef = useRef(vb)
   useEffect(() => {
     vbRef.current = vb
   }, [vb])
+  /** Whether the phone camera has framed the opening view yet; the layout
+   *  by ref so the resize observer's first callback can frame it. */
+  const framedRef = useRef(false)
+  const layoutRef = useRef(layout)
+  useEffect(() => {
+    layoutRef.current = layout
+  }, [layout])
 
   /** Explore: the hovered person (mouse only) and the tapped person
    *  (toggles, survives the pointer leaving). The tapped one wins. */
@@ -102,6 +131,7 @@ export default function ConstellationMap({ layout }) {
 
   /** The viewer's own thread — lit at rest, in gold, both directions. */
   const threadSet = useMemo(() => new Set(layout?.threadIds ?? []), [layout])
+  const hasThread = threadSet.size > 0
 
   /** The explored person's lineage — the person, every ancestor up to the
    *  film, and every descendant at every depth. Empty at rest. */
@@ -126,17 +156,60 @@ export default function ConstellationMap({ layout }) {
   /** Everything lit right now: the viewer's thread plus the explored lineage. */
   const litSet = useMemo(() => new Set([...threadSet, ...exploreSet]), [threadSet, exploreSet])
 
-  /** The map's rendered CSS box — the label counter-scaling's denominator
-   *  is the TRUE scale (mapScaleFor: the smaller of width and height
-   *  ratios). {0,0} until the first measurement (labels then render at
-   *  their base design sizes for that first paint). */
+  /** The map's rendered CSS box — the true scale's denominator. {0,0}
+   *  until the first measurement (labels then render at their base design
+   *  sizes for that first paint). */
   const [rendered, setRendered] = useState({ w: 0, h: 0 })
   useEffect(() => {
     const svg = svgRef.current
     if (!svg || typeof ResizeObserver === 'undefined') return
     const ro = new ResizeObserver((entries) => {
       const rect = entries[0]?.contentRect
-      if (rect?.width && rect?.height) setRendered({ w: rect.width, h: rect.height })
+      if (!rect?.width || !rect?.height) return
+      setRendered({ w: rect.width, h: rect.height })
+      // THE PHONE CAMERA: on the first measurement, a viewer's phone opens
+      // on the thread (see the header). Once per mount.
+      const lay = layoutRef.current
+      if (framedRef.current || !lay?.threadFrame) return
+      framedRef.current = true
+      // A PHONE is a narrow viewport, not a narrow map box — a laptop with
+      // the dashboard's sidebar beside the map still opens on the whole
+      // graph (founder: every desktop does).
+      const viewportWidth = typeof window !== 'undefined' && window.innerWidth ? window.innerWidth : rect.width
+      if (viewportWidth >= PHONE_MAX_WIDTH_PX) return
+      const cw = lay.width
+      const ch = lay.height
+      const minScale = lay.plan?.scale || mapScaleFor(960, 576, cw, ch)
+      // The whole thread if it fits at the plan's scale (nothing inside
+      // hides there); else the path and the first generation — still at
+      // no smaller a scale than the plan's, so nothing inside hides even
+      // when the frame is wider than the phone (the viewer pans).
+      const full = frameViewBox(lay.threadFrame.full, rect.width, rect.height, minScale)
+      const firstGen = full.fits ? full : frameViewBox(lay.threadFrame.firstGeneration, rect.width, rect.height, minScale)
+      const chosen = firstGen
+      const w = Math.min(Math.max(chosen.w, cw / MIN_ZOOM_DIV), cw)
+      const h = w * (ch / cw)
+      /** `at` moved the least so that [lo, hi] lies inside [at, at + size]
+       *  (centred on it when it cannot), then kept inside [0, extent]. */
+      const within = (at, size, lo, hi, extent) => {
+        let v = at
+        if (hi - lo > size) v = (lo + hi) / 2 - size / 2
+        else v = Math.min(Math.max(v, hi - size), lo)
+        return size >= extent ? (extent - size) / 2 : Math.min(Math.max(v, 0), extent - size)
+      }
+      // Centred on the frame; when even the first generation is wider than
+      // the phone at the legible scale, shifted the least so the PATH (film
+      // → YOU, with their names) stays wholly in view — the origin never
+      // off-screen — and the viewer pans to the rest; never past the
+      // canvas's edges (a view as wide as the canvas shows the canvas, not
+      // blank space beside it).
+      const pf = lay.threadFrame.path || chosen
+      setVb({
+        x: within(chosen.x + chosen.w / 2 - w / 2, w, pf.x, pf.x + pf.w, cw),
+        y: within(chosen.y + chosen.h / 2 - h / 2, h, pf.y, pf.y + pf.h, ch),
+        w,
+        h,
+      })
     })
     ro.observe(svg)
     return () => ro.disconnect()
@@ -145,40 +218,96 @@ export default function ConstellationMap({ layout }) {
   const W = layout?.width ?? 0
   const H = layout?.height ?? 0
 
-  /** Every label's collision inputs, viewport-independent: map position,
-   *  anchor, name, design size. ONE rule for every name on every surface —
-   *  the only always-on labels are the film node's two center labels and
-   *  YOU's marker; everyone else is placed greedily in the same order the
-   *  modal uses (no viewer-dependent priority). */
+  /** CSS pixels per map unit, zoom included — the true scale: positions,
+   *  the label counter-scale, and the clearance rule all use it. */
+  const mapScale = mapScaleFor(rendered.w, rendered.h, vb?.w, vb?.h)
+  /** The clearance, in map units, at this scale. */
+  const gapMap = mapScale ? LABEL_GAP_PX / mapScale : LABEL_GAP_PX
+
+  /** The filmmaker's center labels for this scale (shared geometry). */
+  const centerLabels = useMemo(
+    () => (layout ? centerLabelLayout(mapScale || 1, layout.creatorLabel) : []),
+    [layout, mapScale]
+  )
+
+  /** Every person's name box in MAP units at this scale — the same
+   *  estimate the layout planned with, at the size the floor paints. */
+  const labelRects = useMemo(() => {
+    const map = new Map()
+    if (!layout) return map
+    for (const n of layout.nodes) {
+      if (!n.label) continue
+      map.set(
+        n.id,
+        labelScreenRect(
+          { x: n.label.x, y: n.label.y, anchor: n.label.anchor, name: n.name, baseSize: PERSON_LABEL_SIZE },
+          { vbX: 0, vbY: 0, scale: 1, fontScale: mapScale || undefined }
+        )
+      )
+    }
+    return map
+  }, [layout, mapScale])
+
+  /** Law (c) on the segments: each starts beyond its start's name box (or
+   *  the film node's emblem and center labels) and ends before its end's
+   *  name box, by the clearance — but only around the name boxes that are
+   *  PAINTED (`visible`): a hidden name clips nothing (clipping around
+   *  hidden names once erased a viewer's own thread at 1:1 on a phone —
+   *  red team finding 2). A line is never dropped: when nothing would
+   *  remain, a first-ring line starts beyond the emblem alone (under the
+   *  film node's own labels), and at worst a line is painted whole. Map
+   *  units. */
+  const clipEdges = useCallback(
+    (visible) => {
+      if (!layout) return []
+      const film = layout.nodes.find((n) => n.kind === 'film')
+      const emblem = { x: layout.cx - EMBLEM_R, y: layout.cy - EMBLEM_R, w: 2 * EMBLEM_R, h: 2 * EMBLEM_R }
+      const filmObstacles = [emblem, ...centerLabels.map((c) => ({ ...c.rect, x: c.rect.x + layout.cx, y: c.rect.y + layout.cy }))]
+      const boxOf = (id) => (visible.has(id) && labelRects.has(id) ? [labelRects.get(id)] : [])
+      return layout.edges.map((e) => {
+        const fromFilm = e.fromId === film?.id
+        const startObs = fromFilm ? filmObstacles : boxOf(e.fromId)
+        const endObs = boxOf(e.toId)
+        const cut =
+          clipSegment(e.x1, e.y1, e.x2, e.y2, startObs, endObs, gapMap) ||
+          (fromFilm && clipSegment(e.x1, e.y1, e.x2, e.y2, [emblem], endObs, gapMap)) ||
+          clipSegment(e.x1, e.y1, e.x2, e.y2, [], endObs, gapMap) ||
+          { x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2 }
+        return { ...e, ...cut }
+      })
+    },
+    [layout, labelRects, centerLabels, gapMap]
+  )
+  /** The segments the visibility pass measures against: clipped only
+   *  around the always-painted boxes (the film node's; YOU's) — every
+   *  painted line is a part of one of these, so a name that clears them
+   *  clears the paint. */
+  const openSegments = useMemo(
+    () => clipEdges(new Set(layout?.youId ? [layout.youId] : [])),
+    [clipEdges, layout]
+  )
+
+  /** Every label's collision inputs: the always-on labels (the film's two
+   *  and YOU's marker), the thread's names (tier 1), everyone else (tier 2). */
   const labelItems = useMemo(() => {
     if (!layout) return []
     const items = []
     for (const n of layout.nodes) {
       if (n.kind === 'film') {
-        if (layout.creatorLabel) {
+        for (const c of centerLabels) {
           items.push({
-            id: `${n.id}::creator`,
+            id: `${n.id}::${c.key}`,
             x: n.x,
-            y: n.y + 42,
+            y: n.y + c.y,
             anchor: 'middle',
-            name: layout.creatorLabel,
-            baseSize: 11,
-            letterSpacing: 2.5,
+            name: c.name,
+            baseSize: c.key === 'creator' ? 11 : 7.5,
+            letterSpacing: c.letterSpacing,
             gold: true,
+            tier: 0,
             dist: 0,
           })
         }
-        items.push({
-          id: `${n.id}::role`,
-          x: n.x,
-          y: n.y + 57,
-          anchor: 'middle',
-          name: 'FILMMAKER',
-          baseSize: 7.5,
-          letterSpacing: 3,
-          gold: true,
-          dist: 0,
-        })
         continue
       }
       if (!n.label) continue
@@ -190,50 +319,57 @@ export default function ConstellationMap({ layout }) {
         name: n.name,
         baseSize: PERSON_LABEL_SIZE,
         gold: n.id === layout.youId,
+        tier: threadSet.has(n.id) ? 1 : 2,
         dist: 0,
       })
     }
     return items
-  }, [layout])
+  }, [layout, threadSet, centerLabels])
 
-  /** Collision pass — cheap AABB over tens of labels, recomputed whenever
-   *  the view changes (zoom, pan, resize). YOU and the center labels are
-   *  always present; every other person's dot is an obstacle a name may
-   *  not cross. */
+  /** Collision pass — cheap rect tests over tens of labels, recomputed
+   *  whenever the view changes (zoom, pan, resize): names against names,
+   *  every other person's dot, and every unattached line. */
   const { visibleIds, goldOverlaps } = useMemo(() => {
     if (!vb || !labelItems.length) {
       return { visibleIds: new Set(labelItems.map((it) => it.id)), goldOverlaps: [] }
     }
-    const scale = mapScaleFor(rendered.w, rendered.h, vb.w, vb.h)
-    const view = { vbX: vb.x, vbY: vb.y, scale, fontScale: fontScaleFor(rendered.w, vb.w) }
+    const scale = mapScale
+    const view = { vbX: vb.x, vbY: vb.y, scale }
+    const toScreen = (x, y) => [(x - vb.x) * scale, (y - vb.y) * scale]
     const obstacles = scale
       ? layout.nodes
           .filter((n) => n.kind !== 'film')
-          .map((n) => ({
-            id: n.id,
-            rect: {
-              x: (n.x - PERSON_DOT_R - vb.x) * scale,
-              y: (n.y - PERSON_DOT_R - vb.y) * scale,
-              w: 2 * PERSON_DOT_R * scale,
-              h: 2 * PERSON_DOT_R * scale,
-            },
-          }))
+          .map((n) => {
+            const [sx, sy] = toScreen(n.x - PERSON_DOT_R, n.y - PERSON_DOT_R)
+            return { id: n.id, rect: { x: sx, y: sy, w: 2 * PERSON_DOT_R * scale, h: 2 * PERSON_DOT_R * scale } }
+          })
+      : []
+    const lines = scale
+      ? openSegments.map((s) => {
+          const [x1, y1] = toScreen(s.x1, s.y1)
+          const [x2, y2] = toScreen(s.x2, s.y2)
+          return { fromId: s.fromId, toId: s.toId, x1, y1, x2, y2 }
+        })
       : []
     return labelVisibility(
       labelItems.map((it) => ({ ...it, rect: labelScreenRect(it, view) })),
       undefined,
-      obstacles
+      obstacles,
+      lines
     )
-  }, [layout, labelItems, vb, rendered])
+  }, [layout, labelItems, vb, mapScale, openSegments])
 
-  /** Founder rule: two GOLD labels colliding is an edge case to REPORT, not
-   *  something this rule may silently resolve — both stay rendered. A plan
-   *  that could not settle on a canvas (names then thin by hiding at the
-   *  reference view) is reported the same way. */
+  /** The segments as painted: clipped around every name that is painted. */
+  const segments = useMemo(() => clipEdges(visibleIds), [clipEdges, visibleIds])
+
+  /** Founder rule: two always-on labels colliding is an edge case to
+   *  REPORT, not something this rule may silently resolve — both stay
+   *  rendered. A plan that could not settle on a canvas is reported the
+   *  same way. */
   useEffect(() => {
     if (goldOverlaps.length) {
       console.warn(
-        '[constellation] gold-path labels overlap (both kept rendered — report this layout):',
+        '[constellation] always-on labels overlap (both kept rendered — report this layout):',
         goldOverlaps
       )
     }
@@ -247,9 +383,8 @@ export default function ConstellationMap({ layout }) {
 
   /** Wheel/trackpad zoom, centered on the pointer. Registered natively with
    *  passive:false — React's synthetic wheel can't preventDefault, and the
-   *  page must NOT scroll while the pointer is over the map (outside it,
-   *  normal page scrolling is untouched). Trackpad pinch arrives as a wheel
-   *  event with ctrlKey and fine deltas, hence the two sensitivities. */
+   *  page must NOT scroll while the pointer is over the map. Trackpad pinch
+   *  arrives as a wheel event with ctrlKey and fine deltas. */
   useEffect(() => {
     const svg = svgRef.current
     if (!svg || !W || !H) return
@@ -260,10 +395,11 @@ export default function ConstellationMap({ layout }) {
       const cur = vbRef.current
       if (!cur) return
       const factor = Math.exp((e.ctrlKey ? 0.01 : 0.002) * e.deltaY)
+      zoomAt(cur, factor, (e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height)
+    }
+    const zoomAt = (cur, factor, fx, fy) => {
       const nw = Math.min(Math.max(cur.w * factor, W / MIN_ZOOM_DIV), W)
       const nh = nw * (H / W)
-      const fx = (e.clientX - rect.left) / rect.width
-      const fy = (e.clientY - rect.top) / rect.height
       const px = cur.x + fx * cur.w
       const py = cur.y + fy * cur.h
       const ox = nw * PAN_OVERSHOOT
@@ -302,9 +438,16 @@ export default function ConstellationMap({ layout }) {
   /** A press that ends without moving on a person is a TAP (toggles the
    *  pinned lineage). Detected here, at the SVG, because the drag handler
    *  takes pointer capture — the release then never reaches the person's
-   *  own element. (tapRef is declared with the other refs above the early
-   *  return.) */
+   *  own element. Two touch pointers make a pinch instead. */
   const onPointerDown = (e) => {
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (pointersRef.current.size === 2) {
+      const [a, b] = [...pointersRef.current.values()]
+      pinchRef.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), vb: vbRef.current }
+      dragRef.current = null
+      tapRef.current = null
+      return
+    }
     dragRef.current = { x: e.clientX, y: e.clientY }
     const person = e.target?.closest?.('[data-node]')
     tapRef.current = person ? { id: person.getAttribute('data-node'), x: e.clientX, y: e.clientY } : null
@@ -312,21 +455,41 @@ export default function ConstellationMap({ layout }) {
     e.currentTarget.setPointerCapture(e.pointerId)
   }
   const onPointerMove = (e) => {
+    if (pointersRef.current.has(e.pointerId)) pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (pinchRef.current && pointersRef.current.size === 2) {
+      const [a, b] = [...pointersRef.current.values()]
+      const dist = Math.hypot(a.x - b.x, a.y - b.y)
+      if (!dist) return
+      const rect = svgRef.current?.getBoundingClientRect()
+      if (!rect?.width) return
+      const start = pinchRef.current
+      const factor = start.dist / dist
+      const nw = Math.min(Math.max(start.vb.w * factor, W / MIN_ZOOM_DIV), W)
+      const nh = nw * (H / W)
+      const fx = ((a.x + b.x) / 2 - rect.left) / rect.width
+      const fy = ((a.y + b.y) / 2 - rect.top) / rect.height
+      const px = start.vb.x + fx * start.vb.w
+      const py = start.vb.y + fy * start.vb.h
+      setVb(clampVb({ x: px - fx * nw, y: py - fy * nh, w: nw, h: nh }))
+      return
+    }
     const last = dragRef.current
     if (!last) return
     const rect = svgRef.current?.getBoundingClientRect()
     if (!rect?.width) return
-    const scale = vb.w / rect.width
+    const scale = mapScaleFor(rect.width, rect.height, vb.w, vb.h) || vb.w / rect.width
     setVb((cur) =>
       clampVb({
         ...cur,
-        x: cur.x - (e.clientX - last.x) * scale,
-        y: cur.y - (e.clientY - last.y) * scale,
+        x: cur.x - (e.clientX - last.x) / scale,
+        y: cur.y - (e.clientY - last.y) / scale,
       })
     )
     dragRef.current = { x: e.clientX, y: e.clientY }
   }
   const endDrag = (e) => {
+    pointersRef.current.delete(e?.pointerId)
+    if (pointersRef.current.size < 2) pinchRef.current = null
     const tap = tapRef.current
     tapRef.current = null
     if (
@@ -340,9 +503,7 @@ export default function ConstellationMap({ layout }) {
     svgRef.current?.classList.remove('panning')
   }
 
-  /** The scale the label counter-scale works against (width over viewBox
-   *  width — see fontScaleFor). */
-  const mapScale = fontScaleFor(rendered.w, vb.w)
+  const fontSize = labelFontSize(PERSON_LABEL_SIZE, mapScale)
 
   /** A person: hit area, solid/hollow dot, radial name. Lit = on the
    *  viewer's thread (gold at rest) or on the explored lineage. An explored
@@ -356,7 +517,10 @@ export default function ConstellationMap({ layout }) {
       <g
         key={n.id}
         data-node={n.id}
+        data-you={n.id === layout.youId ? 'true' : undefined}
+        data-parent={n.parentId}
         data-claimed={n.claimed ? 'true' : 'false'}
+        data-thread={onThread ? 'true' : 'false'}
         className={`${lit ? 'lit-person' : ''}${onThread ? ' lineage' : ''}`.trim() || undefined}
         style={{ cursor: 'pointer' }}
         onPointerEnter={(e) => {
@@ -381,7 +545,7 @@ export default function ConstellationMap({ layout }) {
             x={n.label.x}
             y={n.label.y}
             textAnchor={n.label.anchor}
-            fontSize={labelFontSize(PERSON_LABEL_SIZE, mapScale)}
+            fontSize={fontSize}
             letterSpacing="2"
             className={onThread ? 'web-label lineage' : 'web-label dim-label'}
             style={{ fontFamily: LABEL_FONT, textTransform: 'uppercase' }}
@@ -393,10 +557,68 @@ export default function ConstellationMap({ layout }) {
     )
   }
 
+  const edge = (s, i) => {
+    const lit = litSet.has(s.fromId) && litSet.has(s.toId)
+    const onThread = threadSet.has(s.fromId) && threadSet.has(s.toId)
+    return (
+      <line
+        key={`edge-${i}`}
+        x1={s.x1}
+        y1={s.y1}
+        x2={s.x2}
+        y2={s.y2}
+        strokeWidth="1"
+        strokeDasharray="2 5"
+        data-from={s.fromId}
+        data-to={s.toId}
+        data-thread={onThread ? 'true' : 'false'}
+        className={`web-edge${lit ? ' lit-edge' : ''}${onThread ? ' lineage' : ''}`}
+      />
+    )
+  }
+
+  const film = layout.nodes.find((n) => n.kind === 'film')
+  const persons = layout.nodes.filter((n) => n.kind !== 'film')
+  const offThreadSegments = segments.filter((s) => !(threadSet.has(s.fromId) && threadSet.has(s.toId)))
+  const onThreadSegments = segments.filter((s) => threadSet.has(s.fromId) && threadSet.has(s.toId))
+  const offThreadPersons = persons.filter((n) => !threadSet.has(n.id))
+  const onThreadPersons = persons.filter((n) => threadSet.has(n.id))
+
+  const filmNode = film && (
+    <g key={film.id} data-film="true">
+      <circle cx={film.x} cy={film.y} r={EMBLEM_R} fill="rgba(199,169,107,0.09)" />
+      <circle cx={film.x} cy={film.y} r="21" fill="none" stroke="rgba(216,199,154,0.75)" strokeWidth="1" />
+      <rect x={film.x - 8.5} y={film.y - 5.5} width="11" height="11" rx="1.5" fill="none" stroke="#D8C79A" strokeWidth="1.2" />
+      <path
+        d={`M ${film.x + 3} ${film.y - 1.5} l 6 -3.5 v 10 l -6 -3.5 z`}
+        fill="none"
+        stroke="#D8C79A"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+      {/* The center labels ride the same readability floor as every name
+          and sit below the emblem by the clearance rule at every scale. */}
+      {centerLabels.map((c) => (
+        <text
+          key={c.key}
+          x={film.x}
+          y={film.y + c.y}
+          textAnchor="middle"
+          fill={c.key === 'creator' ? '#D8C79A' : '#9A9890'}
+          fontSize={c.fontSize}
+          letterSpacing={c.letterSpacing}
+          style={{ fontFamily: LABEL_FONT, textTransform: c.key === 'creator' ? 'uppercase' : undefined }}
+        >
+          {c.name}
+        </text>
+      ))}
+    </g>
+  )
+
   return (
     <div className="relative mt-5 overflow-hidden border border-mist/[0.12] bg-ink-2">
       <style>{`
-        .dc-constellation { cursor: grab; }
+        .dc-constellation { cursor: grab; touch-action: none; }
         .dc-constellation.panning { cursor: grabbing; }
         .dc-constellation .web-edge { stroke: rgba(234,231,224,0.16); transition: stroke 450ms ease; }
         .dc-constellation .web-ring { stroke: rgba(234,231,224,0.08); }
@@ -439,67 +661,18 @@ export default function ConstellationMap({ layout }) {
             className="web-ring"
           />
         ))}
-        {layout.edges.map((e, i) => {
-          const lit = litSet.has(e.fromId) && litSet.has(e.toId)
-          const onThread = threadSet.has(e.fromId) && threadSet.has(e.toId)
-          return (
-            <line
-              key={`edge-${i}`}
-              x1={e.x1}
-              y1={e.y1}
-              x2={e.x2}
-              y2={e.y2}
-              strokeWidth="1"
-              strokeDasharray="2 5"
-              className={`web-edge${lit ? ' lit-edge' : ''}${onThread ? ' lineage' : ''}`}
-            />
-          )
-        })}
-        {layout.nodes.map((n) => {
-          if (n.kind === 'film') {
-            return (
-              <g key={n.id}>
-                <circle cx={n.x} cy={n.y} r="34" fill="rgba(199,169,107,0.09)" />
-                <circle cx={n.x} cy={n.y} r="21" fill="none" stroke="rgba(216,199,154,0.75)" strokeWidth="1" />
-                <rect x={n.x - 8.5} y={n.y - 5.5} width="11" height="11" rx="1.5" fill="none" stroke="#D8C79A" strokeWidth="1.2" />
-                <path
-                  d={`M ${n.x + 3} ${n.y - 1.5} l 6 -3.5 v 10 l -6 -3.5 z`}
-                  fill="none"
-                  stroke="#D8C79A"
-                  strokeWidth="1.2"
-                  strokeLinejoin="round"
-                />
-                {/* The center labels ride the same readability floor as every
-                    node label (2026-07-31) — the filmmaker's name is a name. */}
-                {layout.creatorLabel && (
-                  <text
-                    x={n.x}
-                    y={n.y + 42}
-                    textAnchor="middle"
-                    fill="#D8C79A"
-                    fontSize={labelFontSize(11, mapScale)}
-                    letterSpacing="2.5"
-                    style={{ fontFamily: LABEL_FONT, textTransform: 'uppercase' }}
-                  >
-                    {layout.creatorLabel}
-                  </text>
-                )}
-                <text
-                  x={n.x}
-                  y={n.y + 57}
-                  textAnchor="middle"
-                  fill="#9A9890"
-                  fontSize={labelFontSize(7.5, mapScale)}
-                  letterSpacing="3"
-                  style={{ fontFamily: LABEL_FONT }}
-                >
-                  FILMMAKER
-                </text>
-              </g>
-            )
-          }
-          return person(n)
-        })}
+        {/* Law (a)/(b): everything off the thread first, receded when a thread exists… */}
+        <g className="off-thread" opacity={hasThread ? RECEDE_OPACITY : 1}>
+          {offThreadSegments.map(edge)}
+          {!hasThread && filmNode}
+          {offThreadPersons.map(person)}
+        </g>
+        {/* …then the thread — segments, dots and names — painted last at full strength. */}
+        <g className="on-thread">
+          {onThreadSegments.map(edge)}
+          {hasThread && filmNode}
+          {onThreadPersons.map(person)}
+        </g>
       </svg>
       <div className="absolute bottom-3.5 right-3.5 flex gap-1.5" aria-label="Zoom controls">
         <button

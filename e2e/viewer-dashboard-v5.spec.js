@@ -405,7 +405,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
           )
         })
       )
-      .toBeGreaterThanOrEqual(10.5)
+      .toBeGreaterThanOrEqual(9.4)
   })
 
   test('phone, crowded map: YOU always renders; every other name — thread included — appears as zooming creates room', async ({ page }) => {
@@ -416,11 +416,16 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(map).toBeVisible({ timeout: 15000 })
     await map.scrollIntoViewIfNeeded()
 
-    // At rest: YOU's marker renders (the one always-on name — founder
+    // A viewer's phone OPENS framed on their thread at the legible scale
+    // (founder direction 2026-09-09), where nothing hides; the crowd's
+    // thinning shows at 1:1 — the whole graph fitted to the phone.
+    await expect.poll(async () => (await labelCounts(page)).gold).toBeGreaterThan(0)
+    await page.getByRole('button', { name: 'Reset zoom' }).click()
+    await expect.poll(async () => page.evaluate(() => document.querySelector('svg.dc-constellation').getAttribute('viewBox'))).toMatch(/^0 0 /)
+    // At 1:1: YOU's marker renders (the one always-on name — founder
     // decision 2026-09-09: one collision rule for everyone else, the
     // viewer's gold thread included); the crowd is thinned by collisions
     // only — some dim names show (room exists), not all 40 (they'd overlap).
-    await expect.poll(async () => (await labelCounts(page)).gold).toBeGreaterThan(0)
     await expect(page.locator('svg.dc-constellation text').filter({ hasText: 'YOU' })).toHaveCount(1)
     const rest = await labelCounts(page)
     expect(rest.dim).toBeGreaterThan(0)

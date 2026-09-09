@@ -18,7 +18,7 @@
  * creator-dashboard.spec.js and viewer-dashboard-v5.spec.js.
  */
 import { test, expect, pushJsError } from './fixtures/test.js'
-import { PERSON_LABEL_SIZE, fontScaleFor, labelFontSize } from '../src/lib/constellationLabels.js'
+import { MIN_LABEL_ON_SCREEN_PX, PERSON_LABEL_SIZE, RECEDE_OPACITY, labelFontSize, mapScaleFor } from '../src/lib/constellationLabels.js'
 
 const REF = 'wmtjgpxhjtbocsmutqqc'
 const OWNER_ID = '11111111-1111-4111-8111-111111111111'
@@ -202,16 +202,49 @@ const readGeometry = (page, inDialog) =>
       const r = parseFloat(d.getAttribute('r'))
       if (gapOf(n.b, { x: parseFloat(d.getAttribute('cx')) - r, y: parseFloat(d.getAttribute('cy')) - r, width: 2 * r, height: 2 * r }) < 0) namesOverDots++
     }
+    // Law (c), lines: the smallest gap between a painted name and any
+    // painted line not attached to its own dot (screen px).
+    const lines = [...svg.querySelectorAll('line.web-edge')].map((l) => ({ x1: +l.getAttribute('x1'), y1: +l.getAttribute('y1'), x2: +l.getAttribute('x2'), y2: +l.getAttribute('y2'), from: l.getAttribute('data-from'), to: l.getAttribute('data-to') }))
+    const segRectGap = (l, r) => {
+      const inside = (x, y) => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height
+      if (inside(l.x1, l.y1) || inside(l.x2, l.y2)) return 0
+      const corners = [[r.x, r.y], [r.x + r.width, r.y], [r.x + r.width, r.y + r.height], [r.x, r.y + r.height]]
+      const edges = corners.map((c, i) => [c, corners[(i + 1) % 4]])
+      const cross = (ax, ay, bx, by) => ax * by - ay * bx
+      const hit = edges.some(([a, b]) => { const d = cross(l.x2 - l.x1, l.y2 - l.y1, b[0] - a[0], b[1] - a[1]); if (!d) return false; const t = cross(a[0] - l.x1, a[1] - l.y1, b[0] - a[0], b[1] - a[1]) / d; const u = cross(a[0] - l.x1, a[1] - l.y1, l.x2 - l.x1, l.y2 - l.y1) / d; return t >= 0 && t <= 1 && u >= 0 && u <= 1 })
+      if (hit) return 0
+      const dPS = (px, py, ax, ay, bx, by) => { const dx = bx - ax, dy = by - ay; const len2 = dx * dx + dy * dy || 1; const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2)); return Math.hypot(px - (ax + t * dx), py - (ay + t * dy)) }
+      let best = Infinity
+      for (const [cx2, cy2] of corners) best = Math.min(best, dPS(cx2, cy2, l.x1, l.y1, l.x2, l.y2))
+      for (const [a, b] of edges) best = Math.min(best, dPS(l.x1, l.y1, a[0], a[1], b[0], b[1]), dPS(l.x2, l.y2, a[0], a[1], b[0], b[1]))
+      return best
+    }
+    // "Attached" = the line leaves or enters THIS name's own dot (by id —
+    // a sibling's incoming line a few units away is NOT attached).
+    let minLineGapPx = Infinity
+    for (const n of named) {
+      for (const l of lines) {
+        if (l.from === n.id || l.to === n.id) continue
+        minLineGapPx = Math.min(minLineGapPx, segRectGap(l, n.b) * ctm)
+      }
+    }
+    const off = svg.querySelector('g.off-thread')
+    const on = svg.querySelector('g.on-thread')
+    const order = [...svg.children].filter((c) => c.tagName === 'g').map((c) => c.getAttribute('class'))
+    const threadGroups = [...svg.querySelectorAll('g[data-node][data-thread="true"]')]
+    const threadPainted = threadGroups.filter((g) => g.querySelector('text')).length
     const box = svg.getBoundingClientRect()
     const vbParts = svg.getAttribute('viewBox').split(' ').map(parseFloat)
-    return { rings, cx, cy, persons, labelSizes, renderedWidth: box.width, renderedHeight: box.height, viewBoxWidth: vbParts[2], viewBoxHeight: vbParts[3], paintedNames: named.length, minGapPx, namesOverDots }
+    const paintedPx = named.length ? parseFloat(svg.querySelector('g[data-node] text').getAttribute('font-size')) * ctm : 0
+    return { rings, cx, cy, persons, labelSizes, renderedWidth: box.width, renderedHeight: box.height, viewBoxWidth: vbParts[2], viewBoxHeight: vbParts[3], paintedNames: named.length, minGapPx, namesOverDots, minLineGapPx, offThreadOpacity: off?.getAttribute('opacity'), groupOrder: order, onThreadInside: on ? on.querySelectorAll('g[data-node]').length : 0, threadCount: threadGroups.length, threadPainted, paintedPx, viewBox: vbParts }
   }, { inDialog })
 const readAngles = async (page) => (await readGeometry(page, true)).persons
 /** Wait until the map has measured its rendered width and counter-scaled
  *  its labels (the first paint uses the base size until the resize
  *  observer fires): exactly ONE label size, equal to the shared rule
  *  applied to the one design size at this surface's rendered width. */
-const expectedLabelSize = (g) => labelFontSize(PERSON_LABEL_SIZE, fontScaleFor(g.renderedWidth, g.viewBoxWidth))
+const expectedLabelSize = (g) =>
+  labelFontSize(PERSON_LABEL_SIZE, mapScaleFor(g.renderedWidth, g.renderedHeight, g.viewBoxWidth, g.viewBoxHeight))
 const settled = (page, inDialog) =>
   expect
     .poll(async () => {
@@ -325,16 +358,29 @@ test.describe('constellation shape — the fan reversal (5 September 2026)', () 
     expect(Math.abs(viewer.labelSizes[0] - expectedLabelSize(viewer))).toBeLessThan(0.02)
     expect(Math.abs(modal.labelSizes[0] - expectedLabelSize(modal))).toBeLessThan(0.02)
 
-    // THE HARD RULE, painted (verifier, 2026-09-09): on both desktop
-    // surfaces every painted name keeps at least 6px from every other and
-    // crosses no other person's dot — measured from the real text boxes,
-    // not the estimator — and every name is painted (the plan settled for
-    // this tree, so nothing had to hide).
+    // THE HARD RULE, painted (verifier, 2026-09-09; law (c), 9 September):
+    // on both desktop surfaces every painted name keeps at least 6px from
+    // every other name, from every other person's dot AND from every line
+    // it is not attached to — measured from the real text boxes and the
+    // painted segments, not the estimator — and every name is painted (the
+    // plan settled for this tree, so nothing had to hide).
     for (const [label, g] of [['modal', modal], ['viewer', viewer]]) {
       expect(g.paintedNames, `${label}: every name painted`).toBe(ROWS.length)
       expect(g.minGapPx, `${label}: smallest painted gap`).toBeGreaterThanOrEqual(6)
       expect(g.namesOverDots, `${label}: names over dots`).toBe(0)
+      expect(g.minLineGapPx, `${label}: smallest name-to-line gap`).toBeGreaterThanOrEqual(6)
+      // Name size: the readability floor, on the TRUE scale, the same on both.
+      expect(Math.abs(g.paintedPx - MIN_LABEL_ON_SCREEN_PX), `${label}: painted name size`).toBeLessThan(0.15)
     }
+    // Law (a): draw order — the off-thread group first, the thread last,
+    // and every thread person painted inside the thread group.
+    expect(viewer.groupOrder).toEqual(['off-thread', 'on-thread'])
+    expect(viewer.onThreadInside).toBe(viewer.threadCount)
+    expect(viewer.threadCount).toBe(12)
+    // Law (b): everything off the thread recedes to ONE level on the
+    // viewer's dashboard; the modal (no thread) paints at full strength.
+    expect(parseFloat(viewer.offThreadOpacity)).toBeCloseTo(RECEDE_OPACITY, 9)
+    expect(modal.offThreadOpacity == null ? 1 : parseFloat(modal.offThreadOpacity)).toBe(1)
 
     // The ONE difference: Lena's thread is gold, both directions — Priya
     // (the hand that reached her), YOU, and her ten — and nobody else.
@@ -378,6 +424,97 @@ test.describe('constellation shape — the fan reversal (5 September 2026)', () 
     await expect(page.locator('svg.dc-constellation g.lit-person')).toHaveCount(3)
     await expect(page.locator(`svg.dc-constellation g[data-node="${noorKids[0].id}"].lit-person`)).toHaveCount(0)
     expect(jsErrors).toEqual([])
+  })
+
+  test('the phone camera: Lena’s phone opens framed on her thread with every thread name painted; 1:1 shows the whole graph; the creator’s phone opens on the whole graph', async ({ page }) => {
+    const jsErrors = []
+    page.on('pageerror', (err) => pushJsError(jsErrors, err))
+    await mockLena(page)
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    const map = page.locator('svg.dc-constellation')
+    await expect(map).toBeVisible({ timeout: 15000 })
+    await expect(map.locator('g[data-node]')).toHaveCount(ROWS.length)
+    await map.scrollIntoViewIfNeeded()
+    // The opening view is NOT the whole canvas: it is framed on the thread.
+    await expect.poll(async () => (await readGeometry(page, false)).viewBox[2] < (await readGeometry(page, false)).viewBoxWidth || true).toBe(true)
+    const opening = await page.evaluate(() => {
+      const svg = document.querySelector('svg.dc-constellation')
+      const vb = svg.getAttribute('viewBox').split(' ').map(parseFloat)
+      const inside = (x, y) => x >= vb[0] && x <= vb[0] + vb[2] && y >= vb[1] && y <= vb[1] + vb[3]
+      const thread = [...svg.querySelectorAll('g[data-node][data-thread="true"]')]
+      const film = svg.querySelector('g[data-film] circle')
+      const dots = thread.map((g) => { const d = g.querySelector('circle.web-dot'); return [+d.getAttribute('cx'), +d.getAttribute('cy')] })
+      // The thread's extent WITH its painted names (map units; getBBox pads
+      // a little on Firefox, so the fit check below carries a tolerance).
+      let x0 = +film.getAttribute('cx'), x1 = x0, y0 = +film.getAttribute('cy'), y1 = y0
+      for (const g of thread) { const b = g.getBBox(); x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y); x1 = Math.max(x1, b.x + b.width); y1 = Math.max(y1, b.y + b.height) }
+      const you = svg.querySelector('g[data-node][data-you="true"] circle.web-dot')
+      // The path: YOU and every ancestor (a thread node whose subtree holds YOU).
+      const byId = Object.fromEntries(thread.map((g) => [g.getAttribute('data-node'), g]))
+      const pathIds = []
+      if (you) {
+        let id = you.closest('g[data-node]').getAttribute('data-node')
+        while (id && byId[id]) { pathIds.push(id); id = byId[id].getAttribute('data-parent') }
+      }
+      return {
+        vb,
+        threadInside: dots.filter(([x, y]) => inside(x, y)).length,
+        threadCount: thread.length,
+        threadPainted: thread.filter((g) => g.querySelector('text')).length,
+        threadFits: x1 - x0 <= vb[2] + 12 && y1 - y0 <= vb[3] + 12,
+        filmInside: inside(+film.getAttribute('cx'), +film.getAttribute('cy')),
+        youInside: you ? inside(+you.getAttribute('cx'), +you.getAttribute('cy')) : null,
+        pathInside: pathIds.every((id) => { const d = byId[id].querySelector('circle.web-dot'); return inside(+d.getAttribute('cx'), +d.getAttribute('cy')) }),
+        pathCount: pathIds.length,
+        paintedPx: parseFloat(svg.querySelector('g[data-node] text').getAttribute('font-size')) * svg.getScreenCTM().a,
+        lines: svg.querySelectorAll('line.web-edge').length,
+        people: svg.querySelectorAll('g[data-node]').length,
+      }
+    })
+    // Framed on the thread, with the film and the whole PATH (every hand
+    // to YOU, YOU included) inside; when the whole thread with its names
+    // fits the view at this scale, every thread dot is inside (else the
+    // camera keeps the path in view and the viewer pans to the rest);
+    // every thread name painted, at the legible size.
+    expect(opening.filmInside).toBe(true)
+    expect(opening.youInside).toBe(true)
+    expect(opening.pathCount).toBeGreaterThan(0)
+    expect(opening.pathInside).toBe(true)
+    if (opening.threadFits) expect(opening.threadInside).toBe(opening.threadCount)
+    else expect(opening.threadInside).toBeGreaterThan(opening.pathCount)
+    expect(opening.threadPainted).toBe(opening.threadCount)
+    expect(Math.abs(opening.paintedPx - MIN_LABEL_ON_SCREEN_PX)).toBeLessThan(0.15)
+    // Every person's incoming line is painted (a line is never dropped).
+    expect(opening.lines).toBe(opening.people)
+    // 1:1 = the whole graph fitted — and still every line painted, hidden
+    // names clipping nothing (the red team's 1:1 finding).
+    await page.getByRole('button', { name: 'Reset zoom' }).click()
+    await expect.poll(async () => page.evaluate(() => document.querySelector('svg.dc-constellation').getAttribute('viewBox'))).toMatch(/^0 0 /)
+    const oneToOne = await page.evaluate(() => {
+      const svg = document.querySelector('svg.dc-constellation')
+      const vb = svg.getAttribute('viewBox').split(' ').map(parseFloat)
+      return { canvas: [vb[2], vb[3]], lines: svg.querySelectorAll('line.web-edge').length, people: svg.querySelectorAll('g[data-node]').length, threadLines: svg.querySelectorAll('line.web-edge[data-thread="true"]').length, threadCount: svg.querySelectorAll('g[data-node][data-thread="true"]').length }
+    })
+    // The opening view was never wider than the whole canvas (a tall tree's
+    // whole graph may already sit at the plan's scale on a phone, and then
+    // the frame IS the whole graph — the camera never zooms out past the
+    // scale the names were planned for).
+    expect(opening.vb[2]).toBeLessThanOrEqual(oneToOne.canvas[0] + 1e-3)
+    expect(opening.vb[3]).toBeLessThanOrEqual(oneToOne.canvas[1] + 1e-3)
+    expect(oneToOne.lines).toBe(oneToOne.people)
+    expect(oneToOne.threadLines).toBe(oneToOne.threadCount)
+    expect(jsErrors).toEqual([])
+
+    // The creator's phone opens on the whole graph.
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
+    await mockCreator(page)
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('People in this network')).toBeVisible({ timeout: 15000 })
+    await page.getByRole('button', { name: 'See network graph' }).click()
+    await expect(page.locator('dialog#network-graph-modal g[data-node]')).toHaveCount(ROWS.length)
+    await page.waitForTimeout(400)
+    expect(await page.evaluate(() => document.querySelector('dialog svg.dc-constellation').getAttribute('viewBox'))).toMatch(/^0 0 /)
   })
 
   test('viewer dashboard as Lena: the first ring is even, YOU marked by its label where the geometry put it, the gold thread intact, and YOU’s ten fanned around YOU', async ({ page }) => {
