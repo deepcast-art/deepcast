@@ -84,7 +84,13 @@ const LINK_CLAIMED = {
 
 /* RECORDED before the film-scoped entry existed (2026-09-03, chromium,
    1280×720 default viewport) — do not "update" this by re-recording after
-   a change to the page; a difference here IS the regression. */
+   a change to the page; a difference here IS the regression.
+   DELIBERATELY RE-RECORDED 2026-09-09 (founder batch `story-links-and-copy`):
+   the modal's labels took the invitation vocabulary ("5 invitations left." /
+   "Create their invitation"). The rail's lineage chain, briefly part of the
+   same batch, was withdrawn by the founder the same day pending a design
+   pass, and the rail text below is the ORIGINAL 2026-09-03 recording. Every
+   other recorded byte is unchanged. */
 const BASELINE = {
   before: {
     header: 'deepcast\nYOUR DASHBOARD →',
@@ -104,11 +110,11 @@ const BASELINE = {
     eyebrow: 'Pass it on',
     paragraphs: [
       'Pass it on',
-      '5 tickets left.',
+      '5 invitations left.',
       'Who needs to see this? Not anyone — the one it will matter to.',
     ],
     placeholder: 'Their first name',
-    buttons: ['Close', 'Share it with them'],
+    buttons: ['Close', 'Create their invitation'],
     svgTexts: ['IEN', 'PRIYA', 'DAN', 'YOU', '?'],
     stubs: 5,
     forks: 2,
@@ -304,14 +310,14 @@ test.describe('the filmmaker’s own watch page — /watch/film/:filmId', () => 
     ).toEqual(['YOU', '?'])
     await expect(page.locator('dialog svg g[data-fork]')).toHaveCount(0)
     await expect(page.locator('dialog [data-stub]')).toHaveCount(0)
-    await expect(page.getByText(/tickets? left\./)).toHaveCount(0)
+    await expect(page.getByText(/invitations? left\./)).toHaveCount(0)
     await expect(page.getByText(/Who needs to see this\? Not anyone/)).toBeVisible()
 
     // Generating a ticket here is the SAME session-path create-link call the
     // card's "Create an invitation" makes: bearer token + film id, no
     // claimed-invite reference, no parent — the server numbers it like any.
     await page.getByPlaceholder('Their first name').fill('Noa')
-    await page.getByRole('button', { name: 'Share it with them' }).click()
+    await page.getByRole('button', { name: 'Create their invitation' }).click()
     await expect(page.getByText('http://localhost:3000/ticket-k7m2p')).toBeVisible()
     expect(createCalls).toHaveLength(1)
     expect(createCalls[0].authorization).toBe('Bearer fake-jwt')
@@ -323,9 +329,9 @@ test.describe('the filmmaker’s own watch page — /watch/film/:filmId', () => 
     })
     // The reveal: unlimited wording, the share-again act, the emblem's tip
     // now carries the name (still hollow until they claim).
-    await expect(page.getByText(/Here’s Noa’s ticket link/)).toBeVisible()
+    await expect(page.getByText(/Here’s Noa’s invitation link — it admits one person only/)).toBeVisible()
     await expect(page.getByText('Who else needs it?')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Share another ticket' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Create another invitation' })).toBeVisible()
     expect(
       await page.evaluate(() =>
         [...document.querySelectorAll('dialog svg text')].map((t) => t.textContent)

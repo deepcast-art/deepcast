@@ -4,6 +4,9 @@
  * source for the copy: rendered by the /about page and the dashboard's
  * About popup, so the two can never drift.
  */
+import FilmmakerLinks from './FilmmakerLinks'
+import { IEN_LINKS } from '../content/filmStory'
+
 export default function AboutContent() {
   return (
     <div className="space-y-8">
@@ -33,7 +36,11 @@ export default function AboutContent() {
       <section>
         <h2 className="font-serif-v3 text-[21px] italic text-accent">Who made this?</h2>
         <p className="mt-2 font-body font-light text-base text-[#dddddd]/70 leading-relaxed">
-          {'I did — Ien Chi ('}
+          {'I did — Ien Chi'}
+          {/* The founder's two link icons beside his name (2026-09-09) —
+              the copy itself is untouched. */}
+          <FilmmakerLinks links={IEN_LINKS} className="ml-2 align-middle" />
+          {' ('}
           <a
             href="https://www.ienchi.com"
             target="_blank"

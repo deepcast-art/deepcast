@@ -1038,7 +1038,7 @@ export default function Dashboard() {
                                               }}
                                               className="cursor-pointer rounded-none border border-border px-2 py-0.5 text-[9px] uppercase tracking-wider text-text-muted transition-colors hover:border-text-muted hover:text-text"
                                             >
-                                              {copiedTicketId === row.id ? 'Copied' : 'Copy their ticket link'}
+                                              {copiedTicketId === row.id ? 'Copied' : 'Copy their invitation link'}
                                             </button>
                                           </span>
                                         )}

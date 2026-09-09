@@ -173,10 +173,10 @@ export default function ViewerDashboardV5({
     ticketsRemaining === Infinity ? 'Unlimited' : (ticketsRemaining ?? '—')
   const mobileLine =
     ticketsRemaining === Infinity
-      ? `Unlimited tickets · ${ticketsGiven} shared`
+      ? `Unlimited invitations · ${ticketsGiven} sent`
       : ticketsRemaining == null
-        ? `${ticketsGiven} tickets shared`
-        : `${ticketsRemaining} tickets remaining · ${ticketsGiven} shared`
+        ? `${ticketsGiven} invitations sent`
+        : `${ticketsRemaining} invitations remaining · ${ticketsGiven} sent`
 
   const shareCtaClass =
     'w-full border border-gold bg-gold px-4 py-[1.125rem] text-center font-sans text-[0.8125rem] uppercase tracking-[0.26em] text-ink transition-colors duration-300 hover:bg-transparent hover:text-gold-soft focus-visible:bg-transparent focus-visible:text-gold-soft focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-gold disabled:hover:text-ink'
@@ -287,7 +287,7 @@ export default function ViewerDashboardV5({
                 {remainingDisplay}
               </p>
               <p className="font-sans text-[0.625rem] uppercase tracking-[0.22em] text-smoke">
-                Tickets remaining
+                Invitations remaining
               </p>
             </div>
             <div className="flex items-baseline gap-3">
@@ -295,7 +295,7 @@ export default function ViewerDashboardV5({
                 {ticketsGiven}
               </p>
               <p className="font-sans text-[0.625rem] uppercase tracking-[0.22em] text-smoke">
-                Tickets shared
+                Invitations sent
               </p>
             </div>
           </div>
@@ -502,11 +502,11 @@ export default function ViewerDashboardV5({
                     the ask, even before the first link exists) ── */}
               <section className="mt-12 md:mt-16">
                 <p className="font-sans text-[0.625rem] uppercase tracking-[0.3em] text-smoke">
-                  Tickets you&apos;ve shared
+                  Invitations you&apos;ve sent
                 </p>
                 {ticketRows.length === 0 ? (
                   <p className="mt-5 border-t border-mist/[0.12] pt-6 font-serif-v3 text-base italic text-smoke">
-                    No tickets shared yet.
+                    No invitations sent yet.
                   </p>
                 ) : (
                   <div className="mt-5 border-t border-mist/[0.12]">
@@ -548,7 +548,7 @@ export default function ViewerDashboardV5({
                             onClick={() => copyTicketLink(t)}
                             className="min-w-0 break-all py-1.5 text-left font-sans text-[0.65rem] uppercase tracking-[0.22em] text-gold transition-colors hover:text-gold-soft"
                           >
-                            {copyFeedback?.id === t.id ? copyFeedback.label : 'Copy their ticket link'}
+                            {copyFeedback?.id === t.id ? copyFeedback.label : 'Copy their invitation link'}
                           </button>
                         )}
                       </div>

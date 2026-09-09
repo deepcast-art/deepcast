@@ -12,6 +12,7 @@ import { api } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import { firstNameInputError } from '../lib/firstNameRule'
 import { revealTicketsLine } from '../lib/revealTicketsLine'
+import { revealSentence } from '../lib/revealSentence'
 
 export default function ShareLinkModal({ open, onClose, filmId, parentInviteId, onCreated }) {
   const [name, setName] = useState('')
@@ -117,18 +118,18 @@ export default function ShareLinkModal({ open, onClose, filmId, parentInviteId, 
             disabled={busy}
             className="w-full border border-gold bg-gold px-4 py-4 font-sans text-[0.8125rem] uppercase tracking-[0.26em] text-ink transition-colors duration-300 hover:bg-transparent hover:text-gold-soft disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {busy ? 'One moment…' : 'Share it with them'}
+            {busy ? 'One moment…' : 'Create their invitation'}
           </button>
         </form>
         {error && <p className="mt-3 font-sans text-sm text-error">{error}</p>}
 
         {generated && (
           <div className="mt-7 border-t border-mist/[0.12] pt-6">
-            {/* Owner-approved reveal copy (2026-07-21; "admits one person
-                only" revision 2026-07-25, aligned with creed line 3). */}
+            {/* The reveal sentence — the SAME sentence as the watch page's
+                modal, from the one shared rule (src/lib/revealSentence.js;
+                founder 2026-09-09). */}
             <p className="font-serif-v3 text-base italic leading-relaxed text-smoke">
-              Here’s {generated.name}’s ticket. Deliver it with your own words — it admits one
-              person only.
+              {revealSentence(generated.name)}
             </p>
             <p className="mt-4 break-all font-sans text-sm text-mist">{generated.url}</p>
             <button
@@ -136,7 +137,7 @@ export default function ShareLinkModal({ open, onClose, filmId, parentInviteId, 
               onClick={handleCopy}
               className="mt-4 border border-mist/25 px-5 py-2.5 font-sans text-[0.6875rem] uppercase tracking-[0.22em] text-smoke transition-colors hover:border-gold hover:text-gold-soft"
             >
-              {copied ? 'Copied' : 'Copy their ticket link'}
+              {copied ? 'Copied' : 'Copy their invitation link'}
             </button>
             <p className="mt-5 font-sans text-[0.6875rem] uppercase tracking-[0.22em] text-smoke">
               {revealTicketsLine(generated.ticketsRemaining)}

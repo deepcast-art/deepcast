@@ -1,10 +1,10 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import DeepcastLogo from '../components/DeepcastLogo'
-import { buildLineageChain } from '../lib/lineageThread'
+import LineageChain from '../components/LineageChain'
 import { formatRuntimeMinutes } from '../lib/runtime'
 import { saveClaimStash, readClaimStash, isClaimOwner } from '../lib/claimStash'
 import { emailInputError } from '../lib/emailShape'
@@ -242,100 +242,6 @@ function ClaimPrologue({ receiver, sharer, posterUrl, onDone }) {
           >
             {text}
           </p>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-/** Collapse thresholds (fixed counts, decided 2026-07-18): the full chain
- *  shows up to 5 names on wide screens, 3 on phones; past that the middle
- *  folds into a tappable "⋯ N others ⋯" that expands in place. The 640px
- *  breakpoint only picks WHICH fixed threshold applies — nothing measures
- *  what fits. Mobile started at 4 per spec, but a measured full 4-name
- *  vertical chain overflowed 390×844 by ~69px even with tightened gaps, so
- *  it dropped to 3 per the agreed fallback (2026-07-18). */
-const CHAIN_THRESHOLD_WIDE = 5
-const CHAIN_THRESHOLD_NARROW = 3
-const CHAIN_MEDIA_QUERY = '(min-width: 640px)'
-
-/** The lineage chain — the network idea at a whisper: first names joined by
- *  arrows (→ on wide screens, ↓ stacked on phones), the film's creator
- *  first with a small "filmmaker" caption, ending in "you". */
-function LineageChain({ names, senderIsCreator }) {
-  const [expanded, setExpanded] = useState(false)
-  const [wide, setWide] = useState(() => window.matchMedia(CHAIN_MEDIA_QUERY).matches)
-
-  useEffect(() => {
-    const mq = window.matchMedia(CHAIN_MEDIA_QUERY)
-    const onChange = (e) => setWide(e.matches)
-    mq.addEventListener('change', onChange)
-    return () => mq.removeEventListener('change', onChange)
-  }, [])
-
-  const items = buildLineageChain(names, {
-    collapseAfter: wide ? CHAIN_THRESHOLD_WIDE : CHAIN_THRESHOLD_NARROW,
-    expanded,
-    senderIsCreator,
-  })
-  if (!items.length) return null
-
-  return (
-    <div className="mt-[clamp(1.25rem,2.5svh,2rem)]">
-      <span className="block font-sans text-[10px] uppercase tracking-[0.3em] text-muted">
-        How this reached you
-      </span>
-      <div
-        className={`mt-3 flex items-center justify-center font-sans text-[0.8125rem] uppercase leading-none tracking-[0.2em] text-accent ${
-          wide ? 'flex-row flex-wrap gap-x-[1.125rem] gap-y-5' : 'flex-col gap-1.5'
-        }`}
-      >
-        {items.map((item, i) => (
-          <Fragment key={i}>
-            {i > 0 && (
-              <span aria-hidden className="font-light tracking-normal text-accent/65">
-                {wide ? '→' : '↓'}
-              </span>
-            )}
-            {item.type === 'collapsed' ? (
-              /* Expanding may push content below the fold — acceptable only
-                 after this deliberate tap, never in the default state. */
-              <button
-                type="button"
-                onClick={() => setExpanded(true)}
-                className="cursor-pointer border-none bg-transparent p-0 font-sans text-[0.8125rem] uppercase tracking-[0.2em] text-muted transition-colors hover:text-warm focus-visible:text-warm focus-visible:outline-none"
-                aria-label={`Show all ${item.count} people this film passed through`}
-              >
-                ⋯ {item.count} others ⋯
-              </button>
-            ) : item.type === 'you' ? (
-              <span className="text-paper/90">you</span>
-            ) : item.filmmaker ? (
-              /* Horizontal rows: the caption hangs below (absolute) so the
-                 name stays on the row's shared baseline. Vertical stacks:
-                 in-flow, so the ↓ beneath moves down to make room. */
-              wide ? (
-                <span className="relative inline-block">
-                  <span>{item.label}</span>
-                  <span
-                    aria-hidden
-                    className="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap text-[0.5625rem] tracking-[0.3em] text-muted"
-                  >
-                    filmmaker
-                  </span>
-                </span>
-              ) : (
-                <span className="inline-flex flex-col items-center gap-1">
-                  <span>{item.label}</span>
-                  <span aria-hidden className="text-[0.5625rem] tracking-[0.3em] text-muted">
-                    filmmaker
-                  </span>
-                </span>
-              )
-            ) : (
-              <span>{item.label}</span>
-            )}
-          </Fragment>
         ))}
       </div>
     </div>
@@ -636,9 +542,20 @@ export default function ClaimLanding() {
           {headline}
         </h1>
 
-        {/* 3. Lineage chain — the whisper. */}
+        {/* 3. Lineage chain — the whisper. The chain itself is the shared
+            component (src/components/LineageChain.jsx, since 2026-09-09 also
+            the watch rail's); the label is this page's alone. */}
         <div className="dc-rise dc-rise-3">
-          <LineageChain names={chainNames} senderIsCreator={chainSenderIsCreator} />
+          {Array.isArray(chainNames) && chainNames.length > 0 && (
+            <div className="mt-[clamp(1.25rem,2.5svh,2rem)]">
+              <span className="block font-sans text-[10px] uppercase tracking-[0.3em] text-muted">
+                How this reached you
+              </span>
+              <div className="mt-3">
+                <LineageChain names={chainNames} senderIsCreator={chainSenderIsCreator} />
+              </div>
+            </div>
+          )}
         </div>
 
         <LetterDivider className="mt-[clamp(1.75rem,3.5svh,3.25rem)] dc-rise dc-rise-3" />

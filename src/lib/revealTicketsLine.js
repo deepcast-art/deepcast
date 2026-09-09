@@ -6,7 +6,10 @@
  * Copy stamped founder-approved 2026-07-23 (watch-page redesign, amendment
  * A): "Who else needs it?" replaces the earlier "Who else comes to mind?"
  * ON EVERY SURFACE — the founder confirmed the dashboard modal picking up
- * the new line is intended, not drift.
+ * the new line is intended, not drift. Vocabulary split 2026-09-09
+ * (founder): the counted thing is an INVITATION — "{n} invitations left."
+ * / "That was your last invitation for this film." — while "Who else needs
+ * it?" alone is unchanged.
  *
  * `ticketsRemaining` is the create-link response value at the reveal moment:
  * a number for finite wallets, null for unlimited sharers (the server sends
@@ -15,6 +18,6 @@
  */
 export function revealTicketsLine(ticketsRemaining) {
   if (ticketsRemaining == null) return 'Who else needs it?'
-  if (ticketsRemaining <= 0) return 'That was your last ticket for this film.'
-  return `${ticketsRemaining} ticket${ticketsRemaining === 1 ? '' : 's'} left. Who else needs it?`
+  if (ticketsRemaining <= 0) return 'That was your last invitation for this film.'
+  return `${ticketsRemaining} invitation${ticketsRemaining === 1 ? '' : 's'} left. Who else needs it?`
 }
