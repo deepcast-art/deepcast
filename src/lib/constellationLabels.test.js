@@ -190,13 +190,36 @@ describe('labelTextWidth — glyph by glyph from the Phoenix font', () => {
   })
 })
 
+describe('clipSegment — a box adjacent to an end counts as attached (v5, 9 September 2026)', () => {
+  it('trims a line that leaves its dot and meets the name beside it a few units out (Charles → Jacob)', () => {
+    // Charles's dot at (557, 407); his outward name box to its LEFT, ending
+    // 11 units short of the dot; the line to Jacob runs left through it.
+    const box = { x: 478, y: 397, w: 68, h: 16 }
+    const cut = clipSegment(557, 407, 334, 368, [box], [], 6)
+    expect(cut).not.toBeNull()
+    // The line now starts beyond the box (past its left edge plus the gap).
+    expect(cut.x1).toBeLessThan(478 - 6 + 1e-6)
+    expect(cut.x2).toBe(334)
+  })
+  it('does not trim a box that merely lies further along the line (not attached to its end)', () => {
+    const far = { x: 400, y: 380, w: 30, h: 16 } // ~150 units along, not adjacent to either end
+    const cut = clipSegment(557, 407, 334, 368, [far], [], 6)
+    expect(cut).toEqual({ x1: 557, y1: 407, x2: 334, y2: 368 })
+  })
+  it('the end side is symmetric: a name beside the END dot on the line’s side is trimmed', () => {
+    const box = { x: 340, y: 360, w: 68, h: 16 } // just past the end dot (334, 368), on the line's side
+    const cut = clipSegment(557, 407, 334, 368, [], [box], 6)
+    expect(cut).not.toBeNull()
+    expect(cut.x2).toBeGreaterThan(408 + 6 - 1e-6)
+  })
+})
+
 describe('the two scales', () => {
-  it('the readability floor is 9.5px and counter-scales against the TRUE scale (the width-based formula is gone)', () => {
-    expect(MIN_LABEL_ON_SCREEN_PX).toBe(9.5)
-    // A height-limited desktop map: the font follows 576/H, not 960/W.
-    const s = mapScaleFor(960, 576, 1311, 806)
-    expect(s).toBeCloseTo(576 / 806, 9)
-    expect(labelFontSize(8, s)).toBeCloseTo(9.5 / s, 1)
+  it('the readability floor is 11px (the reach layout: the largest size at which Circles settles) and counter-scales against the TRUE scale (the width-based formula is gone)', () => {
+    expect(MIN_LABEL_ON_SCREEN_PX).toBe(11)
+    const s = mapScaleFor(960, 576, 950, 800)
+    expect(s).toBeCloseTo(576 / 800, 9)
+    expect(labelFontSize(8, s)).toBeCloseTo(11 / s, 1)
   })
   it('mapScaleFor is the true scale — the smaller of the width and height ratios', () => {
     // The founder's desktop box shows a 1035² canvas height-limited.
@@ -365,5 +388,16 @@ describe('labelVisibility — tiers and lines (law (a)/(c) at every view)', () =
     const lines = [{ fromId: 'p', toId: 'q', x1: -50, y1: 5, x2: 100, y2: 5 }]
     const dots = [{ id: 'q', rect: rect(10, 2, 4, 4) }]
     expect(labelVisibility(items, 6, dots, lines).visibleIds.has('you')).toBe(true)
+  })
+})
+
+/* ── 10 September 2026: the line floor is pinned at v4's grey ── */
+import { LINE_ALPHA, RECEDE_OPACITY as RECEDE } from './constellationLabels.js'
+
+describe('the line floor (founder, 10 September 2026)', () => {
+  it('is v4’s line grey, 0.16 — NOT v5’s half strength — and off a viewer’s thread the recede halves it to 0.08, the live v4 look', () => {
+    expect(LINE_ALPHA).toBe(0.16)
+    expect(RECEDE).toBe(0.5)
+    expect(+(LINE_ALPHA * RECEDE).toFixed(3)).toBe(0.08)
   })
 })

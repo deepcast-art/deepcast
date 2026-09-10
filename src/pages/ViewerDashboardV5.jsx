@@ -412,7 +412,7 @@ export default function ViewerDashboardV5({
                               goWatch()
                             }
                           }}
-                          className="relative flex cursor-pointer items-center gap-3.5 border border-mist/[0.12] bg-ink-2 p-3.5 transition-colors hover:border-mist/25 md:gap-6 md:p-5"
+                          className="relative flex cursor-pointer items-center gap-3.5 border border-mist/[0.12] bg-ink p-3.5 transition-colors hover:border-mist/25 md:gap-6 md:p-5"
                         >
                           {/* Thin quiet progress indicator (in-progress cards only). */}
                           {card.progress != null && (

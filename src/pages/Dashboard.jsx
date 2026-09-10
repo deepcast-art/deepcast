@@ -794,7 +794,7 @@ export default function Dashboard() {
               const isInviteOpen = inviteFilmId === film.id
 
               return (
-                <div key={film.id} className="border border-border bg-bg-card p-6">
+                <div key={film.id} className="border border-border bg-ink p-6">
                   <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex items-center gap-4">
                       {film.thumbnail_url && (
@@ -913,7 +913,7 @@ export default function Dashboard() {
                             {film.title}
                           </span>
                         </div>
-                        <div className="relative flex h-[min(52vh,560px)] w-full overflow-hidden bg-[#121a33] sm:h-[min(56vh,620px)]">
+                        <div className="relative flex h-[min(52vh,560px)] w-full overflow-hidden bg-ink sm:h-[min(56vh,620px)]">
                           <NetworkGraph
                             fillHeight
                             pannable

@@ -51,12 +51,15 @@
  *  - RECEDE_OPACITY — how far the non-thread drawing steps back.
  */
 
-/** 9.5 since 2026-09-09 (was 11, which the width-based floor never
- *  delivered on the desktop — names painted ≈7px there): the founder asked
- *  for names enlarged by half at his desktop, and for the largest size at
- *  which Circles still settles at rest under the hard clearance rule —
- *  measured, that is 9.5px (see the constellation notes in CLAUDE.md). */
-export const MIN_LABEL_ON_SCREEN_PX = 9.5
+/** 11 since the reach layout of 10 September 2026 (9.5 in v4, 9 in the
+ *  rejected v5; 11 before that, which the width-based floor never
+ *  delivered on the desktop — names painted ≈7px there). The founder's
+ *  standing instruction: names paint at the LARGEST size at which Circles
+ *  still settles at rest under the hard clearance rule — measured on the
+ *  sanitized Circles fixture under "a branch's length is its reach" with
+ *  the canvas fitted to the drawing: 9.5, 10, 10.5 and 11 settle; 11.25
+ *  and above fall back (see the constellation notes in CLAUDE.md). */
+export const MIN_LABEL_ON_SCREEN_PX = 11
 /** The on-screen clearance the renderer's visibility rule demands between
  *  two painted names, a name and another person's dot, and a name and an
  *  unattached line — the verifier's hard rule of 2026-09-09 (was 3). */
@@ -65,10 +68,21 @@ export const LABEL_GAP_PX = 6
  *  reference view (the layout converts it to map units by the view's scale). */
 export const LABEL_CLEARANCE = 6
 /** Law (b): the one quieter level everything off a viewer's thread recedes
- *  to — a group opacity applied alike to non-thread segments, dots and
- *  labels. Proposed by the builder 2026-09-09 (0.5: the web still reads as
- *  a web, the thread reads as the subject); the founder tunes it. */
+ *  to — applied per element (each non-thread segment, dot and label
+ *  carries it, so an explored element lifts to full strength in place and
+ *  nothing re-mounts on hover). THE PINNED VALUE (founder, 10 September
+ *  2026): off-thread on a viewer's dashboard is FAINT — exactly the live v4
+ *  look, not v5's half strength: a non-thread line paints at LINE_ALPHA ×
+ *  RECEDE_OPACITY = 0.16 × 0.5 = 0.08 alpha, a name at 0.45 × 0.5, a dot
+ *  at 0.7 × 0.5 (the base greys are the renderer's, unchanged since V5). */
 export const RECEDE_OPACITY = 0.5
+/** THE LINE FLOOR (founder, 9 September 2026 evening; value pinned
+ *  10 September): a painted line is never fainter than this — the grey
+ *  line's own alpha, v4's 0.16, and NOT v5's 0.5 — and never thinner than
+ *  one device pixel (the renderer paints every edge with a non-scaling
+ *  stroke), so the 1:1 phone view reads as connected dots, never a
+ *  dot-cloud. Off a viewer's thread the recede multiplies it (0.08). */
+export const LINE_ALPHA = 0.16
 /** THE REFERENCE VIEW the layout plans for — the founder's desktop
  *  (1440×900): the NARROWER of its two map boxes, the creator modal's, is
  *  ~960 CSS px wide (a 64rem panel minus its padding; the viewer
@@ -99,11 +113,21 @@ export function mapScaleFor(w, h, vbW, vbH) {
  *  (CENTER_LABELS) and the emblem its radius (EMBLEM_R). */
 export const PERSON_LABEL_SIZE = 8
 export const PERSON_DOT_R = 2.4
+/** A hollow (in-flight) dot's stroke width; its outer half lies OUTSIDE the
+ *  radius, so the dot paints 0.55 units wider than a solid one. */
+export const PERSON_DOT_STROKE = 1.1
+/** The radius a dot occupies as an OBSTACLE (founder, 9 September 2026
+ *  evening: a hollow dot's stroke counts as part of the obstacle). Applied
+ *  to every dot — solid ones too — so the geometry never depends on who
+ *  has claimed by the time the map is drawn. */
+export const PERSON_DOT_OBSTACLE_R = PERSON_DOT_R + PERSON_DOT_STROKE / 2
+/** How far a name sits from its dot (radialLabel's offset). */
+export const LABEL_OFFSET = 11
 export const EMBLEM_R = 34
-/** A person dot's axis-aligned square at design scale, for the same
- *  overlap test the labels use. */
+/** A person dot's axis-aligned square at design scale — the obstacle a
+ *  name may not cross — for the same overlap test the labels use. */
 export function dotRect(x, y) {
-  return { x: x - PERSON_DOT_R, y: y - PERSON_DOT_R, w: 2 * PERSON_DOT_R, h: 2 * PERSON_DOT_R }
+  return { x: x - PERSON_DOT_OBSTACLE_R, y: y - PERSON_DOT_OBSTACLE_R, w: 2 * PERSON_DOT_OBSTACLE_R, h: 2 * PERSON_DOT_OBSTACLE_R }
 }
 
 /** Advance width per glyph as a fraction of the font size, read from the
@@ -271,13 +295,22 @@ export function segmentTouchesRect(x1, y1, x2, y2, rect, gap = LABEL_GAP_PX) {
 export function clipSegment(x1, y1, x2, y2, startObstacles = [], endObstacles = [], gap = LABEL_GAP_PX) {
   let t0 = 0
   let t1 = 1
+  // An attached box counts whether the segment STARTS inside it or merely
+  // meets it within the label offset (plus the gap) of its start — a name
+  // sits LABEL_OFFSET from its dot, so a line leaving the dot on the name's
+  // side enters the box a few units out, not at the dot (v5, 9 September
+  // 2026: Charles's line to Jacob ran through "CHARLES" — his name could
+  // not turn inward at the first ring, and the old rule trimmed only a box
+  // that contained the dot). The same holds at the end.
+  const len = Math.hypot(x2 - x1, y2 - y1) || 1
+  const reach = (LABEL_OFFSET + gap) / len
   for (const r of startObstacles) {
     const iv = segmentRectInterval(x1, y1, x2, y2, r, gap)
-    if (iv && iv[0] <= t0 + 1e-9) t0 = Math.max(t0, iv[1])
+    if (iv && iv[0] <= t0 + reach + 1e-9) t0 = Math.max(t0, iv[1])
   }
   for (const r of endObstacles) {
     const iv = segmentRectInterval(x1, y1, x2, y2, r, gap)
-    if (iv && iv[1] >= t1 - 1e-9) t1 = Math.min(t1, iv[0])
+    if (iv && iv[1] >= t1 - reach - 1e-9) t1 = Math.min(t1, iv[0])
   }
   if (t0 >= t1) return null
   return { x1: x1 + (x2 - x1) * t0, y1: y1 + (y2 - y1) * t0, x2: x1 + (x2 - x1) * t1, y2: y1 + (y2 - y1) * t1 }

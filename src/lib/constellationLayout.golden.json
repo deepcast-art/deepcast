@@ -1,1 +1,429 @@
-{"width":900,"height":826,"cx":450,"cy":413,"rings":[118,174,230,286,342],"nodes":[{"id":"film-root","kind":"film","name":"","depth":0,"theta":0,"r":0,"parentId":null,"x":450,"y":413,"label":null,"labelSide":null,"twinkleDelay":null},{"id":"a","kind":"person","name":"P1","depth":1,"theta":-1.5707963267948966,"r":118,"parentId":"film-root","x":450,"y":295,"label":{"x":450,"y":313,"anchor":"middle"},"labelSide":"in","twinkleDelay":0.97,"claimed":false},{"id":"b","kind":"person","name":"YOU","depth":2,"theta":-1.5707963267948966,"r":174,"parentId":"a","x":450,"y":239,"label":{"x":450,"y":257,"anchor":"middle"},"labelSide":"in","twinkleDelay":0.98,"claimed":false},{"id":"c1","kind":"person","name":"P3","depth":3,"theta":-1.8332963267948965,"r":230,"parentId":"b","x":390.3159841827546,"y":190.87882078485447,"label":{"x":387.46153125236464,"y":177.25563395282578,"anchor":"middle"},"labelSide":"out","twinkleDelay":1.18,"claimed":false},{"id":"c2","kind":"person","name":"P4","depth":3,"theta":-1.6582963267948965,"r":230,"parentId":"b","x":429.90067050957896,"y":183.87990713593996,"label":{"x":428.9393982296023,"y":169.9219896511371,"anchor":"middle"},"labelSide":"out","twinkleDelay":1.19,"claimed":true},{"id":"c3","kind":"person","name":"P5","depth":3,"theta":-1.4832963267948966,"r":230,"parentId":"b","x":470.09932949042104,"y":183.87990713593996,"label":{"x":471.0606017703977,"y":169.9219896511371,"anchor":"middle"},"labelSide":"out","twinkleDelay":1.2,"claimed":true},{"id":"c4","kind":"person","name":"P6","depth":3,"theta":-1.3082963267948964,"r":230,"parentId":"b","x":509.6840158172455,"y":190.8788207848545,"label":{"x":506.8295628868555,"y":208.5020076168832,"anchor":"middle"},"labelSide":"in","twinkleDelay":1.21,"claimed":true},{"id":"d1","kind":"person","name":"P7","depth":4,"theta":-1.3082963267948964,"r":286,"parentId":"c4","x":524.21577619014,"y":136.79714236725385,"label":{"x":521.36132325975,"y":154.42032919928255,"anchor":"middle"},"labelSide":"in","twinkleDelay":1.49,"claimed":false},{"id":"d2","kind":"person","name":"P8","depth":5,"theta":-1.3082963267948964,"r":342,"parentId":"d1","x":538.7475365630346,"y":82.71546394965321,"label":{"x":541.6019894934246,"y":69.09227711762452,"anchor":"middle"},"labelSide":"out","twinkleDelay":1.5,"claimed":false},{"id":"w1","kind":"person","name":"P9","depth":1,"theta":1.5707963267948966,"r":118,"parentId":"film-root","x":450,"y":531,"label":{"x":450,"y":517,"anchor":"middle"},"labelSide":"in","twinkleDelay":2.38,"claimed":false},{"id":"w2","kind":"person","name":"P10","depth":2,"theta":1.5707963267948966,"r":174,"parentId":"w1","x":450,"y":587,"label":{"x":450,"y":573,"anchor":"middle"},"labelSide":"in","twinkleDelay":2.39,"claimed":false},{"id":"w3","kind":"person","name":"P11","depth":3,"theta":1.5707963267948966,"r":230,"parentId":"w2","x":450,"y":643,"label":{"x":450,"y":661,"anchor":"middle"},"labelSide":"out","twinkleDelay":2.4,"claimed":false}],"edges":[{"x1":450,"y1":413,"x2":450,"y2":295,"fromId":"film-root","toId":"a"},{"x1":450,"y1":413,"x2":450,"y2":531,"fromId":"film-root","toId":"w1"},{"x1":450,"y1":295,"x2":450,"y2":239,"fromId":"a","toId":"b"},{"x1":450,"y1":239,"x2":390.3159841827546,"y2":190.87882078485447,"fromId":"b","toId":"c1"},{"x1":450,"y1":239,"x2":429.90067050957896,"y2":183.87990713593996,"fromId":"b","toId":"c2"},{"x1":450,"y1":239,"x2":470.09932949042104,"y2":183.87990713593996,"fromId":"b","toId":"c3"},{"x1":450,"y1":239,"x2":509.6840158172455,"y2":190.8788207848545,"fromId":"b","toId":"c4"},{"x1":509.6840158172455,"y1":190.8788207848545,"x2":524.21577619014,"y2":136.79714236725385,"fromId":"c4","toId":"d1"},{"x1":524.21577619014,"y1":136.79714236725385,"x2":538.7475365630346,"y2":82.71546394965321,"fromId":"d1","toId":"d2"},{"x1":450,"y1":531,"x2":450,"y2":587,"fromId":"w1","toId":"w2"},{"x1":450,"y1":587,"x2":450,"y2":643,"fromId":"w2","toId":"w3"}],"creatorLabel":"Ien","youId":"b","hasYou":true,"threadIds":["b","a","film-root","c4","d1","d2","c3","c2","c1"],"inviteCount":11,"viewerDownstreamCount":6,"plan":{"scale":0.6973365617433414,"fontMap":13.62,"clearance":8.604166666666668,"settled":true,"rounds":3},"threadFrame":{"full":{"x":362.8502645856979,"y":49.59211045095783,"w":203.3629915743933,"h":455.90938954904215},"firstGeneration":{"x":362.8502645856979,"y":150.42182298447042,"w":168.59056496782424,"h":355.07967701552957},"path":{"x":393.6415333333333,"y":227.99583333333334,"w":112.71693333333332,"h":277.5056666666666}}}
+{
+  "width": 900,
+  "height": 800,
+  "cx": 399.9988966567016,
+  "cy": 431.51501281509394,
+  "nodes": [
+    {
+      "id": "film-root",
+      "kind": "film",
+      "name": "",
+      "depth": 0,
+      "theta": 0,
+      "r": 0,
+      "parentId": null,
+      "x": 399.9988966567016,
+      "y": 431.51501281509394,
+      "dir": null,
+      "dist": null,
+      "extra": null,
+      "subtreeSize": 12,
+      "label": null,
+      "labelSide": null,
+      "twinkleDelay": null
+    },
+    {
+      "id": "a",
+      "kind": "person",
+      "name": "P1",
+      "depth": 1,
+      "theta": -1.5707963267948966,
+      "r": 118,
+      "parentId": "film-root",
+      "x": 399.9988966567016,
+      "y": 313.51501281509394,
+      "dir": -1.5707963267948966,
+      "dist": 118,
+      "extra": 0,
+      "subtreeSize": 8,
+      "label": {
+        "x": 399.9988966567016,
+        "y": 331.51501281509394,
+        "anchor": "middle"
+      },
+      "labelSide": "in",
+      "twinkleDelay": 0.97,
+      "claimed": false
+    },
+    {
+      "id": "b",
+      "kind": "person",
+      "name": "YOU",
+      "depth": 2,
+      "theta": -1.5707963267948966,
+      "r": 190.33202097703344,
+      "parentId": "a",
+      "x": 399.9988966567016,
+      "y": 241.1829918380605,
+      "dir": -1.5707963267948966,
+      "dist": 72.33202097703345,
+      "extra": 0,
+      "subtreeSize": 7,
+      "label": {
+        "x": 399.9988966567016,
+        "y": 259.1829918380605,
+        "anchor": "middle"
+      },
+      "labelSide": "in",
+      "twinkleDelay": 0.98,
+      "claimed": false
+    },
+    {
+      "id": "c1",
+      "kind": "person",
+      "name": "P3",
+      "depth": 3,
+      "theta": -1.7778931297932246,
+      "r": 226.31964057311123,
+      "parentId": "b",
+      "x": 353.46314067372333,
+      "y": 210.03137205525144,
+      "dir": -2.5516914518633835,
+      "dist": 56,
+      "extra": 10,
+      "subtreeSize": 1,
+      "label": {
+        "x": 344.3221886056383,
+        "y": 206.91230388362823,
+        "anchor": "end"
+      },
+      "labelSide": "out",
+      "twinkleDelay": 1.18,
+      "claimed": false
+    },
+    {
+      "id": "c2",
+      "kind": "person",
+      "name": "P4",
+      "depth": 3,
+      "theta": -1.641624818066299,
+      "r": 244.21074371114892,
+      "parentId": "b",
+      "x": 382.71627680425166,
+      "y": 187.9165760487876,
+      "dir": -1.8845363157308266,
+      "dist": 56,
+      "extra": 10,
+      "subtreeSize": 1,
+      "label": {
+        "x": 379.32147647609185,
+        "y": 174.4535300901804,
+        "anchor": "middle"
+      },
+      "labelSide": "out",
+      "twinkleDelay": 1.19,
+      "claimed": true
+    },
+    {
+      "id": "c3",
+      "kind": "person",
+      "name": "P5",
+      "depth": 3,
+      "theta": -1.491680986499994,
+      "r": 243.67852103744136,
+      "parentId": "b",
+      "x": 419.25750039592606,
+      "y": 188.59871489128173,
+      "dir": -1.2197253700100448,
+      "dist": 56,
+      "extra": 10,
+      "subtreeSize": 1,
+      "label": {
+        "x": 423.0404404161309,
+        "y": 175.26966049102163,
+        "anchor": "middle"
+      },
+      "labelSide": "out",
+      "twinkleDelay": 1.2,
+      "claimed": true
+    },
+    {
+      "id": "c4",
+      "kind": "person",
+      "name": "P6",
+      "depth": 3,
+      "theta": -1.3288364756366573,
+      "r": 234.84006459675794,
+      "parentId": "b",
+      "x": 456.2679491391563,
+      "y": 203.5157810783703,
+      "dir": -0.5899012017264096,
+      "dist": 67.71281292110203,
+      "extra": 10,
+      "subtreeSize": 3,
+      "label": {
+        "x": 465.40890120724134,
+        "y": 200.3967129067471,
+        "anchor": "start"
+      },
+      "labelSide": "out",
+      "twinkleDelay": 1.21,
+      "claimed": true
+    },
+    {
+      "id": "d1",
+      "kind": "person",
+      "name": "P7",
+      "depth": 4,
+      "theta": -1.20007077964572,
+      "r": 276.02670293762213,
+      "parentId": "c4",
+      "x": 500.0011033432984,
+      "y": 174.2402581413687,
+      "dir": -0.5899012017264096,
+      "dist": 52.62741699796952,
+      "extra": 0,
+      "subtreeSize": 2,
+      "label": {
+        "x": 509.1420554113834,
+        "y": 171.1211899697455,
+        "anchor": "start"
+      },
+      "labelSide": "out",
+      "twinkleDelay": 1.49,
+      "claimed": false
+    },
+    {
+      "id": "d2",
+      "kind": "person",
+      "name": "P8",
+      "depth": 5,
+      "theta": -1.1007213656283086,
+      "r": 323.51684343398676,
+      "parentId": "d1",
+      "x": 546.5368593262766,
+      "y": 143.08863835855965,
+      "dir": -0.5899012017264096,
+      "dist": 56,
+      "extra": 10,
+      "subtreeSize": 1,
+      "label": {
+        "x": 555.6778113943616,
+        "y": 139.96957018693644,
+        "anchor": "start"
+      },
+      "labelSide": "out",
+      "twinkleDelay": 1.5,
+      "claimed": false
+    },
+    {
+      "id": "w1",
+      "kind": "person",
+      "name": "P9",
+      "depth": 1,
+      "theta": 1.5707963267948966,
+      "r": 118,
+      "parentId": "film-root",
+      "x": 399.9988966567016,
+      "y": 549.515012815094,
+      "dir": 1.5707963267948966,
+      "dist": 118,
+      "extra": 0,
+      "subtreeSize": 3,
+      "label": {
+        "x": 399.9988966567016,
+        "y": 567.515012815094,
+        "anchor": "middle"
+      },
+      "labelSide": "out",
+      "twinkleDelay": 2.38,
+      "claimed": false
+    },
+    {
+      "id": "w2",
+      "kind": "person",
+      "name": "P10",
+      "depth": 2,
+      "theta": 1.5707963267948966,
+      "r": 170.62741699796953,
+      "parentId": "w1",
+      "x": 399.9988966567016,
+      "y": 602.1424298130635,
+      "dir": 1.5707963267948966,
+      "dist": 52.62741699796952,
+      "extra": 0,
+      "subtreeSize": 2,
+      "label": {
+        "x": 399.9988966567016,
+        "y": 620.1424298130635,
+        "anchor": "middle"
+      },
+      "labelSide": "out",
+      "twinkleDelay": 2.39,
+      "claimed": false
+    },
+    {
+      "id": "w3",
+      "kind": "person",
+      "name": "P11",
+      "depth": 3,
+      "theta": 1.5707963267948966,
+      "r": 216.62741699796953,
+      "parentId": "w2",
+      "x": 399.9988966567016,
+      "y": 648.1424298130635,
+      "dir": 1.5707963267948966,
+      "dist": 46,
+      "extra": 0,
+      "subtreeSize": 1,
+      "label": {
+        "x": 399.9988966567016,
+        "y": 666.1424298130635,
+        "anchor": "middle"
+      },
+      "labelSide": "out",
+      "twinkleDelay": 2.4,
+      "claimed": false
+    }
+  ],
+  "edges": [
+    {
+      "x1": 399.9988966567016,
+      "y1": 431.51501281509394,
+      "x2": 399.9988966567016,
+      "y2": 313.51501281509394,
+      "fromId": "film-root",
+      "toId": "a",
+      "arrived": false
+    },
+    {
+      "x1": 399.9988966567016,
+      "y1": 431.51501281509394,
+      "x2": 399.9988966567016,
+      "y2": 549.515012815094,
+      "fromId": "film-root",
+      "toId": "w1",
+      "arrived": false
+    },
+    {
+      "x1": 399.9988966567016,
+      "y1": 313.51501281509394,
+      "x2": 399.9988966567016,
+      "y2": 241.1829918380605,
+      "fromId": "a",
+      "toId": "b",
+      "arrived": false
+    },
+    {
+      "x1": 399.9988966567016,
+      "y1": 241.1829918380605,
+      "x2": 353.46314067372333,
+      "y2": 210.03137205525144,
+      "fromId": "b",
+      "toId": "c1",
+      "arrived": false
+    },
+    {
+      "x1": 399.9988966567016,
+      "y1": 241.1829918380605,
+      "x2": 382.71627680425166,
+      "y2": 187.9165760487876,
+      "fromId": "b",
+      "toId": "c2",
+      "arrived": true
+    },
+    {
+      "x1": 399.9988966567016,
+      "y1": 241.1829918380605,
+      "x2": 419.25750039592606,
+      "y2": 188.59871489128173,
+      "fromId": "b",
+      "toId": "c3",
+      "arrived": true
+    },
+    {
+      "x1": 399.9988966567016,
+      "y1": 241.1829918380605,
+      "x2": 456.2679491391563,
+      "y2": 203.5157810783703,
+      "fromId": "b",
+      "toId": "c4",
+      "arrived": true
+    },
+    {
+      "x1": 456.2679491391563,
+      "y1": 203.5157810783703,
+      "x2": 500.0011033432984,
+      "y2": 174.2402581413687,
+      "fromId": "c4",
+      "toId": "d1",
+      "arrived": false
+    },
+    {
+      "x1": 500.0011033432984,
+      "y1": 174.2402581413687,
+      "x2": 546.5368593262766,
+      "y2": 143.08863835855965,
+      "fromId": "d1",
+      "toId": "d2",
+      "arrived": false
+    },
+    {
+      "x1": 399.9988966567016,
+      "y1": 549.515012815094,
+      "x2": 399.9988966567016,
+      "y2": 602.1424298130635,
+      "fromId": "w1",
+      "toId": "w2",
+      "arrived": false
+    },
+    {
+      "x1": 399.9988966567016,
+      "y1": 602.1424298130635,
+      "x2": 399.9988966567016,
+      "y2": 648.1424298130635,
+      "fromId": "w2",
+      "toId": "w3",
+      "arrived": false
+    }
+  ],
+  "creatorLabel": "Ien",
+  "youId": "b",
+  "hasYou": true,
+  "threadIds": [
+    "b",
+    "a",
+    "film-root",
+    "c4",
+    "d1",
+    "d2",
+    "c3",
+    "c2",
+    "c1"
+  ],
+  "inviteCount": 11,
+  "viewerDownstreamCount": 6,
+  "plan": {
+    "scale": 0.72,
+    "fontMap": 15.28,
+    "clearance": 8.333333333333334,
+    "settled": true,
+    "rounds": 1
+  },
+  "threadFrame": {
+    "full": {
+      "x": 300.804055272305,
+      "y": 119.41223685360312,
+      "w": 298.39188945539,
+      "h": 407.77577596149087
+    },
+    "firstGeneration": {
+      "x": 300.804055272305,
+      "y": 153.8961967568471,
+      "w": 208.1229792682697,
+      "h": 373.29181605824687
+    },
+    "path": {
+      "x": 339.73636332336827,
+      "y": 229.89965850472717,
+      "w": 120.52506666666669,
+      "h": 297.28835431036674
+    }
+  },
+  "firstRingFrame": {
+    "x": 339.73636332336827,
+    "y": 281.06967948176055,
+    "w": 120.5250666666667,
+    "h": 300.8906666666668
+  }
+}
