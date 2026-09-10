@@ -51,12 +51,18 @@
  *  - RECEDE_OPACITY — how far the non-thread drawing steps back.
  */
 
-/** 9.5 since 2026-09-09 (was 11, which the width-based floor never
- *  delivered on the desktop — names painted ≈7px there): the founder asked
- *  for names enlarged by half at his desktop, and for the largest size at
- *  which Circles still settles at rest under the hard clearance rule —
- *  measured, that is 9.5px (see the constellation notes in CLAUDE.md). */
-export const MIN_LABEL_ON_SCREEN_PX = 9.5
+/** 9 since the v5 round of 2026-09-09 (9.5 in v4; 11 before that, which
+ *  the width-based floor never delivered on the desktop — names painted
+ *  ≈7px there): the founder asked for names enlarged by half at his desktop
+ *  and, whenever a rule changes, for the largest size at which Circles
+ *  still settles at rest under the hard clearance rule. Under RINGS ARE
+ *  GENERATIONS every generation shares one ring, so the ring Arielle's
+ *  seven need at the side of the map (≈340 units — their fan's lines must
+ *  clear Marcus's first-ring name) is also the ring Oliver's three sit on
+ *  at the top, which makes the canvas taller than v4's and the reference
+ *  view paint it smaller: measured, 9px is the largest size that settles
+ *  (9.25 and above diverge — see the constellation notes in CLAUDE.md). */
+export const MIN_LABEL_ON_SCREEN_PX = 9
 /** The on-screen clearance the renderer's visibility rule demands between
  *  two painted names, a name and another person's dot, and a name and an
  *  unattached line — the verifier's hard rule of 2026-09-09 (was 3). */
@@ -99,11 +105,21 @@ export function mapScaleFor(w, h, vbW, vbH) {
  *  (CENTER_LABELS) and the emblem its radius (EMBLEM_R). */
 export const PERSON_LABEL_SIZE = 8
 export const PERSON_DOT_R = 2.4
+/** A hollow (in-flight) dot's stroke width; its outer half lies OUTSIDE the
+ *  radius, so the dot paints 0.55 units wider than a solid one. */
+export const PERSON_DOT_STROKE = 1.1
+/** The radius a dot occupies as an OBSTACLE (founder, 9 September 2026
+ *  evening: a hollow dot's stroke counts as part of the obstacle). Applied
+ *  to every dot — solid ones too — so the geometry never depends on who
+ *  has claimed by the time the map is drawn. */
+export const PERSON_DOT_OBSTACLE_R = PERSON_DOT_R + PERSON_DOT_STROKE / 2
+/** How far a radial name sits from its dot (radialLabel's offset). */
+export const LABEL_OFFSET = 11
 export const EMBLEM_R = 34
-/** A person dot's axis-aligned square at design scale, for the same
- *  overlap test the labels use. */
+/** A person dot's axis-aligned square at design scale — the obstacle a
+ *  name may not cross — for the same overlap test the labels use. */
 export function dotRect(x, y) {
-  return { x: x - PERSON_DOT_R, y: y - PERSON_DOT_R, w: 2 * PERSON_DOT_R, h: 2 * PERSON_DOT_R }
+  return { x: x - PERSON_DOT_OBSTACLE_R, y: y - PERSON_DOT_OBSTACLE_R, w: 2 * PERSON_DOT_OBSTACLE_R, h: 2 * PERSON_DOT_OBSTACLE_R }
 }
 
 /** Advance width per glyph as a fraction of the font size, read from the
@@ -135,6 +151,18 @@ const BASELINE_RATIO = 0.8
  *  measured at 1.2× (the old estimate used 1.0×, which is why stacked
  *  names two units under the real height read as clear and touched). */
 const BOX_HEIGHT_RATIO = 1.2
+/** The height of a name's box for a font size (map or screen units) — the
+ *  layout's ring-spacing floor reads it. */
+export function labelBoxHeight(fontPx) {
+  return fontPx * BOX_HEIGHT_RATIO
+}
+/** THE LINE FLOOR (founder, 9 September 2026 evening): a painted line is
+ *  never fainter than this — the recede level — so the 1:1 phone view reads
+ *  as connected dots, never a dot-cloud. The renderer paints every edge's
+ *  stroke at this alpha (the receded group then dims it with everything
+ *  else off the thread) and its width in SCREEN pixels (never under one
+ *  device pixel at any zoom). */
+export const LINE_OPACITY_FLOOR = RECEDE_OPACITY
 
 /**
  * Font size in SVG map units for a label whose base design size is
@@ -266,18 +294,27 @@ export function segmentTouchesRect(x1, y1, x2, y2, rect, gap = LABEL_GAP_PX) {
  * every obstacle attached to its start (the parent's label box, or the
  * film node's emblem and center labels) and ends before every obstacle
  * attached to its end (the child's label box), each grown by `gap`.
- * Returns { x1, y1, x2, y2 } or null when nothing is left to draw.
+ * An attached box counts whether the segment STARTS inside it or merely
+ * meets it within the label offset (plus the gap) of its start — a name
+ * sits LABEL_OFFSET from its dot, so a line leaving the dot on the name's
+ * side enters the box a few units out, not at the dot (v5, 9 September
+ * 2026: Charles's line to Jacob ran through "CHARLES" — his name could not
+ * turn inward at the first ring, and the old rule trimmed only a box that
+ * contained the dot). The same holds at the end. Returns { x1, y1, x2, y2 }
+ * or null when nothing is left to draw.
  */
 export function clipSegment(x1, y1, x2, y2, startObstacles = [], endObstacles = [], gap = LABEL_GAP_PX) {
   let t0 = 0
   let t1 = 1
+  const len = Math.hypot(x2 - x1, y2 - y1) || 1
+  const reach = (LABEL_OFFSET + gap) / len // how far past an end an attached box may begin
   for (const r of startObstacles) {
     const iv = segmentRectInterval(x1, y1, x2, y2, r, gap)
-    if (iv && iv[0] <= t0 + 1e-9) t0 = Math.max(t0, iv[1])
+    if (iv && iv[0] <= t0 + reach + 1e-9) t0 = Math.max(t0, iv[1])
   }
   for (const r of endObstacles) {
     const iv = segmentRectInterval(x1, y1, x2, y2, r, gap)
-    if (iv && iv[1] >= t1 - 1e-9) t1 = Math.min(t1, iv[0])
+    if (iv && iv[1] >= t1 - reach - 1e-9) t1 = Math.min(t1, iv[0])
   }
   if (t0 >= t1) return null
   return { x1: x1 + (x2 - x1) * t0, y1: y1 + (y2 - y1) * t0, x2: x1 + (x2 - x1) * t1, y2: y1 + (y2 - y1) * t1 }

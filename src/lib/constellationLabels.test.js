@@ -190,13 +190,37 @@ describe('labelTextWidth — glyph by glyph from the Phoenix font', () => {
   })
 })
 
+describe('clipSegment — a box adjacent to an end counts as attached (v5, 9 September 2026)', () => {
+  it('trims a line that leaves its dot and meets the name beside it a few units out (Charles → Jacob)', () => {
+    // Charles's dot at (557, 407); his outward name box to its LEFT, ending
+    // 11 units short of the dot; the line to Jacob runs left through it.
+    const box = { x: 478, y: 397, w: 68, h: 16 }
+    const cut = clipSegment(557, 407, 334, 368, [box], [], 6)
+    expect(cut).not.toBeNull()
+    // The line now starts beyond the box (past its left edge plus the gap).
+    expect(cut.x1).toBeLessThan(478 - 6 + 1e-6)
+    expect(cut.x2).toBe(334)
+  })
+  it('does not trim a box that merely lies further along the line (not attached to its end)', () => {
+    const far = { x: 400, y: 380, w: 30, h: 16 } // ~150 units along, not adjacent to either end
+    const cut = clipSegment(557, 407, 334, 368, [far], [], 6)
+    expect(cut).toEqual({ x1: 557, y1: 407, x2: 334, y2: 368 })
+  })
+  it('the end side is symmetric: a name beside the END dot on the line’s side is trimmed', () => {
+    const box = { x: 340, y: 360, w: 68, h: 16 } // just past the end dot (334, 368), on the line's side
+    const cut = clipSegment(557, 407, 334, 368, [], [box], 6)
+    expect(cut).not.toBeNull()
+    expect(cut.x2).toBeGreaterThan(408 + 6 - 1e-6)
+  })
+})
+
 describe('the two scales', () => {
-  it('the readability floor is 9.5px and counter-scales against the TRUE scale (the width-based formula is gone)', () => {
-    expect(MIN_LABEL_ON_SCREEN_PX).toBe(9.5)
+  it('the readability floor is 9px (v5: the largest size at which Circles settles under the ring rule) and counter-scales against the TRUE scale (the width-based formula is gone)', () => {
+    expect(MIN_LABEL_ON_SCREEN_PX).toBe(9)
     // A height-limited desktop map: the font follows 576/H, not 960/W.
     const s = mapScaleFor(960, 576, 1311, 806)
     expect(s).toBeCloseTo(576 / 806, 9)
-    expect(labelFontSize(8, s)).toBeCloseTo(9.5 / s, 1)
+    expect(labelFontSize(8, s)).toBeCloseTo(9 / s, 1)
   })
   it('mapScaleFor is the true scale — the smaller of the width and height ratios', () => {
     // The founder's desktop box shows a 1035² canvas height-limited.

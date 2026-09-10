@@ -40,6 +40,26 @@
  *    the whole thread cannot fit that way, the film, the path to YOU and
  *    YOU's first generation, never less. The creator's phone and every
  *    desktop open on the whole graph.
+ *  - THE LINE LAW (founder, 9 September 2026 evening): a SOLID line is a
+ *    connection that has arrived (the recipient claimed); a DOTTED line is
+ *    an invitation still in flight — the same fact as the dot at its end.
+ *    The generation rings stay dotted. A viewer's gold thread is therefore
+ *    solid end to end; their own in-flight invitations hang off YOU as
+ *    dotted gold runs to hollow gold dots.
+ *  - LINES NEVER VANISH: every edge is painted with a screen-pixel stroke
+ *    (vector-effect: non-scaling-stroke — at least one device pixel at any
+ *    zoom, the dash in screen pixels too) at no less than the recede
+ *    opacity (LINE_OPACITY_FLOOR), so the 1:1 phone view reads as
+ *    connected dots, never a dot-cloud.
+ *  - An explored lineage on a viewer's surface paints at FULL strength
+ *    while explored: the recede is applied per element (each off-thread
+ *    person and segment carries its own opacity), so an explored element
+ *    simply lifts to 1 in place — group membership never changes on hover
+ *    (re-parenting re-mounted the element, which snapped the 450ms gold
+ *    fade and restarted the twinkle — red team, 9 September).
+ *  - THE CREATOR'S PHONE opens the way a viewer's does: on the film node
+ *    and the whole first ring (layout.firstRingFrame), at the legible
+ *    scale, centred on the filmmaker; pan, pinch, + / − / 1:1 to the rest.
  *  - Labels never paint below a readable on-screen size: sizes are in map
  *    units but counter-scaled against the map's TRUE rendered scale
  *    (mapScaleFor, since 2026-09-09 — the same size on the modal and the
@@ -51,7 +71,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   EMBLEM_R,
   LABEL_GAP_PX,
+  LINE_OPACITY_FLOOR,
+  PERSON_DOT_OBSTACLE_R,
   PERSON_DOT_R,
+  PERSON_DOT_STROKE,
   PERSON_LABEL_SIZE,
   PHONE_MAX_WIDTH_PX,
   RECEDE_OPACITY,
@@ -116,6 +139,21 @@ export default function ConstellationMap({ layout }) {
   const [hoverId, setHoverId] = useState(null)
   const [pinnedId, setPinnedId] = useState(null)
   const litId = pinnedId ?? hoverId
+  /** Leaving: while a person is hovered, any mouse movement outside the
+   *  map clears it — tracked on the document, because WebKit stops firing
+   *  boundary events once the element under the pointer has been
+   *  re-mounted (an explored person moves into its own layer), so neither
+   *  the person's nor the SVG's own leave event can be relied on. */
+  useEffect(() => {
+    if (hoverId == null) return undefined
+    const onMove = (e) => {
+      if (e.pointerType && e.pointerType !== 'mouse') return
+      const svg = svgRef.current
+      if (svg && !svg.contains(e.target)) setHoverId(null)
+    }
+    document.addEventListener('pointermove', onMove)
+    return () => document.removeEventListener('pointermove', onMove)
+  }, [hoverId])
 
   /** Children by parent id, for the downstream walk. */
   const childrenById = useMemo(() => {
@@ -170,7 +208,7 @@ export default function ConstellationMap({ layout }) {
       // THE PHONE CAMERA: on the first measurement, a viewer's phone opens
       // on the thread (see the header). Once per mount.
       const lay = layoutRef.current
-      if (framedRef.current || !lay?.threadFrame) return
+      if (framedRef.current || !lay || (!lay.threadFrame && !lay.firstRingFrame)) return
       framedRef.current = true
       // A PHONE is a narrow viewport, not a narrow map box — a laptop with
       // the dashboard's sidebar beside the map still opens on the whole
@@ -184,8 +222,13 @@ export default function ConstellationMap({ layout }) {
       // hides there); else the path and the first generation — still at
       // no smaller a scale than the plan's, so nothing inside hides even
       // when the frame is wider than the phone (the viewer pans).
-      const full = frameViewBox(lay.threadFrame.full, rect.width, rect.height, minScale)
-      const firstGen = full.fits ? full : frameViewBox(lay.threadFrame.firstGeneration, rect.width, rect.height, minScale)
+      // No viewer looking (the creator's phone): the film and the whole
+      // first ring, centred on the filmmaker, at the legible scale.
+      const creatorFrame = lay.threadFrame ? null : lay.firstRingFrame
+      const full = creatorFrame
+        ? frameViewBox(creatorFrame, rect.width, rect.height, minScale)
+        : frameViewBox(lay.threadFrame.full, rect.width, rect.height, minScale)
+      const firstGen = creatorFrame || full.fits ? full : frameViewBox(lay.threadFrame.firstGeneration, rect.width, rect.height, minScale)
       const chosen = firstGen
       const w = Math.min(Math.max(chosen.w, cw / MIN_ZOOM_DIV), cw)
       const h = w * (ch / cw)
@@ -203,7 +246,9 @@ export default function ConstellationMap({ layout }) {
       // off-screen — and the viewer pans to the rest; never past the
       // canvas's edges (a view as wide as the canvas shows the canvas, not
       // blank space beside it).
-      const pf = lay.threadFrame.path || chosen
+      // …and on the creator's phone the film node itself (its emblem box).
+      const filmBox = { x: cw / 2 - EMBLEM_R, y: ch / 2 - EMBLEM_R, w: 2 * EMBLEM_R, h: 2 * EMBLEM_R }
+      const pf = creatorFrame ? filmBox : lay.threadFrame.path || chosen
       setVb({
         x: within(chosen.x + chosen.w / 2 - w / 2, w, pf.x, pf.x + pf.w, cw),
         y: within(chosen.y + chosen.h / 2 - h / 2, h, pf.y, pf.y + pf.h, ch),
@@ -340,8 +385,8 @@ export default function ConstellationMap({ layout }) {
       ? layout.nodes
           .filter((n) => n.kind !== 'film')
           .map((n) => {
-            const [sx, sy] = toScreen(n.x - PERSON_DOT_R, n.y - PERSON_DOT_R)
-            return { id: n.id, rect: { x: sx, y: sy, w: 2 * PERSON_DOT_R * scale, h: 2 * PERSON_DOT_R * scale } }
+            const [sx, sy] = toScreen(n.x - PERSON_DOT_OBSTACLE_R, n.y - PERSON_DOT_OBSTACLE_R)
+            return { id: n.id, rect: { x: sx, y: sy, w: 2 * PERSON_DOT_OBSTACLE_R * scale, h: 2 * PERSON_DOT_OBSTACLE_R * scale } }
           })
       : []
     const lines = scale
@@ -454,7 +499,17 @@ export default function ConstellationMap({ layout }) {
     svgRef.current?.classList.add('panning')
     e.currentTarget.setPointerCapture(e.pointerId)
   }
+  /** Hover (mouse only) is tracked at the SVG, not per person: an explored
+   *  person moves into the `explored` layer while lit, which re-mounts the
+   *  element under the pointer — its own leave event would never fire (the
+   *  webkit "still lit after leaving" failure, 9 September). During a drag
+   *  the pointer is captured by the SVG, so hover is left as it was. */
   const onPointerMove = (e) => {
+    if (e.pointerType === 'mouse' && !dragRef.current && !pinchRef.current) {
+      const person = e.target?.closest?.('[data-node]')
+      const id = person ? person.getAttribute('data-node') : null
+      setHoverId((cur) => (cur === id ? cur : id))
+    }
     if (pointersRef.current.has(e.pointerId)) pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
     if (pinchRef.current && pointersRef.current.size === 2) {
       const [a, b] = [...pointersRef.current.values()]
@@ -509,6 +564,10 @@ export default function ConstellationMap({ layout }) {
    *  viewer's thread (gold at rest) or on the explored lineage. An explored
    *  person's name renders while explored; otherwise the one collision
    *  rule decides — thread names included. */
+  /** Law (b), per element: everything off the thread recedes to
+   *  RECEDE_OPACITY while a thread exists — except while explored, when it
+   *  paints at full strength (the founder's call of 9 September evening). */
+  const recede = (id) => (hasThread && !threadSet.has(id) && !exploreSet.has(id) ? RECEDE_OPACITY : undefined)
   const person = (n) => {
     const onThread = threadSet.has(n.id)
     const lit = litSet.has(n.id)
@@ -521,14 +580,9 @@ export default function ConstellationMap({ layout }) {
         data-parent={n.parentId}
         data-claimed={n.claimed ? 'true' : 'false'}
         data-thread={onThread ? 'true' : 'false'}
+        opacity={recede(n.id)}
         className={`${lit ? 'lit-person' : ''}${onThread ? ' lineage' : ''}`.trim() || undefined}
         style={{ cursor: 'pointer' }}
-        onPointerEnter={(e) => {
-          if (e.pointerType === 'mouse') setHoverId(n.id)
-        }}
-        onPointerLeave={(e) => {
-          if (e.pointerType === 'mouse') setHoverId((cur) => (cur === n.id ? null : cur))
-        }}
       >
         {/* Hit area — the dot itself is too small a target for a finger. */}
         <circle cx={n.x} cy={n.y} r="10" fill="transparent" />
@@ -568,21 +622,28 @@ export default function ConstellationMap({ layout }) {
         x2={s.x2}
         y2={s.y2}
         strokeWidth="1"
-        strokeDasharray="2 5"
+        // The line law: solid = arrived (the recipient claimed), dotted =
+        // still in flight. The dash is in SCREEN pixels (non-scaling
+        // stroke), so it never dissolves at 1:1 on a phone.
+        strokeDasharray={s.arrived ? undefined : '2 5'}
+        vectorEffect="non-scaling-stroke"
+        opacity={onThread || (exploreSet.has(s.fromId) && exploreSet.has(s.toId)) || !hasThread ? undefined : RECEDE_OPACITY}
         data-from={s.fromId}
         data-to={s.toId}
+        data-arrived={s.arrived ? 'true' : 'false'}
         data-thread={onThread ? 'true' : 'false'}
-        className={`web-edge${lit ? ' lit-edge' : ''}${onThread ? ' lineage' : ''}`}
+        className={`web-edge${s.arrived ? ' arrived' : ' in-flight'}${lit ? ' lit-edge' : ''}${onThread ? ' lineage' : ''}`}
       />
     )
   }
 
   const film = layout.nodes.find((n) => n.kind === 'film')
   const persons = layout.nodes.filter((n) => n.kind !== 'film')
-  const offThreadSegments = segments.filter((s) => !(threadSet.has(s.fromId) && threadSet.has(s.toId)))
-  const onThreadSegments = segments.filter((s) => threadSet.has(s.fromId) && threadSet.has(s.toId))
-  const offThreadPersons = persons.filter((n) => !threadSet.has(n.id))
+  const segOnThread = (s) => threadSet.has(s.fromId) && threadSet.has(s.toId)
+  const onThreadSegments = segments.filter(segOnThread)
+  const offThreadSegments = segments.filter((s) => !segOnThread(s))
   const onThreadPersons = persons.filter((n) => threadSet.has(n.id))
+  const offThreadPersons = persons.filter((n) => !threadSet.has(n.id))
 
   const filmNode = film && (
     <g key={film.id} data-film="true">
@@ -620,10 +681,10 @@ export default function ConstellationMap({ layout }) {
       <style>{`
         .dc-constellation { cursor: grab; touch-action: none; }
         .dc-constellation.panning { cursor: grabbing; }
-        .dc-constellation .web-edge { stroke: rgba(234,231,224,0.16); transition: stroke 450ms ease; }
+        .dc-constellation .web-edge { stroke: rgba(234,231,224,${LINE_OPACITY_FLOOR}); transition: stroke 450ms ease; }
         .dc-constellation .web-ring { stroke: rgba(234,231,224,0.08); }
         .dc-constellation .web-dot  { fill: rgba(234,231,224,0.7); transition: fill 450ms ease, stroke 450ms ease; }
-        .dc-constellation .web-dot.hollow { fill: none; stroke: rgba(234,231,224,0.7); stroke-width: 1.1; }
+        .dc-constellation .web-dot.hollow { fill: none; stroke: rgba(234,231,224,0.7); stroke-width: ${PERSON_DOT_STROKE}; }
         .dc-constellation .web-label{ fill: rgba(234,231,224,0.45); transition: fill 450ms ease; }
         .dc-constellation .star { animation: dc-twinkle 5s ease-in-out infinite alternate; }
         @keyframes dc-twinkle { from { opacity: 0.55; } to { opacity: 1; } }
@@ -638,6 +699,7 @@ export default function ConstellationMap({ layout }) {
         ref={svgRef}
         className="dc-constellation block h-[23rem] w-full md:h-[clamp(26rem,64vh,38rem)]"
         viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
+        data-plan-settled={layout.plan?.settled ? 'true' : 'false'}
         role="img"
         aria-label={
           layout.hasYou
@@ -648,6 +710,9 @@ export default function ConstellationMap({ layout }) {
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
+        onPointerLeave={(e) => {
+          if (e.pointerType === 'mouse') setHoverId(null)
+        }}
       >
         {layout.rings.map((r) => (
           <circle
@@ -661,8 +726,10 @@ export default function ConstellationMap({ layout }) {
             className="web-ring"
           />
         ))}
-        {/* Law (a)/(b): everything off the thread first, receded when a thread exists… */}
-        <g className="off-thread" opacity={hasThread ? RECEDE_OPACITY : 1}>
+        {/* Law (a)/(b): everything off the thread first — each element
+            receded on its own while a thread exists, lifted while explored;
+            membership of the two groups never changes on hover… */}
+        <g className="off-thread">
           {offThreadSegments.map(edge)}
           {!hasThread && filmNode}
           {offThreadPersons.map(person)}

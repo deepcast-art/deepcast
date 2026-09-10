@@ -8,7 +8,14 @@
  * viewer dashboard draws EXACTLY the creator modal's drawing (same rings,
  * same node positions, same label sizes) and differs only in colour — the
  * viewer's thread (the path from the filmmaker to them AND everything that
- * grew from their own tickets) is gold. Rendered end to end on a
+ * grew from their own tickets) is gold. And the founder's evening
+ * decisions of 9 September (v5, branch constellation-v5): RINGS ARE
+ * GENERATIONS (every dot exactly on the dotted ring of its generation),
+ * THE LINE LAW (a solid line has arrived — the recipient claimed; a dotted
+ * line is still in flight; the rings stay dotted), LINES NEVER VANISH
+ * (screen-pixel strokes at no less than the recede opacity, at any zoom),
+ * and THE CREATOR'S PHONE opening on the film and its first ring at the
+ * legible scale. Rendered end to end on a
  * Circles-shaped tree (one first-ring ticket with a seven-wide branch, one
  * of whose people shared ten times) on BOTH surfaces that read
  * src/lib/constellationLayout.js: the creator dashboard's "See network
@@ -228,7 +235,27 @@ const readGeometry = (page, inDialog) =>
         minLineGapPx = Math.min(minLineGapPx, segRectGap(l, n.b) * ctm)
       }
     }
-    const off = svg.querySelector('g.off-thread')
+    // RINGS ARE GENERATIONS: each dot's radius against the ring of its
+    // depth (depth = parent hops to the film), the worst deviation.
+    const byId = Object.fromEntries([...svg.querySelectorAll('g[data-node]')].map((g) => [g.getAttribute('data-node'), g]))
+    let worstOffRing = 0
+    for (const [id, p] of Object.entries(persons)) {
+      let depth = 1
+      let cur = byId[id]
+      while (cur && byId[cur.getAttribute('data-parent')]) { depth++; cur = byId[cur.getAttribute('data-parent')] }
+      worstOffRing = Math.max(worstOffRing, Math.abs(p.r - rings[depth - 1]))
+    }
+    // THE LINE LAW as painted: dashed ⇔ the line's end is a hollow dot.
+    const lineLaw = lines.map((l) => {
+      const el = svg.querySelector(`line.web-edge[data-to="${l.to}"]`)
+      const endDot = byId[l.to]?.querySelector('circle.web-dot')
+      return { to: l.to, dashed: Boolean(el.getAttribute('stroke-dasharray')), arrived: el.getAttribute('data-arrived') === 'true', endHollow: endDot?.classList.contains('hollow') ?? null, vectorEffect: getComputedStyle(el).vectorEffect, strokeWidthPx: getComputedStyle(el).strokeWidth, stroke: getComputedStyle(el).stroke, lit: el.classList.contains('lit-edge') }
+    })
+    const ringsDashed = [...svg.querySelectorAll('circle.web-ring')].every((c) => Boolean(c.getAttribute('stroke-dasharray')))
+    const settledPlan = svg.getAttribute('data-plan-settled') === 'true'
+    // Law (b) per element: an off-thread person's own opacity attribute.
+    const offPerson = [...svg.querySelectorAll('g[data-node][data-thread="false"]')][0]
+    const off = offPerson ? { getAttribute: () => offPerson.getAttribute('opacity') } : null
     const on = svg.querySelector('g.on-thread')
     const order = [...svg.children].filter((c) => c.tagName === 'g').map((c) => c.getAttribute('class'))
     const threadGroups = [...svg.querySelectorAll('g[data-node][data-thread="true"]')]
@@ -236,7 +263,7 @@ const readGeometry = (page, inDialog) =>
     const box = svg.getBoundingClientRect()
     const vbParts = svg.getAttribute('viewBox').split(' ').map(parseFloat)
     const paintedPx = named.length ? parseFloat(svg.querySelector('g[data-node] text').getAttribute('font-size')) * ctm : 0
-    return { rings, cx, cy, persons, labelSizes, renderedWidth: box.width, renderedHeight: box.height, viewBoxWidth: vbParts[2], viewBoxHeight: vbParts[3], paintedNames: named.length, minGapPx, namesOverDots, minLineGapPx, offThreadOpacity: off?.getAttribute('opacity'), groupOrder: order, onThreadInside: on ? on.querySelectorAll('g[data-node]').length : 0, threadCount: threadGroups.length, threadPainted, paintedPx, viewBox: vbParts }
+    return { rings, cx, cy, persons, labelSizes, renderedWidth: box.width, renderedHeight: box.height, viewBoxWidth: vbParts[2], viewBoxHeight: vbParts[3], paintedNames: named.length, minGapPx, namesOverDots, minLineGapPx, offThreadOpacity: off?.getAttribute('opacity'), groupOrder: order, onThreadInside: on ? on.querySelectorAll('g[data-node]').length : 0, threadCount: threadGroups.length, threadPainted, paintedPx, viewBox: vbParts, worstOffRing, lineLaw, ringsDashed, settledPlan }
   }, { inDialog })
 const readAngles = async (page) => (await readGeometry(page, true)).persons
 /** Wait until the map has measured its rendered width and counter-scaled
@@ -362,16 +389,48 @@ test.describe('constellation shape — the fan reversal (5 September 2026)', () 
     // on both desktop surfaces every painted name keeps at least 6px from
     // every other name, from every other person's dot AND from every line
     // it is not attached to — measured from the real text boxes and the
-    // painted segments, not the estimator — and every name is painted (the
-    // plan settled for this tree, so nothing had to hide).
+    // painted segments, not the estimator. Every name is painted when the
+    // plan settled; under RINGS ARE GENERATIONS (v5) this tree — a
+    // third-generation person at 12 o'clock over a deep branch at the side
+    // — does NOT settle at the 9px floor (the canvas is as tall as ring 3),
+    // so the safety net applies: the renderer hides the few that would
+    // touch and the rule still holds among the painted (the same limit is
+    // measured in the unit tests and reported in CLAUDE.md).
     for (const [label, g] of [['modal', modal], ['viewer', viewer]]) {
-      expect(g.paintedNames, `${label}: every name painted`).toBe(ROWS.length)
+      if (g.settledPlan) expect(g.paintedNames, `${label}: every name painted`).toBe(ROWS.length)
+      else expect(g.paintedNames, `${label}: the safety net paints most names`).toBeGreaterThanOrEqual(ROWS.length - 8)
+      console.log(`[constellation-fan] ${label}: plan settled ${g.settledPlan}, painted ${g.paintedNames}/${ROWS.length}`)
       expect(g.minGapPx, `${label}: smallest painted gap`).toBeGreaterThanOrEqual(6)
       expect(g.namesOverDots, `${label}: names over dots`).toBe(0)
       expect(g.minLineGapPx, `${label}: smallest name-to-line gap`).toBeGreaterThanOrEqual(6)
       // Name size: the readability floor, on the TRUE scale, the same on both.
       expect(Math.abs(g.paintedPx - MIN_LABEL_ON_SCREEN_PX), `${label}: painted name size`).toBeLessThan(0.15)
     }
+    // v5 — RINGS ARE GENERATIONS and THE LINE LAW, on both surfaces: every
+    // dot exactly on the ring of its generation; a dashed line ends at a
+    // hollow dot and a solid line at a solid one; the rings stay dotted;
+    // every line a screen-pixel stroke at the line floor.
+    for (const [label, g] of [['modal', modal], ['viewer', viewer]]) {
+      expect(g.worstOffRing, `${label}: worst dot-off-ring (map units)`).toBeLessThan(0.01)
+      expect(g.lineLaw.length, `${label}: every person has a line`).toBe(ROWS.length)
+      for (const l of g.lineLaw) {
+        expect(l.dashed, `${label}: line into ${l.to} dashed ⇔ in flight`).toBe(!l.arrived)
+        expect(l.endHollow, `${label}: line into ${l.to} ends at a hollow dot ⇔ in flight`).toBe(!l.arrived)
+        expect(l.vectorEffect).toBe('non-scaling-stroke')
+        expect(l.strokeWidthPx).toBe('1px')
+        // The line floor: an unlit edge's own stroke alpha is the recede
+        // level (a lit gold edge has its own colour).
+        if (!l.lit) expect(l.stroke).toBe(`rgba(234, 231, 224, ${RECEDE_OPACITY})`)
+      }
+      expect(g.lineLaw.filter((l) => l.arrived).map((l) => l.to).sort()).toEqual([PRIYA.id, LENA_ROW.id, OTIS_ROW.id].sort())
+      expect(g.ringsDashed).toBe(true)
+    }
+    // Lena's thread is solid gold to YOU (Priya and Lena claimed) and her
+    // ten hang off YOU as dotted gold runs to hollow gold dots.
+    await expect(map.locator(`line.lineage[data-to="${PRIYA.id}"]`)).not.toHaveAttribute('stroke-dasharray', /.+/)
+    await expect(map.locator(`line.lineage[data-to="${LENA_ROW.id}"]`)).not.toHaveAttribute('stroke-dasharray', /.+/)
+    for (const k of LENA_KIDS) await expect(map.locator(`line.lineage[data-to="${k.id}"]`)).toHaveAttribute('stroke-dasharray', '2 5')
+
     // Law (a): draw order — the off-thread group first, the thread last,
     // and every thread person painted inside the thread group.
     expect(viewer.groupOrder).toEqual(['off-thread', 'on-thread'])
@@ -506,7 +565,9 @@ test.describe('constellation shape — the fan reversal (5 September 2026)', () 
     expect(oneToOne.threadLines).toBe(oneToOne.threadCount)
     expect(jsErrors).toEqual([])
 
-    // The creator's phone opens on the whole graph.
+    // THE CREATOR'S PHONE (v5) opens the way a viewer's does: on the film
+    // and the whole first ring, centred on the filmmaker, at the legible
+    // scale — not on the whole graph; 1:1 shows the whole graph.
     await page.unrouteAll({ behavior: 'ignoreErrors' })
     await mockCreator(page)
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
@@ -514,7 +575,43 @@ test.describe('constellation shape — the fan reversal (5 September 2026)', () 
     await page.getByRole('button', { name: 'See network graph' }).click()
     await expect(page.locator('dialog#network-graph-modal g[data-node]')).toHaveCount(ROWS.length)
     await page.waitForTimeout(400)
-    expect(await page.evaluate(() => document.querySelector('dialog svg.dc-constellation').getAttribute('viewBox'))).toMatch(/^0 0 /)
+    const creatorOpening = await page.evaluate(() => {
+      const svg = document.querySelector('dialog svg.dc-constellation')
+      const vb = svg.getAttribute('viewBox').split(' ').map(parseFloat)
+      const inside = (x, y) => x >= vb[0] && x <= vb[0] + vb[2] && y >= vb[1] && y <= vb[1] + vb[3]
+      const film = svg.querySelector('g[data-film] circle')
+      const fx = +film.getAttribute('cx')
+      const fy = +film.getAttribute('cy')
+      const ring1 = [...svg.querySelectorAll('g[data-node]')].filter((g) => !document.querySelector(`dialog g[data-node="${g.getAttribute('data-parent')}"]`))
+      const ring1Inside = ring1.filter((g) => { const d = g.querySelector('circle.web-dot'); return inside(+d.getAttribute('cx'), +d.getAttribute('cy')) }).length
+      const ctm = svg.getScreenCTM().a
+      const ring1Painted = ring1.filter((g) => g.querySelector('text')).length
+      return { vb, filmInside: inside(fx, fy), centreOffset: [Math.abs(vb[0] + vb[2] / 2 - fx), Math.abs(vb[1] + vb[3] / 2 - fy)], ring1: ring1.length, ring1Inside, ring1Painted, paintedPx: parseFloat(svg.querySelector('g[data-node] text').getAttribute('font-size')) * ctm, edgePx: parseFloat(getComputedStyle(svg.querySelector('line.web-edge')).strokeWidth), lines: svg.querySelectorAll('line.web-edge').length, people: svg.querySelectorAll('g[data-node]').length }
+    })
+    expect(creatorOpening.ring1).toBe(9)
+    expect(creatorOpening.filmInside).toBe(true)
+    expect(creatorOpening.ring1Inside).toBe(9)
+    expect(creatorOpening.ring1Painted).toBe(9)
+    expect(creatorOpening.centreOffset[0]).toBeLessThan(1)
+    expect(creatorOpening.centreOffset[1]).toBeLessThan(1)
+    expect(Math.abs(creatorOpening.paintedPx - MIN_LABEL_ON_SCREEN_PX)).toBeLessThan(0.15)
+    // LINES NEVER VANISH: a screen-pixel stroke, every line painted.
+    expect(creatorOpening.edgePx).toBe(1)
+    expect(creatorOpening.lines).toBe(creatorOpening.people)
+    await page.getByRole('button', { name: 'Reset zoom' }).click()
+    await expect.poll(async () => page.evaluate(() => document.querySelector('dialog svg.dc-constellation').getAttribute('viewBox'))).toMatch(/^0 0 /)
+    const oneToOneCreator = await page.evaluate(() => {
+      const svg = document.querySelector('dialog svg.dc-constellation')
+      const vb = svg.getAttribute('viewBox').split(' ').map(parseFloat)
+      const edge = svg.querySelector('line.web-edge')
+      return { canvas: [vb[2], vb[3]], edgePx: parseFloat(getComputedStyle(edge).strokeWidth), vectorEffect: getComputedStyle(edge).vectorEffect, lines: svg.querySelectorAll('line.web-edge').length, people: svg.querySelectorAll('g[data-node]').length }
+    })
+    expect(creatorOpening.vb[2]).toBeLessThan(oneToOneCreator.canvas[0])
+    // …and at 1:1 on a phone the lines are STILL one device pixel wide
+    // (non-scaling stroke) — connected dots, never a dot-cloud.
+    expect(oneToOneCreator.edgePx).toBe(1)
+    expect(oneToOneCreator.vectorEffect).toBe('non-scaling-stroke')
+    expect(oneToOneCreator.lines).toBe(oneToOneCreator.people)
   })
 
   test('viewer dashboard as Lena: the first ring is even, YOU marked by its label where the geometry put it, the gold thread intact, and YOU’s ten fanned around YOU', async ({ page }) => {
