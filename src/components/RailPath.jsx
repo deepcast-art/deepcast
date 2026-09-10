@@ -16,7 +16,13 @@ import {
  * 1.25rem under "Pass it on", replacing the rule line. The film's hands as
  * a row of nodes — origin first with "(FILMMAKER)" beneath, through the
  * hands (a single collapsed entry when there are more than three), then
- * "YOU", then the hollow next slot "?". No hover, no motion, not a link.
+ * "YOU", then the hollow next slot "?" — or, once the viewer has created
+ * at least one invitation for this film, the ONWARD node in that seat
+ * (founder design 2026-09-09, second pass): the people they shared with
+ * directly, one node, and the path ends there. Hollow dot + dashed run
+ * while none of them has claimed; solid dot + solid run the moment any one
+ * has — the same stroke, weight, colour and opacity as the rest of the
+ * path, only fill and dash change. No hover, no motion, not a link.
  *
  * Colour law: one grey for every label but YOU and the next slot — names,
  * the collapsed "{n} OTHERS" entry, and the "(FILMMAKER)" caption all read
@@ -37,16 +43,21 @@ function labelStyle(node) {
       return { size: 10, fill: WARM, opacity: 1 }
     case 'next':
       return { size: 11, fill: ACCENT, opacity: 1 }
+    // The onward node's label reads as a name: the names' 10px grey.
     default:
       return { size: 10, fill: WARM, opacity: 0.7 }
   }
 }
 
-export default function RailPath({ hands }) {
-  const nodes = railPathNodes(hands)
+export default function RailPath({ hands, onward }) {
+  const nodes = railPathNodes(hands, onward)
   if (!nodes.length) return null
   const xs = railPathPositions(nodes.length)
   const youIndex = nodes.findIndex((n) => n.type === 'you')
+  const last = nodes[nodes.length - 1]
+  // The final run — you → the seat — is dashed while the seat is the next
+  // slot or an onward node nobody has claimed yet; solid once anyone has.
+  const finalRunDashed = last.type === 'next' || (last.type === 'onward' && !last.claimed)
   const Y = RAIL_PATH_NODE_Y
 
   return (
@@ -73,14 +84,22 @@ export default function RailPath({ hands }) {
           stroke={ACCENT}
           strokeWidth="1"
           strokeOpacity={RAIL_PATH_STROKE_OPACITY}
-          strokeDasharray={i >= youIndex ? '2 4' : undefined}
+          strokeDasharray={i >= youIndex && finalRunDashed ? '2 4' : undefined}
         />
       ))}
       {/* Nodes: hands and the collapsed entry r2.6 at 0.85; YOU r3.2 solid;
-          the next slot r3.2 hollow, 1px accent stroke. */}
+          the next slot r3.2 hollow, 1px accent stroke; the onward node in
+          that seat r3.2 — hollow (the same stroke) until anyone claims,
+          then solid. */}
       {nodes.map((node, i) =>
         node.type === 'next' ? (
           <circle key={`node-${i}`} cx={xs[i]} cy={Y} r="3.2" fill="none" stroke={ACCENT} strokeWidth="1" data-node="next" />
+        ) : node.type === 'onward' ? (
+          node.claimed ? (
+            <circle key={`node-${i}`} cx={xs[i]} cy={Y} r="3.2" fill={ACCENT} data-node="onward" data-claimed="true" />
+          ) : (
+            <circle key={`node-${i}`} cx={xs[i]} cy={Y} r="3.2" fill="none" stroke={ACCENT} strokeWidth="1" data-node="onward" data-claimed="false" />
+          )
         ) : node.type === 'you' ? (
           <circle key={`node-${i}`} cx={xs[i]} cy={Y} r="3.2" fill={ACCENT} data-node="you" />
         ) : (

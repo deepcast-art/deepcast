@@ -26,11 +26,19 @@
 const MUX_THE_NEW_NARRATIVE = 'zLQpzAlaojxoKWAzjnwm1cOGho7p02jHGq802rKwNdzz8'
 const MUX_A_SACRED_PAUSE = '6GMWj01CjP01Y1ee001Vd2qYqUPJtEOgUYz00nG02BYE9F9E'
 const MUX_CIRCLES_THIRD_CUT = 'QDUEUyF7WDjjsOtMfeVfqh6M2NVM02arzLHK3IJnwYC00'
-// The film's ORIGINAL playback id (the Faith Dialogues video), kept only to
-// pin the poster in POSTER_OVERRIDES below — never a FILM_STORIES key. Three
-// recuts later (2026-07-24, 2026-08-06 twice, 2026-08-22) the poster still
-// points here.
-const MUX_FAITH_CIRCLE_PREVIOUS = '4HnHRG3NAf9YYR7V1fNs0143gGJnLUZ9F1umQuXsOaaQ'
+/**
+ * The Circles player poster (founder decision 2026-09-09): a frame from the
+ * cut that is ACTUALLY PLAYING — the third cut — at a fixed time the founder
+ * chose on rendered frames (t=5). The pin is EXPLICIT: both the source
+ * playback id and the time are named here, so a future playback-id swap
+ * re-keys the FILM_STORIES entry but cannot silently change this frame —
+ * the founder re-chooses the time on the new cut, or keeps this source.
+ * (History: from 2026-07-24 to 2026-09-09 the poster was pinned to the
+ * ORIGINAL upload's playback id `4HnHRG3N…` through four swaps; that
+ * dependency on the original Mux asset is gone.)
+ */
+const CIRCLES_POSTER_SOURCE = MUX_CIRCLES_THIRD_CUT
+const CIRCLES_POSTER_TIME = 5
 
 /** The founder's links (2026-09-09): the story header's two icons on his
  *  films, and the About page beside his name. REAL. */
@@ -98,10 +106,9 @@ export function filmStory(muxPlaybackId) {
  */
 const POSTER_OVERRIDES = {
   // [MUX_A_SACRED_PAUSE]: 'https://image.mux.com/…/thumbnail.png?time=123',
-  // Circles (owner direction 2026-07-24): the poster stays PINNED to the
-  // ORIGINAL video's thumbnail so the playback-id swap can never silently
-  // change the frame. Requires the original Mux asset to stay undeleted.
-  [MUX_CIRCLES_THIRD_CUT]: `https://image.mux.com/${MUX_FAITH_CIRCLE_PREVIOUS}/thumbnail.png?time=1`,
+  // Circles (founder decision 2026-09-09): the live cut's frame at t=5,
+  // pinned explicitly by source id + time (see CIRCLES_POSTER_SOURCE).
+  [MUX_CIRCLES_THIRD_CUT]: `https://image.mux.com/${CIRCLES_POSTER_SOURCE}/thumbnail.png?time=${CIRCLES_POSTER_TIME}`,
 }
 
 export function filmPosterUrl(muxPlaybackId) {

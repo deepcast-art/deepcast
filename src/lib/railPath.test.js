@@ -7,6 +7,9 @@ import {
   collapsedLabel,
   RAIL_PATH_INSET,
   RAIL_PATH_VIEWBOX,
+  onwardLabel,
+  onwardPeople,
+  onwardSeatSolid,
 } from './railPath.js'
 import { chainHands } from './handsChain.js'
 
@@ -98,5 +101,94 @@ describe('railPathDescription — the accessible sentence', () => {
       'How this reached you: IEN (filmmaker) → THEMBA → you → ?'
     )
     expect(railPathDescription([])).toBe('')
+  })
+})
+
+describe('the onward seat — the path after you share (founder design 2026-09-09)', () => {
+  const HANDS = ['Ien', 'Themba']
+
+  it('0 onward: the seat is the hollow "?" — unchanged', () => {
+    const nodes = railPathNodes(HANDS, [])
+    expect(labels(nodes)).toEqual(['IEN', 'THEMBA', 'YOU', '?'])
+    expect(nodes[nodes.length - 1]).toEqual({ type: 'next', label: '?', caption: null })
+    expect(railPathNodes(HANDS)).toEqual(nodes)
+    expect(railPathNodes(HANDS, undefined)).toEqual(nodes)
+    expect(railPathNodes(HANDS, null)).toEqual(nodes)
+  })
+
+  it('1 onward, unclaimed: their first name as typed, hollow — never "1 PERSON", never a "?" after it', () => {
+    const nodes = railPathNodes(HANDS, [{ firstName: 'Maya', claimed: false }])
+    expect(labels(nodes)).toEqual(['IEN', 'THEMBA', 'YOU', 'MAYA'])
+    expect(types(nodes)).toEqual(['hand', 'hand', 'you', 'onward'])
+    expect(nodes[3]).toEqual({ type: 'onward', label: 'MAYA', caption: null, claimed: false })
+    expect(nodes.some((n) => n.type === 'next')).toBe(false)
+  })
+
+  it('1 onward, claimed: the same name, solid', () => {
+    const nodes = railPathNodes(HANDS, [{ firstName: 'Maya', claimed: true }])
+    expect(labels(nodes)).toEqual(['IEN', 'THEMBA', 'YOU', 'MAYA'])
+    expect(nodes[3]).toMatchObject({ type: 'onward', claimed: true })
+  })
+
+  it('3 onward, mixed: "3 PEOPLE", solid — a group seat is always solid', () => {
+    const nodes = railPathNodes(HANDS, [
+      { firstName: 'Maya', claimed: false },
+      { firstName: 'Joiselle', claimed: true },
+      { firstName: 'Cal', claimed: false },
+    ])
+    expect(labels(nodes)).toEqual(['IEN', 'THEMBA', 'YOU', '3 PEOPLE'])
+    expect(nodes[3]).toEqual({ type: 'onward', label: '3 PEOPLE', caption: null, claimed: true })
+  })
+
+  it('2 onward, none claimed: "2 PEOPLE", STILL solid — the count records the sharer’s act, not an arrival (founder amendment, 9 September late)', () => {
+    const nodes = railPathNodes(HANDS, [
+      { firstName: 'Maya', claimed: false },
+      { firstName: 'Cal', claimed: false },
+    ])
+    expect(nodes[3]).toEqual({ type: 'onward', label: '2 PEOPLE', caption: null, claimed: true })
+    expect(onwardSeatSolid([{ firstName: 'A', claimed: false }, { firstName: 'B', claimed: false }])).toBe(true)
+    expect(onwardSeatSolid([{ firstName: 'A', claimed: false }])).toBe(false)
+    expect(onwardSeatSolid([{ firstName: 'A', claimed: true }])).toBe(true)
+    expect(onwardSeatSolid([])).toBe(false)
+  })
+
+  it('4 hands + 2 onward: the collapse applies before "you" only — five nodes, the onward node never collapsed or counted', () => {
+    const nodes = railPathNodes(['Ien', 'Arielle', 'Krist', 'Alexander'], [
+      { firstName: 'Maya', claimed: false },
+      { firstName: 'Cal', claimed: true },
+    ])
+    expect(labels(nodes)).toEqual(['IEN', '2 OTHERS', 'ALEXANDER', 'YOU', '2 PEOPLE'])
+    expect(types(nodes)).toEqual(['hand', 'collapsed', 'hand', 'you', 'onward'])
+    expect(nodes[4].claimed).toBe(true) // a group seat: solid whatever the claims
+    expect(nodes).toHaveLength(5)
+    expect(railPathPositions(nodes.length)).toEqual([30, 111, 192, 273, 354])
+  })
+
+  it('the label rule: one name uppercase; the word is PEOPLE', () => {
+    expect(onwardLabel([{ firstName: 'maya', claimed: false }])).toBe('MAYA')
+    expect(onwardLabel([{ firstName: 'Maya Rivera', claimed: false }])).toBe('MAYA')
+    expect(onwardLabel([{ firstName: 'A' }, { firstName: 'B' }])).toBe('2 PEOPLE')
+    expect(onwardLabel([])).toBe('')
+    expect(onwardLabel(null)).toBe('')
+  })
+
+  it('an email is never a name; junk entries read as nobody', () => {
+    expect(onwardPeople([{ firstName: 'maya@example.com', claimed: true }])).toEqual([{ firstName: 'Someone', claimed: true }])
+    expect(onwardPeople([null, 'Maya', 3])).toEqual([])
+    expect(onwardPeople('Maya')).toEqual([])
+    expect(onwardPeople([{ firstName: 'Cal', claimed: 'yes' }])).toEqual([{ firstName: 'Cal', claimed: false }])
+  })
+
+  it('no hands (depth 0): still nothing, even with onward people', () => {
+    expect(railPathNodes([], [{ firstName: 'Maya', claimed: false }])).toEqual([])
+  })
+
+  it('the accessible sentence names the onward seat and whether it has been claimed', () => {
+    expect(railPathDescription(railPathNodes(HANDS, [{ firstName: 'Maya', claimed: false }]))).toBe(
+      'How this reached you: IEN (filmmaker) → THEMBA → you → MAYA (not yet claimed)'
+    )
+    expect(railPathDescription(railPathNodes(HANDS, [{ firstName: 'Maya', claimed: false }, { firstName: 'Cal' }]))).toBe(
+      'How this reached you: IEN (filmmaker) → THEMBA → you → 2 PEOPLE'
+    )
   })
 })

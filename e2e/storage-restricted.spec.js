@@ -144,6 +144,7 @@ for (const mode of MODES) {
             inviteId: 'e2e-claim-1',
             claimOrdinal: null,
             ticketsRemaining: claimed ? 5 : null,
+            onward: [],
           },
         })
       )

@@ -125,6 +125,7 @@ async function mockBackends(page) {
         claimOrdinal: null,
         ticketNo: 2,
         ticketsRemaining: claimed ? 5 : null,
+        onward: [],
       },
     })
   )

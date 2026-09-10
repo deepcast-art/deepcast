@@ -14,6 +14,9 @@
  * Pure decisions only (adminAuth.js pattern); the routes own the queries.
  */
 import { countFilmClaims, countFilmShares } from '../src/lib/filmClaims.js'
+import { existingInvites } from '../src/lib/inviteExistence.js'
+import { isInviteClaimedStage } from '../src/lib/ticketFunnel.js'
+import { safeFirstName } from '../src/lib/displayName.js'
 
 /**
  * Film-level watch fields shared by both routes. `rows` are the film's
@@ -61,4 +64,39 @@ export function filmWatchDecision({ callerId, film }) {
     return { ok: false, status: 403, error: 'This page belongs to the film’s maker' }
   }
   return { ok: true }
+}
+
+/**
+ * The invite's ONWARD people (founder design, 9 September 2026 — the rail's
+ * path after you share): the people THIS viewer shared with directly, one
+ * hop only — deeper is the constellation's job. Served by the link route as
+ * `onward: [{ firstName, claimed }]`, oldest first.
+ *
+ *  - which rows: the invite's direct children (parent_invite_id = this
+ *    invite's id) that EXIST — the shared who-exists rule (voided links
+ *    never; demo ghosts only when the film shows them);
+ *  - firstName: the recipient's first name as the sharer typed it (after a
+ *    claim the canonical-name rule has re-stamped it from the account),
+ *    through the display-name rule — an email fragment is never a name;
+ *  - claimed: the shared claimed-stage rule (claimed / watched; the legacy
+ *    opened / signed_up ladder counts the same way).
+ *
+ * Nothing else about those people leaves the server.
+ */
+export function buildOnward({ rows = [], inviteId, includeGhosts = false } = {}) {
+  const id = inviteId ?? null
+  if (id == null) return []
+  const list = existingInvites(Array.isArray(rows) ? rows : [], { includeGhosts })
+  return list
+    .filter((r) => r?.parent_invite_id != null && String(r.parent_invite_id) === String(id))
+    .sort((a, b) => {
+      const ta = new Date(a.created_at || 0).getTime()
+      const tb = new Date(b.created_at || 0).getTime()
+      if (ta !== tb) return ta - tb
+      return String(a.id).localeCompare(String(b.id))
+    })
+    .map((r) => ({
+      firstName: safeFirstName(r.recipient_name),
+      claimed: isInviteClaimedStage(r),
+    }))
 }

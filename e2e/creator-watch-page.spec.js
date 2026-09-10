@@ -80,6 +80,9 @@ const LINK_CLAIMED = {
   filmSharesCount: 847,
   filmClaimsCount: 512,
   lineageForks: [true, false, true],
+  // DELIBERATELY no `onward` field: this baseline is the proof that a
+  // payload from an older API — without the seat's list — still renders
+  // the '?' exactly as recorded (red team, 2026-09-09).
 }
 
 /* RECORDED before the film-scoped entry existed (2026-09-03, chromium,
@@ -153,6 +156,7 @@ const FILM_WATCH = {
   lineageNames: [],
   senderIsCreator: false,
   lineageForks: [],
+  onward: [],
   inviteId: null,
   claimOrdinal: null,
   ticketNo: 1,
