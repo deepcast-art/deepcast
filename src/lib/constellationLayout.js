@@ -31,22 +31,29 @@
  *     then clockwise; team-member nodes, which hold no ticket, sort first).
  *     If the first ring is too crowded for its names to clear, the whole
  *     ring moves outward (still even) until they do.
- *  2. FANS AT THE PARENT'S ANGLE: every deeper generation clusters at its
+ *  2. RINGS ARE GENERATIONS, FANS AT THE PARENT'S ANGLE (founder reversal
+ *     of the v4 level mechanism, 9 September 2026 evening): a person's dot
+ *     sits EXACTLY on the dotted ring of their generation — never between
+ *     rings, never stepped out. Every deeper generation clusters at its
  *     parent's angle — siblings fan out in a tight, fixed angular step
  *     (FAN_STEP) centered on the parent, and the fan widens as far as the
- *     clearance rule REQUIRES — name to name, and name to the neighbouring
- *     sibling's dot — using the empty arc beside it: everything up to the
- *     neighbouring fans already placed at the same radius (their dots and
- *     their names' reach). A fan never fills a proportional sector, and
- *     fans are never nudged off their parent's angle. If a fan cannot fit
- *     inside its free arc at the fixed step, its step tightens down to the
- *     clearance minimum; if even that is not enough, the fan is PUSHED
- *     OUTWARD for that branch — to the next radius LEVEL (RING_BUMP
- *     further out), where the free arc is measured again against the fans
- *     at THAT level, the branch below it following — rather than let names
- *     touch. A global pass then checks EVERY label pair on the map and
- *     every label against every other dot, moving the fan responsible a
- *     level out until the rule holds.
+ *     clearance rule REQUIRES (name to name, name to the neighbouring
+ *     sibling's dot). A fan that needs more room spreads ALONG its ring,
+ *     centred on its parent, nudging neighbouring fans around the ring —
+ *     a one-dimensional circular packing per ring, least movement, two
+ *     overlapping neighbours moving equally, untouched fans staying put,
+ *     every reach measured from the real name boxes plus the clearance.
+ *     If a ring's demand exceeds its circumference, THAT ring's radius
+ *     grows (and every ring outside it moves out by the same amount)
+ *     until it fits; if a name on the ring still cannot clear an inner
+ *     ring's name, dot or line — after turning inward (law (c)) and after
+ *     asking its parent's fan for room — the ring grows the same way. A
+ *     fan never fills a proportional sector. Ring spacing is never less
+ *     than a name box plus the clearance, so adjacent rings cannot touch
+ *     radially at the top or bottom, and the growth rule keeps names off
+ *     the next ring everywhere else. A global pass then checks EVERY label
+ *     pair on the map, every label against every other dot and every
+ *     unattached line, until the rule holds.
  *  3. ONE LABEL RULE: every person's name is placed RADIALLY — pushed
  *     straight outward from its ring — at one size, on every surface.
  *  4. NO ROTATION: the map is never turned for the viewer. YOU sits
@@ -63,8 +70,14 @@
  *  - Seeded demo ghosts are excluded entirely (owner decision 2026-07-20)
  *    unless the film's show_ghosts flag asks for them.
  *  - Deep chains get a minimum ring step; the canvas grows to hold the
- *    outermost node instead of the rings compressing (zoom/pan absorbs
+ *    outermost name instead of the rings compressing (zoom/pan absorbs
  *    the size).
+ *  - Every edge carries `arrived` (the founder's line law, 9 September
+ *    2026 evening): a SOLID line is a connection that has arrived — the
+ *    recipient claimed; a DOTTED line is an invitation still in flight.
+ *  - `firstRingFrame`: the film node and the whole first ring with their
+ *    planned name boxes — where the creator's phone opens (the same
+ *    camera a viewer's phone has, centred on the filmmaker).
  *
  * The legacy network map (graphLayout.js) is the ancestor of the fan idea
  * — children in a contiguous block centered on the parent — reused here
@@ -77,11 +90,14 @@ import { safeFirstName } from './displayName.js'
 import {
   EMBLEM_R,
   LABEL_CLEARANCE,
+  LABEL_OFFSET,
   MIN_LABEL_ON_SCREEN_PX,
+  PERSON_DOT_OBSTACLE_R,
   PERSON_LABEL_SIZE,
   REFERENCE_VIEW,
   centerLabelLayout,
   dotRect,
+  labelBoxHeight,
   labelFontSize,
   labelScreenRect,
   labelTextWidth,
@@ -101,7 +117,11 @@ const EDGE_PAD = 58
 const MIN_RSTEP = 46
 /** Placement rounds for the reference-view plan (see the loop at the end
  *  of placement) before it falls back to the base canvas's boxes. */
-const MAX_PLAN_ROUNDS = 6
+const MAX_PLAN_ROUNDS = 8
+/** The plan loop stops early once the needed canvas has grown by more than
+ *  DIVERGENCE_RATIO in each of DIVERGING_ROUNDS consecutive rounds. */
+const DIVERGENCE_RATIO = 1.08
+const DIVERGING_ROUNDS = 3
 /** Law (c), third remedy: when a name cannot clear a neighbour's outgoing
  *  line by turning inward, the fan that neighbour sits in is asked to open
  *  by this much ON EACH SIDE OF THAT MEMBER (the other gaps keep the fixed
@@ -125,16 +145,29 @@ const RING1_BASE = -Math.PI / 2
 export const FAN_STEP = 0.075
 /** How much a fan widens per pass while its own labels still collide. */
 const FAN_WIDEN = 0.01
-/** The smallest angular step a fan may tighten to when its arc is short —
+/** The smallest angular step a fan may tighten to when its ring is full —
  *  the clearance rule (in map units) then decides the real minimum. */
 const STEP_FLOOR = 0.005
-/** How far a fan's ring is pushed outward, per push, when its arc cannot
- *  hold its names; and how many pushes at most (best effort beyond that). */
-export const RING_BUMP = 46
-const MAX_BUMPS = 24
+/** RINGS ARE GENERATIONS (founder reversal, 9 September 2026 evening — the
+ *  v4 "step out one level" mechanism is GONE): a person's dot sits EXACTLY
+ *  on the ring of their generation. When a ring cannot hold its fans —
+ *  their demand exceeds its circumference, or a name on it cannot clear an
+ *  inner ring's name, dot or line — THAT ring's radius grows by this much
+ *  per step (and every ring outside it moves out by the same amount), up
+ *  to MAX_RING_GROWS steps (best effort beyond). The first ring grows the
+ *  same way when its names cannot clear each other or the film node. */
+export const RING_GROW = 8
+const MAX_RING_GROWS = 80
+/** The extra angular room added, per side, between two fans on one ring
+ *  whose names still touch after the 1-D packing (the packing measures
+ *  each fan's reach exactly, so this is rarely needed). */
+const PAD_STEP = 0.01
 /** Bound on the global clearance passes per ring (each pass fixes one
  *  violation; the count is generous for any real network). */
 const MAX_FIX_PASSES = 1500
+/** Bound on the packing iterations per ring (the push-apart / pull-back
+ *  relaxation converges in a handful for any real ring). */
+const MAX_PACK_ITERATIONS = 400
 /** Design-scale view for the clearance rule's collision question. */
 const DESIGN_VIEW = { vbX: 0, vbY: 0, scale: 1 }
 /** The film node's emblem, as a square obstacle the first ring's names
@@ -306,6 +339,10 @@ export function buildConstellationLayout({
   /* ---- Ring step: minimum; the canvas grows, rings never compress ---- */
   let rstep = (Math.min(BASE_W, BASE_H) / 2 - EDGE_PAD - R0) / Math.max(maxDepth - 1, 1)
   rstep = Math.max(rstep, MIN_RSTEP)
+  // Team-member nodes are account holders (solid, arrived); the film root
+  // has no ticket. Claimed-stage per invite by the funnel's shared rule.
+  const claimedById = new Map(invites.map((i) => [i.id, isInviteClaimedStage(i)]))
+  const arrivedOf = (id) => (claimedById.has(id) ? claimedById.get(id) : true)
 
   // Positions are computed around a provisional center (0,0) and shifted
   // to the final canvas center once the outermost name is known.
@@ -424,11 +461,17 @@ export function buildConstellationLayout({
       const { offsets } = fanOffsets(fan)
       fan.kids.forEach((c, i) => {
         c.r = fan.r
-        c.theta = fan.center + offsets[i]
+        c.theta = fan.angle + offsets[i]
       })
     }
 
     for (const n of nodes.values()) n.side = 'out'
+    /** Why this placement is best effort (the first reason wins). */
+    let bestEffortReason = null
+    const giveUp = (reason) => {
+      bestEffort = true
+      if (!bestEffortReason) bestEffortReason = reason
+    }
 
     /* ---- Rule 1: the first ring, even, pushed outward only if its names
             cannot clear each other or the center labels ---- */
@@ -441,8 +484,8 @@ export function buildConstellationLayout({
         c.r = r1
         c.theta = RING1_BASE + i * slot
       })
-      if (bumps >= MAX_BUMPS) {
-        bestEffort = true
+      if (bumps >= MAX_RING_GROWS) {
+        giveUp('the first ring grew to its limit')
         break
       }
       let bad = false
@@ -459,7 +502,7 @@ export function buildConstellationLayout({
         if (!bad && !segmentKeepsLength(segs[i], centerRects, rects[i].label)) bad = true
       }
       if (!bad) break
-      r1 += RING_BUMP
+      r1 += RING_GROW
     }
     root.r = 0
     root.theta = 0
@@ -491,7 +534,40 @@ export function buildConstellationLayout({
       }
     }
 
-    /* ---- Rule 2: each deeper generation, fitted into radius LEVELS ---- */
+    /* ---- Rule 2: rings are generations — every depth-d node on ring d ---- */
+    // Ring spacing floor: a dot, the label offset, a name box and the
+    // clearance — adjacent rings can never touch radially where names
+    // stack (top and bottom); the growth rule below keeps names off the
+    // next ring everywhere else.
+    const ringStep = Math.max(rstep, PERSON_DOT_OBSTACLE_R + LABEL_OFFSET + labelBoxHeight(fontMap) + clearance)
+    const ringR = [null, r1]
+    for (let d = 2; d <= maxDepth; d++) ringR[d] = ringR[d - 1] + ringStep
+    /** Grow ring d and every ring outside it by `by`. */
+    const growRing = (d, by) => {
+      for (let e = d; e <= maxDepth; e++) ringR[e] += by
+    }
+    /** The angular extent of a placed node's name and dot around the film
+     *  node, as [min, max] deviations from `about` (radians). */
+    const angularExtent = (n, r, theta, about) => {
+      const { label, dot } = rectsAt(n, r, theta)
+      let lo = Infinity
+      let hi = -Infinity
+      for (const rect of [label, dot]) {
+        for (const [x, y] of [
+          [rect.x, rect.y],
+          [rect.x + rect.w, rect.y],
+          [rect.x, rect.y + rect.h],
+          [rect.x + rect.w, rect.y + rect.h],
+        ]) {
+          let d = normAngle(Math.atan2(y, x) - about)
+          if (d > Math.PI) d -= TWO_PI
+          lo = Math.min(lo, d)
+          hi = Math.max(hi, d)
+        }
+      }
+      return [lo, hi]
+    }
+
     let prev = ring1
     for (let d = 2; d <= maxDepth; d++) {
       const parents = prev
@@ -503,90 +579,177 @@ export function buildConstellationLayout({
         index,
         p,
         kids: p.children,
-        center: p.theta,
-        base: p.r + rstep,
-        r: null,
+        center: p.theta, // the parent's angle — where the fan wants to be
+        angle: p.theta, // where the packing put it
+        r: ringR[d],
         step: FAN_STEP,
-        level: 0,
-        a0: 0,
-        a1: 0,
+        stepFrom: FAN_STEP, // the fixed step, or STEP_FLOOR once the ring had to tighten
+        widen: 0, // extra step the global pass added for the fan's own names
+        padL: 0, // extra angular room demanded on each side by the global pass
+        padR: 0,
+        hL: 0, // the fan's reach on each side of `angle` (dots, names, clearance)
+        hR: 0,
       }))
       const half = (fan) => fanOffsets(fan).half
-      /** How far, in angle, a fan's outermost names can reach past its
-       *  outermost dots at radius r (a name centered on its dot at the top
-       *  of the ring reaches half its width), plus the clearance. */
-      const margin = (fan, r) => {
-        let widest = 0
-        for (const k of fan.kids) widest = Math.max(widest, labelTextWidth(measuredName(k), fontMap, 2))
-        return (widest / 2 + clearance) / r
+      /** A fan's reach on each side of its angle at radius r: its outermost
+       *  members' names and dots (measured from the real boxes) plus the
+       *  clearance, plus any pad the global pass asked for. */
+      const measureReach = (fan) => {
+        const { offsets } = fanOffsets(fan)
+        const first = fan.kids[0]
+        const last = fan.kids[fan.kids.length - 1]
+        const [lo] = angularExtent(first, fan.r, fan.angle + offsets[0], fan.angle)
+        const [, hi] = angularExtent(last, fan.r, fan.angle + offsets[offsets.length - 1], fan.angle)
+        const c = clearance / fan.r
+        fan.hL = Math.max(-lo, half(fan)) + c + fan.padL
+        fan.hR = Math.max(hi, half(fan)) + c + fan.padR
       }
-      /** The empty arc beside a fan at radius r — halfway is not needed:
-       *  the fan may use everything up to this generation's fans ALREADY
-       *  placed at that radius (their dots plus their name margins). A
-       *  fan pushed to another radius cannot collide, so it does not
-       *  count; an EARLIER generation's fan that happens to sit at this
-       *  radius is not seen here — the global pass below catches that
-       *  case. Returns the half-width (in angle) the fan may occupy. */
-      const freeHalf = (fan, r) => {
-        let left = Math.PI
-        let right = Math.PI
-        for (const o of fans) {
-          if (o === fan || o.r == null || Math.abs(o.r - r) > 1e-6) continue
-          const span = normAngle(o.a1 - o.a0)
-          if (normAngle(fan.center - o.a0) <= span) return 0 // the parent's angle is inside the neighbour
-          right = Math.min(right, normAngle(o.a0 - fan.center))
-          left = Math.min(left, normAngle(fan.center - o.a1))
+      /** THE PACKING: one-dimensional, circular, least movement. Every fan
+       *  starts at its parent's angle; overlapping neighbours are pushed
+       *  apart equally, then each fan is pulled back toward its parent as
+       *  far as its neighbours allow — repeated until nothing moves. A fan
+       *  with no crowding neighbour never leaves its parent's angle; a fan
+       *  crowded on both sides stays centred to within the difference of
+       *  its two neighbours' reach. (A size-weighted push — the smaller fan
+       *  yielding more — was tried on 9 September and dropped: it broke
+       *  convergence, and Circles stopped settling.) */
+      const pack = () => {
+        const n = fans.length
+        for (const fan of fans) {
+          fan.angle = fan.center
+          measureReach(fan)
         }
-        return Math.max(0, Math.min(left, right) - margin(fan, r))
-      }
-      /** Fit a fan at radius r: the fixed step if it fits the free arc;
-       *  else tightened to the clearance minimum at this radius. */
-      const fitAt = (fan, r) => {
-        const budget = freeHalf(fan, r)
-        fan.step = fanStepFrom(fan.kids, fan.center, r, FAN_STEP)
-        if (half(fan) <= budget + 1e-12) return true
-        fan.step = fanStepFrom(fan.kids, fan.center, r, STEP_FLOOR)
-        return half(fan) <= budget + 1e-12
-      }
-      /** Place a fan at the first level (from `fromLevel`) where it fits —
-       *  its own ring first, then RING_BUMP outward per level. Beyond
-       *  MAX_BUMPS it is placed at the last level, best effort. */
-      const settle = (fan, fromLevel) => {
-        fan.r = null
-        let level = fromLevel
-        for (; level <= MAX_BUMPS; level++) {
-          if (fitAt(fan, fan.base + level * RING_BUMP)) break
+        if (n < 2) return
+        // Unwrapped positions in center order; the wrap pair closes the ring.
+        const a = fans.map((f) => f.center)
+        for (let i = 1; i < n; i++) while (a[i] < a[i - 1]) a[i] += TWO_PI
+        const want = a.slice()
+        const need = (i, j) => fans[i].hR + fans[j].hL // room between i and its next neighbour j
+        for (let iter = 0; iter < MAX_PACK_ITERATIONS; iter++) {
+          let moved = 0
+          // Push apart.
+          for (let i = 0; i < n; i++) {
+            const j = (i + 1) % n
+            const gap = (j === 0 ? a[0] + TWO_PI : a[j]) - a[i] - need(i, j)
+            if (gap < -1e-9) {
+              a[i] -= -gap / 2
+              a[j] += -gap / 2
+              moved = Math.max(moved, -gap / 2)
+            }
+          }
+          // Pull back toward the parent, within the neighbours.
+          for (let i = 0; i < n; i++) {
+            const prevI = (i + n - 1) % n
+            const nextI = (i + 1) % n
+            const lo = (prevI === n - 1 ? a[prevI] - TWO_PI : a[prevI]) + need(prevI, i)
+            const hi = (nextI === 0 ? a[nextI] + TWO_PI : a[nextI]) - need(i, nextI)
+            const target = Math.min(Math.max(want[i], lo), hi)
+            if (Math.abs(target - a[i]) > 1e-12) {
+              moved = Math.max(moved, Math.abs(target - a[i]))
+              a[i] = target
+            }
+          }
+          if (moved < 1e-7) break
         }
-        if (level > MAX_BUMPS) {
-          level = MAX_BUMPS
-          bestEffort = true
-          fan.step = fanStepFrom(fan.kids, fan.center, fan.base + level * RING_BUMP, STEP_FLOOR)
-        }
-        fan.level = level
-        fan.r = fan.base + level * RING_BUMP
-        const m = margin(fan, fan.r)
-        fan.a0 = fan.center - half(fan) - m
-        fan.a1 = fan.center + half(fan) + m
-        placeFan(fan)
+        fans.forEach((f, i) => {
+          f.angle = a[i]
+        })
       }
-      for (const fan of fans) settle(fan, 0)
+      /** The ring's angular demand against its circumference. */
+      const demand = () => fans.reduce((sum, f) => sum + f.hL + f.hR, 0)
+      /** Fit the fans at the ring's current radius: the fixed step where the
+       *  ring can hold it, else tightened to the clearance minimum; false
+       *  when even that exceeds the circumference (the ring must grow). */
+      /** A fan's step at the ring's CURRENT radius: the fixed step, widened
+       *  as far as its own names need there (a grown ring narrows a
+       *  name-bound fan), plus whatever the global pass added. */
+      const fitStep = (fan, from = fan.stepFrom) => fanStepFrom(fan.kids, fan.center, fan.r, from) + fan.widen
+      const fitRing = (mayGrow = true) => {
+        for (const fan of fans) {
+          fan.r = ringR[d]
+          fan.angle = fan.center
+          fan.step = fitStep(fan)
+          measureReach(fan)
+        }
+        if (demand() > TWO_PI) {
+          // Beyond the circumference at the fixed step: the ring grows
+          // while the dots alone would fit at that step (the names' reach
+          // shrinks with the radius); when the dots themselves cannot fit
+          // — or the ring can grow no further — the step tightens to the
+          // clearance minimum at this radius.
+          const dotsOnly = fans.reduce((sum, f) => sum + (f.kids.length - 1) * FAN_STEP + (2 * clearance) / f.r, 0)
+          if (dotsOnly < TWO_PI && mayGrow) return false
+          for (const fan of fans) {
+            fan.stepFrom = STEP_FLOOR
+            fan.step = fitStep(fan)
+            measureReach(fan)
+          }
+          if (demand() > TWO_PI) return false
+        }
+        pack()
+        for (const fan of fans) placeFan(fan)
+        return true
+      }
+      let grows = 0
+      while (!fitRing()) {
+        if (grows >= MAX_RING_GROWS) {
+          // The ring can grow no further: tightened steps, and if even
+          // those exceed the circumference, packed as best it can.
+          if (!fitRing(false)) {
+            giveUp(`ring ${d} cannot hold its fans at its largest radius`)
+            pack()
+            for (const fan of fans) placeFan(fan)
+          }
+          break
+        }
+        growRing(d, RING_GROW)
+        grows += 1
+      }
 
-      // The global pass: EVERY name on the map against every other name and
-      // every other dot. A violation involving one of this ring's fans is
-      // resolved by moving a fan one level outward (and re-fitting it
-      // there): against an earlier ring's name or dot, or the center
-      // labels, this fan moves; between two of this ring's fans, the later
-      // one (by parent angle) moves; within one fan, it widens while its
-      // free arc allows, else moves. Repeated until the rule holds.
+      // The global pass: EVERY name on this ring against every name, dot
+      // and line already placed and the film node, and against each other.
+      // Remedies, in the founder's order: within one fan its step widens;
+      // between two fans on this ring the pair is padded apart and the ring
+      // re-packed; a name on an inner ring's line turns inward or asks its
+      // parent's fan for room (law (c)); anything else against an inner
+      // ring — a name, a dot, a line, the film node — grows THIS ring (and
+      // every ring outside it). Repeated until the rule holds.
       const fanOf = new Map()
       for (const fan of fans) for (const k of fan.kids) fanOf.set(k.id, fan)
       const ringKids = fans.flatMap((f) => f.kids)
-      const push = (fan) => {
-        if (fan.level >= MAX_BUMPS) {
-          bestEffort = true
+      const refit = () => {
+        // Each fan's step for the current radius (plus what the pass
+        // added) and its pads; re-pack.
+        for (const fan of fans) {
+          fan.r = ringR[d]
+          fan.angle = fan.center
+          fan.step = fitStep(fan)
+          measureReach(fan)
+        }
+        if (demand() > TWO_PI) return false
+        pack()
+        for (const fan of fans) placeFan(fan)
+        return true
+      }
+      const grow = () => {
+        if (grows >= MAX_RING_GROWS) {
+          giveUp(`ring ${d} grew to its limit`)
           return false
         }
-        settle(fan, fan.level + 1)
+        growRing(d, RING_GROW)
+        grows += 1
+        // A larger ring holds the same steps and pads more easily; when it
+        // still cannot, keep growing.
+        while (!refit()) {
+          if (grows >= MAX_RING_GROWS) {
+            giveUp(`ring ${d} grew to its limit`)
+            pack()
+            for (const fan of fans) placeFan(fan)
+            return false
+          }
+          growRing(d, RING_GROW)
+          grows += 1
+        }
         return true
       }
       /** Law (c), first remedy: turn a name to the INWARD side of its dot
@@ -615,6 +778,7 @@ export function buildConstellationLayout({
       let clean = false
       for (let pass = 0; pass < MAX_FIX_PASSES; pass++) {
         let culprit = null
+        let pairWith = null
         let widenable = false
         let flipCandidate = null
         let lineStart = null
@@ -645,7 +809,7 @@ export function buildConstellationLayout({
             // Law (c): this name against an earlier ring's line, and this
             // ring's incoming line against an earlier ring's name — the
             // name turns inward first; only if that cannot clear does the
-            // fan move.
+            // fan ask for room, then the ring grow.
             if (labelTouchesLine(k.id, kr.label, seg(other))) {
               culprit = fanOf.get(k.id)
               flipCandidate = k
@@ -691,7 +855,8 @@ export function buildConstellationLayout({
                 culprit = fa
                 widenable = true
               } else {
-                culprit = fa.index > fb.index ? fa : fb
+                culprit = fa
+                pairWith = fb
               }
               break outer
             }
@@ -702,41 +867,73 @@ export function buildConstellationLayout({
           break
         }
         if (flipCandidate && tryFlip(flipCandidate)) continue
-        if (allowRestart && flipCandidate && lineStart && lineStart !== ROOT_ID) {
-          // Neither side of the name clears the line: ask the fan the
-          // line leaves from to open on both sides of that member (up to
-          // MAX_DEMAND — past that the fan is pushed outward instead), and
-          // re-place. (A first-ring member cannot: the first ring is even.)
+        if (flipCandidate && lineStart && !widenable && !pairWith) {
+          // Neither side of the name clears the line. While the fan the
+          // line runs into is still wider than the tight step — bound by
+          // its stacked names at this radius — the ring GROWS: a larger
+          // ring narrows the fan and turns its lines radial, which is what
+          // clears an inner name (rings are generations: growth, not a
+          // level). Once the fan is already at the tight step, growth
+          // barely moves the line, so the fan the line LEAVES from is
+          // asked to open on both sides of that member (up to MAX_DEMAND)
+          // and the placement re-runs; a first-ring member cannot be
+          // opened around (the first ring is even), so its ring grows.
+          const nameBound = culprit.step > FAN_STEP + 1e-9
+          if (nameBound && grow()) continue
           const from = nodes.get(lineStart)
-          if (from && from.parentId && from.parentId !== ROOT_ID && (demands.get(from.id) || 0) < MAX_DEMAND - 1e-12) {
+          if (allowRestart && from && from.parentId && from.parentId !== ROOT_ID && (demands.get(from.id) || 0) < MAX_DEMAND - 1e-12) {
             restart = { memberId: from.id }
             break
           }
+          if (!grow()) break
+          continue
         }
         if (widenable) {
-          const widened = culprit.step + FAN_WIDEN
-          const budget = freeHalf(culprit, culprit.r)
-          if (half({ ...culprit, step: widened }) <= budget + 1e-12) {
-            culprit.step = widened
-            const m = margin(culprit, culprit.r)
-            culprit.a0 = culprit.center - half(culprit) - m
-            culprit.a1 = culprit.center + half(culprit) + m
-            placeFan(culprit)
-            continue
+          const cap = TWO_PI / culprit.kids.length
+          if (culprit.step + FAN_WIDEN < cap) {
+            culprit.widen += FAN_WIDEN
+            if (refit()) continue
+            // The wider fan no longer fits the ring: the ring grows.
+            if (grow()) continue
+            break
           }
         }
-        if (!push(culprit)) break
+        if (pairWith) {
+          // Two fans on this ring touch: pad the facing sides (or, for
+          // fans that are not neighbours in angle, both sides of both) and
+          // re-pack; a ring that can no longer hold the padded fans grows.
+          const n = fans.length
+          const adjacentAfter = (pairWith.index + 1) % n === culprit.index
+          const adjacentBefore = (culprit.index + 1) % n === pairWith.index
+          if (adjacentBefore) {
+            culprit.padR += PAD_STEP
+            pairWith.padL += PAD_STEP
+          } else if (adjacentAfter) {
+            culprit.padL += PAD_STEP
+            pairWith.padR += PAD_STEP
+          } else {
+            culprit.padL += PAD_STEP
+            culprit.padR += PAD_STEP
+            pairWith.padL += PAD_STEP
+            pairWith.padR += PAD_STEP
+          }
+          if (refit()) continue
+          if (grow()) continue
+          break
+        }
+        // Against an inner ring, the film node, or a line that cannot be
+        // cleared by side or by room: this ring grows, every ring outside
+        // it with it.
+        if (!grow()) break
       }
       if (restart) break
-      if (!clean) bestEffort = true
+      if (!clean) giveUp(`ring ${d} still had a violation after ${MAX_FIX_PASSES} passes`)
 
       // Law (c), applied ahead of time: a name on the line leaving its own
       // dot is resolved "by label side, away from the outgoing branch" —
       // so a person who shared onward gets their name on the INWARD side
       // (between them and the hand that reached them; the renderer ends
       // that incoming line before the box) whenever that side is clear.
-      // Their children then need no pushing past an outward name, which
-      // is what let a deep branch outgrow the reference view.
       for (const k of ringKids) if (k.children.length) tryFlip(k)
 
       placed.push(...ringKids)
@@ -763,7 +960,7 @@ export function buildConstellationLayout({
     for (const cr of centerRects) grow(cr)
     const width = Math.max(BASE_W, Math.ceil(2 * (ex + EDGE_PAD)))
     const height = Math.max(BASE_H, Math.ceil(2 * (ey + EDGE_PAD)))
-    return { width, height, r1, bestEffort, rectsAt, centerRects }
+    return { width, height, ringR, bestEffort, bestEffortReason, rectsAt, centerRects }
   }
 
   /* ---- Plan for the reference view: the hard rule holds on SCREEN there ----
@@ -807,19 +1004,35 @@ export function buildConstellationLayout({
     // old one returned the base canvas with the nodes wherever the last
     // aborted attempt left them (red team finding 1).
     r = runPlacement(p.fontMap, p.clearance, p.scale, demands, false)
-    return { ...r, bestEffort: true }
+    return { ...r, bestEffort: true, bestEffortReason: r.bestEffortReason || `out of restarts (${MAX_RESTARTS} fan openings)` }
   }
   let assumed = { width: BASE_W, height: BASE_H }
   let plan = planFor(BASE_W, BASE_H)
   let result = null
   let settled = false
   let rounds = 0
+  /** Why the plan did not settle: the placement's own reason when it gave
+   *  up, else the canvas that kept growing past the round limit. */
+  let reason = null
+  let growthStreak = 0
   for (; rounds < MAX_PLAN_ROUNDS; rounds++) {
     plan = planFor(assumed.width, assumed.height)
     result = place(plan)
+    reason = result.bestEffortReason || `the canvas kept growing (${result.width}×${result.height} after ${rounds + 1} rounds)`
     if (!result.bestEffort && result.width <= assumed.width && result.height <= assumed.height) {
       result = { ...result, width: assumed.width, height: assumed.height }
       settled = true
+      rounds += 1
+      break
+    }
+    // A plan that needs a clearly bigger canvas every round is diverging
+    // (bigger boxes need a bigger canvas which paints bigger boxes): stop
+    // after DIVERGING_ROUNDS such rounds rather than spend the round limit
+    // on placements that can only get larger (red team, 9 September: the
+    // layout runs on the dashboard's main thread).
+    const grew = result.width > assumed.width * DIVERGENCE_RATIO || result.height > assumed.height * DIVERGENCE_RATIO
+    growthStreak = grew ? growthStreak + 1 : 0
+    if (growthStreak >= DIVERGING_ROUNDS) {
       rounds += 1
       break
     }
@@ -829,7 +1042,7 @@ export function buildConstellationLayout({
     plan = planFor(BASE_W, BASE_H)
     result = place(plan)
   }
-  const { width, height, r1 } = result
+  const { width, height, ringR } = result
   const cx = width / 2
   const cy = height / 2
 
@@ -858,6 +1071,18 @@ export function buildConstellationLayout({
     const pad = plan.clearance
     return { x: cx + x0 - pad, y: cy + y0 - pad, w: x1 - x0 + 2 * pad, h: y1 - y0 + 2 * pad }
   }
+  // THE CREATOR'S PHONE (founder, 9 September 2026 evening): the film node
+  // and the whole first ring with their planned name boxes — the frame a
+  // phone opens on when no viewer is looking, centred on the filmmaker.
+  const firstRingFrame = (() => {
+    const f = frameOf([ROOT_ID, ...root.children.map((c) => c.id)])
+    // Symmetric about the filmmaker, so a camera centred on this frame is
+    // centred on him with every first-ring name in view (a ring of nine has
+    // no name at 6 o'clock to balance the one at 12).
+    const rx = Math.max(cx - f.x, f.x + f.w - cx)
+    const ry = Math.max(cy - f.y, f.y + f.h - cy)
+    return { x: cx - rx, y: cy - ry, w: 2 * rx, h: 2 * ry }
+  })()
   let threadFrame = null
   if (you) {
     const pathIds = []
@@ -877,11 +1102,6 @@ export function buildConstellationLayout({
   /* ---- Output: nodes, labels, edges ---- */
   const pos = (n) => (n.id === ROOT_ID ? { x: cx, y: cy } : { x: cx + n.r * Math.cos(n.theta), y: cy + n.r * Math.sin(n.theta) })
 
-  // Claimed-stage per person (the funnel's shared rule — solid vs hollow);
-  // team-member nodes are account holders, so solid; the film root has no
-  // ticket to claim.
-  const claimedById = new Map(invites.map((i) => [i.id, isInviteClaimedStage(i)]))
-
   const outNodes = []
   const edges = []
   for (const n of nodes.values()) {
@@ -900,18 +1120,21 @@ export function buildConstellationLayout({
       label: isFilm ? null : radialLabel(n.theta, x, y, n.side),
       labelSide: isFilm ? null : n.side,
       twinkleDelay: isFilm ? null : twinkleDelay(n.id),
-      ...(isFilm ? {} : { claimed: claimedById.has(n.id) ? claimedById.get(n.id) : true }),
+      ...(isFilm ? {} : { claimed: arrivedOf(n.id) }),
     })
     for (const c of n.children) {
       const B = pos(c)
-      edges.push({ x1: x, y1: y, x2: B.x, y2: B.y, fromId: n.id, toId: c.id })
+      // THE LINE LAW (founder, 9 September 2026 evening): solid = the
+      // connection has arrived (the recipient claimed); dotted = still in
+      // flight. The same fact as the child's dot.
+      edges.push({ x1: x, y1: y, x2: B.x, y2: B.y, fromId: n.id, toId: c.id, arrived: arrivedOf(c.id) })
     }
   }
 
-  // The dashed generation rings: the (possibly pushed-out) first ring, then
-  // one ring step per generation. A pushed-out branch sits beyond its ring.
+  // The dashed generation rings — one per generation, and every dot of
+  // that generation sits exactly on it (rings are generations).
   const rings = []
-  for (let d = 1; d <= maxDepth; d++) rings.push(r1 + (d - 1) * rstep)
+  for (let d = 1; d <= maxDepth; d++) rings.push(ringR[d])
 
   return {
     width,
@@ -939,7 +1162,7 @@ export function buildConstellationLayout({
      *  a canvas consistent with them (if not, the placement used the base
      *  canvas's boxes and the renderer hides what would touch at the
      *  reference view), and the rounds it took. */
-    plan: { scale: plan.scale, fontMap: plan.fontMap, clearance: plan.clearance, settled, rounds },
+    plan: { scale: plan.scale, fontMap: plan.fontMap, clearance: plan.clearance, settled, rounds, reason: settled ? null : reason },
     /** THE PHONE CAMERA (founder 2026-09-09): the two frames a viewer's
      *  phone may open on, in canvas coordinates — `full` = the whole
      *  thread (film, the path to YOU, YOU's entire branch) with every
@@ -949,5 +1172,10 @@ export function buildConstellationLayout({
      *  generation is wider than the phone at the legible scale). Null
      *  when no viewer is looking. */
     threadFrame,
+    /** THE CREATOR'S PHONE: the film node and the whole first ring with
+     *  their planned name boxes, in canvas coordinates — what a phone opens
+     *  on when no viewer is looking (centred on the filmmaker, at the
+     *  legible scale). */
+    firstRingFrame,
   }
 }
