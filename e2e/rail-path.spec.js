@@ -9,9 +9,11 @@
  *    and its names are never gold;
  *  - THE ONWARD SEAT (founder design 2026-09-09, second pass): once the
  *    viewer has created an invitation, the "?" becomes the people they
- *    shared with directly — one name, or "{n} PEOPLE" — hollow + dashed
- *    until anyone claims, solid + solid after; five nodes at most; and it
- *    appears the moment an invitation is created, before any reload.
+ *    shared with directly — one name, or "{n} PEOPLE" — a single person
+ *    hollow + dashed until they claim, solid + solid after; a group seat
+ *    ALWAYS solid (founder amendment, 9 September late); five nodes at
+ *    most; and it appears the moment an invitation is created, before any
+ *    reload.
  */
 import { test, expect, pushJsError } from './fixtures/test.js'
 
@@ -406,7 +408,7 @@ test.describe('the onward seat — the path after you share', () => {
     await expect(page.getByText(/OTHERS/)).toHaveCount(0)
   })
 
-  test('four hands and two invitations: five nodes — the collapse never touches the seat; labels keep 6px at 1440 and 390', async ({ page }) => {
+  test('four hands and two invitations (none claimed): five nodes, the group seat SOLID — the collapse never touches the seat; labels keep 6px at 1440 and 390', async ({ page }) => {
     await mockMedia(page)
     await mockClaimant(page, {
       ...LINK,
@@ -423,8 +425,9 @@ test.describe('the onward seat — the path after you share', () => {
     expect(await pathTexts(page)).toEqual(['IEN', '2 OTHERS', 'ALEXANDER', 'YOU', '2 PEOPLE', '(FILMMAKER)'])
     const g = await seatGeometry(page)
     expect(g.kinds).toEqual(['hand', 'collapsed', 'hand', 'you', 'onward'])
-    expect(g.seat).toMatchObject({ kind: 'onward', claimed: 'false', fill: 'none', stroke: '#b1a180' })
-    expect(g.lines.map((l) => l.dash)).toEqual([null, null, null, '2 4'])
+    // A group seat is always solid, whatever the claims (founder amendment).
+    expect(g.seat).toMatchObject({ kind: 'onward', claimed: 'true', fill: '#b1a180', stroke: null })
+    expect(g.lines.map((l) => l.dash)).toEqual([null, null, null, null])
     expect(
       await page.evaluate(() => [...document.querySelectorAll('[data-rail-path] circle')].map((c) => Number(c.getAttribute('cx'))))
     ).toEqual([30, 111, 192, 273, 354])
@@ -461,13 +464,16 @@ test.describe('the onward seat — the path after you share', () => {
     expect(g.lines[2].dash).toBe('2 4')
     expect(g.hasNext).toBe(false)
 
-    // A second invitation: "2 PEOPLE", still hollow.
+    // A second invitation: "2 PEOPLE" — a group seat, solid at once even
+    // though nobody has claimed (founder amendment, 9 September late).
     await page.getByRole('button', { name: 'Create another invitation' }).click()
     await page.locator('dialog input').fill('Cal')
     await page.locator('dialog button[type="submit"]').click()
     await expect(page.getByText('http://localhost:3000/ticket-k7m2p')).toBeVisible()
     expect(await pathTexts(page)).toEqual(['IEN', 'THEMBA', 'YOU', '2 PEOPLE', '(FILMMAKER)'])
-    expect((await seatGeometry(page)).seat).toMatchObject({ kind: 'onward', claimed: 'false', fill: 'none' })
+    const two = await seatGeometry(page)
+    expect(two.seat).toMatchObject({ kind: 'onward', claimed: 'true', fill: '#b1a180' })
+    expect(two.lines[2].dash).toBeNull()
     expect(jsErrors).toEqual([])
   })
 

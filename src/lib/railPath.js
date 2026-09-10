@@ -17,8 +17,11 @@
  *    shared with directly, as one node, and the path ends there — no "?"
  *    after it, ever. One person → their first name (as the sharer typed
  *    it, from the moment the invitation is created); two or more →
- *    "{n} PEOPLE". The node is hollow with a dashed run while none of them
- *    has claimed, solid with a solid run the moment any one has. The
+ *    "{n} PEOPLE". The node is hollow with a dashed run ONLY when the seat
+ *    is a single named person who has not yet claimed; solid with a solid
+ *    run once that person claims — and a group seat (two or more) is
+ *    ALWAYS solid, whatever the claims: the count records the sharer's
+ *    act, not an arrival (founder amendment, 9 September 2026, late). The
  *    collapse applies to the hands BEFORE "you" only — the onward node is
  *    never collapsed or counted: five nodes at most.
  *
@@ -59,6 +62,17 @@ export function onwardLabel(people) {
   return `${list.length} PEOPLE`
 }
 
+/** Is the onward seat SOLID? A single named person: solid once they have
+ *  claimed, hollow until then. A group ("{n} PEOPLE"): always solid — the
+ *  count records the sharer's act, not an arrival (founder amendment,
+ *  9 September 2026, late). */
+export function onwardSeatSolid(people) {
+  const list = onwardPeople(people)
+  if (list.length === 0) return false
+  if (list.length === 1) return list[0].claimed
+  return true
+}
+
 /** The link payload's `onward` entries, cleaned: first names through the
  *  display-name rule (an email fragment is never a name), `claimed` as a
  *  boolean. Anything that isn't a list reads as nobody. */
@@ -92,7 +106,7 @@ export function railPathNodes(hands, onward = []) {
   }
   const seat =
     people.length > 0
-      ? { type: 'onward', label: onwardLabel(people), caption: null, claimed: people.some((p) => p.claimed) }
+      ? { type: 'onward', label: onwardLabel(people), caption: null, claimed: onwardSeatSolid(people) }
       : { type: 'next', label: '?', caption: null }
   return [...nodes, { type: 'you', label: 'YOU', caption: null }, seat]
 }

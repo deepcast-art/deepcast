@@ -9,6 +9,7 @@ import {
   RAIL_PATH_VIEWBOX,
   onwardLabel,
   onwardPeople,
+  onwardSeatSolid,
 } from './railPath.js'
 import { chainHands } from './handsChain.js'
 
@@ -129,7 +130,7 @@ describe('the onward seat — the path after you share (founder design 2026-09-0
     expect(nodes[3]).toMatchObject({ type: 'onward', claimed: true })
   })
 
-  it('3 onward, mixed: "3 PEOPLE", solid the moment any one has claimed', () => {
+  it('3 onward, mixed: "3 PEOPLE", solid — a group seat is always solid', () => {
     const nodes = railPathNodes(HANDS, [
       { firstName: 'Maya', claimed: false },
       { firstName: 'Joiselle', claimed: true },
@@ -139,12 +140,16 @@ describe('the onward seat — the path after you share (founder design 2026-09-0
     expect(nodes[3]).toEqual({ type: 'onward', label: '3 PEOPLE', caption: null, claimed: true })
   })
 
-  it('2 onward, none claimed: "2 PEOPLE", hollow', () => {
+  it('2 onward, none claimed: "2 PEOPLE", STILL solid — the count records the sharer’s act, not an arrival (founder amendment, 9 September late)', () => {
     const nodes = railPathNodes(HANDS, [
       { firstName: 'Maya', claimed: false },
       { firstName: 'Cal', claimed: false },
     ])
-    expect(nodes[3]).toEqual({ type: 'onward', label: '2 PEOPLE', caption: null, claimed: false })
+    expect(nodes[3]).toEqual({ type: 'onward', label: '2 PEOPLE', caption: null, claimed: true })
+    expect(onwardSeatSolid([{ firstName: 'A', claimed: false }, { firstName: 'B', claimed: false }])).toBe(true)
+    expect(onwardSeatSolid([{ firstName: 'A', claimed: false }])).toBe(false)
+    expect(onwardSeatSolid([{ firstName: 'A', claimed: true }])).toBe(true)
+    expect(onwardSeatSolid([])).toBe(false)
   })
 
   it('4 hands + 2 onward: the collapse applies before "you" only — five nodes, the onward node never collapsed or counted', () => {
@@ -154,6 +159,7 @@ describe('the onward seat — the path after you share (founder design 2026-09-0
     ])
     expect(labels(nodes)).toEqual(['IEN', '2 OTHERS', 'ALEXANDER', 'YOU', '2 PEOPLE'])
     expect(types(nodes)).toEqual(['hand', 'collapsed', 'hand', 'you', 'onward'])
+    expect(nodes[4].claimed).toBe(true) // a group seat: solid whatever the claims
     expect(nodes).toHaveLength(5)
     expect(railPathPositions(nodes.length)).toEqual([30, 111, 192, 273, 354])
   })
@@ -181,7 +187,7 @@ describe('the onward seat — the path after you share (founder design 2026-09-0
     expect(railPathDescription(railPathNodes(HANDS, [{ firstName: 'Maya', claimed: false }]))).toBe(
       'How this reached you: IEN (filmmaker) → THEMBA → you → MAYA (not yet claimed)'
     )
-    expect(railPathDescription(railPathNodes(HANDS, [{ firstName: 'Maya', claimed: true }, { firstName: 'Cal' }]))).toBe(
+    expect(railPathDescription(railPathNodes(HANDS, [{ firstName: 'Maya', claimed: false }, { firstName: 'Cal' }]))).toBe(
       'How this reached you: IEN (filmmaker) → THEMBA → you → 2 PEOPLE'
     )
   })
