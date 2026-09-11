@@ -312,6 +312,10 @@ export default function ConstellationMap({ layout }) {
       const [x2, y2] = toScreen(s.x2, s.y2)
       return { fromId: s.fromId, toId: s.toId, x1, y1, x2, y2 }
     })
+    // A name the LAYOUT already hid (no side of its own clears a line at
+    // the reference view) is not a rung's failure: the rung must paint
+    // every OTHER name.
+    const layoutHidden = layout.nodes.filter((n) => n.kind !== 'film' && n.hidden).length
     const picked = pickLabelSize((px) => {
       const view = { vbX: 0, vbY: 0, scale, minPx: px }
       const items = personItems.map((it) => ({ ...it, rect: labelScreenRect(it, view) }))
@@ -321,7 +325,7 @@ export default function ConstellationMap({ layout }) {
           items.push({ ...item, rect: labelScreenRect(item, view) })
         }
       }
-      return { ...labelVisibility(items, undefined, obstacles, lines), total: items.length }
+      return { ...labelVisibility(items, undefined, obstacles, lines), total: items.length - layoutHidden }
     })
     return { visibleIds: picked.visibleIds, goldOverlaps: picked.goldOverlaps, labelPx: picked.px }
   }, [layout, personItems, vb, mapScale, segments])

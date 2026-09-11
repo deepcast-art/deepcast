@@ -130,8 +130,9 @@ const BASE_H = 715
 const R0 = 118
 const EDGE_PAD = 58
 /** Placement rounds for the reference-view plan before it falls back to
- *  the base canvas's boxes. */
+ *  the base canvas's boxes; a placement that lost names gets fewer. */
 const MAX_PLAN_ROUNDS = 6
+const MAX_UNCLEAN_ROUNDS = 3
 
 /* ---- THE REACH RULE (rule 2) — the two knobs the founder tunes ---- */
 /** Map units from a parent to a child who shared with nobody would be
@@ -1502,11 +1503,9 @@ export function buildConstellationLayout({
     let result = null
     let settled = false
     let rounds = 0
-    let baseResult = null // the base-canvas placement, when a round already made it
     for (; rounds < MAX_PLAN_ROUNDS; rounds++) {
       plan = planFor(assumed.width, assumed.height, floorPx)
       result = runPlacement(plan.fontMap, plan.clearance, plan.scale, floorPx)
-      if (rounds === 0) baseResult = result
       // A placement that could not satisfy the rules — a name hidden or
       // still colliding at the end — will not be helped by a larger canvas
       // (that only enlarges every name in map units against the fixed
@@ -1516,13 +1515,14 @@ export function buildConstellationLayout({
       // along the way: a fan that spent its ladder and was then cleared by
       // the relaxation is clean (11 September).
       const clean = result.hiddenCount === 0 && result.collidingCount === 0
-      if (!clean) {
-        rounds += 1
-        break
-      }
-      if (result.width <= assumed.width && result.height <= assumed.height) {
+      const consistent = result.width <= assumed.width && result.height <= assumed.height
+      if (consistent) {
         // The output canvas is the assumed one; the drawing is re-centred
-        // inside it (the extra room splits evenly around it).
+        // inside it (the extra room splits evenly around it). Every box
+        // and gap was measured for exactly the scale this canvas paints
+        // at — whether or not every name made it (a CONSISTENT plan that
+        // lost names still paints the survivors at the planned size; the
+        // old base-canvas fallback painted them larger and hid many more).
         result = {
           ...result,
           width: assumed.width,
@@ -1530,21 +1530,31 @@ export function buildConstellationLayout({
           cx: result.cx + (assumed.width - result.width) / 2,
           cy: result.cy + (assumed.height - result.height) / 2,
         }
-        settled = true
+        settled = clean
+        rounds += 1
+        break
+      }
+      // A placement that lost names gets only a couple of rounds to find
+      // a consistent canvas (a larger canvas never helps it lose fewer —
+      // it only enlarges every name against the fixed distances; a public
+      // film with ghosts once burned seven placements to learn the same
+      // answer — red team, 10 September), and a HOPELESS one (a fan no
+      // rung can fit) none; a clean one may grow longer.
+      if (!clean && (result.hopeless || rounds + 1 >= MAX_UNCLEAN_ROUNDS)) {
         rounds += 1
         break
       }
       assumed = { width: result.width, height: result.height }
     }
-    if (!settled) {
-      // The fallback is the base canvas's placement. When round 0 was the
-      // last round its nodes are still in place; otherwise place once more
-      // so the nodes, the canvas and `plan.hidden` describe ONE placement
-      // (red team, 10 September evening: a stale round-0 result over
-      // round-N node state).
-      plan = planFor(BASE_W, BASE_H, floorPx)
-      result = rounds === 1 && baseResult ? baseResult : runPlacement(plan.fontMap, plan.clearance, plan.scale, floorPx)
-    }
+    // No consistent canvas in the rounds allowed: the LAST round's
+    // placement stands — its canvas fitted to its own drawing, its boxes
+    // measured for the round before (a hair small; the renderer hides
+    // what then touches). The nodes hold exactly that placement, so the
+    // nodes, the canvas and `plan.hidden` describe ONE placement (red
+    // team, 10 September evening: a stale round-0 result over round-N
+    // state). The old fallback re-placed on the BASE canvas and painted a
+    // 1,300-unit drawing's names at a 900-unit canvas's size — 21 of 54
+    // names hidden on tomorrow's first ring (11 September).
     return { plan, result, settled, rounds }
   }
   /* ---- SHRINK BEFORE HIDE: the size ladder, top down. The first rung at

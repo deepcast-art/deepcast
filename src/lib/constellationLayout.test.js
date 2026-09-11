@@ -492,6 +492,7 @@ describe('buildConstellationLayout', () => {
     // suite — red team, 10 September): a placement that cannot satisfy
     // the rules is not re-planned on larger canvases.
     console.log(`[constellation] 131-person layout in ${(performance.now() - t0).toFixed(0)}ms, rounds ${layout.plan.rounds}, ladder rung ${layout.plan.labelPx}`)
+    // A hopeless fan (sixty names) stops the plan after ONE round per rung.
     if (!layout.plan.settled) expect(layout.plan.rounds).toBeLessThanOrEqual(1)
     const big = childrenOf(layout, 'r5')
     expect(big).toHaveLength(60)
