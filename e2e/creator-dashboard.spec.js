@@ -193,7 +193,7 @@ test.describe('creator dashboard — "See network graph" (mocked creator)', () =
     await expect(page.getByText('People in this network')).toBeVisible({ timeout: 15000 })
 
     // The action row on the card: Watch page · See network graph · Create an invitation · the status pill.
-    const card = page.locator('div.border.bg-bg-card').filter({ hasText: 'The Test Narrative' }).first()
+    const card = page.locator('div.border.bg-ink').filter({ hasText: 'The Test Narrative' }).first()
     const row = card.locator('div.flex.flex-wrap.items-center.gap-3').first()
     await expect(row.getByRole('link', { name: 'Watch page' })).toHaveAttribute('href', `/watch/film/${FILM_ID}`)
     await expect(row.getByRole('button', { name: 'See network graph' })).toBeVisible()

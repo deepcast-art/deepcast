@@ -9,6 +9,7 @@
  * /profile. The claimant (stash) variant is covered by claim-landing.spec.js.
  */
 import { test, expect } from './fixtures/test.js'
+import { MIN_LABEL_ON_SCREEN_PX } from '../src/lib/constellationLabels.js'
 
 const REF = 'wmtjgpxhjtbocsmutqqc'
 const USER_ID = '11111111-1111-4111-8111-111111111111'
@@ -405,7 +406,7 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
           )
         })
       )
-      .toBeGreaterThanOrEqual(9.4)
+      .toBeGreaterThanOrEqual(MIN_LABEL_ON_SCREEN_PX - 0.1)
   })
 
   test('phone, crowded map: YOU always renders; every other name — thread included — appears as zooming creates room', async ({ page }) => {

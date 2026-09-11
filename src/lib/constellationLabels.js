@@ -20,12 +20,15 @@
  *      ONE quieter level (RECEDE_OPACITY, applied alike to non-thread
  *      segments, dots and labels); the thread keeps full strength. With
  *      no thread (the creator surfaces) the drawing is as before.
- *  (c) COLLISIONS — a label box may not touch ANY line it is not attached
- *      to, and a label may not sit on the line leaving or entering its own
- *      dot: resolved by starting the segment beyond the label box
- *      (clipSegment), never by hiding. Label-vs-label, label-vs-dot,
- *      label-vs-line: all LABEL_CLEARANCE minimum, all in the measurement.
- *      Lines crossing lines is permitted.
+ *  (c) COLLISIONS — LINES CONNECT DOT TO DOT (founder, 10 September
+ *      2026): every segment runs from dot centre to dot centre, full
+ *      length, never trimmed around a name. A label box may not come within
+ *      LABEL_CLEARANCE of a line it is not attached to, nor touch a line
+ *      leaving or entering its own dot: the layout resolves it by MOVING
+ *      THE NAME (out → in → perpendicular); the renderer hides a name that
+ *      cleared nowhere until zoom. Label-vs-label, label-vs-dot,
+ *      label-vs-line: all in the measurement. Lines crossing lines is
+ *      permitted.
  *
  * Two rules live here:
  *  1. SIZE — labels are sized in SVG map units but counter-scale against
@@ -51,12 +54,41 @@
  *  - RECEDE_OPACITY — how far the non-thread drawing steps back.
  */
 
-/** 9.5 since 2026-09-09 (was 11, which the width-based floor never
- *  delivered on the desktop — names painted ≈7px there): the founder asked
- *  for names enlarged by half at his desktop, and for the largest size at
- *  which Circles still settles at rest under the hard clearance rule —
- *  measured, that is 9.5px (see the constellation notes in CLAUDE.md). */
-export const MIN_LABEL_ON_SCREEN_PX = 9.5
+/** SHRINK BEFORE HIDE (founder, 11 September 2026). Names paint at ONE of
+ *  the sizes on this ladder, chosen PER FILM and per view: the largest at
+ *  which every name paints — the layout chooses for the reference view
+ *  (the founder's desktop) and the renderer re-chooses at its own view
+ *  (a phone follows the same ladder at its own width). Only at the
+ *  bottom of the ladder may a name hide: never at 9px or above. (History:
+ *  11 fixed since the reach layout of 10 September; 10.5 under its evening
+ *  amendment; 9.5 in v4; 9 in the rejected v5.) */
+export const LABEL_SIZE_LADDER = [11, 10.5, 10, 9.5, 9]
+/** The top of the ladder — the size names paint at when there is room. */
+export const MAX_LABEL_ON_SCREEN_PX = LABEL_SIZE_LADDER[0]
+/** The bottom of the ladder — the smallest a name ever paints. Below it a
+ *  name hides rather than shrinks. The default readability floor wherever a
+ *  caller does not name a rung. */
+export const MIN_LABEL_ON_SCREEN_PX = LABEL_SIZE_LADDER[LABEL_SIZE_LADDER.length - 1]
+/**
+ * Walk the ladder from the top: `measureAt(px)` places every label at that
+ * size and returns labelVisibility's answer plus either `required` (the
+ * ids that must paint) or `total` (the number of labels asked about). The
+ * first rung at which every required label paints wins; if none does, the
+ * bottom rung — with its hiding — is the answer. Returns `{ px, …answer }`.
+ */
+export function pickLabelSize(measureAt, ladder = LABEL_SIZE_LADDER) {
+  let last = null
+  for (const px of ladder) {
+    const r = measureAt(px)
+    last = { px, ...r }
+    // Every label that MUST paint does — named by id when the caller
+    // lists them (`required`), else every label asked about (`total`); a
+    // count alone let the wrong name go missing (red team, 11 September).
+    const ok = r.required ? r.required.every((id) => r.visibleIds.has(id)) : r.visibleIds.size >= r.total
+    if (ok) return last
+  }
+  return last
+}
 /** The on-screen clearance the renderer's visibility rule demands between
  *  two painted names, a name and another person's dot, and a name and an
  *  unattached line — the verifier's hard rule of 2026-09-09 (was 3). */
@@ -65,10 +97,21 @@ export const LABEL_GAP_PX = 6
  *  reference view (the layout converts it to map units by the view's scale). */
 export const LABEL_CLEARANCE = 6
 /** Law (b): the one quieter level everything off a viewer's thread recedes
- *  to — a group opacity applied alike to non-thread segments, dots and
- *  labels. Proposed by the builder 2026-09-09 (0.5: the web still reads as
- *  a web, the thread reads as the subject); the founder tunes it. */
+ *  to — applied per element (each non-thread segment, dot and label
+ *  carries it, so an explored element lifts to full strength in place and
+ *  nothing re-mounts on hover). THE PINNED VALUE (founder, 10 September
+ *  2026): off-thread on a viewer's dashboard is FAINT — exactly the live v4
+ *  look, not v5's half strength: a non-thread line paints at LINE_ALPHA ×
+ *  RECEDE_OPACITY = 0.16 × 0.5 = 0.08 alpha, a name at 0.45 × 0.5, a dot
+ *  at 0.7 × 0.5 (the base greys are the renderer's, unchanged since V5). */
 export const RECEDE_OPACITY = 0.5
+/** THE LINE FLOOR (founder, 9 September 2026 evening; value pinned
+ *  10 September): a painted line is never fainter than this — the grey
+ *  line's own alpha, v4's 0.16, and NOT v5's 0.5 — and never thinner than
+ *  one device pixel (the renderer paints every edge with a non-scaling
+ *  stroke), so the 1:1 phone view reads as connected dots, never a
+ *  dot-cloud. Off a viewer's thread the recede multiplies it (0.08). */
+export const LINE_ALPHA = 0.16
 /** THE REFERENCE VIEW the layout plans for — the founder's desktop
  *  (1440×900): the NARROWER of its two map boxes, the creator modal's, is
  *  ~960 CSS px wide (a 64rem panel minus its padding; the viewer
@@ -99,11 +142,23 @@ export function mapScaleFor(w, h, vbW, vbH) {
  *  (CENTER_LABELS) and the emblem its radius (EMBLEM_R). */
 export const PERSON_LABEL_SIZE = 8
 export const PERSON_DOT_R = 2.4
+/** A hollow (in-flight) dot's stroke width; its outer half lies OUTSIDE the
+ *  radius, so the dot paints 0.55 units wider than a solid one. */
+export const PERSON_DOT_STROKE = 1.1
+/** The radius a dot occupies as an OBSTACLE (founder, 9 September 2026
+ *  evening: a hollow dot's stroke counts as part of the obstacle). Applied
+ *  to every dot — solid ones too — so the geometry never depends on who
+ *  has claimed by the time the map is drawn. */
+export const PERSON_DOT_OBSTACLE_R = PERSON_DOT_R + PERSON_DOT_STROKE / 2
+/** How far a name sits from its dot (radialLabel's offset) — beyond the
+ *  end of the line into the dot, which is why an outward name clears its
+ *  own incoming line. */
+export const LABEL_OFFSET = 11
 export const EMBLEM_R = 34
-/** A person dot's axis-aligned square at design scale, for the same
- *  overlap test the labels use. */
+/** A person dot's axis-aligned square at design scale — the obstacle a
+ *  name may not cross — for the same overlap test the labels use. */
 export function dotRect(x, y) {
-  return { x: x - PERSON_DOT_R, y: y - PERSON_DOT_R, w: 2 * PERSON_DOT_R, h: 2 * PERSON_DOT_R }
+  return { x: x - PERSON_DOT_OBSTACLE_R, y: y - PERSON_DOT_OBSTACLE_R, w: 2 * PERSON_DOT_OBSTACLE_R, h: 2 * PERSON_DOT_OBSTACLE_R }
 }
 
 /** Advance width per glyph as a fraction of the font size, read from the
@@ -152,14 +207,15 @@ export function labelFontSize(baseSize, mapScale, minPx = MIN_LABEL_ON_SCREEN_PX
  * The label's approximate on-screen rectangle {x, y, w, h} in CSS pixels.
  * `item`: { x, y, anchor, name, baseSize, letterSpacing? } — map-unit
  * position (the text element's x/y/text-anchor) and design size.
- * `view`: { vbX, vbY, scale, fontScale? } — current viewBox origin, the
- * rendered scale positions map to screen by (mapScaleFor), and the scale
- * the font counter-scales against (defaults to `scale`).
+ * `view`: { vbX, vbY, scale, fontScale?, minPx? } — current viewBox origin,
+ * the rendered scale positions map to screen by (mapScaleFor), the scale
+ * the font counter-scales against (defaults to `scale`), and the ladder
+ * rung the font is floored at (defaults to the bottom of the ladder).
  */
-export function labelScreenRect(item, { vbX, vbY, scale, fontScale }) {
+export function labelScreenRect(item, { vbX, vbY, scale, fontScale, minPx }) {
   const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 0
   const safeFontScale = Number.isFinite(fontScale) && fontScale > 0 ? fontScale : safeScale
-  const fontPx = labelFontSize(item.baseSize, safeFontScale) * safeScale
+  const fontPx = labelFontSize(item.baseSize, safeFontScale, minPx ?? MIN_LABEL_ON_SCREEN_PX) * safeScale
   const spacingPx = (item.letterSpacing ?? 2) * safeScale
   const w = labelTextWidth(item.name, fontPx, spacingPx)
   const sx = (item.x - vbX) * safeScale
@@ -181,9 +237,10 @@ export const CENTER_LABELS = {
  * like every name — so at a small scale they are large in map units and
  * move outward, never onto the emblem (the -v3 phone defect). Returns
  * [{ key, name, y, fontSize, letterSpacing, rect }] with `rect` relative to
- * the film node's center, at design scale (map units).
+ * the film node's center, at design scale (map units). `minPx` = the
+ * ladder rung the names ride (the center labels ride the same one).
  */
-export function centerLabelLayout(scale, creatorName) {
+export function centerLabelLayout(scale, creatorName, minPx = MIN_LABEL_ON_SCREEN_PX) {
   const s = Number.isFinite(scale) && scale > 0 ? scale : 1
   const gap = LABEL_CLEARANCE / s
   const out = []
@@ -191,11 +248,11 @@ export function centerLabelLayout(scale, creatorName) {
   for (const [key, spec] of [['creator', CENTER_LABELS.creator], ['role', CENTER_LABELS.role]]) {
     const name = key === 'creator' ? creatorName : spec.name
     if (!name) continue
-    const fontSize = labelFontSize(spec.baseSize, s)
+    const fontSize = labelFontSize(spec.baseSize, s, minPx)
     const y = top + fontSize * BASELINE_RATIO
     const rect = labelScreenRect(
       { x: 0, y, anchor: 'middle', name, baseSize: spec.baseSize, letterSpacing: spec.letterSpacing },
-      { vbX: 0, vbY: 0, scale: 1, fontScale: s }
+      { vbX: 0, vbY: 0, scale: 1, fontScale: s, minPx }
     )
     out.push({ key, name, y, fontSize, letterSpacing: spec.letterSpacing, rect })
     // A hair beyond the clearance so the two never sit at EXACTLY the gap
@@ -262,28 +319,6 @@ export function segmentTouchesRect(x1, y1, x2, y2, rect, gap = LABEL_GAP_PX) {
 }
 
 /**
- * Law (c) for a segment's OWN ends: trim the segment so it starts beyond
- * every obstacle attached to its start (the parent's label box, or the
- * film node's emblem and center labels) and ends before every obstacle
- * attached to its end (the child's label box), each grown by `gap`.
- * Returns { x1, y1, x2, y2 } or null when nothing is left to draw.
- */
-export function clipSegment(x1, y1, x2, y2, startObstacles = [], endObstacles = [], gap = LABEL_GAP_PX) {
-  let t0 = 0
-  let t1 = 1
-  for (const r of startObstacles) {
-    const iv = segmentRectInterval(x1, y1, x2, y2, r, gap)
-    if (iv && iv[0] <= t0 + 1e-9) t0 = Math.max(t0, iv[1])
-  }
-  for (const r of endObstacles) {
-    const iv = segmentRectInterval(x1, y1, x2, y2, r, gap)
-    if (iv && iv[1] >= t1 - 1e-9) t1 = Math.min(t1, iv[0])
-  }
-  if (t0 >= t1) return null
-  return { x1: x1 + (x2 - x1) * t0, y1: y1 + (y2 - y1) * t0, x2: x1 + (x2 - x1) * t1, y2: y1 + (y2 - y1) * t1 }
-}
-
-/**
  * Decide which labels render. `items`: [{ id, rect, gold, tier, dist }] —
  * `rect` from labelScreenRect, `gold` = always-on (the filmmaker's center
  * labels and YOU's marker), `tier` = 1 for the viewer's thread names, 2 for
@@ -291,8 +326,9 @@ export function clipSegment(x1, y1, x2, y2, startObstacles = [], endObstacles = 
  * non-thread name), `dist` = a priority tiebreak, lower first.
  * `obstacles`: [{ id, rect }] — every person's DOT on screen; a name never
  * collides with its own dot (same id). `lines`: [{ fromId, toId, x1, y1,
- * x2, y2 }] — every painted segment on screen; a name may not come within
- * `gap` of a line it is not attached to (its own dot is neither end).
+ * x2, y2 }] — every painted segment on screen, whole (dot centre to dot
+ * centre); a name may not come within `gap` of a line it is not attached
+ * to, nor touch a line that leaves or enters its own dot.
  *
  * Returns { visibleIds: Set, goldOverlaps: [[idA, idB], …] }. Gold labels
  * are ALWAYS in visibleIds; a gold-gold collision is REPORTED (the caller
@@ -325,8 +361,8 @@ export function labelVisibility(items, gap = LABEL_GAP_PX, obstacles = [], lines
     if (placed.some((r) => rectsCollide(r, it.rect, gap))) continue
     if (obstacles.some((o) => o.id !== it.id && rectsCollide(o.rect, it.rect, gap))) continue
     if (
-      lines.some(
-        (l) => l.fromId !== it.id && l.toId !== it.id && segmentTouchesRect(l.x1, l.y1, l.x2, l.y2, it.rect, gap)
+      lines.some((l) =>
+        segmentTouchesRect(l.x1, l.y1, l.x2, l.y2, it.rect, l.fromId === it.id || l.toId === it.id ? 0 : gap)
       )
     ) {
       continue

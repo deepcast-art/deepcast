@@ -3,6 +3,8 @@ import {
   labelFontSize,
   labelScreenRect,
   labelVisibility,
+  pickLabelSize,
+  LABEL_SIZE_LADDER,
   MIN_LABEL_ON_SCREEN_PX,
   LABEL_GAP_PX,
 } from './constellationLabels'
@@ -191,12 +193,23 @@ describe('labelTextWidth — glyph by glyph from the Phoenix font', () => {
 })
 
 describe('the two scales', () => {
-  it('the readability floor is 9.5px and counter-scales against the TRUE scale (the width-based formula is gone)', () => {
-    expect(MIN_LABEL_ON_SCREEN_PX).toBe(9.5)
-    // A height-limited desktop map: the font follows 576/H, not 960/W.
-    const s = mapScaleFor(960, 576, 1311, 806)
-    expect(s).toBeCloseTo(576 / 806, 9)
-    expect(labelFontSize(8, s)).toBeCloseTo(9.5 / s, 1)
+  it('SHRINK BEFORE HIDE (founder, 11 September 2026): the ladder runs 11 → 9; the floor is its bottom rung and counter-scales against the TRUE scale (the width-based formula is gone); a rung is honoured when named', () => {
+    expect(LABEL_SIZE_LADDER).toEqual([11, 10.5, 10, 9.5, 9])
+    expect(MIN_LABEL_ON_SCREEN_PX).toBe(9)
+    const s = mapScaleFor(960, 576, 900, 715)
+    expect(s).toBeCloseTo(576 / 715, 9)
+    expect(labelFontSize(8, s)).toBeCloseTo(9 / s, 1)
+    expect(labelFontSize(8, s, 10.5)).toBeCloseTo(10.5 / s, 1)
+    expect(labelScreenRect({ x: 0, y: 0, anchor: 'start', name: 'YOU', baseSize: 8 }, { vbX: 0, vbY: 0, scale: s, minPx: 11 }).h).toBeCloseTo(11 * 1.2, 1)
+  })
+  it('pickLabelSize walks the ladder from the top and keeps the first rung at which every label paints; when none does, the bottom rung with its hiding', () => {
+    const measure = (allAt) => (px) => ({ visibleIds: new Set(px <= allAt ? ['a', 'b', 'c'] : ['a', 'b']), goldOverlaps: [], total: 3 })
+    expect(pickLabelSize(measure(11)).px).toBe(11)
+    expect(pickLabelSize(measure(10)).px).toBe(10)
+    expect(pickLabelSize(measure(9)).px).toBe(9)
+    const none = pickLabelSize(measure(0))
+    expect(none.px).toBe(9)
+    expect(none.visibleIds.size).toBe(2)
   })
   it('mapScaleFor is the true scale — the smaller of the width and height ratios', () => {
     // The founder's desktop box shows a 1035² canvas height-limited.
@@ -268,7 +281,6 @@ import {
   RECEDE_OPACITY,
   labelVisibility as labelVisibilityV4,
   centerLabelLayout,
-  clipSegment,
   segmentRectInterval,
   segmentTouchesRect,
 } from './constellationLabels.js'
@@ -324,18 +336,6 @@ describe('law (c): segments and boxes', () => {
     expect(segmentTouchesRect(0, 20, 100, 20, box, 6)).toBe(false)
     expect(segmentTouchesRect(0, 10, 100, 10, box, 6)).toBe(true) // within 6 of the box's edge
   })
-  it('clipSegment starts a line beyond its start obstacle and ends it before its end obstacle, by the gap', () => {
-    const startBox = { x: -10, y: -5, w: 30, h: 10 } // around the start
-    const endBox = { x: 80, y: -5, w: 30, h: 10 } // around the end
-    const cut = clipSegment(0, 0, 100, 0, [startBox], [endBox], 6)
-    expect(cut.x1).toBeCloseTo(26, 9) // 20 (box edge) + 6
-    expect(cut.x2).toBeCloseTo(74, 9) // 80 − 6
-    expect(cut.y1).toBe(0)
-  })
-  it('clipSegment returns null when the obstacles consume the whole line, and leaves an unobstructed line alone', () => {
-    expect(clipSegment(0, 0, 100, 0, [{ x: -10, y: -5, w: 200, h: 10 }], [], 6)).toBeNull()
-    expect(clipSegment(0, 0, 100, 0, [], [], 6)).toEqual({ x1: 0, y1: 0, x2: 100, y2: 0 })
-  })
 })
 
 describe('labelVisibility — tiers and lines (law (a)/(c) at every view)', () => {
@@ -351,12 +351,14 @@ describe('labelVisibility — tiers and lines (law (a)/(c) at every view)', () =
     expect(visibleIds.has('b-thread')).toBe(true)
     expect(visibleIds.has('a-nonthread')).toBe(false)
   })
-  it('a name within 6px of a line it is not attached to hides; its own lines never hide it', () => {
+  it('a name within 6px of a line it is not attached to hides; its own line hides it only when it TOUCHES the box (lines run dot to dot — founder, 10 September)', () => {
     const items = [{ id: 'me', rect: rect(0, 0), gold: false, tier: 2, dist: 0 }]
     const foreign = [{ fromId: 'p', toId: 'q', x1: -50, y1: 13, x2: 100, y2: 13 }] // 3px below the box
     expect(labelVisibility(items, 6, [], foreign).visibleIds.has('me')).toBe(false)
-    const mine = [{ fromId: 'p', toId: 'me', x1: -50, y1: 13, x2: 100, y2: 13 }]
-    expect(labelVisibility(items, 6, [], mine).visibleIds.has('me')).toBe(true)
+    const mineNear = [{ fromId: 'p', toId: 'me', x1: -50, y1: 13, x2: 100, y2: 13 }] // 3px below: my own, not touching
+    expect(labelVisibility(items, 6, [], mineNear).visibleIds.has('me')).toBe(true)
+    const mineThrough = [{ fromId: 'p', toId: 'me', x1: -50, y1: 5, x2: 100, y2: 5 }] // through the box
+    expect(labelVisibility(items, 6, [], mineThrough).visibleIds.has('me')).toBe(false)
     const far = [{ fromId: 'p', toId: 'q', x1: -50, y1: 17, x2: 100, y2: 17 }] // 7px below
     expect(labelVisibility(items, 6, [], far).visibleIds.has('me')).toBe(true)
   })
@@ -365,5 +367,16 @@ describe('labelVisibility — tiers and lines (law (a)/(c) at every view)', () =
     const lines = [{ fromId: 'p', toId: 'q', x1: -50, y1: 5, x2: 100, y2: 5 }]
     const dots = [{ id: 'q', rect: rect(10, 2, 4, 4) }]
     expect(labelVisibility(items, 6, dots, lines).visibleIds.has('you')).toBe(true)
+  })
+})
+
+/* ── 10 September 2026: the line floor is pinned at v4's grey ── */
+import { LINE_ALPHA, RECEDE_OPACITY as RECEDE } from './constellationLabels.js'
+
+describe('the line floor (founder, 10 September 2026)', () => {
+  it('is v4’s line grey, 0.16 — NOT v5’s half strength — and off a viewer’s thread the recede halves it to 0.08, the live v4 look', () => {
+    expect(LINE_ALPHA).toBe(0.16)
+    expect(RECEDE).toBe(0.5)
+    expect(+(LINE_ALPHA * RECEDE).toFixed(3)).toBe(0.08)
   })
 })
