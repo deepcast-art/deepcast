@@ -512,6 +512,10 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     // nothing receives the pointer, and the dot itself twinkles forever,
     // which Playwright's stability wait never outlasts.
     await map.locator(`g[data-node="${NOOR.id}"] > circle`).first().scrollIntoViewIfNeeded()
+    // Park the pointer first: Firefox fires no pointerenter when the mouse
+    // already rests on the spot (left there by the "See network graph"
+    // click above) and the map renders underneath it (11 September 2026).
+    await page.mouse.move(2, 2)
     await map.locator(`g[data-node="${NOOR.id}"] > circle`).first().hover()
     await expect(map.locator(`g[data-node="${NOOR.id}"]`)).not.toHaveAttribute('opacity', /.+/)
     await expect(map.locator(`g[data-node="${noorKids[0].id}"]`)).not.toHaveAttribute('opacity', /.+/)

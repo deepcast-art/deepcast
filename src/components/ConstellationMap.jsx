@@ -274,11 +274,16 @@ export default function ConstellationMap({ layout }) {
         x: n.label.x,
         y: n.label.y,
         anchor: n.label.anchor,
-        name: n.name,
+        // Measured with the name the LAYOUT measured (the real name, or
+        // "YOU" when wider) — the viewer's node paints "YOU" but its box is
+        // sized as everyone else's, so the ladder's rung and the hiding
+        // are the same whoever is looking (rule 4; red team, 11 September).
+        name: n.measureName ?? n.name,
         baseSize: PERSON_LABEL_SIZE,
         gold: n.id === layout.youId,
         tier: threadSet.has(n.id) ? 1 : 2,
         dist: 0,
+        layoutHidden: Boolean(n.hidden),
       })
     }
     return items
@@ -294,7 +299,7 @@ export default function ConstellationMap({ layout }) {
    *  and recomputed only when the scale changes. */
   const { visibleIds, goldOverlaps, labelPx } = useMemo(() => {
     const fallbackPx = layout?.plan?.labelPx ?? MIN_LABEL_ON_SCREEN_PX
-    if (!vb || !layout || !personItems.length || !mapScale) {
+    if (!layout || !personItems.length || !mapScale) {
       return { visibleIds: new Set(personItems.map((it) => it.id)), goldOverlaps: [], labelPx: fallbackPx }
     }
     const scale = mapScale
@@ -314,8 +319,9 @@ export default function ConstellationMap({ layout }) {
     })
     // A name the LAYOUT already hid (no side of its own clears a line at
     // the reference view) is not a rung's failure: the rung must paint
-    // every OTHER name.
-    const layoutHidden = layout.nodes.filter((n) => n.kind !== 'film' && n.hidden).length
+    // every OTHER name — named by id, never by count (a count let a
+    // first-ring name go missing in a hidden name's place).
+    const required = personItems.filter((it) => !it.layoutHidden).map((it) => it.id)
     const picked = pickLabelSize((px) => {
       const view = { vbX: 0, vbY: 0, scale, minPx: px }
       const items = personItems.map((it) => ({ ...it, rect: labelScreenRect(it, view) }))
@@ -325,10 +331,10 @@ export default function ConstellationMap({ layout }) {
           items.push({ ...item, rect: labelScreenRect(item, view) })
         }
       }
-      return { ...labelVisibility(items, undefined, obstacles, lines), total: items.length - layoutHidden }
+      return { ...labelVisibility(items, undefined, obstacles, lines), required: [...required, ...items.filter((it) => it.gold).map((it) => it.id)] }
     })
     return { visibleIds: picked.visibleIds, goldOverlaps: picked.goldOverlaps, labelPx: picked.px }
-  }, [layout, personItems, vb, mapScale, segments])
+  }, [layout, personItems, mapScale, segments])
 
   /** The filmmaker's center labels for this scale (shared geometry), on
    *  the rung the ladder chose. */

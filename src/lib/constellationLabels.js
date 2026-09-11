@@ -71,17 +71,21 @@ export const MAX_LABEL_ON_SCREEN_PX = LABEL_SIZE_LADDER[0]
 export const MIN_LABEL_ON_SCREEN_PX = LABEL_SIZE_LADDER[LABEL_SIZE_LADDER.length - 1]
 /**
  * Walk the ladder from the top: `measureAt(px)` places every label at that
- * size and returns `{ visibleIds, goldOverlaps, total }` (labelVisibility's
- * answer plus the number of labels asked about). The first rung at which
- * every label paints wins; if none does, the bottom rung — with its hiding
- * — is the answer. Returns `{ px, visibleIds, goldOverlaps, total }`.
+ * size and returns labelVisibility's answer plus either `required` (the
+ * ids that must paint) or `total` (the number of labels asked about). The
+ * first rung at which every required label paints wins; if none does, the
+ * bottom rung — with its hiding — is the answer. Returns `{ px, …answer }`.
  */
 export function pickLabelSize(measureAt, ladder = LABEL_SIZE_LADDER) {
   let last = null
   for (const px of ladder) {
     const r = measureAt(px)
     last = { px, ...r }
-    if (r.visibleIds.size >= r.total) return last
+    // Every label that MUST paint does — named by id when the caller
+    // lists them (`required`), else every label asked about (`total`); a
+    // count alone let the wrong name go missing (red team, 11 September).
+    const ok = r.required ? r.required.every((id) => r.visibleIds.has(id)) : r.visibleIds.size >= r.total
+    if (ok) return last
   }
   return last
 }

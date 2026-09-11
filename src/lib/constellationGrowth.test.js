@@ -253,11 +253,11 @@ describe('STABILITY (founder, 11 September 2026)', () => {
     expect(ring1[0].r).toBeGreaterThanOrEqual((25 * RING_ARC) / TWO_PI - 1e-9)
     const { changed } = compare(l, ROOT_ID)
     // KNOWN GAP (11 September 2026): with the first ring re-slotted at
-    // 14.4° and the ladder's rung re-chosen, Arielle's and Alexander's
-    // fans re-choose their stagger pattern (the pattern with the fewest
-    // broken pairs at the new absolute angles and sizes) — the fans whose
-    // rows change. Pinned; prune when it stops.
-    expect(changed).toEqual(['Arielle', 'Alexander'])
+    // 14.4° and the ladder's rung re-chosen, Alexander's fan re-chooses
+    // its stagger pattern (the pattern with the fewest broken pairs at the
+    // new absolute angles and sizes) — the one fan whose rows change.
+    // Pinned; prune when it stops.
+    expect(changed).toEqual(['Alexander'])
     // "…and nothing else": every fan's children keep their positions
     // RELATIVE to their parent up to the parent's rotation — measured and
     // reported; the relaxation's turns against new neighbours break it

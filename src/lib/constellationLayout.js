@@ -144,10 +144,12 @@ const MAX_UNCLEAN_ROUNDS = 3
  *  the reach rule alone, and the founder's targets at his desktop (Ien →
  *  Arielle ≈ 95–100px, Arielle → Krist ≈ 115–125px) fix K: on the base
  *  canvas (first ring 118 units = 95px) 30 + 31 × 4 = 154 units reads
- *  124px. K 31 is also the value at which Circles today paints every name
- *  at 9.5px on the ladder (K 30 and 32 each hide one or two — the settle
- *  is a knife edge, reported as such). A leaf sits 61 units (49px) from
- *  its sharer. */
+ *  124px. K 31 was also the value at which the 33-ticket Circles-shaped
+ *  test tree painted every name at 9.5px (K 30 and 32 each hid one or two
+ *  — a knife edge); the LIVE film as of 11 September (39 tickets) does not
+ *  settle clean at any rung — it paints at 10.5px on the desktop with two
+ *  of Krist's ten hidden until zoom (constellationGrowth.test.js pins it).
+ *  A leaf sits 61 units (49px) from its sharer. */
 export const REACH_BASE = 30
 export const REACH_K = 31
 
@@ -878,7 +880,14 @@ export function buildConstellationLayout({
       // nothing real.
       let hi = Math.max(STEP_FLOOR, FAN_MAX_SPAN - (spanOf(fan) - fan.gaps[g]))
       fan.gaps[g] = hi
-      if (!pairClear(fan, g)) return null
+      if (!pairClear(fan, g)) {
+        // No gap inside the room clears this pair: it takes an EVEN share
+        // of the room with the gaps still to come, not all of it (red
+        // team, 11 September: a starved tail stacked three names within
+        // half a degree); the residual widen loop takes it from there.
+        fan.gaps[g] = Math.max(STEP_FLOOR, hi / (fan.gaps.length - g))
+        return null
+      }
       for (let it = 0; it < 12; it++) {
         const mid = (lo + hi) / 2
         fan.gaps[g] = mid
@@ -987,20 +996,21 @@ export function buildConstellationLayout({
         return !spread(fan) || !nameStep(fan)
       }
       if (attempt()) return true
+      fan.stagger = true
+      assignRows(fan)
+      if (attempt()) return true
       // HOPELESS: a fan of more than HOPELESS_KIDS children cannot fit two
       // rows inside the cap at any size on the ladder (each adjacent pair
       // needs ~9° for its line to clear the neighbour's dot alone) — the
-      // ladder's remaining steps are skipped, the fan left at the cap for
-      // the safety net (a 60-wide fan once burned seven attempts to learn
-      // the same answer).
+      // ladder's remaining steps are skipped, the fan left STAGGERED at
+      // the cap for the safety net (a 60-wide fan once burned seven
+      // attempts to learn the same answer; skipping the stagger too drew
+      // a 17-child fan worse than a 16-child one — red team, 11 September).
       if (fan.kids.length > HOPELESS_KIDS) {
         hopeless = true
         bestEffort = true
         return false
       }
-      fan.stagger = true
-      assignRows(fan)
-      if (attempt()) return true
       const max = extraMaxOf(fan)
       for (let e = EXTRA_STEP; e <= max + 1e-9; e += EXTRA_STEP) {
         fan.extra = Math.min(e, max)
@@ -1666,6 +1676,12 @@ export function buildConstellationLayout({
       row: isFilm ? null : n.row,
       subtreeSize: n.size,
       label: isFilm ? null : radialLabel(n.dir, x, y, n.side, n.perpOffset, n.hang),
+      /** The name the layout MEASURED this node's box with — the real name,
+       *  or "YOU" when that paints wider — so the renderer measures the
+       *  viewer's node (which reads "YOU") exactly as the layout did and
+       *  the size ladder is the same whoever is looking (red team,
+       *  11 September). */
+      measureName: isFilm ? null : labelTextWidth('YOU', PERSON_LABEL_SIZE, 2) > labelTextWidth(n.name, PERSON_LABEL_SIZE, 2) ? 'YOU' : n.name,
       labelSide: isFilm ? null : n.side,
       /** Which way a perpendicular name hangs along the limb ('out' = away
        *  from the sharer, 'in' = back toward them). */

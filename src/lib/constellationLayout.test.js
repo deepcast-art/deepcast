@@ -828,6 +828,24 @@ describe('the label side — LINES CONNECT DOT TO DOT, names move (founder, 10 S
       if (n.labelSide === 'left' || n.labelSide === 'right') expect(n.labelOffset).toBeGreaterThanOrEqual(16)
       else expect(n.labelOffset).toBe(11)
     }
+    // THE HANG (11 September): a perpendicular name is never centred on
+    // the perpendicular — its box lies on one side of it along the limb:
+    // hang 'out' has its centre ahead of the dot along the limb, hang 'in'
+    // behind (a near-vertical limb, whose perpendicular is horizontal, is
+    // the one case allowed to centre).
+    for (const n of persons(layout).filter((m) => m.labelSide === 'left' || m.labelSide === 'right')) {
+      if (Math.abs(Math.cos(n.dir)) < 0.35) continue
+      const r = planRect(layout, n)
+      const along = (r.x + r.w / 2 - n.x) * Math.cos(n.dir) + (r.y + r.h / 2 - n.y) * Math.sin(n.dir)
+      if (n.labelHang === 'out') expect(along, `${n.name}'s perpendicular name hangs outward`).toBeGreaterThan(4)
+      else expect(along, `${n.name}'s perpendicular name hangs inward`).toBeLessThan(-4)
+    }
+    // A sharer's perpendicular name hangs INWARD first; the radialLabel
+    // geometry: for a limb pointing right, hang 'out' anchors 'start'
+    // (text runs right), hang 'in' anchors 'end' (text runs left).
+    expect(radialLabel(0, 100, 100, 'right', 16, 'out').anchor).toBe('start')
+    expect(radialLabel(0, 100, 100, 'right', 16, 'in').anchor).toBe('end')
+    expect(persons(layout).some((m) => (m.labelSide === 'left' || m.labelSide === 'right') && m.labelHang === 'in')).toBe(true)
     // Down a chain the sharers' names are perpendicular and the last is outward.
     seq = 0
     const chain = buildConstellationLayout({
