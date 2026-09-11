@@ -6,6 +6,7 @@ import {
   REACH_K,
   FAN_MAX_SPAN,
   RING_BUMP,
+  LABEL_SIDES,
   radialLabel,
 } from './constellationLayout.js'
 import {
@@ -18,8 +19,6 @@ import {
   mapScaleFor,
   rectsCollide,
   segmentTouchesRect,
-  centerLabelLayout,
-  clipSegment,
   EMBLEM_R,
 } from './constellationLabels.js'
 
@@ -50,7 +49,9 @@ const planRect = (layout, n) =>
 const assertClearance = (layout) => {
   expect(layout.plan.settled, 'the plan settled on a consistent canvas').toBe(true)
   const { clearance } = layout.plan
-  const ps = persons(layout)
+  // A name the safety net hides occupies nothing (it is painted only on
+  // zoom or explore); every painted name obeys the rule.
+  const ps = persons(layout).filter((n) => !n.hidden)
   const byId = byIdOf(layout)
   const gap = (a, b) => Math.max(b.x - (a.x + a.w), a.x - (b.x + b.w), b.y - (a.y + a.h), a.y - (b.y + b.h))
   let min = Infinity
@@ -67,37 +68,41 @@ const assertClearance = (layout) => {
       expect(rectsCollide(planRect(layout, a), dotRect(b.x, b.y), clearance), `${a.name}'s name near ${b.name}'s dot`).toBe(false)
     }
   }
-  const lines = ps.map((n) => {
-    const p = byId.get(n.parentId)
-    return { x1: p.x, y1: p.y, x2: n.x, y2: n.y, fromId: p.id, toId: n.id }
-  })
+  // LINES CONNECT DOT TO DOT: every edge runs from the parent's dot centre
+  // to the child's, whole; a painted name keeps the clearance from every
+  // line it is not attached to and never touches its own.
+  const lines = layout.edges
+  for (const e of lines) {
+    const p = byId.get(e.fromId)
+    const c = byId.get(e.toId)
+    expect([e.x1, e.y1, e.x2, e.y2]).toEqual([p.x, p.y, c.x, c.y])
+  }
   for (const n of ps) {
     const box = planRect(layout, n)
     for (const l of lines) {
-      if (l.fromId === n.id || l.toId === n.id) continue
-      expect(segmentTouchesRect(l.x1, l.y1, l.x2, l.y2, box, clearance), `${n.name}'s name vs the line into ${byId.get(l.toId).name}`).toBe(false)
+      const own = l.fromId === n.id || l.toId === n.id
+      expect(segmentTouchesRect(l.x1, l.y1, l.x2, l.y2, box, own ? 0 : clearance), `${n.name}'s name vs the line into ${byId.get(l.toId).name}`).toBe(false)
     }
   }
   const screen = mapScaleFor(REFERENCE_VIEW.w, REFERENCE_VIEW.h, layout.width, layout.height)
   return min * screen
 }
-/** Every edge, clipped exactly as the renderer clips at the reference
- *  view (start beyond the parent's box or the film node, end before the
- *  child's box, by the clearance): none may vanish. */
-const assertNoSwallowedLine = (layout) => {
+/** Every edge is whole — dot centre to dot centre — and no painted name
+ *  sits on any line (the founder's amendment of 10 September: names move,
+ *  lines never). */
+const assertLinesWhole = (layout) => {
   const byId = byIdOf(layout)
-  const center = [
-    { x: layout.cx - EMBLEM_R, y: layout.cy - EMBLEM_R, w: 2 * EMBLEM_R, h: 2 * EMBLEM_R },
-    ...centerLabelLayout(layout.plan.scale, layout.creatorLabel).map((c) => ({ ...c.rect, x: c.rect.x + layout.cx, y: c.rect.y + layout.cy })),
-  ]
   for (const e of layout.edges) {
-    const parent = byId.get(e.fromId)
-    const child = byId.get(e.toId)
-    const startObs = parent.kind === 'film' ? center : [planRect(layout, parent)]
-    const cut =
-      clipSegment(e.x1, e.y1, e.x2, e.y2, startObs, [planRect(layout, child)], layout.plan.clearance) ||
-      (parent.kind === 'film' && clipSegment(e.x1, e.y1, e.x2, e.y2, [center[0]], [planRect(layout, child)], layout.plan.clearance))
-    expect(cut, `the line ${parent.name || 'film'} → ${child.name} keeps a visible length`).toBeTruthy()
+    const p = byId.get(e.fromId)
+    const c = byId.get(e.toId)
+    expect(Math.hypot(e.x1 - p.x, e.y1 - p.y) + Math.hypot(e.x2 - c.x, e.y2 - c.y), `${p.name || 'film'} → ${c.name} runs dot to dot`).toBe(0)
+  }
+  for (const n of persons(layout).filter((m) => !m.hidden)) {
+    const box = planRect(layout, n)
+    for (const e of layout.edges) {
+      const own = e.fromId === n.id || e.toId === n.id
+      expect(segmentTouchesRect(e.x1, e.y1, e.x2, e.y2, box, own ? 0 : layout.plan.clearance), `${n.name}'s name off the line into ${byId.get(e.toId).name}`).toBe(false)
+    }
   }
 }
 /** Every node, every planned name box and every camera frame lies inside
@@ -388,7 +393,7 @@ describe('buildConstellationLayout', () => {
     // Turned apart: r0's fan counter-clockwise, r1's clockwise (or neither
     // needed to — then both are exactly centred).
     expect(turn0 * turn1).toBeLessThanOrEqual(1e-12)
-    if (Math.abs(turn0) > 1e-9 || Math.abs(turn1) > 1e-9) {
+    if (Math.abs(turn0) > 1e-9 && Math.abs(turn1) > 1e-9) {
       expect(turn0).toBeLessThan(0)
       expect(turn1).toBeGreaterThan(0)
     }
@@ -403,7 +408,7 @@ describe('buildConstellationLayout', () => {
     expect(assertClearance(fixture())).toBeGreaterThanOrEqual(LABEL_CLEARANCE - 1e-9)
     const circles = buildConstellationLayout({ filmInvites: circlesRows(), creatorId: CREATOR, creatorName: 'Ien' })
     expect(assertClearance(circles)).toBeGreaterThanOrEqual(LABEL_CLEARANCE - 1e-9)
-    assertNoSwallowedLine(circles)
+    assertLinesWhole(circles)
     assertOnCanvas(circles)
     // The limb the founder described: Ien → Arielle → Krist → Alexander,
     // each beyond the last; Krist further from Arielle than her leaf
@@ -417,8 +422,10 @@ describe('buildConstellationLayout', () => {
     // Krist's ten stay inside the cap, centred near Krist's own direction
     // (any turn is the least the neighbours needed).
     const ten = childrenOf(circles, 'a-Krist')
-    expect(ten[9].dir - ten[0].dir).toBeLessThanOrEqual(FAN_MAX_SPAN + 1e-9)
-    expect(Math.abs(angDiff((ten[0].dir + ten[9].dir) / 2, byId.get('a-Krist').dir))).toBeLessThan(Math.PI / 6)
+    const span = ten[9].dir - ten[0].dir
+    expect(span).toBeLessThanOrEqual(FAN_MAX_SPAN + 1e-9)
+    // Any lean is within the limit that keeps every child beyond Krist.
+    expect(Math.abs(angDiff((ten[0].dir + ten[9].dir) / 2, byId.get('a-Krist').dir))).toBeLessThanOrEqual(Math.PI / 2 - span / 2 + 1e-9)
     // The film's NEXT realistic shares — Stacy sharing three, then four
     // quiet first-ring people sharing four each — may not settle at the
     // production floor (reported in CLAUDE.md, never hidden here): what
@@ -485,16 +492,15 @@ describe('buildConstellationLayout', () => {
     expect(childrenOf(a, 'early').map((n) => n.id)).toEqual(['k-early', 'k-mid', 'k-late'])
   })
 
-  it('rule 3, labels: ONE label rule — every name along its own limb, at one size, out or in, the viewer’s thread included', () => {
+  it('rule 3, labels: ONE label rule — every name on one side of its dot relative to its own limb (out, in, or perpendicular), at one size, the viewer’s thread included', () => {
     const layout = fixture()
     for (const n of layout.nodes) {
       if (!n.label) continue
       const dx = n.label.x - n.x
       const dy = n.label.y - n.y
-      const limb = { x: Math.cos(n.dir), y: Math.sin(n.dir) }
-      expect(Math.abs(dx * limb.x + dy * limb.y)).toBeGreaterThan(6)
-      expect(['out', 'in']).toContain(n.labelSide)
-      expect(n.label).toEqual(radialLabel(n.dir, n.x, n.y, n.labelSide))
+      expect(Math.hypot(dx, dy)).toBeGreaterThan(6)
+      expect(LABEL_SIDES).toContain(n.labelSide)
+      expect(n.label).toEqual(radialLabel(n.dir, n.x, n.y, n.labelSide, n.labelOffset))
       expect(n.kind).toBe('person')
     }
     expect(PERSON_LABEL_SIZE).toBe(8)
@@ -506,7 +512,7 @@ describe('buildConstellationLayout', () => {
     expect([viewer.width, viewer.height, viewer.cx, viewer.cy]).toEqual([modal.width, modal.height, modal.cx, modal.cy])
     for (const n of viewer.nodes) {
       const twin = modal.nodes.find((m) => m.id === n.id)
-      expect([n.x, n.y, n.theta, n.dir, n.dist, n.extra, n.depth, n.parentId, n.claimed]).toEqual([twin.x, twin.y, twin.theta, twin.dir, twin.dist, twin.extra, twin.depth, twin.parentId, twin.claimed])
+      expect([n.x, n.y, n.theta, n.dir, n.dist, n.extra, n.depth, n.parentId, n.claimed, n.hidden]).toEqual([twin.x, twin.y, twin.theta, twin.dir, twin.dist, twin.extra, twin.depth, twin.parentId, twin.claimed, twin.hidden])
       expect(n.label).toEqual(twin.label)
       if (n.id !== 'b') expect(n.name).toBe(twin.name)
     }
@@ -615,10 +621,11 @@ describe('buildConstellationLayout', () => {
     // canvas's middle, not on it.
     expect(circles.cx).toBeLessThan(circles.width / 2)
     expect(circles.width).toBeGreaterThanOrEqual(900)
-    expect(circles.height).toBeGreaterThanOrEqual(800)
-    // A small drawing is centred inside the base canvas.
+    expect(circles.height).toBeGreaterThanOrEqual(715)
+    // A small drawing is centred inside the base canvas (900×715 — the
+    // reference view's proportion, so the first ring paints at 95px).
     const small = buildConstellationLayout({ filmInvites: [inv('a', CREATOR), inv('b', CREATOR)], creatorId: CREATOR })
-    expect([small.width, small.height]).toEqual([900, 800])
+    expect([small.width, small.height]).toEqual([900, 715])
     expect(small.cx).toBeCloseTo(450, 6)
   })
 
@@ -691,7 +698,10 @@ import golden from './constellationLayout.golden.json'
  *  branch's length is its reach" (no rings, the reach fields `dir`,
  *  `dist`, `extra`, `subtreeSize`, `arrived` on every edge, the fitted
  *  canvas, `firstRingFrame`). The snapshot guards THAT shape: a future
- *  layout change must re-record it on purpose, never by accident. */
+ *  layout change must re-record it on purpose, never by accident. Re-recorded
+ *  once more the same evening for the founder's amendment: lines dot to
+ *  dot, the four label sides (`labelSide`, `labelOffset`, `hidden`), the
+ *  base canvas at 715 and REACH_K 18. */
 function goldenRows() {
   let n = 0
   const row = (id, senderId, parentId = null, over = {}) => ({
@@ -759,36 +769,61 @@ describe('the viewer’s layout matches the recorded golden shape (re-recorded 2
   })
 })
 
-describe('law (c) in the layout: label side', () => {
-  it('a person who shared onward gets their name INWARD (between them and their sharer) whenever that side is clear; a leaf stays outward; an inward name lies on its own limb, inner side', () => {
+describe('the label side — LINES CONNECT DOT TO DOT, names move (founder, 10 September 2026)', () => {
+  it('a person who shared onward gets their name PERPENDICULAR to their limb (their own lines run along out and in); a leaf stays outward; every edge runs dot to dot; no painted name sits on a line', () => {
     seq = 0
     const rows = [inv('r0', CREATOR), inv('r1', CREATOR), inv('r2', CREATOR), inv('r3', CREATOR)]
-    // r1 (3 o'clock): three kids, the middle one shares five times.
     for (const name of ['Ada', 'Ben', 'Cy']) rows.push(inv(`k-${name}`, 'user-r1', 'r1', { recipient_name: name }))
     for (const name of ['Dov', 'Eli', 'Fay', 'Gus', 'Hal']) rows.push(inv(`g-${name}`, 'user-k-Ben', 'k-Ben', { recipient_name: name }))
     rows.push(inv('lone', 'user-r3', 'r3', { recipient_name: 'Lone' }))
     const layout = buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR })
     expect(assertClearance(layout)).toBeGreaterThanOrEqual(LABEL_CLEARANCE - 1e-9)
+    assertLinesWhole(layout)
     const byId = byIdOf(layout)
     expect(byId.get('lone').labelSide).toBe('out')
-    expect(byId.get('r1').labelSide).toBe('in')
-    // Ben's own name turns inward only if that side is clear of r1's dot
-    // and the siblings' lines — either way every inward name lies on its
-    // own limb, inner side.
-    for (const n of layout.nodes.filter((m) => m.labelSide === 'in')) {
-      expect(n.label).toEqual(radialLabel(n.dir, n.x, n.y, 'in'))
-      expect(Math.abs(n.label.x - (n.x - 11 * Math.cos(n.dir)))).toBeLessThan(1e-9)
+    expect(['left', 'right']).toContain(byId.get('r1').labelSide)
+    expect(['left', 'right']).toContain(byId.get('k-Ben').labelSide)
+    for (const n of persons(layout)) {
+      expect(n.label).toEqual(radialLabel(n.dir, n.x, n.y, n.labelSide, n.labelOffset))
+      if (n.labelSide === 'left' || n.labelSide === 'right') expect(n.labelOffset).toBeGreaterThanOrEqual(16)
+      else expect(n.labelOffset).toBe(11)
     }
-    assertNoSwallowedLine(layout)
-    // Down a chain the inward side IS clear: the sharer's name sits between
-    // them and the hand that reached them.
+    // Down a chain the sharers' names are perpendicular and the last is outward.
     seq = 0
     const chain = buildConstellationLayout({
       filmInvites: [inv('n0', CREATOR), inv('n1', 'user-n0', 'n0', { recipient_name: 'Eli' }), inv('n2', 'user-n1', 'n1', { recipient_name: 'Fay' }), inv('n3', 'user-n2', 'n2', { recipient_name: 'Gus' })],
       creatorId: CREATOR,
     })
-    expect(byIdOf(chain).get('n2').labelSide).toBe('in')
+    expect(['left', 'right']).toContain(byIdOf(chain).get('n2').labelSide)
     expect(byIdOf(chain).get('n3').labelSide).toBe('out')
+    assertLinesWhole(chain)
+  })
+  it('the four sides, in order, and the perpendicular offset: radialLabel turns the limb by 0, π, −π/2, +π/2; a perpendicular name sits at least 16 units from its dot', () => {
+    expect(LABEL_SIDES).toEqual(['out', 'in', 'left', 'right'])
+    const at = (side, off) => radialLabel(0, 100, 100, side, off)
+    expect(at('out').x).toBeCloseTo(111, 9)
+    expect(at('in').x).toBeCloseTo(89, 9)
+    expect(at('left', 16).y).toBeLessThan(100)
+    expect(at('right', 16).y).toBeGreaterThan(100)
+    expect(at('right', 28).y - at('right', 16).y).toBeCloseTo(12, 9)
+  })
+  it('the safety net: a name no side of its own can take off a line is recorded `hidden` (never a trimmed line), and the plan still closes around it', () => {
+    // Twelve long-named first-ring people each sharing with one, so the
+    // first-ring names sit under their own fans' lines with neighbours'
+    // lines on both perpendicular sides.
+    seq = 0
+    const names = ['Bartholomew', 'Elizabeth', 'Christopher', 'Maximilian', 'Alexandria', 'Montgomery', 'Evangeline', 'Sebastiano', 'Wilhelmina', 'Nathaniel', 'Josephine', 'Cornelius']
+    const rows = names.map((name, i) => inv(`r${i}`, CREATOR, null, { recipient_name: name }))
+    for (let i = 0; i < 12; i++) for (let k = 0; k < 3; k++) rows.push(inv(`k${i}-${k}`, `user-r${i}`, `r${i}`, { recipient_name: 'Kid' }))
+    const layout = buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR, creatorName: 'Ien' })
+    expect(typeof layout.plan.hidden).toBe('number')
+    for (const n of persons(layout)) expect(typeof n.hidden).toBe('boolean')
+    assertLinesWhole(layout)
+    if (layout.plan.settled) expect(assertClearance(layout)).toBeGreaterThanOrEqual(LABEL_CLEARANCE - 1e-9)
+    // Circles at the production floor hides NO name.
+    const circles = buildConstellationLayout({ filmInvites: circlesRows(), creatorId: CREATOR, creatorName: 'Ien' })
+    expect(circles.plan.hidden).toBe(0)
+    expect(persons(circles).some((n) => n.hidden)).toBe(false)
   })
 })
 
@@ -851,31 +886,31 @@ describe('the fallback is a REAL placement, never a stand-in (red team, 9 Septem
         assertReach(layout)
         if (layout.plan.settled) {
           assertClearance(layout)
-          assertNoSwallowedLine(layout)
+          assertLinesWhole(layout)
         }
       }
     }
   })
-  it('no line is swallowed on the fixture', () => {
-    assertNoSwallowedLine(fixture())
+  it('every line on the fixture runs dot to dot and no name sits on one', () => {
+    assertLinesWhole(fixture())
     assertOnCanvas(fixture())
   })
-  it('the first ring obeys law (c) too: with twelve long-named first-ring people, no name touches another first-ring line and the ring settles', () => {
+  it('the first ring obeys the rule too: with twelve long-named first-ring people, no painted name touches another first-ring line and the ring settles', () => {
     seq = 0
     const names = ['Bartholomew', 'Elizabeth', 'Christopher', 'Maximilian', 'Alexandria', 'Montgomery', 'Evangeline', 'Sebastiano', 'Wilhelmina', 'Nathaniel', 'Josephine', 'Cornelius']
     const rows = names.map((name, i) => inv(`r${i}`, CREATOR, null, { recipient_name: name }))
     for (let i = 0; i < 12; i += 3) rows.push(inv(`k${i}`, `user-r${i}`, `r${i}`, { recipient_name: 'Kid' }))
     const layout = buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR, creatorName: 'Ien' })
     expect(layout.plan.settled).toBe(true)
-    const ps = persons(layout)
+    const ps = persons(layout).filter((n) => !n.hidden)
     const film = layout.nodes.find((n) => n.kind === 'film')
     for (const n of ps.filter((p) => p.depth === 1)) {
       const box = planRect(layout, n)
-      for (const other of ps.filter((p) => p.depth === 1 && p !== n)) {
+      for (const other of persons(layout).filter((p) => p.depth === 1 && p !== n)) {
         expect(segmentTouchesRect(film.x, film.y, other.x, other.y, box, layout.plan.clearance), `${n.name} vs the line into ${other.name}`).toBe(false)
       }
     }
-    assertNoSwallowedLine(layout)
+    assertLinesWhole(layout)
   })
 })
 

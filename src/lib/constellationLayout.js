@@ -37,23 +37,30 @@
  *     that would collide are separated by the LEAST MOVEMENT — each turns
  *     about its own parent, the two equally, damped, the smallest amount
  *     that clears — never by changing anyone's distance. v4's "step out to
- *     the next radius level" is GONE. THE FOUR TRIGGERS OF `extra`, all
+ *     the next radius level" is GONE. THE THREE TRIGGERS OF `extra`, all
  *     of them "this fan cannot fit where it is" and named so the founder
  *     can strike any: (a) its own names need more than FAN_MAX_SPAN (the
- *     fit search); (b) a sibling's line would be swallowed by its own two
- *     name boxes; (c) a sharer's branch is WEDGED between that sharer's
+ *     fit search); (c) a sharer's branch is WEDGED between that sharer's
  *     own siblings and the outer fan has already spread to its cap (the
  *     outer fan moves, so the same angular gaps span more room); (d) a
  *     fan is wedged against what cannot move — the film node's labels, a
  *     first-ring name or line — and turning has stopped helping (a
- *     stall). Nothing else ever changes a distance. Every clearance rule
+ *     stall). Nothing else ever changes a distance (a former trigger — a
+ *     line swallowed by its two name boxes — went with the clipping). Every clearance rule
  *     of v4/v5 stays, measured on real rendered boxes at the reference
  *     view: label-vs-label, label-vs-dot (a hollow dot's stroke included),
- *     label-vs-unattached-line, a line keeping a visible length between
- *     its two boxes; and the label-SIDE rules: a name never sits on a line
- *     it is not attached to (it turns to the inward side of its dot when
- *     that is clear — a person who shared onward prefers inward), nor on
- *     the line leaving its own dot.
+ *     label-vs-line; and the label-SIDE rule (founder amendment,
+ *     10 September evening): LINES CONNECT DOT TO DOT — every segment runs
+ *     from the centre of the parent's dot to the centre of the child's
+ *     dot, full length, never trimmed, notched or clipped around a name. A
+ *     name never sits on a line — not on a line it is not attached to (six
+ *     px clear), not on its own incoming or outgoing line (never touching)
+ *     — and the remedy is MOVING THE NAME, never the line: in order, the
+ *     name's outward side, its inward side, then above or below the dot
+ *     (perpendicular to the limb), the side away from the node's own fan
+ *     first (the founder's sketch: Arielle, Krist and Alexander with the
+ *     name below the dot and the fan above). Only when no side clears
+ *     does the renderer's safety net hide the name until zoom.
  *  4. ONE DRAWING ON EVERY SURFACE: layout, sizes and type are identical on
  *     the creator modal and the viewer dashboard at a given width. The
  *     viewer's node keeps its REAL name through placement (the label reads
@@ -107,14 +114,18 @@ import {
   mapScaleFor,
   rectsCollide,
   segmentTouchesRect,
-  clipSegment,
 } from './constellationLabels.js'
 
 export const ROOT_ID = 'film-root'
 const TWO_PI = Math.PI * 2
 
 const BASE_W = 900
-const BASE_H = 800
+/** The base canvas's height sets the reference view's scale for a drawing
+ *  that fits inside it (the view is 960×576, height-limited): 800 painted
+ *  the first ring at 85px on the founder's desktop; 715 paints it at 95px
+ *  — the "tiny bit longer" limbs of the 10 September amendment (the first
+ *  ring's radius is v4's and REACH_K cannot lengthen it). */
+const BASE_H = 715
 /** The first ring's radius — v4's, unchanged (rule 1). */
 const R0 = 118
 const EDGE_PAD = 58
@@ -124,13 +135,16 @@ const MAX_PLAN_ROUNDS = 6
 
 /* ---- THE REACH RULE (rule 2) — the two knobs the founder tunes ---- */
 /** Map units from a parent to a child who shared with nobody would be
- *  REACH_BASE + REACH_K (subtree of one). Tuned 10 September 2026 so that
- *  on Circles Arielle → Krist (subtree 16: √16 = 4) comes out about 20%
- *  shorter than the founder's approved sketch drew it, with Arielle still
- *  roughly midway between Ien and Krist: 30 + 16 × 4 = 94 units against
- *  the first ring's 118. */
+ *  REACH_BASE + REACH_K (subtree of one). Tuned 10 September 2026: K 16
+ *  read Arielle → Krist (subtree 16: √16 = 4) about 20% shorter than the
+ *  founder's sketch; the evening amendment asked for both limbs a tiny
+ *  bit longer: the base canvas at 715 paints the first ring at 95px, and
+ *  K 21 reads Arielle → Krist at 116px there (30 + 21 × 4 = 114 units
+ *  against the first ring's 118, before the fan's own outward move) —
+ *  inside the founder's ~115–120 target, with Circles settling at 11px and
+ *  every name shown. */
 export const REACH_BASE = 30
-export const REACH_K = 16
+export const REACH_K = 18
 
 /* ---- The fan knobs (rule 3) ---- */
 /** Where the first ring starts: 12 o'clock, then clockwise in ticket order. */
@@ -197,22 +211,45 @@ const angDiff = (a, b) => {
   return d
 }
 
-/** The one label rule: a name lies along its node's own LIMB direction
- *  (`dir` — the direction from the person who gave them the film), pushed
- *  straight OUTWARD from the dot by default, or straight INWARD (`side` =
- *  'in', back toward their sharer) when the outward side would sit on a
- *  line the name is not attached to, or when the person shared onward and
- *  the inward side is clear. An inward name sits on the line entering its
- *  own dot, which the renderer ends before the box. Exported so the tests
- *  can ask the same question the layout asks. */
-export function radialLabel(theta, x, y, side = 'out') {
-  const dir = side === 'in' ? -1 : 1
-  const c = dir * Math.cos(theta)
-  const sn = dir * Math.sin(theta)
-  let lx = x + LABEL_OFFSET * c
-  let ly = y + LABEL_OFFSET * sn
-  const anchor = Math.abs(c) < 0.35 ? 'middle' : c > 0 ? 'start' : 'end'
-  if (Math.abs(c) < 0.35) ly += sn > 0 ? 7 : -3
+/** The sides a name may take around its dot, in the order they are tried
+ *  (founder, 10 September evening): outward along the limb, inward along
+ *  it, then the two perpendiculars — 'left' is the limb direction turned a
+ *  quarter turn counter-clockwise on screen (dir − π/2), 'right' clockwise
+ *  (dir + π/2). */
+export const LABEL_SIDES = ['out', 'in', 'left', 'right']
+const SIDE_TURN = { out: 0, in: Math.PI, left: -Math.PI / 2, right: Math.PI / 2 }
+export const PERP_OFFSET = 16
+export const PERP_OFFSET_MAX = 52
+const PERP_OFFSET_STEP = 6
+/** The one label rule: a name lies on one SIDE of its dot relative to its
+ *  node's own LIMB direction (`dir` — the direction from the person who
+ *  gave them the film): straight outward by default, straight inward, or
+ *  perpendicular ('left' / 'right') when the limb's own lines run through
+ *  the outward and inward boxes — LINES CONNECT DOT TO DOT and a name never
+ *  sits on one, so the name moves. Exported so the tests can ask the same
+ *  question the layout asks. */
+export function radialLabel(theta, x, y, side = 'out', perpOffset = PERP_OFFSET) {
+  const angle = theta + (SIDE_TURN[side] ?? 0)
+  const c = Math.cos(angle)
+  const sn = Math.sin(angle)
+  // A perpendicular name sits further from its dot than a radial one: the
+  // lines of the fan it stands beside leave that same dot, and a wide name
+  // close to the dot is crossed by any line steeper than a few degrees.
+  // The layout slides it outward along the perpendicular (PERP_OFFSET up
+  // to PERP_OFFSET_MAX) to the smallest distance that clears — still
+  // "above or below the dot", the founder's third side.
+  const perp = side === 'left' || side === 'right'
+  const offset = perp ? perpOffset : LABEL_OFFSET
+  let lx = x + offset * c
+  let ly = y + offset * sn
+  // A radial name hangs off its dot (start/end anchor unless the limb is
+  // nearly vertical); a perpendicular name is CENTRED on the perpendicular
+  // through the dot unless that perpendicular is nearly horizontal — a
+  // name hung to one side of an oblique perpendicular lands far from its
+  // dot, on the neighbours' lines.
+  const centred = Math.abs(c) < (perp ? 0.75 : 0.35)
+  const anchor = centred ? 'middle' : c > 0 ? 'start' : 'end'
+  if (centred) ly += sn > 0 ? 7 : -3
   else ly += 3
   return { x: lx, y: ly, anchor }
 }
@@ -269,6 +306,8 @@ export function buildConstellationLayout({
       r: 0, // from the filmmaker
       theta: 0, // around the filmmaker
       side: 'out',
+      perpOffset: PERP_OFFSET, // how far a perpendicular name sits from the dot
+      hidden: false, // no side clears: the safety net hides the name until zoom
       size: 1,
     }
     nodes.set(id, n)
@@ -385,17 +424,17 @@ export function buildConstellationLayout({
     /** The design-scale rectangles a node paints at (x, y) with its limb
      *  direction `dir` — its name (the SAME estimate the renderer's
      *  collision rule uses, glyph by glyph from the font) and its dot. */
-    const rectsAt = (n, x, y, dir, side = n.side) => {
-      const l = radialLabel(dir, x, y, side)
+    const NO_BOX = { x: 0, y: 0, w: 0, h: 0 } // a hidden name occupies nothing
+    const rectsAt = (n, x, y, dir, side = n.side, perpOffset = n.perpOffset) => {
+      const l = radialLabel(dir, x, y, side, perpOffset)
       return {
-        label: labelScreenRect(
-          { x: l.x, y: l.y, anchor: l.anchor, name: measuredName(n), baseSize: fontMap },
-          DESIGN_VIEW
-        ),
+        label: n.hidden
+          ? NO_BOX
+          : labelScreenRect({ x: l.x, y: l.y, anchor: l.anchor, name: measuredName(n), baseSize: fontMap }, DESIGN_VIEW),
         dot: dotRect(x, y),
       }
     }
-    const rectsOf = (n, side = n.side) => rectsAt(n, n.px, n.py, n.dir, side)
+    const rectsOf = (n, side = n.side, perpOffset = n.perpOffset) => rectsAt(n, n.px, n.py, n.dir, side, perpOffset)
     // The film node: its emblem and its two center labels, placed for
     // this scale by the SAME function the renderer uses — obstacles every
     // name and every unattached line must clear.
@@ -418,46 +457,31 @@ export function buildConstellationLayout({
         clearance - separation(b.label, a.dot),
         0
       )
-    /** Law (c): a name may not come within `clearance` of a line it is not
-     *  attached to. `seg` = { x1, y1, x2, y2, fromId, toId }. */
-    const labelTouchesLine = (id, label, seg) =>
-      seg.fromId !== id &&
-      seg.toId !== id &&
-      segNear(seg, label, clearance) &&
-      segmentTouchesRect(seg.x1, seg.y1, seg.x2, seg.y2, label, clearance)
+    /** A name never sits on a line: within `clearance` of a line it is not
+     *  attached to, or touching at all a line that leaves or enters its own
+     *  dot (lines run dot centre to dot centre, so an outward name beyond
+     *  its dot clears its incoming line by the label offset; a name along
+     *  a line that continues past the dot never can). `seg` = { x1, y1,
+     *  x2, y2, fromId, toId }. */
+    const labelTouchesLine = (id, label, seg) => {
+      const gap = seg.fromId === id || seg.toId === id ? 0 : clearance
+      return segNear(seg, label, gap) && segmentTouchesRect(seg.x1, seg.y1, seg.x2, seg.y2, label, gap)
+    }
     /** Broad phase for a segment against a box: the segment's own box. */
     const segNear = (seg, r, gap) =>
       Math.min(seg.x1, seg.x2) < r.x + r.w + gap &&
       Math.max(seg.x1, seg.x2) > r.x - gap &&
       Math.min(seg.y1, seg.y2) < r.y + r.h + gap &&
       Math.max(seg.y1, seg.y2) > r.y - gap
-    /** Law (c) on the line itself: once the renderer starts a segment
-     *  beyond its start's box(es) and ends it before its end's name box —
-     *  by the clearance, exactly as it paints — some of the line must
-     *  remain. */
-    const keeps = (seg, startObstacles, endLabel) => {
-      const cut = clipSegment(seg.x1, seg.y1, seg.x2, seg.y2, startObstacles, [endLabel], clearance)
-      return Boolean(cut) && Math.hypot(cut.x2 - cut.x1, cut.y2 - cut.y1) > 1e-6
-    }
-    const segmentKeepsLength = (seg, startObstacles, endLabel) =>
-      keeps(seg, startObstacles, endLabel) ||
-      // A FIRST-RING line is the film node's own: when starting it beyond
-      // the filmmaker's two center labels would leave nothing (a first-ring
-      // dot right under "FILMMAKER"), the renderer starts it beyond the
-      // emblem alone and lets it pass under those labels — the film node's
-      // labels over the film node's line, never a dropped line.
-      (seg.fromId === ROOT_ID && keeps(seg, [EMBLEM_RECT], endLabel))
     const segmentOf = (n) => {
       const parent = nodes.get(n.parentId)
       return { x1: parent.px, y1: parent.py, x2: n.px, y2: n.py, fromId: parent.id, toId: n.id }
     }
-    const startObstaclesOf = (n) => {
-      const parent = nodes.get(n.parentId)
-      return parent.id === ROOT_ID ? centerRects : [rectsOf(parent).label]
-    }
 
     for (const n of nodes.values()) {
       n.side = 'out'
+      n.perpOffset = PERP_OFFSET
+      n.hidden = false
       n.extra = 0
     }
     root.px = 0
@@ -494,46 +518,73 @@ export function buildConstellationLayout({
       for (let i = 0; i < rects.length && !bad; i++) {
         for (const cr of centerRects) if (rectsCollide(rects[i].label, cr, clearance)) bad = true
         for (let j = i + 1; j < rects.length && !bad; j++) if (violates(rects[i], rects[j])) bad = true
-        // Law (c) on the first ring: a name against every OTHER first-ring
-        // line (film → sibling), and its own line must keep a visible
-        // length once the renderer starts it beyond the film node and ends
-        // it before the name.
-        for (let j = 0; j < segs.length && !bad; j++) if (j !== i && labelTouchesLine(ring1[i].id, rects[i].label, segs[j])) bad = true
-        if (!bad && !segmentKeepsLength(segs[i], centerRects, rects[i].label)) bad = true
+        // A first-ring name against every first-ring line — the others by
+        // the clearance, its own by touch.
+        for (let j = 0; j < segs.length && !bad; j++) if (labelTouchesLine(ring1[i].id, rects[i].label, segs[j])) bad = true
       }
       if (!bad) break
       r1 += RING_BUMP
     }
     const placed = [...ring1]
 
-    /** Law (c), the first remedy: turn a name to the INWARD side of its
-     *  dot if that clears every name, dot, unattached line and the film
-     *  node — returns true and keeps the flip, else leaves the name as it
-     *  was. `others` = everyone placed so far whose boxes count. */
-    const tryFlip = (n, others) => {
-      if (n.side === 'in') return false
-      const flipped = rectsOf(n, 'in')
-      for (const cr of centerRects) if (rectsCollide(flipped.label, cr, clearance)) return false
+    /** Is this side of n's name clear of everything placed — the film
+     *  node, every other name and dot, every line (others by the clearance,
+     *  n's own by touch)? `others` = everyone placed so far whose boxes count. */
+    const sideClear = (n, side, others, perpOffset = n.perpOffset) => {
+      const r = rectsOf(n, side, perpOffset)
+      for (const cr of centerRects) if (rectsCollide(r.label, cr, clearance)) return false
+      if (labelTouchesLine(n.id, r.label, segmentOf(n))) return false
       for (const other of others) {
         if (other === n) continue
         const o = rectsOf(other)
-        if (rectsCollide(flipped.label, o.label, clearance) || rectsCollide(flipped.label, o.dot, clearance)) return false
-        const so = segmentOf(other)
-        if (so.fromId !== n.id && so.toId !== n.id && segmentTouchesRect(so.x1, so.y1, so.x2, so.y2, flipped.label, clearance)) return false
+        if (rectsCollide(r.label, o.label, clearance) || rectsCollide(r.label, o.dot, clearance)) return false
+        if (labelTouchesLine(n.id, r.label, segmentOf(other))) return false
       }
-      // The name's own incoming line must keep a visible length past its
-      // parent's box once the name turns inward.
-      if (!segmentKeepsLength(segmentOf(n), startObstaclesOf(n), flipped.label)) return false
-      n.side = 'in'
       return true
     }
-    // First-ring sharers: inward when that side is clear of the film node,
-    // the other first-ring names and their lines (no deeper ring exists yet).
-    for (const c of ring1) if (c.children.length) tryFlip(c, ring1)
+    /** The order the sides are tried for n: out, in, then the perpendicular
+     *  AWAY from n's own fan first — the side fewer of its PLACED children
+     *  lean to (an unplaced child has no direction yet and counts for
+     *  nothing); on a tie, the side that points down the screen ("name
+     *  below the dot, fan above" — the founder's sketch). */
+    const sideOrder = (n) => {
+      let lean = 0
+      for (const c of n.children) if (fanOf.has(c.id)) lean += Math.sign(angDiff(c.dir, n.dir))
+      const rightDown = Math.sin(n.dir + Math.PI / 2) > 0
+      const perp = lean > 0 ? ['left', 'right'] : lean < 0 ? ['right', 'left'] : rightDown ? ['right', 'left'] : ['left', 'right']
+      // A person who shared onward: the outward side lies on their own
+      // fan's axis and the inward side on their incoming line — both are
+      // lines by construction — so their name goes perpendicular (the
+      // founder's sketch: Arielle, Krist, Alexander).
+      return n.children.length ? perp : ['out', 'in', ...perp]
+    }
+    /** THE REMEDY — move the name, never the line: the first side in
+     *  order that clears everything. Returns true when the side changed;
+     *  leaves it as it was when no side clears (the renderer's safety net
+     *  then hides the name until zoom). */
+    const chooseSide = (n, others) => {
+      for (const side of sideOrder(n)) {
+        const perp = side === 'left' || side === 'right'
+        for (let off = PERP_OFFSET; off <= PERP_OFFSET_MAX + 1e-9; off += perp ? PERP_OFFSET_STEP : Infinity) {
+          if (sideClear(n, side, others, off)) {
+            if (n.side === side && n.perpOffset === off) return false
+            n.side = side
+            n.perpOffset = off
+            return true
+          }
+        }
+      }
+      return false
+    }
+    /** Every fan, all depths, parents before children; and each child's fan. */
+    const fans = []
+    const fanOf = new Map()
+    // First-ring names: settle each side against the film node and the
+    // other first-ring names and lines now (a sharer's fan re-checks it
+    // once placed, when its own lines exist).
+    for (const c of ring1) chooseSide(c, ring1)
 
     /* ---- Rules 2 and 3: every deeper generation, parent by parent ---- */
-    const fans = [] // every fan, all depths, parents before children
-    const fanOf = new Map() // kid id -> its fan
     const spanOf = (fan) => fan.gaps.reduce((x, y) => x + y, 0)
     const halfOf = (fan) => spanOf(fan) / 2
     const offsetsOf = (fan) => {
@@ -555,6 +606,10 @@ export function buildConstellationLayout({
       return { x: fan.p.px + dist * Math.cos(dir), y: fan.p.py + dist * Math.sin(dir), dir, dist }
     }
     const placeFan = (fan) => {
+      // A fan that spread since it turned keeps every child beyond the
+      // parent: the turn is held within the limit for its current span.
+      const lim = turnLimit(fan)
+      fan.turn = Math.min(lim, Math.max(-lim, fan.turn))
       const offsets = offsetsOf(fan)
       fan.kids.forEach((k, i) => {
         const c = candidate(fan, i, offsets)
@@ -574,9 +629,8 @@ export function buildConstellationLayout({
     /** The fan's own rules, at its current gaps/turn/extra. Returns null
      *  when clean, else { pair: [i, j] } for the first two siblings (or a
      *  sibling and its parent, j = -1) whose names, dots or lines break
-     *  the rule, or { swallowed: true } when a sibling's line keeps no
-     *  visible length (only moving outward helps). Siblings are measured
-     *  on the outward side — the side decision comes after placement. */
+     *  the rule. Siblings are measured on the outward side — the side
+     *  decision comes after placement. */
     const intraViolation = (fan) => {
       const pr = rectsOf(fan.p)
       const offsets = offsetsOf(fan)
@@ -588,10 +642,16 @@ export function buildConstellationLayout({
           seg: { x1: fan.p.px, y1: fan.p.py, x2: c.x, y2: c.y, fromId: fan.p.id, toId: k.id },
         }
       })
-      const startObs = fan.p.id === ROOT_ID ? centerRects : [pr.label]
+      const pseg = fan.p.id === ROOT_ID ? null : segmentOf(fan.p)
+      // The parent's name sits beside the dot, perpendicular to the limb:
+      // a sibling against it is the fan's to TURN away from (turnFromName),
+      // not to spread for — only the parent's dot spreads the fan here.
+      const perp = fan.p.side === 'left' || fan.p.side === 'right'
       for (const [i, c] of cands.entries()) {
-        if (violates(c.rects, pr)) return { pair: [i, -1], need: needOf(c.rects, pr) }
-        if (!segmentKeepsLength(c.seg, startObs, c.rects.label)) return { swallowed: true }
+        if (perp ? rectsCollide(c.rects.label, pr.dot, clearance) : violates(c.rects, pr)) return { pair: [i, -1], need: perp ? clearance - separation(c.rects.label, pr.dot) : needOf(c.rects, pr) }
+        // The parent's own incoming line runs on to no one; a sibling's
+        // name may not come within the clearance of it.
+        if (pseg && labelTouchesLine(c.k.id, c.rects.label, pseg)) return { pair: [i, -1], need: clearance }
       }
       for (let i = 0; i < cands.length; i++) {
         for (let j = i + 1; j < cands.length; j++) {
@@ -670,6 +730,32 @@ export function buildConstellationLayout({
       fitsAt(hi * EXTRA_STEP)
       return true
     }
+    /** A sharer's name sits beside their dot, perpendicular to the limb;
+     *  the fan's edge lines leave the same dot and may cross that name. The
+     *  remedy is the fan TURNING away from the name (rule 3's least
+     *  movement, about the parent), as far as its limit allows — never a
+     *  clipped line, never a moved name. */
+    const turnFromName = (fan) => {
+      const p = fan.p
+      if (p.side !== 'left' && p.side !== 'right') return
+      const label = { ...rectsOf(p).label }
+      const crosses = () => fan.kids.some((k, i) => {
+        const c = candidate(fan, i)
+        const r = rectsAt(k, c.x, c.y, c.dir, 'out')
+        return segmentTouchesRect(p.px, p.py, c.x, c.y, label, 0) || rectsCollide(r.label, label, clearance) || rectsCollide(r.dot, label, clearance)
+      })
+      const sgn = p.side === 'left' ? 1 : -1 // the name on the left: the fan leans right
+      const lim = turnLimit(fan)
+      while (crosses() && Math.abs(fan.turn + sgn * FAN_WIDEN) <= lim + 1e-12) fan.turn += sgn * FAN_WIDEN
+      // Still crossed at the fan's full lean: the name slides outward along
+      // the perpendicular, the least that clears (never past the maximum —
+      // then the safety net hides it).
+      while (crosses() && p.perpOffset + PERP_OFFSET_STEP <= PERP_OFFSET_MAX + 1e-9) {
+        p.perpOffset += PERP_OFFSET_STEP
+        label.x = rectsOf(p).label.x
+        Object.assign(label, rectsOf(p).label)
+      }
+    }
     /** The turn a fan may make without any member leaving "beyond the
      *  parent": the member's limb direction stays within a right angle of
      *  the parent's outward direction. */
@@ -697,14 +783,23 @@ export function buildConstellationLayout({
         gaps: new Array(Math.max(p.children.length - 1, 0)).fill(STEP_FLOOR),
       }))
       for (const fan of generation) {
+        // The parent's name goes perpendicular to its limb (its own lines
+        // run along out and in). Which perpendicular — "the side away from
+        // the node's own fan" — is known only once the fan is placed, so:
+        // a provisional side, the fan fitted against it, then the side
+        // chosen from the placed children's lean, and the fan turned away
+        // from the name it settled on.
+        fan.p.side = sideOrder(fan.p)[0]
         fit(fan)
+        placeFan(fan)
+        chooseSide(fan.p, [...placed, ...fan.kids])
+        turnFromName(fan)
         placeFan(fan)
         fans.push(fan)
         for (const k of fan.kids) fanOf.set(k.id, fan)
       }
       const kids = generation.flatMap((f) => f.kids)
       placed.push(...kids)
-      for (const k of kids) if (k.children.length) tryFlip(k, placed)
       prev = kids
     }
 
@@ -739,15 +834,14 @@ export function buildConstellationLayout({
       const pushes = new Map() // fan -> { pos, neg }: which ways it was asked to turn
       const widen = new Map() // fan -> a violating pair of its own siblings (null = only outward helps)
       const deferred = [] // sharer's-branch-vs-sibling violations, decided after the pass
-      const fixedPush = new Set() // fans pushed by something that cannot move (the film node, the first ring)
+      const stuck = new Set() // names on a line that no side of theirs clears
       let flipped = false
       let violations = 0
       let pressure = 0 // the room every violation still asks for, summed
       /** Ask `fan` to turn so that its member `k` moves AWAY from the
        *  point (ox, oy), by enough to gain `need` map units. */
-      const away = (fan, k, ox, oy, need, fixed = false) => {
+      const away = (fan, k, ox, oy, need) => {
         if (!fan) return
-        if (fixed) fixedPush.add(fan)
         const a = Math.atan2(k.py - fan.p.py, k.px - fan.p.px)
         const b = Math.atan2(oy - fan.p.py, ox - fan.p.px)
         const sgn = Math.sign(angDiff(a, b)) || 1
@@ -805,14 +899,25 @@ export function buildConstellationLayout({
         // and the line (only a line attached to the film node may pass
         // through them, and the renderer starts that one beyond them).
         for (const cr of centerRects) {
-          if (rectsCollide(kr.label, cr, clearance)) away(fan, k, 0, 0, clearance - separation(kr.label, cr), true)
-          else if (ks.fromId !== ROOT_ID && segmentTouchesRect(ks.x1, ks.y1, ks.x2, ks.y2, cr, clearance)) away(fan, k, 0, 0, clearance, true)
+          if (rectsCollide(kr.label, cr, clearance)) away(fan, k, 0, 0, clearance - separation(kr.label, cr))
+          // (A line through the film node's labels: only a turn helps —
+          // more distance never moves a line's path.)
+          else if (ks.fromId !== ROOT_ID && segmentTouchesRect(ks.x1, ks.y1, ks.x2, ks.y2, cr, clearance)) away(fan, k, 0, 0, clearance)
         }
-        // The incoming line must keep a visible length between its
-        // parent's box(es) and this name's box.
-        if (!segmentKeepsLength(ks, startObstaclesOf(k), kr.label)) {
-          if (!widen.has(fan)) widen.set(fan, null)
-          violations += 1
+        // A name on one of its OWN lines (its incoming line, or a line to
+        // one of its children): move the name; only if no side clears does
+        // its fan spread away from it.
+        if (labelTouchesLine(k.id, kr.label, ks) || k.children.some((c) => labelTouchesLine(k.id, kr.label, seg(c)))) {
+          if (chooseSide(k, placed)) {
+            flipped = true
+            break
+          }
+          // No side clears: the child fan turns away from the name.
+          stuck.add(k)
+          const own = fanOf.get(k.children[0]?.id)
+          const crossing = k.children.find((c) => labelTouchesLine(k.id, kr.label, seg(c)))
+          if (own && crossing) away(own, crossing, kr.label.x + kr.label.w / 2, kr.label.y + kr.label.h / 2, clearance)
+          else violations += 1
         }
       }
       /** Broad phase: everything a person can collide with — name, dot
@@ -847,6 +952,23 @@ export function buildConstellationLayout({
           const lineHitB = labelTouchesLine(other.id, o.label, seg(k))
           const boxHit = violates(kr, o)
           if (!boxHit && !lineHitA && !lineHitB) continue
+          // A name on a line it is not attached to MOVES first (out → in →
+          // perpendicular) — siblings included; only if no side clears do
+          // the fans spread or turn.
+          if (lineHitA) {
+            if (chooseSide(k, placed)) {
+              flipped = true
+              break
+            }
+            stuck.add(k)
+          }
+          if (lineHitB) {
+            if (chooseSide(other, placed)) {
+              flipped = true
+              break
+            }
+            stuck.add(other)
+          }
           if (fa && fa === fb) {
             if (!widen.has(fa)) widen.set(fa, { pair: [fa.kids.indexOf(k), fa.kids.indexOf(other)], need: needOf(kr, o) })
             violations += 1
@@ -890,26 +1012,18 @@ export function buildConstellationLayout({
               continue
             }
           }
-          // Law (c): a name on a line it is not attached to turns inward
-          // first; only if that cannot clear do the fans turn.
-          if (lineHitA && tryFlip(k, placed)) {
-            flipped = true
-            break
-          }
-          if (lineHitB && tryFlip(other, placed)) {
-            flipped = true
-            break
-          }
           const need = Math.max(boxHit ? needOf(kr, o) : 0, lineHitA || lineHitB ? clearance : 0)
           const share = fa && fb ? need / 2 : need
+          // A name against a line: a turn parts them; more distance never
+          // moves a line's path, so a fixed obstacle here asks no outward move.
           if (lineHitA && !boxHit) {
             const [mx, my] = nearestOn(seg(other), kr.label)
-            away(fa, k, mx, my, share, !fb)
-            away(fb, other, kr.label.x + kr.label.w / 2, kr.label.y + kr.label.h / 2, share, !fa)
+            away(fa, k, mx, my, share)
+            away(fb, other, kr.label.x + kr.label.w / 2, kr.label.y + kr.label.h / 2, share)
           } else if (lineHitB && !boxHit) {
             const [mx, my] = nearestOn(seg(k), o.label)
-            away(fb, other, mx, my, share, !fa)
-            away(fa, k, o.label.x + o.label.w / 2, o.label.y + o.label.h / 2, share, !fb)
+            away(fb, other, mx, my, share)
+            away(fa, k, o.label.x + o.label.w / 2, o.label.y + o.label.h / 2, share)
           } else {
             away(fa, k, other.px, other.py, share, !fb)
             away(fb, other, k.px, k.py, share, !fa)
@@ -935,22 +1049,7 @@ export function buildConstellationLayout({
       if (measure < best - 1e-6) {
         best = measure
         sinceBest = 0
-      } else if (++sinceBest >= STALL_PASSES) {
-        // Turning has stopped helping. A fan wedged against what cannot
-        // move — the film node's labels, a first-ring name or line —
-        // cannot fit where it is: the whole fan moves outward (rule 3),
-        // the one remedy that changes no one else; then the turning goes
-        // on. With no such fan, the rest is the renderer's safety net.
-        let moved = false
-        for (const fan of fixedPush) {
-          if (!wedged(fan) || widen.has(fan) || fan.extra >= EXTRA_STEP * MAX_EXTRA_STEPS) continue
-          widen.set(fan, null)
-          moved = true
-        }
-        if (!moved) break
-        sinceBest = 0
-        best = Infinity
-      }
+      } else if (++sinceBest >= STALL_PASSES) break
       // Apply: widen the fans whose own names collide (that pair's gap,
       // then the outward move — the same rule as the first fit), and turn
       // the others, each within the limit that keeps every member beyond
@@ -973,11 +1072,23 @@ export function buildConstellationLayout({
       placeAll()
     }
     if (!clean) bestEffort = true
-    // Law (c), applied once more now that everything has settled: a person
-    // who shared onward gets their name on the INWARD side whenever that
-    // side is clear (between them and the hand that reached them; the
-    // renderer ends that incoming line before the box).
-    for (const k of placed) if (k.children.length && fanOf.has(k.id)) tryFlip(k, placed)
+    // Once more now that the fans have settled: any name whose side no
+    // longer clears moves to the first side that does; a name that still
+    // sits on a line no side of its own can leave is THE SAFETY NET's —
+    // hidden until zoom or explore, recorded on the node, out of every
+    // rule from here on (lines stay whole; the plan closes around it).
+    // Every name takes the FIRST side in its order that clears (the
+    // preference, not merely a clear side — a fan that leaned during the
+    // relaxation can have changed which side is away from it).
+    for (const k of placed) chooseSide(k, placed)
+    let hiddenCount = 0
+    for (const k of placed) {
+      const r = rectsOf(k)
+      const onLine = placed.some((o) => labelTouchesLine(k.id, r.label, segmentOf(o)))
+      if (!onLine) continue
+      k.hidden = true
+      hiddenCount += 1
+    }
 
     /* ---- The canvas this placement needs: the drawing's own extent —
             every name's box and dot plus the film node — with room around
@@ -1011,7 +1122,7 @@ export function buildConstellationLayout({
     // the edge, centred when the canvas is larger than it needs to be.
     const cx = (width - (x1 - x0)) / 2 - x0
     const cy = (height - (y1 - y0)) / 2 - y0
-    return { width, height, cx, cy, r1, bestEffort, rectsOf, centerRects }
+    return { width, height, cx, cy, r1, bestEffort, hiddenCount, rectsOf, centerRects }
   }
 
   /* ---- Plan for the reference view: the hard rule holds on SCREEN there ----
@@ -1072,8 +1183,13 @@ export function buildConstellationLayout({
     assumed = { width: result.width, height: result.height }
   }
   if (!settled) {
+    // The fallback is the base canvas's placement. When round 0 was the
+    // last round its nodes are still in place; otherwise place once more
+    // so the nodes, the canvas and `plan.hidden` describe ONE placement
+    // (red team, 10 September evening: a stale round-0 result over
+    // round-N node state).
     plan = planFor(BASE_W, BASE_H)
-    result = baseResult || runPlacement(plan.fontMap, plan.clearance, plan.scale)
+    result = rounds === 1 && baseResult ? baseResult : runPlacement(plan.fontMap, plan.clearance, plan.scale)
   }
   const { width, height, cx, cy } = result
 
@@ -1153,8 +1269,12 @@ export function buildConstellationLayout({
       dist: isFilm ? null : n.dist,
       extra: isFilm ? null : n.extra,
       subtreeSize: n.size,
-      label: isFilm ? null : radialLabel(n.dir, x, y, n.side),
+      label: isFilm ? null : radialLabel(n.dir, x, y, n.side, n.perpOffset),
       labelSide: isFilm ? null : n.side,
+      labelOffset: isFilm ? null : n.side === 'left' || n.side === 'right' ? n.perpOffset : LABEL_OFFSET,
+      /** The safety net: no side of this name clears a line at the
+       *  reference view — the renderer hides it until zoom or explore. */
+      hidden: isFilm ? null : n.hidden,
       twinkleDelay: isFilm ? null : twinkleDelay(n.id),
       ...(isFilm ? {} : { claimed: arrivedOf(n.id) }),
     })
@@ -1191,7 +1311,7 @@ export function buildConstellationLayout({
      *  a canvas consistent with them (if not, the placement used the base
      *  canvas's boxes and the renderer hides what would touch at the
      *  reference view), and the rounds it took. */
-    plan: { scale: plan.scale, fontMap: plan.fontMap, clearance: plan.clearance, settled, rounds },
+    plan: { scale: plan.scale, fontMap: plan.fontMap, clearance: plan.clearance, settled, rounds, hidden: result.hiddenCount },
     /** THE PHONE CAMERA (founder 2026-09-09): the frames a viewer's phone
      *  may open on, in canvas coordinates — `full` = the whole thread
      *  (film, the path to YOU, YOU's entire branch) with every name's

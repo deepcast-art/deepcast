@@ -12,19 +12,20 @@
  *  (b) CONTRAST — with a thread, every off-thread segment, dot and label
  *      is painted at RECEDE_OPACITY (one constant, per element); the
  *      thread keeps full strength. With no thread, opacity 1.
- *  (c) COLLISIONS — a segment starts beyond its start node's name box
- *      (or the film node's emblem and center labels) and ends before its
- *      end node's name box (clipSegment); a painted name never comes
- *      within LABEL_GAP_PX of another name, another person's dot, or a
- *      line it is not attached to — at the reference view the layout
- *      guarantees it by placement; at every other view the visibility
- *      pass hides what would touch, and zooming reveals it.
+ *  (c) COLLISIONS — LINES CONNECT DOT TO DOT (founder, 10 September):
+ *      every segment is painted whole, from dot centre to dot centre,
+ *      never trimmed around a name; a painted name never comes within
+ *      LABEL_GAP_PX of another name, another person's dot, or a line it
+ *      is not attached to, and never touches its own lines — at the
+ *      reference view the layout guarantees it by placing the name (out,
+ *      in, or perpendicular to its limb); at every other view the
+ *      visibility pass hides what would touch, and zooming reveals it.
  *
  * Everything else, on every surface:
  *  - The filmmaker at the center; every person a small dot on its ring —
  *    solid = claimed, hollow = in flight — with its name placed radially
- *    at ONE size, on the side the layout chose (out, or in for a name
- *    that would otherwise sit on a neighbour's line).
+ *    at ONE size, on the side the layout chose (out, in, or perpendicular
+ *    to its limb when its own lines would run through the name).
  *  - Only the viewer's thread is lit at rest (layout.threadIds); YOU is
  *    marked by its solid node and its always-on label.
  *  - Explore: hover (mouse) or tap (touch/click, toggles) on any person
@@ -69,7 +70,7 @@
  *    ONE rule on every surface, by tier: the always-on labels; then the
  *    thread's names, which a non-thread name can never hide; then the rest.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   EMBLEM_R,
   LABEL_GAP_PX,
@@ -81,7 +82,6 @@ import {
   PHONE_MAX_WIDTH_PX,
   RECEDE_OPACITY,
   centerLabelLayout,
-  clipSegment,
   labelFontSize,
   labelScreenRect,
   labelVisibility,
@@ -253,71 +253,17 @@ export default function ConstellationMap({ layout }) {
   /** CSS pixels per map unit, zoom included — the true scale: positions,
    *  the label counter-scale, and the clearance rule all use it. */
   const mapScale = mapScaleFor(rendered.w, rendered.h, vb?.w, vb?.h)
-  /** The clearance, in map units, at this scale. */
-  const gapMap = mapScale ? LABEL_GAP_PX / mapScale : LABEL_GAP_PX
-
   /** The filmmaker's center labels for this scale (shared geometry). */
   const centerLabels = useMemo(
     () => (layout ? centerLabelLayout(mapScale || 1, layout.creatorLabel) : []),
     [layout, mapScale]
   )
 
-  /** Every person's name box in MAP units at this scale — the same
-   *  estimate the layout planned with, at the size the floor paints. */
-  const labelRects = useMemo(() => {
-    const map = new Map()
-    if (!layout) return map
-    for (const n of layout.nodes) {
-      if (!n.label) continue
-      map.set(
-        n.id,
-        labelScreenRect(
-          { x: n.label.x, y: n.label.y, anchor: n.label.anchor, name: n.name, baseSize: PERSON_LABEL_SIZE },
-          { vbX: 0, vbY: 0, scale: 1, fontScale: mapScale || undefined }
-        )
-      )
-    }
-    return map
-  }, [layout, mapScale])
-
-  /** Law (c) on the segments: each starts beyond its start's name box (or
-   *  the film node's emblem and center labels) and ends before its end's
-   *  name box, by the clearance — but only around the name boxes that are
-   *  PAINTED (`visible`): a hidden name clips nothing (clipping around
-   *  hidden names once erased a viewer's own thread at 1:1 on a phone —
-   *  red team finding 2). A line is never dropped: when nothing would
-   *  remain, a first-ring line starts beyond the emblem alone (under the
-   *  film node's own labels), and at worst a line is painted whole. Map
-   *  units. */
-  const clipEdges = useCallback(
-    (visible) => {
-      if (!layout) return []
-      const film = layout.nodes.find((n) => n.kind === 'film')
-      const emblem = { x: layout.cx - EMBLEM_R, y: layout.cy - EMBLEM_R, w: 2 * EMBLEM_R, h: 2 * EMBLEM_R }
-      const filmObstacles = [emblem, ...centerLabels.map((c) => ({ ...c.rect, x: c.rect.x + layout.cx, y: c.rect.y + layout.cy }))]
-      const boxOf = (id) => (visible.has(id) && labelRects.has(id) ? [labelRects.get(id)] : [])
-      return layout.edges.map((e) => {
-        const fromFilm = e.fromId === film?.id
-        const startObs = fromFilm ? filmObstacles : boxOf(e.fromId)
-        const endObs = boxOf(e.toId)
-        const cut =
-          clipSegment(e.x1, e.y1, e.x2, e.y2, startObs, endObs, gapMap) ||
-          (fromFilm && clipSegment(e.x1, e.y1, e.x2, e.y2, [emblem], endObs, gapMap)) ||
-          clipSegment(e.x1, e.y1, e.x2, e.y2, [], endObs, gapMap) ||
-          { x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2 }
-        return { ...e, ...cut }
-      })
-    },
-    [layout, labelRects, centerLabels, gapMap]
-  )
-  /** The segments the visibility pass measures against: clipped only
-   *  around the always-painted boxes (the film node's; YOU's) — every
-   *  painted line is a part of one of these, so a name that clears them
-   *  clears the paint. */
-  const openSegments = useMemo(
-    () => clipEdges(new Set(layout?.youId ? [layout.youId] : [])),
-    [clipEdges, layout]
-  )
+  /** LINES CONNECT DOT TO DOT (founder, 10 September 2026): every segment
+   *  is painted whole, from the parent's dot centre to the child's, never
+   *  trimmed around a name — a name that would sit on a line moved (the
+   *  layout) or hides (the visibility pass below). */
+  const segments = useMemo(() => layout?.edges ?? [], [layout])
 
   /** Every label's collision inputs: the always-on labels (the film's two
    *  and YOU's marker), the thread's names (tier 1), everyone else (tier 2). */
@@ -378,7 +324,7 @@ export default function ConstellationMap({ layout }) {
           })
       : []
     const lines = scale
-      ? openSegments.map((s) => {
+      ? segments.map((s) => {
           const [x1, y1] = toScreen(s.x1, s.y1)
           const [x2, y2] = toScreen(s.x2, s.y2)
           return { fromId: s.fromId, toId: s.toId, x1, y1, x2, y2 }
@@ -390,10 +336,7 @@ export default function ConstellationMap({ layout }) {
       obstacles,
       lines
     )
-  }, [layout, labelItems, vb, mapScale, openSegments])
-
-  /** The segments as painted: clipped around every name that is painted. */
-  const segments = useMemo(() => clipEdges(visibleIds), [clipEdges, visibleIds])
+  }, [layout, labelItems, vb, mapScale, segments])
 
   /** Founder rule: two always-on labels colliding is an edge case to
    *  REPORT, not something this rule may silently resolve — both stay

@@ -190,36 +190,12 @@ describe('labelTextWidth — glyph by glyph from the Phoenix font', () => {
   })
 })
 
-describe('clipSegment — a box adjacent to an end counts as attached (v5, 9 September 2026)', () => {
-  it('trims a line that leaves its dot and meets the name beside it a few units out (Charles → Jacob)', () => {
-    // Charles's dot at (557, 407); his outward name box to its LEFT, ending
-    // 11 units short of the dot; the line to Jacob runs left through it.
-    const box = { x: 478, y: 397, w: 68, h: 16 }
-    const cut = clipSegment(557, 407, 334, 368, [box], [], 6)
-    expect(cut).not.toBeNull()
-    // The line now starts beyond the box (past its left edge plus the gap).
-    expect(cut.x1).toBeLessThan(478 - 6 + 1e-6)
-    expect(cut.x2).toBe(334)
-  })
-  it('does not trim a box that merely lies further along the line (not attached to its end)', () => {
-    const far = { x: 400, y: 380, w: 30, h: 16 } // ~150 units along, not adjacent to either end
-    const cut = clipSegment(557, 407, 334, 368, [far], [], 6)
-    expect(cut).toEqual({ x1: 557, y1: 407, x2: 334, y2: 368 })
-  })
-  it('the end side is symmetric: a name beside the END dot on the line’s side is trimmed', () => {
-    const box = { x: 340, y: 360, w: 68, h: 16 } // just past the end dot (334, 368), on the line's side
-    const cut = clipSegment(557, 407, 334, 368, [], [box], 6)
-    expect(cut).not.toBeNull()
-    expect(cut.x2).toBeGreaterThan(408 + 6 - 1e-6)
-  })
-})
-
 describe('the two scales', () => {
-  it('the readability floor is 11px (the reach layout: the largest size at which Circles settles) and counter-scales against the TRUE scale (the width-based formula is gone)', () => {
-    expect(MIN_LABEL_ON_SCREEN_PX).toBe(11)
-    const s = mapScaleFor(960, 576, 950, 800)
-    expect(s).toBeCloseTo(576 / 800, 9)
-    expect(labelFontSize(8, s)).toBeCloseTo(11 / s, 1)
+  it('the readability floor is 10.5px (the largest size at which Circles settles with every name shown, lines dot to dot) and counter-scales against the TRUE scale (the width-based formula is gone)', () => {
+    expect(MIN_LABEL_ON_SCREEN_PX).toBe(10.5)
+    const s = mapScaleFor(960, 576, 935, 715)
+    expect(s).toBeCloseTo(576 / 715, 9)
+    expect(labelFontSize(8, s)).toBeCloseTo(10.5 / s, 1)
   })
   it('mapScaleFor is the true scale — the smaller of the width and height ratios', () => {
     // The founder's desktop box shows a 1035² canvas height-limited.
@@ -291,7 +267,6 @@ import {
   RECEDE_OPACITY,
   labelVisibility as labelVisibilityV4,
   centerLabelLayout,
-  clipSegment,
   segmentRectInterval,
   segmentTouchesRect,
 } from './constellationLabels.js'
@@ -347,18 +322,6 @@ describe('law (c): segments and boxes', () => {
     expect(segmentTouchesRect(0, 20, 100, 20, box, 6)).toBe(false)
     expect(segmentTouchesRect(0, 10, 100, 10, box, 6)).toBe(true) // within 6 of the box's edge
   })
-  it('clipSegment starts a line beyond its start obstacle and ends it before its end obstacle, by the gap', () => {
-    const startBox = { x: -10, y: -5, w: 30, h: 10 } // around the start
-    const endBox = { x: 80, y: -5, w: 30, h: 10 } // around the end
-    const cut = clipSegment(0, 0, 100, 0, [startBox], [endBox], 6)
-    expect(cut.x1).toBeCloseTo(26, 9) // 20 (box edge) + 6
-    expect(cut.x2).toBeCloseTo(74, 9) // 80 − 6
-    expect(cut.y1).toBe(0)
-  })
-  it('clipSegment returns null when the obstacles consume the whole line, and leaves an unobstructed line alone', () => {
-    expect(clipSegment(0, 0, 100, 0, [{ x: -10, y: -5, w: 200, h: 10 }], [], 6)).toBeNull()
-    expect(clipSegment(0, 0, 100, 0, [], [], 6)).toEqual({ x1: 0, y1: 0, x2: 100, y2: 0 })
-  })
 })
 
 describe('labelVisibility — tiers and lines (law (a)/(c) at every view)', () => {
@@ -374,12 +337,14 @@ describe('labelVisibility — tiers and lines (law (a)/(c) at every view)', () =
     expect(visibleIds.has('b-thread')).toBe(true)
     expect(visibleIds.has('a-nonthread')).toBe(false)
   })
-  it('a name within 6px of a line it is not attached to hides; its own lines never hide it', () => {
+  it('a name within 6px of a line it is not attached to hides; its own line hides it only when it TOUCHES the box (lines run dot to dot — founder, 10 September)', () => {
     const items = [{ id: 'me', rect: rect(0, 0), gold: false, tier: 2, dist: 0 }]
     const foreign = [{ fromId: 'p', toId: 'q', x1: -50, y1: 13, x2: 100, y2: 13 }] // 3px below the box
     expect(labelVisibility(items, 6, [], foreign).visibleIds.has('me')).toBe(false)
-    const mine = [{ fromId: 'p', toId: 'me', x1: -50, y1: 13, x2: 100, y2: 13 }]
-    expect(labelVisibility(items, 6, [], mine).visibleIds.has('me')).toBe(true)
+    const mineNear = [{ fromId: 'p', toId: 'me', x1: -50, y1: 13, x2: 100, y2: 13 }] // 3px below: my own, not touching
+    expect(labelVisibility(items, 6, [], mineNear).visibleIds.has('me')).toBe(true)
+    const mineThrough = [{ fromId: 'p', toId: 'me', x1: -50, y1: 5, x2: 100, y2: 5 }] // through the box
+    expect(labelVisibility(items, 6, [], mineThrough).visibleIds.has('me')).toBe(false)
     const far = [{ fromId: 'p', toId: 'q', x1: -50, y1: 17, x2: 100, y2: 17 }] // 7px below
     expect(labelVisibility(items, 6, [], far).visibleIds.has('me')).toBe(true)
   })

@@ -20,12 +20,15 @@
  *      ONE quieter level (RECEDE_OPACITY, applied alike to non-thread
  *      segments, dots and labels); the thread keeps full strength. With
  *      no thread (the creator surfaces) the drawing is as before.
- *  (c) COLLISIONS — a label box may not touch ANY line it is not attached
- *      to, and a label may not sit on the line leaving or entering its own
- *      dot: resolved by starting the segment beyond the label box
- *      (clipSegment), never by hiding. Label-vs-label, label-vs-dot,
- *      label-vs-line: all LABEL_CLEARANCE minimum, all in the measurement.
- *      Lines crossing lines is permitted.
+ *  (c) COLLISIONS — LINES CONNECT DOT TO DOT (founder, 10 September
+ *      2026): every segment runs from dot centre to dot centre, full
+ *      length, never trimmed around a name. A label box may not come within
+ *      LABEL_CLEARANCE of a line it is not attached to, nor touch a line
+ *      leaving or entering its own dot: the layout resolves it by MOVING
+ *      THE NAME (out → in → perpendicular); the renderer hides a name that
+ *      cleared nowhere until zoom. Label-vs-label, label-vs-dot,
+ *      label-vs-line: all in the measurement. Lines crossing lines is
+ *      permitted.
  *
  * Two rules live here:
  *  1. SIZE — labels are sized in SVG map units but counter-scale against
@@ -55,11 +58,11 @@
  *  rejected v5; 11 before that, which the width-based floor never
  *  delivered on the desktop — names painted ≈7px there). The founder's
  *  standing instruction: names paint at the LARGEST size at which Circles
- *  still settles at rest under the hard clearance rule — measured on the
- *  sanitized Circles fixture under "a branch's length is its reach" with
- *  the canvas fitted to the drawing: 9.5, 10, 10.5 and 11 settle; 11.25
- *  and above fall back (see the constellation notes in CLAUDE.md). */
-export const MIN_LABEL_ON_SCREEN_PX = 11
+ *  still settles at rest with every name shown — measured on the sanitized
+ *  fixture under the evening amendment (lines dot to dot, names moved
+ *  beside their dots, base canvas 715, REACH_K 21): 11 settles with no
+ *  name hidden on both Circles-shaped trees; 11.5 hides Krist. */
+export const MIN_LABEL_ON_SCREEN_PX = 10.5
 /** The on-screen clearance the renderer's visibility rule demands between
  *  two painted names, a name and another person's dot, and a name and an
  *  unattached line — the verifier's hard rule of 2026-09-09 (was 3). */
@@ -121,7 +124,9 @@ export const PERSON_DOT_STROKE = 1.1
  *  to every dot — solid ones too — so the geometry never depends on who
  *  has claimed by the time the map is drawn. */
 export const PERSON_DOT_OBSTACLE_R = PERSON_DOT_R + PERSON_DOT_STROKE / 2
-/** How far a name sits from its dot (radialLabel's offset). */
+/** How far a name sits from its dot (radialLabel's offset) — beyond the
+ *  end of the line into the dot, which is why an outward name clears its
+ *  own incoming line. */
 export const LABEL_OFFSET = 11
 export const EMBLEM_R = 34
 /** A person dot's axis-aligned square at design scale — the obstacle a
@@ -286,37 +291,6 @@ export function segmentTouchesRect(x1, y1, x2, y2, rect, gap = LABEL_GAP_PX) {
 }
 
 /**
- * Law (c) for a segment's OWN ends: trim the segment so it starts beyond
- * every obstacle attached to its start (the parent's label box, or the
- * film node's emblem and center labels) and ends before every obstacle
- * attached to its end (the child's label box), each grown by `gap`.
- * Returns { x1, y1, x2, y2 } or null when nothing is left to draw.
- */
-export function clipSegment(x1, y1, x2, y2, startObstacles = [], endObstacles = [], gap = LABEL_GAP_PX) {
-  let t0 = 0
-  let t1 = 1
-  // An attached box counts whether the segment STARTS inside it or merely
-  // meets it within the label offset (plus the gap) of its start — a name
-  // sits LABEL_OFFSET from its dot, so a line leaving the dot on the name's
-  // side enters the box a few units out, not at the dot (v5, 9 September
-  // 2026: Charles's line to Jacob ran through "CHARLES" — his name could
-  // not turn inward at the first ring, and the old rule trimmed only a box
-  // that contained the dot). The same holds at the end.
-  const len = Math.hypot(x2 - x1, y2 - y1) || 1
-  const reach = (LABEL_OFFSET + gap) / len
-  for (const r of startObstacles) {
-    const iv = segmentRectInterval(x1, y1, x2, y2, r, gap)
-    if (iv && iv[0] <= t0 + reach + 1e-9) t0 = Math.max(t0, iv[1])
-  }
-  for (const r of endObstacles) {
-    const iv = segmentRectInterval(x1, y1, x2, y2, r, gap)
-    if (iv && iv[1] >= t1 - reach - 1e-9) t1 = Math.min(t1, iv[0])
-  }
-  if (t0 >= t1) return null
-  return { x1: x1 + (x2 - x1) * t0, y1: y1 + (y2 - y1) * t0, x2: x1 + (x2 - x1) * t1, y2: y1 + (y2 - y1) * t1 }
-}
-
-/**
  * Decide which labels render. `items`: [{ id, rect, gold, tier, dist }] —
  * `rect` from labelScreenRect, `gold` = always-on (the filmmaker's center
  * labels and YOU's marker), `tier` = 1 for the viewer's thread names, 2 for
@@ -324,8 +298,9 @@ export function clipSegment(x1, y1, x2, y2, startObstacles = [], endObstacles = 
  * non-thread name), `dist` = a priority tiebreak, lower first.
  * `obstacles`: [{ id, rect }] — every person's DOT on screen; a name never
  * collides with its own dot (same id). `lines`: [{ fromId, toId, x1, y1,
- * x2, y2 }] — every painted segment on screen; a name may not come within
- * `gap` of a line it is not attached to (its own dot is neither end).
+ * x2, y2 }] — every painted segment on screen, whole (dot centre to dot
+ * centre); a name may not come within `gap` of a line it is not attached
+ * to, nor touch a line that leaves or enters its own dot.
  *
  * Returns { visibleIds: Set, goldOverlaps: [[idA, idB], …] }. Gold labels
  * are ALWAYS in visibleIds; a gold-gold collision is REPORTED (the caller
@@ -358,8 +333,8 @@ export function labelVisibility(items, gap = LABEL_GAP_PX, obstacles = [], lines
     if (placed.some((r) => rectsCollide(r, it.rect, gap))) continue
     if (obstacles.some((o) => o.id !== it.id && rectsCollide(o.rect, it.rect, gap))) continue
     if (
-      lines.some(
-        (l) => l.fromId !== it.id && l.toId !== it.id && segmentTouchesRect(l.x1, l.y1, l.x2, l.y2, it.rect, gap)
+      lines.some((l) =>
+        segmentTouchesRect(l.x1, l.y1, l.x2, l.y2, it.rect, l.fromId === it.id || l.toId === it.id ? 0 : gap)
       )
     ) {
       continue

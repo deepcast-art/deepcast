@@ -18,7 +18,10 @@
  * strokes, never fainter than v4's grey), the per-element recede (an
  * explored lineage paints at full strength), THE CREATOR'S PHONE opening
  * on the film and its first ring, and ONE GROUND: INK under the map on
- * every surface. Rendered end to end on a Circles-shaped tree (one
+ * every surface. And the founder's amendment of 10 September evening:
+ * LINES CONNECT DOT TO DOT — every painted segment's endpoints coincide
+ * with its two dots' centres, never trimmed around a name; a name that
+ * would sit on a line MOVES (out → in → perpendicular) or hides. Rendered end to end on a Circles-shaped tree (one
  * first-ring ticket with a seven-wide branch, one of whose people shared
  * ten times) on BOTH surfaces that read src/lib/constellationLayout.js:
  * the creator dashboard's "See network graph" modal and the viewer
@@ -219,6 +222,7 @@ const readGeometry = (page, inDialog) =>
     }
     // Law (c), lines: the smallest gap between a painted name and any
     // painted line not attached to its own dot (screen px).
+    const byId = Object.fromEntries([...svg.querySelectorAll('g[data-node]')].map((g) => [g.getAttribute('data-node'), g]))
     const lines = [...svg.querySelectorAll('line.web-edge')].map((l) => ({ x1: +l.getAttribute('x1'), y1: +l.getAttribute('y1'), x2: +l.getAttribute('x2'), y2: +l.getAttribute('y2'), from: l.getAttribute('data-from'), to: l.getAttribute('data-to') }))
     const segRectGap = (l, r) => {
       const inside = (x, y) => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height
@@ -235,17 +239,35 @@ const readGeometry = (page, inDialog) =>
       return best
     }
     // "Attached" = the line leaves or enters THIS name's own dot (by id —
-    // a sibling's incoming line a few units away is NOT attached).
+    // a sibling's incoming line a few units away is NOT attached). An
+    // unattached line keeps the 6px clearance; an attached one may never
+    // TOUCH the box (lines run dot to dot, so an outward name beyond its
+    // dot clears its own incoming line).
     let minLineGapPx = Infinity
+    let ownLineTouches = 0
     for (const nm of named) {
       for (const l of lines) {
-        if (l.from === nm.id || l.to === nm.id) continue
-        minLineGapPx = Math.min(minLineGapPx, segRectGap(l, nm.b) * ctm)
+        const g = segRectGap(l, nm.b) * ctm
+        if (l.from === nm.id || l.to === nm.id) {
+          if (g <= 0) ownLineTouches++
+          continue
+        }
+        minLineGapPx = Math.min(minLineGapPx, g)
       }
+    }
+    // LINES CONNECT DOT TO DOT: every painted segment's endpoints coincide
+    // with its two dots' centres (the film node's for a first-ring line).
+    const filmXY = [+film.getAttribute('cx'), +film.getAttribute('cy')]
+    const dotXY = (id) => { const d = byId[id]?.querySelector('circle.web-dot'); return d ? [+d.getAttribute('cx'), +d.getAttribute('cy')] : null }
+    let worstEndpointPx = 0
+    for (const l of lines) {
+      const a = byId[l.from] ? dotXY(l.from) : filmXY
+      const b = dotXY(l.to)
+      if (!a || !b) { worstEndpointPx = Infinity; continue }
+      worstEndpointPx = Math.max(worstEndpointPx, Math.hypot(l.x1 - a[0], l.y1 - a[1]) * ctm, Math.hypot(l.x2 - b[0], l.y2 - b[1]) * ctm)
     }
     // THE LINE LAW as painted: dashed ⇔ the line's end is a hollow dot;
     // every line a screen-pixel stroke at the line floor.
-    const byId = Object.fromEntries([...svg.querySelectorAll('g[data-node]')].map((g) => [g.getAttribute('data-node'), g]))
     const lineLaw = lines.map((l) => {
       const el = svg.querySelector(`line.web-edge[data-to="${l.to}"]`)
       const endDot = byId[l.to]?.querySelector('circle.web-dot')
@@ -263,7 +285,7 @@ const readGeometry = (page, inDialog) =>
     const vbParts = svg.getAttribute('viewBox').split(' ').map(parseFloat)
     const paintedPx = named.length ? parseFloat(svg.querySelector('g[data-node] text').getAttribute('font-size')) * ctm : 0
     const ground = getComputedStyle(svg.parentElement).backgroundColor
-    return { cx, cy, persons, labelSizes, renderedWidth: box.width, renderedHeight: box.height, viewBoxWidth: vbParts[2], viewBoxHeight: vbParts[3], paintedNames: named.length, minGapPx, namesOverDots, minLineGapPx, offThreadOpacity: offPerson ? offPerson.getAttribute('opacity') : null, groupOrder: order, onThreadInside: on ? on.querySelectorAll('g[data-node]').length : 0, threadCount: threadGroups.length, threadPainted, paintedPx, viewBox: vbParts, lineLaw, rings, settledPlan, ground }
+    return { cx, cy, persons, labelSizes, renderedWidth: box.width, renderedHeight: box.height, viewBoxWidth: vbParts[2], viewBoxHeight: vbParts[3], paintedNames: named.length, minGapPx, namesOverDots, minLineGapPx, offThreadOpacity: offPerson ? offPerson.getAttribute('opacity') : null, groupOrder: order, onThreadInside: on ? on.querySelectorAll('g[data-node]').length : 0, threadCount: threadGroups.length, threadPainted, paintedPx, viewBox: vbParts, lineLaw, rings, settledPlan, ground, ownLineTouches, worstEndpointPx }
   }, { inDialog })
 /** Wait until the map has measured its rendered width and counter-scaled
  *  its labels (the first paint uses the base size until the resize
@@ -355,8 +377,12 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
       expect((kid.x - noor.x) * Math.cos(noorDir) + (kid.y - noor.y) * Math.sin(noorDir), k.recipient_name).toBeGreaterThan(0)
     }
 
-    // Explore is untouched: hover Lena lights film → Priya → Lena → ten.
-    await dialog.locator(`g[data-node="${LENA_ROW.id}"]`).hover()
+    // Explore is untouched: hover Lena (her hit circle — a sharer's name
+    // now sits beside her dot, so the group's centre is empty space) lights
+    // film → Priya → Lena → ten.
+    // (force: the modal panel's rise animation and the dot's twinkle never
+    // satisfy Playwright's stability wait; the pointer still moves there.)
+    await dialog.locator(`g[data-node="${LENA_ROW.id}"] > circle`).first().hover({ force: true })
     await expect(dialog.locator('.lit-person')).toHaveCount(12)
     expect(jsErrors).toEqual([])
   })
@@ -416,6 +442,10 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
       expect(g.minGapPx, `${label}: smallest painted gap`).toBeGreaterThanOrEqual(6)
       expect(g.namesOverDots, `${label}: names over dots`).toBe(0)
       expect(g.minLineGapPx, `${label}: smallest name-to-line gap`).toBeGreaterThanOrEqual(6)
+      // LINES CONNECT DOT TO DOT: painted whole, and no painted name box
+      // touches its own line either.
+      expect(g.worstEndpointPx, `${label}: every segment's endpoints on its dots`).toBeLessThan(0.01)
+      expect(g.ownLineTouches, `${label}: no name on its own line`).toBe(0)
       // Name size: the readability floor, on the TRUE scale, the same on both.
       expect(Math.abs(g.paintedPx - MIN_LABEL_ON_SCREEN_PX), `${label}: painted name size`).toBeLessThan(0.15)
       // ONE GROUND: the map box sits on ink on both surfaces.
@@ -469,6 +499,7 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     // can fall on the empty space between dot and name (Firefox), where
     // nothing receives the pointer, and the dot itself twinkles forever,
     // which Playwright's stability wait never outlasts.
+    await map.locator(`g[data-node="${NOOR.id}"] > circle`).first().scrollIntoViewIfNeeded()
     await map.locator(`g[data-node="${NOOR.id}"] > circle`).first().hover()
     await expect(map.locator(`g[data-node="${NOOR.id}"]`)).not.toHaveAttribute('opacity', /.+/)
     await expect(map.locator(`g[data-node="${noorKids[0].id}"]`)).not.toHaveAttribute('opacity', /.+/)
