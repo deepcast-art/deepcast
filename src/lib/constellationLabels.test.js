@@ -3,6 +3,8 @@ import {
   labelFontSize,
   labelScreenRect,
   labelVisibility,
+  pickLabelSize,
+  LABEL_SIZE_LADDER,
   MIN_LABEL_ON_SCREEN_PX,
   LABEL_GAP_PX,
 } from './constellationLabels'
@@ -191,11 +193,23 @@ describe('labelTextWidth — glyph by glyph from the Phoenix font', () => {
 })
 
 describe('the two scales', () => {
-  it('the readability floor is 10.5px (the largest size at which Circles settles with every name shown, lines dot to dot) and counter-scales against the TRUE scale (the width-based formula is gone)', () => {
-    expect(MIN_LABEL_ON_SCREEN_PX).toBe(10.5)
-    const s = mapScaleFor(960, 576, 935, 715)
+  it('SHRINK BEFORE HIDE (founder, 11 September 2026): the ladder runs 11 → 9; the floor is its bottom rung and counter-scales against the TRUE scale (the width-based formula is gone); a rung is honoured when named', () => {
+    expect(LABEL_SIZE_LADDER).toEqual([11, 10.5, 10, 9.5, 9])
+    expect(MIN_LABEL_ON_SCREEN_PX).toBe(9)
+    const s = mapScaleFor(960, 576, 900, 715)
     expect(s).toBeCloseTo(576 / 715, 9)
-    expect(labelFontSize(8, s)).toBeCloseTo(10.5 / s, 1)
+    expect(labelFontSize(8, s)).toBeCloseTo(9 / s, 1)
+    expect(labelFontSize(8, s, 10.5)).toBeCloseTo(10.5 / s, 1)
+    expect(labelScreenRect({ x: 0, y: 0, anchor: 'start', name: 'YOU', baseSize: 8 }, { vbX: 0, vbY: 0, scale: s, minPx: 11 }).h).toBeCloseTo(11 * 1.2, 1)
+  })
+  it('pickLabelSize walks the ladder from the top and keeps the first rung at which every label paints; when none does, the bottom rung with its hiding', () => {
+    const measure = (allAt) => (px) => ({ visibleIds: new Set(px <= allAt ? ['a', 'b', 'c'] : ['a', 'b']), goldOverlaps: [], total: 3 })
+    expect(pickLabelSize(measure(11)).px).toBe(11)
+    expect(pickLabelSize(measure(10)).px).toBe(10)
+    expect(pickLabelSize(measure(9)).px).toBe(9)
+    const none = pickLabelSize(measure(0))
+    expect(none.px).toBe(9)
+    expect(none.visibleIds.size).toBe(2)
   })
   it('mapScaleFor is the true scale — the smaller of the width and height ratios', () => {
     // The founder's desktop box shows a 1035² canvas height-limited.

@@ -54,15 +54,37 @@
  *  - RECEDE_OPACITY — how far the non-thread drawing steps back.
  */
 
-/** 11 since the reach layout of 10 September 2026 (9.5 in v4, 9 in the
- *  rejected v5; 11 before that, which the width-based floor never
- *  delivered on the desktop — names painted ≈7px there). The founder's
- *  standing instruction: names paint at the LARGEST size at which Circles
- *  still settles at rest with every name shown — measured on the sanitized
- *  fixture under the evening amendment (lines dot to dot, names moved
- *  beside their dots, base canvas 715, REACH_K 21): 11 settles with no
- *  name hidden on both Circles-shaped trees; 11.5 hides Krist. */
-export const MIN_LABEL_ON_SCREEN_PX = 10.5
+/** SHRINK BEFORE HIDE (founder, 11 September 2026). Names paint at ONE of
+ *  the sizes on this ladder, chosen PER FILM and per view: the largest at
+ *  which every name paints — the layout chooses for the reference view
+ *  (the founder's desktop) and the renderer re-chooses at its own view
+ *  (a phone follows the same ladder at its own width). Only at the
+ *  bottom of the ladder may a name hide: never at 9px or above. (History:
+ *  11 fixed since the reach layout of 10 September; 10.5 under its evening
+ *  amendment; 9.5 in v4; 9 in the rejected v5.) */
+export const LABEL_SIZE_LADDER = [11, 10.5, 10, 9.5, 9]
+/** The top of the ladder — the size names paint at when there is room. */
+export const MAX_LABEL_ON_SCREEN_PX = LABEL_SIZE_LADDER[0]
+/** The bottom of the ladder — the smallest a name ever paints. Below it a
+ *  name hides rather than shrinks. The default readability floor wherever a
+ *  caller does not name a rung. */
+export const MIN_LABEL_ON_SCREEN_PX = LABEL_SIZE_LADDER[LABEL_SIZE_LADDER.length - 1]
+/**
+ * Walk the ladder from the top: `measureAt(px)` places every label at that
+ * size and returns `{ visibleIds, goldOverlaps, total }` (labelVisibility's
+ * answer plus the number of labels asked about). The first rung at which
+ * every label paints wins; if none does, the bottom rung — with its hiding
+ * — is the answer. Returns `{ px, visibleIds, goldOverlaps, total }`.
+ */
+export function pickLabelSize(measureAt, ladder = LABEL_SIZE_LADDER) {
+  let last = null
+  for (const px of ladder) {
+    const r = measureAt(px)
+    last = { px, ...r }
+    if (r.visibleIds.size >= r.total) return last
+  }
+  return last
+}
 /** The on-screen clearance the renderer's visibility rule demands between
  *  two painted names, a name and another person's dot, and a name and an
  *  unattached line — the verifier's hard rule of 2026-09-09 (was 3). */
@@ -181,14 +203,15 @@ export function labelFontSize(baseSize, mapScale, minPx = MIN_LABEL_ON_SCREEN_PX
  * The label's approximate on-screen rectangle {x, y, w, h} in CSS pixels.
  * `item`: { x, y, anchor, name, baseSize, letterSpacing? } — map-unit
  * position (the text element's x/y/text-anchor) and design size.
- * `view`: { vbX, vbY, scale, fontScale? } — current viewBox origin, the
- * rendered scale positions map to screen by (mapScaleFor), and the scale
- * the font counter-scales against (defaults to `scale`).
+ * `view`: { vbX, vbY, scale, fontScale?, minPx? } — current viewBox origin,
+ * the rendered scale positions map to screen by (mapScaleFor), the scale
+ * the font counter-scales against (defaults to `scale`), and the ladder
+ * rung the font is floored at (defaults to the bottom of the ladder).
  */
-export function labelScreenRect(item, { vbX, vbY, scale, fontScale }) {
+export function labelScreenRect(item, { vbX, vbY, scale, fontScale, minPx }) {
   const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 0
   const safeFontScale = Number.isFinite(fontScale) && fontScale > 0 ? fontScale : safeScale
-  const fontPx = labelFontSize(item.baseSize, safeFontScale) * safeScale
+  const fontPx = labelFontSize(item.baseSize, safeFontScale, minPx ?? MIN_LABEL_ON_SCREEN_PX) * safeScale
   const spacingPx = (item.letterSpacing ?? 2) * safeScale
   const w = labelTextWidth(item.name, fontPx, spacingPx)
   const sx = (item.x - vbX) * safeScale
@@ -210,9 +233,10 @@ export const CENTER_LABELS = {
  * like every name — so at a small scale they are large in map units and
  * move outward, never onto the emblem (the -v3 phone defect). Returns
  * [{ key, name, y, fontSize, letterSpacing, rect }] with `rect` relative to
- * the film node's center, at design scale (map units).
+ * the film node's center, at design scale (map units). `minPx` = the
+ * ladder rung the names ride (the center labels ride the same one).
  */
-export function centerLabelLayout(scale, creatorName) {
+export function centerLabelLayout(scale, creatorName, minPx = MIN_LABEL_ON_SCREEN_PX) {
   const s = Number.isFinite(scale) && scale > 0 ? scale : 1
   const gap = LABEL_CLEARANCE / s
   const out = []
@@ -220,11 +244,11 @@ export function centerLabelLayout(scale, creatorName) {
   for (const [key, spec] of [['creator', CENTER_LABELS.creator], ['role', CENTER_LABELS.role]]) {
     const name = key === 'creator' ? creatorName : spec.name
     if (!name) continue
-    const fontSize = labelFontSize(spec.baseSize, s)
+    const fontSize = labelFontSize(spec.baseSize, s, minPx)
     const y = top + fontSize * BASELINE_RATIO
     const rect = labelScreenRect(
       { x: 0, y, anchor: 'middle', name, baseSize: spec.baseSize, letterSpacing: spec.letterSpacing },
-      { vbX: 0, vbY: 0, scale: 1, fontScale: s }
+      { vbX: 0, vbY: 0, scale: 1, fontScale: s, minPx }
     )
     out.push({ key, name, y, fontSize, letterSpacing: spec.letterSpacing, rect })
     // A hair beyond the clearance so the two never sit at EXACTLY the gap

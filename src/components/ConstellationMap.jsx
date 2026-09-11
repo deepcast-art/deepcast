@@ -75,6 +75,7 @@ import {
   EMBLEM_R,
   LABEL_GAP_PX,
   LINE_ALPHA,
+  MIN_LABEL_ON_SCREEN_PX,
   PERSON_DOT_OBSTACLE_R,
   PERSON_DOT_R,
   PERSON_DOT_STROKE,
@@ -86,6 +87,7 @@ import {
   labelScreenRect,
   labelVisibility,
   mapScaleFor,
+  pickLabelSize,
 } from '../lib/constellationLabels'
 
 const MIN_ZOOM_DIV = 4 // deepest zoom-in shows 1/4 of the canvas
@@ -253,42 +255,20 @@ export default function ConstellationMap({ layout }) {
   /** CSS pixels per map unit, zoom included — the true scale: positions,
    *  the label counter-scale, and the clearance rule all use it. */
   const mapScale = mapScaleFor(rendered.w, rendered.h, vb?.w, vb?.h)
-  /** The filmmaker's center labels for this scale (shared geometry). */
-  const centerLabels = useMemo(
-    () => (layout ? centerLabelLayout(mapScale || 1, layout.creatorLabel) : []),
-    [layout, mapScale]
-  )
-
   /** LINES CONNECT DOT TO DOT (founder, 10 September 2026): every segment
    *  is painted whole, from the parent's dot centre to the child's, never
    *  trimmed around a name — a name that would sit on a line moved (the
    *  layout) or hides (the visibility pass below). */
   const segments = useMemo(() => layout?.edges ?? [], [layout])
 
-  /** Every label's collision inputs: the always-on labels (the film's two
-   *  and YOU's marker), the thread's names (tier 1), everyone else (tier 2). */
-  const labelItems = useMemo(() => {
+  /** Every person's label — the collision inputs less the rect, which
+   *  depends on the rung of the size ladder being tried: the thread's
+   *  names (tier 1), everyone else (tier 2). YOU's marker is always on. */
+  const personItems = useMemo(() => {
     if (!layout) return []
     const items = []
     for (const n of layout.nodes) {
-      if (n.kind === 'film') {
-        for (const c of centerLabels) {
-          items.push({
-            id: `${n.id}::${c.key}`,
-            x: n.x,
-            y: n.y + c.y,
-            anchor: 'middle',
-            name: c.name,
-            baseSize: c.key === 'creator' ? 11 : 7.5,
-            letterSpacing: c.letterSpacing,
-            gold: true,
-            tier: 0,
-            dist: 0,
-          })
-        }
-        continue
-      }
-      if (!n.label) continue
+      if (n.kind === 'film' || !n.label) continue
       items.push({
         id: n.id,
         x: n.label.x,
@@ -302,41 +282,56 @@ export default function ConstellationMap({ layout }) {
       })
     }
     return items
-  }, [layout, threadSet, centerLabels])
+  }, [layout, threadSet])
 
-  /** Collision pass — cheap rect tests over tens of labels, recomputed
-   *  whenever the view changes (zoom, pan, resize): names against names,
-   *  every other person's dot, and every unattached line. */
-  const { visibleIds, goldOverlaps } = useMemo(() => {
-    if (!vb || !labelItems.length) {
-      return { visibleIds: new Set(labelItems.map((it) => it.id)), goldOverlaps: [] }
+  /** SHRINK BEFORE HIDE (founder, 11 September 2026) + the collision pass:
+   *  at THIS view's scale, walk the size ladder from the top and keep the
+   *  largest rung at which every label paints (the filmmaker's two center
+   *  labels ride the same rung); at the bottom rung, hide what would touch
+   *  — names against names, every other person's dot, and every
+   *  unattached line. The measurement is translation-invariant (every
+   *  rect shifts alike when the map pans), so it is taken at the origin
+   *  and recomputed only when the scale changes. */
+  const { visibleIds, goldOverlaps, labelPx } = useMemo(() => {
+    const fallbackPx = layout?.plan?.labelPx ?? MIN_LABEL_ON_SCREEN_PX
+    if (!vb || !layout || !personItems.length || !mapScale) {
+      return { visibleIds: new Set(personItems.map((it) => it.id)), goldOverlaps: [], labelPx: fallbackPx }
     }
     const scale = mapScale
-    const view = { vbX: vb.x, vbY: vb.y, scale }
-    const toScreen = (x, y) => [(x - vb.x) * scale, (y - vb.y) * scale]
-    const obstacles = scale
-      ? layout.nodes
-          .filter((n) => n.kind !== 'film')
-          .map((n) => {
-            // A hollow dot's stroke counts as part of the obstacle.
-            const [sx, sy] = toScreen(n.x - PERSON_DOT_OBSTACLE_R, n.y - PERSON_DOT_OBSTACLE_R)
-            return { id: n.id, rect: { x: sx, y: sy, w: 2 * PERSON_DOT_OBSTACLE_R * scale, h: 2 * PERSON_DOT_OBSTACLE_R * scale } }
-          })
-      : []
-    const lines = scale
-      ? segments.map((s) => {
-          const [x1, y1] = toScreen(s.x1, s.y1)
-          const [x2, y2] = toScreen(s.x2, s.y2)
-          return { fromId: s.fromId, toId: s.toId, x1, y1, x2, y2 }
-        })
-      : []
-    return labelVisibility(
-      labelItems.map((it) => ({ ...it, rect: labelScreenRect(it, view) })),
-      undefined,
-      obstacles,
-      lines
-    )
-  }, [layout, labelItems, vb, mapScale, segments])
+    const film = layout.nodes.find((n) => n.kind === 'film')
+    const toScreen = (x, y) => [x * scale, y * scale]
+    const obstacles = layout.nodes
+      .filter((n) => n.kind !== 'film')
+      .map((n) => {
+        // A hollow dot's stroke counts as part of the obstacle.
+        const [sx, sy] = toScreen(n.x - PERSON_DOT_OBSTACLE_R, n.y - PERSON_DOT_OBSTACLE_R)
+        return { id: n.id, rect: { x: sx, y: sy, w: 2 * PERSON_DOT_OBSTACLE_R * scale, h: 2 * PERSON_DOT_OBSTACLE_R * scale } }
+      })
+    const lines = segments.map((s) => {
+      const [x1, y1] = toScreen(s.x1, s.y1)
+      const [x2, y2] = toScreen(s.x2, s.y2)
+      return { fromId: s.fromId, toId: s.toId, x1, y1, x2, y2 }
+    })
+    const picked = pickLabelSize((px) => {
+      const view = { vbX: 0, vbY: 0, scale, minPx: px }
+      const items = personItems.map((it) => ({ ...it, rect: labelScreenRect(it, view) }))
+      if (film) {
+        for (const c of centerLabelLayout(scale, layout.creatorLabel, px)) {
+          const item = { id: `${film.id}::${c.key}`, x: film.x, y: film.y + c.y, anchor: 'middle', name: c.name, baseSize: c.key === 'creator' ? 11 : 7.5, letterSpacing: c.letterSpacing, gold: true, tier: 0, dist: 0 }
+          items.push({ ...item, rect: labelScreenRect(item, view) })
+        }
+      }
+      return { ...labelVisibility(items, undefined, obstacles, lines), total: items.length }
+    })
+    return { visibleIds: picked.visibleIds, goldOverlaps: picked.goldOverlaps, labelPx: picked.px }
+  }, [layout, personItems, vb, mapScale, segments])
+
+  /** The filmmaker's center labels for this scale (shared geometry), on
+   *  the rung the ladder chose. */
+  const centerLabels = useMemo(
+    () => (layout ? centerLabelLayout(mapScale || 1, layout.creatorLabel, labelPx) : []),
+    [layout, mapScale, labelPx]
+  )
 
   /** Founder rule: two always-on labels colliding is an edge case to
    *  REPORT, not something this rule may silently resolve — both stay
@@ -479,7 +474,7 @@ export default function ConstellationMap({ layout }) {
     svgRef.current?.classList.remove('panning')
   }
 
-  const fontSize = labelFontSize(PERSON_LABEL_SIZE, mapScale)
+  const fontSize = labelFontSize(PERSON_LABEL_SIZE, mapScale, labelPx)
 
   /** A person: hit area, solid/hollow dot, radial name. Lit = on the
    *  viewer's thread (gold at rest) or on the explored lineage. An explored
@@ -625,6 +620,8 @@ export default function ConstellationMap({ layout }) {
         className="dc-constellation block h-[23rem] w-full md:h-[clamp(26rem,64vh,38rem)]"
         viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
         data-plan-settled={layout.plan?.settled ? 'true' : 'false'}
+        data-plan-label-px={layout.plan?.labelPx}
+        data-label-px={labelPx}
         role="img"
         aria-label={
           layout.hasYou

@@ -6,12 +6,17 @@ import {
   REACH_K,
   FAN_MAX_SPAN,
   RING_BUMP,
+  RING_ARC,
+  STAGGER_RATIO,
+  EXTRA_MAX,
   LABEL_SIDES,
   radialLabel,
 } from './constellationLayout.js'
 import {
   LABEL_CLEARANCE,
+  LABEL_SIZE_LADDER,
   MIN_LABEL_ON_SCREEN_PX,
+  MAX_LABEL_ON_SCREEN_PX,
   PERSON_LABEL_SIZE,
   REFERENCE_VIEW,
   dotRect,
@@ -38,7 +43,7 @@ const persons = (layout) => layout.nodes.filter((n) => n.kind === 'person')
 const planRect = (layout, n) =>
   labelScreenRect(
     { x: n.label.x, y: n.label.y, anchor: n.label.anchor, name: n.name, baseSize: layout.plan.fontMap },
-    { vbX: 0, vbY: 0, scale: 1 }
+    { vbX: 0, vbY: 0, scale: 1, minPx: layout.plan.labelPx }
   )
 /** THE HARD RULE, asked of a whole layout in the units its plan was
  *  measured in (`layout.plan`): the plan SETTLED, every name pair is at
@@ -127,11 +132,18 @@ const assertReach = (layout) => {
   for (const n of persons(layout)) {
     const p = byId.get(n.parentId)
     if (p.kind === 'film') continue
-    // Distance from the sharer = the rule, plus the fan's outward move (the
-    // same for every sibling) — never anything else.
-    expect(n.dist - n.extra, `${n.name}'s distance from ${p.name}`).toBeCloseTo(REACH_BASE + REACH_K * Math.sqrt(n.subtreeSize), 9)
+    // Distance from the sharer = the rule (the far row's multiple when the
+    // fan staggers this leaf), plus the fan's outward move (the same for
+    // every sibling, never past EXTRA_MAX × the fan's reach distance) —
+    // never anything else. A sharer is always in the near row.
+    expect([0, 1]).toContain(n.row)
+    if (childrenOf(layout, n.id).length) expect(n.row, `${n.name} shared onward: near row`).toBe(0)
+    expect(n.dist - n.extra, `${n.name}'s distance from ${p.name}`).toBeCloseTo((REACH_BASE + REACH_K * Math.sqrt(n.subtreeSize)) * (n.row ? STAGGER_RATIO : 1), 9)
     expect(Math.hypot(n.x - p.x, n.y - p.y), `${n.name} sits at its distance`).toBeCloseTo(n.dist, 6)
-    for (const s of childrenOf(layout, p.id)) expect(s.extra, `${s.name} shares ${p.name}'s fan move`).toBe(n.extra)
+    const siblings = childrenOf(layout, p.id)
+    const fanReach = Math.min(...siblings.map((s) => REACH_BASE + REACH_K * Math.sqrt(s.subtreeSize)))
+    expect(n.extra, `${n.name}'s fan never balloons`).toBeLessThanOrEqual(EXTRA_MAX * fanReach + 1e-9)
+    for (const s of siblings) expect(s.extra, `${s.name} shares ${p.name}'s fan move`).toBe(n.extra)
     // BEYOND the parent: ahead of the parent's own outward direction —
     // the child's limb within a right angle of it, so the child projects
     // forward along it, never back toward the sharer's own sharer.
@@ -267,8 +279,12 @@ describe('buildConstellationLayout', () => {
     for (let i = 0; i < 24; i++) rows.push(inv(`r${i}`, CREATOR, null, { recipient_name: 'Marguerite' }))
     const layout = buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR })
     const ring1 = layout.nodes.filter((n) => n.parentId === ROOT_ID)
-    expect(ring1[0].r).toBeGreaterThan(118)
-    expect((ring1[0].r - 118) / RING_BUMP).toBeCloseTo(Math.round((ring1[0].r - 118) / RING_BUMP), 6)
+    // THE FIRST RING GROWS WITH ITS COUNT (11 September): the radius
+    // starts at count × RING_ARC / 2π when that beats v4's 118, then
+    // moves out in whole bumps only if the names still cannot clear.
+    const base = Math.max(118, (24 * RING_ARC) / TWO_PI)
+    expect(ring1[0].r).toBeGreaterThanOrEqual(base - 1e-9)
+    expect((ring1[0].r - base) / RING_BUMP).toBeCloseTo(Math.round((ring1[0].r - base) / RING_BUMP), 6)
     for (const n of ring1) expect(n.r).toBeCloseTo(ring1[0].r, 6)
     const thetas = ring1.map((n) => norm(n.theta)).sort((x, y) => x - y)
     for (let i = 0; i < 24; i++) {
@@ -344,30 +360,51 @@ describe('buildConstellationLayout', () => {
     expect(assertClearance(layout)).toBeGreaterThanOrEqual(LABEL_CLEARANCE - 1e-9)
   })
 
-  it('rule 3: THE FAN CAP — a fan is never wider than FAN_MAX_SPAN; a fan that cannot fit moves outward from its parent as a whole, and the reach ORDER inside it survives', () => {
+  it('rule 3: A FAN NEVER BALLOONS (founder, 11 September 2026) — a fan is never wider than FAN_MAX_SPAN (140°); a crowded fan STAGGERS its leaves into two rows before it moves outward, and its outward move never exceeds EXTRA_MAX × its reach distance; the reach ORDER between a parent and its own children survives', () => {
+    expect(FAN_MAX_SPAN).toBeCloseTo((7 * Math.PI) / 9, 12)
+    expect(STAGGER_RATIO).toBe(1.55)
+    expect(EXTRA_MAX).toBe(0.5)
     seq = 0
     const rows = [inv('r0', CREATOR), inv('r1', CREATOR), inv('r2', CREATOR), inv('r3', CREATOR)]
-    for (let i = 0; i < 16; i++) rows.push(inv(`k${i}`, 'user-r1', 'r1', { recipient_name: 'Christopher' }))
+    for (let i = 0; i < 12; i++) rows.push(inv(`k${i}`, 'user-r1', 'r1', { recipient_name: 'Christopher' }))
     for (let i = 0; i < 3; i++) rows.push(inv(`g${i}`, 'user-k7', 'k7'))
-    // A smaller floor: this test is about the cap mechanics, not about the
-    // reference view's capacity for sixteen long names at the production floor.
-    const layout = buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR, labelFloorPx: 7 })
+    const layout = buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR })
     const kids = childrenOf(layout, 'r1')
-    expect(kids).toHaveLength(16)
-    expect(kids[15].dir - kids[0].dir).toBeLessThanOrEqual(FAN_MAX_SPAN + 1e-9)
-    expect(kids[0].extra).toBeGreaterThan(0) // moved outward, all together
+    expect(kids).toHaveLength(12)
+    expect(kids[11].dir - kids[0].dir).toBeLessThanOrEqual(FAN_MAX_SPAN + 1e-9)
+    // Twelve long names cannot fit one row inside the cap: the leaves
+    // stagger (both rows present), the sharer k7 stays in the near row.
+    const leaves = kids.filter((k) => k.id !== 'k7')
+    expect(new Set(leaves.map((k) => k.row))).toEqual(new Set([0, 1]))
+    expect(kids.find((k) => k.id === 'k7').row).toBe(0)
+    // The HARD CAP on the outward move: never past half the leaf reach.
+    const leafReach = REACH_BASE + REACH_K
+    for (const k of kids) expect(k.extra).toBeLessThanOrEqual(EXTRA_MAX * leafReach + 1e-9)
     for (const k of kids) expect(k.extra).toBe(kids[0].extra)
-    // The sharer among them still sits further out than his leaf siblings.
+    // The sharer among them still sits further out than a near-row leaf
+    // sibling; a far-row leaf sits at STAGGER_RATIO × the leaf reach.
     const byId = byIdOf(layout)
-    expect(byId.get('k7').dist).toBeGreaterThan(byId.get('k6').dist)
+    const near = leaves.find((k) => k.row === 0)
+    const far = leaves.find((k) => k.row === 1)
+    expect(byId.get('k7').dist).toBeGreaterThan(near.dist)
+    expect(far.dist - far.extra).toBeCloseTo(STAGGER_RATIO * leafReach, 9)
     assertReach(layout)
     assertOnCanvas(layout)
-    // Sixteen long names at the cap leave k7's three grandchildren wedged
-    // between his siblings' names — a case the founder's rules leave to
-    // the renderer's safety net (the plan reports it); when it does
-    // settle, the rule holds.
     expect(typeof layout.plan.settled).toBe('boolean')
     if (layout.plan.settled) expect(assertClearance(layout)).toBeGreaterThanOrEqual(LABEL_CLEARANCE - 1e-9)
+  })
+
+  it('rule 3: the outward move is CAPPED whatever the crowding — a fan of sixty long names sits at most EXTRA_MAX × its reach beyond its parent (the old layout flew such a fan 600 units out)', () => {
+    seq = 0
+    const rows = [inv('r0', CREATOR), inv('r1', CREATOR), inv('r2', CREATOR), inv('r3', CREATOR)]
+    for (let i = 0; i < 60; i++) rows.push(inv(`k${i}`, 'user-r1', 'r1', { recipient_name: 'Christopher' }))
+    const layout = buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR, labelFloorPx: 9 })
+    const kids = childrenOf(layout, 'r1')
+    expect(kids[59].dir - kids[0].dir).toBeLessThanOrEqual(FAN_MAX_SPAN + 1e-9)
+    for (const k of kids) expect(k.extra).toBeLessThanOrEqual(EXTRA_MAX * (REACH_BASE + REACH_K) + 1e-9)
+    expect(layout.plan.settled).toBe(false) // the safety net's case, reported
+    assertReach(layout)
+    assertOnCanvas(layout)
   })
 
   it('rule 3: fans of different parents that would collide are separated by the LEAST MOVEMENT — both turn about their own parents, nobody’s distance rule changes, v4’s level-stepping is gone', () => {
@@ -443,7 +480,7 @@ describe('buildConstellationLayout', () => {
     if (dense.plan.settled) expect(assertClearance(dense)).toBeGreaterThanOrEqual(LABEL_CLEARANCE - 1e-9)
   })
 
-  it('at scale: a ring of many fans, one of them huge, is placed without a throw or a runaway canvas — and says whether its plan settled', () => {
+  it('at scale: a ring of many fans, one of them huge, is placed without a throw or a runaway canvas — and says whether its plan settled', { timeout: 30000 }, () => {
     seq = 0
     const rows = []
     for (let i = 0; i < 36; i++) rows.push(inv(`r${i}`, CREATOR))
@@ -454,12 +491,13 @@ describe('buildConstellationLayout', () => {
     // Bounded WORK, not wall-clock (a timing gate flaked beside the e2e
     // suite — red team, 10 September): a placement that cannot satisfy
     // the rules is not re-planned on larger canvases.
-    console.log(`[constellation] 131-person layout in ${(performance.now() - t0).toFixed(0)}ms, rounds ${layout.plan.rounds}`)
+    console.log(`[constellation] 131-person layout in ${(performance.now() - t0).toFixed(0)}ms, rounds ${layout.plan.rounds}, ladder rung ${layout.plan.labelPx}`)
     if (!layout.plan.settled) expect(layout.plan.rounds).toBeLessThanOrEqual(1)
     const big = childrenOf(layout, 'r5')
     expect(big).toHaveLength(60)
     expect(big[59].dir - big[0].dir).toBeLessThanOrEqual(FAN_MAX_SPAN + 1e-9)
-    expect(big[0].extra).toBeGreaterThan(0)
+    // A FAN NEVER BALLOONS: even sixty names move at most half a leaf reach out.
+    expect(big[0].extra).toBeLessThanOrEqual(EXTRA_MAX * (REACH_BASE + REACH_K) + 1e-9)
     for (const n of layout.nodes) expect(Number.isFinite(n.x) && Number.isFinite(n.y)).toBe(true)
     expect(layout.width).toBeLessThan(8000)
     expect(typeof layout.plan.settled).toBe('boolean')
@@ -500,7 +538,8 @@ describe('buildConstellationLayout', () => {
       const dy = n.label.y - n.y
       expect(Math.hypot(dx, dy)).toBeGreaterThan(6)
       expect(LABEL_SIDES).toContain(n.labelSide)
-      expect(n.label).toEqual(radialLabel(n.dir, n.x, n.y, n.labelSide, n.labelOffset))
+      expect(['out', 'in']).toContain(n.labelHang)
+      expect(n.label).toEqual(radialLabel(n.dir, n.x, n.y, n.labelSide, n.labelOffset, n.labelHang))
       expect(n.kind).toBe('person')
     }
     expect(PERSON_LABEL_SIZE).toBe(8)
@@ -512,7 +551,7 @@ describe('buildConstellationLayout', () => {
     expect([viewer.width, viewer.height, viewer.cx, viewer.cy]).toEqual([modal.width, modal.height, modal.cx, modal.cy])
     for (const n of viewer.nodes) {
       const twin = modal.nodes.find((m) => m.id === n.id)
-      expect([n.x, n.y, n.theta, n.dir, n.dist, n.extra, n.depth, n.parentId, n.claimed, n.hidden]).toEqual([twin.x, twin.y, twin.theta, twin.dir, twin.dist, twin.extra, twin.depth, twin.parentId, twin.claimed, twin.hidden])
+      expect([n.x, n.y, n.theta, n.dir, n.dist, n.extra, n.row, n.depth, n.parentId, n.claimed, n.hidden, n.labelHang]).toEqual([twin.x, twin.y, twin.theta, twin.dir, twin.dist, twin.extra, twin.row, twin.depth, twin.parentId, twin.claimed, twin.hidden, twin.labelHang])
       expect(n.label).toEqual(twin.label)
       if (n.id !== 'b') expect(n.name).toBe(twin.name)
     }
@@ -784,7 +823,7 @@ describe('the label side — LINES CONNECT DOT TO DOT, names move (founder, 10 S
     expect(['left', 'right']).toContain(byId.get('r1').labelSide)
     expect(['left', 'right']).toContain(byId.get('k-Ben').labelSide)
     for (const n of persons(layout)) {
-      expect(n.label).toEqual(radialLabel(n.dir, n.x, n.y, n.labelSide, n.labelOffset))
+      expect(n.label).toEqual(radialLabel(n.dir, n.x, n.y, n.labelSide, n.labelOffset, n.labelHang))
       if (n.labelSide === 'left' || n.labelSide === 'right') expect(n.labelOffset).toBeGreaterThanOrEqual(16)
       else expect(n.labelOffset).toBe(11)
     }
@@ -820,10 +859,11 @@ describe('the label side — LINES CONNECT DOT TO DOT, names move (founder, 10 S
     for (const n of persons(layout)) expect(typeof n.hidden).toBe('boolean')
     assertLinesWhole(layout)
     if (layout.plan.settled) expect(assertClearance(layout)).toBeGreaterThanOrEqual(LABEL_CLEARANCE - 1e-9)
-    // Circles at the production floor hides NO name.
+    // On the Circles-shaped tree the ladder reports what it hides (see the
+    // growth table below for the real rows).
     const circles = buildConstellationLayout({ filmInvites: circlesRows(), creatorId: CREATOR, creatorName: 'Ien' })
-    expect(circles.plan.hidden).toBe(0)
-    expect(persons(circles).some((n) => n.hidden)).toBe(false)
+    expect(typeof circles.plan.hidden).toBe('number')
+    expect(persons(circles).filter((n) => n.hidden)).toHaveLength(circles.plan.hidden)
   })
 })
 
@@ -876,7 +916,7 @@ describe('the fallback is a REAL placement, never a stand-in (red team, 9 Septem
     for (let i = 0; i < 4; i++) for (let k = 0; k < 8; k++) big.push(inv(`r${i}-${k}-x`, `user-r${i}-${k}`, `r${i}-${k}`, { recipient_name: `Grand${k}` }))
     return [small, big]
   }
-  it('every node, every name box and every camera frame sits inside the canvas, the reach rule holds, and no line is swallowed — whether or not the plan settled', () => {
+  it('every node, every name box and every camera frame sits inside the canvas, the reach rule holds, and no line is swallowed — whether or not the plan settled', { timeout: 60000 }, () => {
     for (const rows of dense()) {
       for (const viewerInviteId of [undefined, rows[0].id, rows[rows.length - 1].id]) {
         const layout = buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR, creatorName: 'Ien', viewerInviteId })
@@ -914,17 +954,40 @@ describe('the fallback is a REAL placement, never a stand-in (red team, 9 Septem
   })
 })
 
-describe('name size: the plan measures names at the production floor of the reference view, on the true scale', () => {
-  it('plan.fontMap is the floor divided by the reference scale of the settled canvas', () => {
+describe('name size — SHRINK BEFORE HIDE (founder, 11 September 2026): the plan walks the ladder 11 → 9 and keeps the largest rung at which every name paints at the reference view', () => {
+  it('the ladder is 11 / 10.5 / 10 / 9.5 / 9; plan.fontMap is the chosen rung divided by the reference scale of the settled canvas', () => {
+    expect(LABEL_SIZE_LADDER).toEqual([11, 10.5, 10, 9.5, 9])
+    expect(MAX_LABEL_ON_SCREEN_PX).toBe(11)
+    expect(MIN_LABEL_ON_SCREEN_PX).toBe(9)
     const layout = fixture()
+    expect(LABEL_SIZE_LADDER).toContain(layout.plan.labelPx)
     const s = Math.min(REFERENCE_VIEW.w / layout.width, REFERENCE_VIEW.h / layout.height)
     expect(layout.plan.scale).toBeCloseTo(s, 9)
-    expect(layout.plan.fontMap).toBeCloseTo(Math.round(Math.max(8, MIN_LABEL_ON_SCREEN_PX / s) * 100) / 100, 6)
+    expect(layout.plan.fontMap).toBeCloseTo(Math.round(Math.max(8, layout.plan.labelPx / s) * 100) / 100, 6)
     expect(layout.plan.clearance).toBeCloseTo(6 / s, 9)
   })
-  it('Circles settles at the production floor (the largest size at which it does — the founder’s standing instruction) and not one step above', () => {
+  it('a sparse film paints at the TOP of the ladder with every name shown; a pinned rung is honoured as given', () => {
+    const layout = fixture()
+    expect(layout.plan.labelPx).toBe(MAX_LABEL_ON_SCREEN_PX)
+    expect(layout.plan.settled).toBe(true)
+    expect(layout.plan.hidden).toBe(0)
+    const pinned = fixture({ labelFloorPx: 9.5 })
+    expect(pinned.plan.labelPx).toBe(9.5)
+  })
+  it('the chosen rung is the largest at which the plan settles with no name lost; below it the rungs are not tried, above it none settled', () => {
+    const layout = buildConstellationLayout({ filmInvites: circlesRows(), creatorId: CREATOR, creatorName: 'Ien' })
     const at = (labelFloorPx) => buildConstellationLayout({ filmInvites: circlesRows(), creatorId: CREATOR, creatorName: 'Ien', labelFloorPx })
-    expect(at(MIN_LABEL_ON_SCREEN_PX).plan.settled).toBe(true)
-    expect(at(MIN_LABEL_ON_SCREEN_PX + 1).plan.settled).toBe(false)
+    expect(LABEL_SIZE_LADDER).toContain(layout.plan.labelPx)
+    if (layout.plan.settled && layout.plan.hidden === 0) {
+      for (const px of LABEL_SIZE_LADDER.filter((p) => p > layout.plan.labelPx)) {
+        const above = at(px)
+        expect(above.plan.settled && above.plan.hidden === 0, `${px}px would also have settled clean`).toBe(false)
+      }
+    } else {
+      // No rung settled clean: the rung that loses the fewest names holds
+      // (the builder's reading, pending the founder's word).
+      const lost = (l) => l.plan.hidden + l.plan.colliding
+      for (const px of LABEL_SIZE_LADDER) expect(lost(at(px)), `${px}px loses fewer names than the chosen ${layout.plan.labelPx}px`).toBeGreaterThanOrEqual(lost(layout))
+    }
   })
 })

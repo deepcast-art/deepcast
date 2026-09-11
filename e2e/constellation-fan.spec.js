@@ -30,7 +30,7 @@
  * same harness as creator-dashboard.spec.js and viewer-dashboard-v5.spec.js.
  */
 import { test, expect, pushJsError } from './fixtures/test.js'
-import { LINE_ALPHA, MIN_LABEL_ON_SCREEN_PX, PERSON_LABEL_SIZE, RECEDE_OPACITY, labelFontSize, mapScaleFor } from '../src/lib/constellationLabels.js'
+import { LABEL_SIZE_LADDER, LINE_ALPHA, MIN_LABEL_ON_SCREEN_PX, PERSON_LABEL_SIZE, RECEDE_OPACITY, labelFontSize, mapScaleFor } from '../src/lib/constellationLabels.js'
 import { FAN_MAX_SPAN, REACH_BASE, REACH_K } from '../src/lib/constellationLayout.js'
 
 const REF = 'wmtjgpxhjtbocsmutqqc'
@@ -284,15 +284,20 @@ const readGeometry = (page, inDialog) =>
     const box = svg.getBoundingClientRect()
     const vbParts = svg.getAttribute('viewBox').split(' ').map(parseFloat)
     const paintedPx = named.length ? parseFloat(svg.querySelector('g[data-node] text').getAttribute('font-size')) * ctm : 0
+    // SHRINK BEFORE HIDE: the rung of the size ladder the renderer chose at
+    // this view, and the one the layout planned for the reference view.
+    const labelPx = parseFloat(svg.getAttribute('data-label-px'))
+    const planLabelPx = parseFloat(svg.getAttribute('data-plan-label-px'))
     const ground = getComputedStyle(svg.parentElement).backgroundColor
-    return { cx, cy, persons, labelSizes, renderedWidth: box.width, renderedHeight: box.height, viewBoxWidth: vbParts[2], viewBoxHeight: vbParts[3], paintedNames: named.length, minGapPx, namesOverDots, minLineGapPx, offThreadOpacity: offPerson ? offPerson.getAttribute('opacity') : null, groupOrder: order, onThreadInside: on ? on.querySelectorAll('g[data-node]').length : 0, threadCount: threadGroups.length, threadPainted, paintedPx, viewBox: vbParts, lineLaw, rings, settledPlan, ground, ownLineTouches, worstEndpointPx }
+    return { cx, cy, persons, labelSizes, renderedWidth: box.width, renderedHeight: box.height, viewBoxWidth: vbParts[2], viewBoxHeight: vbParts[3], paintedNames: named.length, minGapPx, namesOverDots, minLineGapPx, offThreadOpacity: offPerson ? offPerson.getAttribute('opacity') : null, groupOrder: order, onThreadInside: on ? on.querySelectorAll('g[data-node]').length : 0, threadCount: threadGroups.length, threadPainted, paintedPx, labelPx, planLabelPx, viewBox: vbParts, lineLaw, rings, settledPlan, ground, ownLineTouches, worstEndpointPx }
   }, { inDialog })
 /** Wait until the map has measured its rendered width and counter-scaled
  *  its labels (the first paint uses the base size until the resize
  *  observer fires): exactly ONE label size, equal to the shared rule
- *  applied to the one design size at this surface's rendered width. */
+ *  applied to the one design size at this surface's rendered width, on
+ *  the rung of the size ladder the renderer chose there. */
 const expectedLabelSize = (g) =>
-  labelFontSize(PERSON_LABEL_SIZE, mapScaleFor(g.renderedWidth, g.renderedHeight, g.viewBoxWidth, g.viewBoxHeight))
+  labelFontSize(PERSON_LABEL_SIZE, mapScaleFor(g.renderedWidth, g.renderedHeight, g.viewBoxWidth, g.viewBoxHeight), g.labelPx)
 const settled = (page, inDialog) =>
   expect
     .poll(async () => {
@@ -427,6 +432,7 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     expect(modal.labelSizes).toHaveLength(1)
     expect(Math.abs(viewer.labelSizes[0] - expectedLabelSize(viewer))).toBeLessThan(0.02)
     expect(Math.abs(modal.labelSizes[0] - expectedLabelSize(modal))).toBeLessThan(0.02)
+    expect(viewer.labelPx).toBe(modal.labelPx)
 
     // THE HARD RULE, painted: on both desktop surfaces every painted name
     // keeps at least 6px from every other name, from every other person's
@@ -446,8 +452,14 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
       // touches its own line either.
       expect(g.worstEndpointPx, `${label}: every segment's endpoints on its dots`).toBeLessThan(0.01)
       expect(g.ownLineTouches, `${label}: no name on its own line`).toBe(0)
-      // Name size: the readability floor, on the TRUE scale, the same on both.
-      expect(Math.abs(g.paintedPx - MIN_LABEL_ON_SCREEN_PX), `${label}: painted name size`).toBeLessThan(0.15)
+      // Name size: a rung of the ladder (SHRINK BEFORE HIDE), never under
+      // its bottom, on the TRUE scale — and the same rung on both desktop
+      // surfaces (same height, same scale).
+      expect(LABEL_SIZE_LADDER, `${label}: the painted size is a rung`).toContain(g.labelPx)
+      expect(Math.abs(g.paintedPx - g.labelPx), `${label}: painted name size`).toBeLessThan(0.15)
+      expect(g.paintedPx).toBeGreaterThanOrEqual(MIN_LABEL_ON_SCREEN_PX - 0.15)
+      // On a settled plan the desktop paints the rung the plan chose.
+      if (g.settledPlan) expect(g.labelPx, `${label}: the plan's rung`).toBe(g.planLabelPx)
       // ONE GROUND: the map box sits on ink on both surfaces.
       expect(g.ground, `${label}: the map box on ink`).toBe(INK)
       expect(g.rings).toBe(0)
@@ -594,7 +606,9 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     if (opening.threadFits) expect(opening.threadInside).toBe(opening.threadCount)
     else expect(opening.threadInside).toBeGreaterThan(opening.pathCount)
     expect(opening.threadPainted).toBe(opening.threadCount)
-    expect(Math.abs(opening.paintedPx - MIN_LABEL_ON_SCREEN_PX)).toBeLessThan(0.15)
+    // The phone follows the same ladder at its own width: a rung, never under the bottom.
+    expect(opening.paintedPx).toBeGreaterThanOrEqual(MIN_LABEL_ON_SCREEN_PX - 0.15)
+    expect(LABEL_SIZE_LADDER.some((px) => Math.abs(opening.paintedPx - px) < 0.15)).toBe(true)
     expect(opening.lines).toBe(opening.people)
     expect(opening.ground).toBe(INK)
     // 1:1 = the whole graph fitted — still every line painted, each one
@@ -644,7 +658,8 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     expect(creatorOpening.ring1Painted).toBe(9)
     expect(creatorOpening.centreOffset[0]).toBeLessThan(1)
     expect(creatorOpening.centreOffset[1]).toBeLessThan(1)
-    expect(Math.abs(creatorOpening.paintedPx - MIN_LABEL_ON_SCREEN_PX)).toBeLessThan(0.15)
+    expect(creatorOpening.paintedPx).toBeGreaterThanOrEqual(MIN_LABEL_ON_SCREEN_PX - 0.15)
+    expect(LABEL_SIZE_LADDER.some((px) => Math.abs(creatorOpening.paintedPx - px) < 0.15)).toBe(true)
     expect(creatorOpening.edgePx).toBe(1)
     expect(creatorOpening.lines).toBe(creatorOpening.people)
     expect(creatorOpening.ground).toBe(INK)
