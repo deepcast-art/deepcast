@@ -1,0 +1,63 @@
+name: Reminders
+
+# The one reminder (founder decision 2026-09-15): once a day, ask the API to
+# send the single reminder to every claimed-but-unwatched ticket older than
+# three days that has not had one. The API decides who (server/reminderRules.js);
+# this job only knocks, with the shared secret. Nothing here reads the
+# database. Manual runs (workflow_dispatch) default to a DRY RUN that lists
+# the rows without sending.
+#
+# Secrets/variables the founder sets (Tier 3), in this order:
+#   1. the migration (supabase/migrations/20260915_invites_reminder.sql)
+#   2. Render: REMINDER_SECRET (16+ characters) and APP_URL = https://deepcast.art
+#   3. GitHub repository secrets: REMINDER_SECRET (the same value), API_URL
+#      (e.g. https://deepcast-virginia.onrender.com)
+#   4. run this workflow by hand (dry) and read the counts
+#   5. GitHub repository VARIABLE REMINDERS_LIVE = 1 — until it is set, the
+#      daily schedule runs DRY; nothing sends by schedule before the founder
+#      has seen a dry run (red-team, 2026-09-15).
+# The response body carries MASKED addresses only (the repo is public); the
+# job prints counts. Full addresses are in Render's own log.
+
+on:
+  schedule:
+    - cron: '0 15 * * *' # 15:00 UTC daily
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: 'Dry run (1 = list only, 0 = send)'
+        required: false
+        default: '1'
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      REMINDER_SECRET: ${{ secrets.REMINDER_SECRET }}
+      API_URL: ${{ secrets.API_URL }}
+      REMINDERS_LIVE: ${{ vars.REMINDERS_LIVE }}
+    steps:
+      - name: Run the reminder pass
+        run: |
+          if [ -z "$REMINDER_SECRET" ] || [ -z "$API_URL" ]; then
+            echo "REMINDER_SECRET or API_URL is not set — nothing sent."
+            exit 0
+          fi
+          DRY="${{ github.event.inputs.dry }}"
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            if [ "$REMINDERS_LIVE" = "1" ]; then DRY="0"; else DRY="1"; echo "REMINDERS_LIVE is not 1 — scheduled run is DRY."; fi
+          fi
+          if [ -z "$DRY" ]; then DRY="1"; fi
+          # ONE request, no retry: a retry on a slow live run would race the
+          # first handler (the API refuses a second run with 409 anyway, and
+          # every row is stamped before it is sent). A long timeout instead.
+          curl --fail --silent --show-error --max-time 600 \
+            -X POST "$API_URL/api/admin/reminders/run?dry=$DRY" \
+            -H "x-reminder-secret: $REMINDER_SECRET" \
+            -o response.json
+          # Counts only — never the rows — into the public log.
+          jq '{dry, baseUrl, count, sent: ((.sent // []) | length), failed: ((.failed // []) | length), skipped: ((.skipped // []) | length)}' response.json
+          if [ "$(jq -r '(.failed // []) | length' response.json)" != "0" ]; then
+            echo "Some sends failed — see Render's log for the rows."; exit 1
+          fi

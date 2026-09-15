@@ -1,6 +1,39 @@
 import { writeFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { join, dirname } from 'path'
+import { buildTicketEmail, buildReminderEmail, ticketUrl } from './ticketEmail.js'
+
+/**
+ * `node server/preview-email.js ticket` / `… reminder` render the REAL
+ * builders from server/ticketEmail.js (the ones the claim and reminder
+ * routes send) into server/email-preview.html, with sample data. The
+ * legacy invite-email preview below stays as it was (a drifted copy — see
+ * CLAUDE.md).
+ */
+const mode = process.argv[2]
+if (mode === 'ticket' || mode === 'reminder') {
+  const sample = {
+    filmTitle: 'Circles',
+    sharerName: 'Ien Chi',
+    ticketNo: 41,
+    durationSeconds: 1803.135633,
+    filmmakerName: 'Ien Chi',
+    ticketUrl: ticketUrl('https://deepcast.art', 'ticket-abcde', 'alex@example.com'),
+  }
+  const message =
+    mode === 'ticket'
+      ? buildTicketEmail(sample)
+      : buildReminderEmail({ ...sample, firstName: 'Alex', daysAgo: 3 })
+  const outPath = join(dirname(fileURLToPath(import.meta.url)), 'email-preview.html')
+  writeFileSync(outPath, message.html, 'utf8')
+  console.log(`Subject: ${message.subject}`)
+  console.log(`Preheader: ${message.preheader}`)
+  console.log('--- plain text ---')
+  console.log(message.text)
+  console.log('---')
+  console.log('Preview written to', outPath)
+  process.exit(0)
+}
 
 function escapeHtml(s) {
   if (s == null || s === '') return ''

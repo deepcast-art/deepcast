@@ -51,6 +51,17 @@ import {
   COMMENT_UNAVAILABLE_MESSAGE,
 } from './commentRules.js'
 import { safeFirstName } from '../src/lib/displayName.js'
+import { buildTicketEmail, buildReminderEmail, ticketUrl, daysBetween } from './ticketEmail.js'
+import {
+  selectReminderRows,
+  reminderRunDecision,
+  isDryRun,
+  sendReminderRow,
+  maskEmail,
+  MAX_PER_RUN as REMINDER_MAX_PER_RUN,
+  REMINDER_AFTER_DAYS,
+  REMINDER_WINDOW_DAYS,
+} from './reminderRules.js'
 
 const app = express()
 app.use(cors())
@@ -1591,7 +1602,7 @@ app.post('/api/invites/claim', async (req, res) => {
 
     const { data: invite, error: lookupError } = await supabase
       .from('invites')
-      .select('id, film_id, sender_id, status, claimed_email, recipient_name, films(*)')
+      .select('id, film_id, sender_id, status, claimed_email, recipient_name, sender_name, ticket_no, films(*)')
       .eq('link_slug', slug)
       .maybeSingle()
     if (lookupError || !invite) {
@@ -1826,6 +1837,20 @@ app.post('/api/invites/claim', async (req, res) => {
         acctErr?.message || acctErr
       )
     }
+
+    // ── THE TICKET EMAIL (founder decision 2026-09-15): once, after the
+    // claim has committed, for BOTH "Watch for free" and "Watch later" (the
+    // request is identical). Scheduled AFTER this response is written —
+    // never blocks the claim, never surfaces a failure to the viewer; the
+    // dispatcher's retry + the log line are the record. Duplicates, voids
+    // and the sharer's own visit return earlier in this route and never
+    // reach here. ──
+    const emailBaseUrl = resolveBaseUrl(APP_URL, req.get('origin'))
+    setImmediate(() => {
+      sendTicketEmailAfterClaim({ invite, slug, emailNorm, baseUrl: emailBaseUrl }).catch((e) =>
+        console.warn('[ticket-email] not sent (claim stands):', e?.message || e)
+      )
+    })
 
     // Claim routes DIRECTLY to the watch page (final spec 2026-07-16) — no
     // reveal beat, so no graph payload here; the dashboard fetches its own.
@@ -3768,6 +3793,172 @@ ${gifBlock}
 }
 
 // ============ START SERVER ============
+
+/** The filmmaker's name and email for a film — the reply-to of the ticket
+ *  email and the caption's "by {name}". Best effort: nulls when RLS or a
+ *  missing row hides it (the email still sends, without the reply line). */
+async function filmmakerContact(creatorId) {
+  if (!creatorId) return { name: null, email: null }
+  const { data } = await supabase.from('users').select('name, email').eq('id', creatorId).maybeSingle()
+  return { name: data?.name || null, email: data?.email || null }
+}
+
+/**
+ * The ticket email, sent once after a claim commits (server/ticketEmail.js
+ * builds it; deliverEmail is the ONE dispatch path). Reply-to is the
+ * filmmaker. The link is the person's own ticket URL with their email as a
+ * query string so a fresh device can prefill the sign-in page — never a
+ * token.
+ */
+async function sendTicketEmailAfterClaim({ invite, slug, emailNorm, baseUrl }) {
+  const film = invite.films || {}
+  const filmmaker = await filmmakerContact(film.creator_id)
+  const message = buildTicketEmail({
+    filmTitle: film.title || 'a film',
+    sharerName: invite.sender_name,
+    ticketNo: invite.ticket_no,
+    durationSeconds: film.duration_seconds,
+    filmmakerName: filmmaker.name,
+    // The base is the request's origin when APP_URL is unset/local — the
+    // same fallback every other emailed link uses (resolveBaseUrl).
+    ticketUrl: ticketUrl(baseUrl || resolveBaseUrl(APP_URL, null), slug, emailNorm),
+  })
+  const accepted = await deliverEmail(
+    withReplyTo(
+      { to: emailNorm, subject: message.subject, html: message.html, text: message.text },
+      filmmaker.email
+    )
+  )
+  console.log('[ticket-email] Resend accepted — id:', accepted?.id || '?', 'invite:', invite.id)
+  return accepted
+}
+
+/**
+ * THE ONE REMINDER (founder decision 2026-09-15): `POST /api/admin/reminders/run`.
+ * Guarded by the `x-reminder-secret` header against REMINDER_SECRET (fails
+ * closed — unset secret → 503 for everyone; wrong header → 401). DRY RUN BY
+ * DEFAULT: `?dry=1` (or nothing) lists the rows it WOULD send to; a live run
+ * requires the literal `?dry=0`. At most MAX_PER_RUN per run, oldest claims
+ * first. Selection is server/reminderRules.js (unit-tested): status
+ * 'claimed', claimed_at ≥ 3 days ago, reminder_sent_at null, a claimed
+ * email, never a ghost, never a film that shows ghosts. Each send goes
+ * through the ONE dispatcher. NEVER TWICE, by construction (red-team,
+ * 2026-09-15): the row is STAMPED FIRST with a conditional UPDATE (only
+ * where reminder_sent_at is still null — zero rows back means another run
+ * has it, skip), THEN sent; a rejected send clears the stamp so tomorrow
+ * retries; a clear that itself fails leaves the row stamped, never
+ * reminded — the safe side. One run at a time per process (409 otherwise).
+ * Only claims between 3 and REMINDER_WINDOW_DAYS days old: the note is
+ * "three days later", never a month late. Triggered daily by
+ * .github/workflows/reminders.yml, which prints counts only.
+ */
+/** One run at a time in this process (Render runs one instance): a second
+ *  POST while a run is in flight answers 409 instead of racing it. */
+let reminderRunInFlight = false
+
+app.post('/api/admin/reminders/run', async (req, res) => {
+  const gate = reminderRunDecision({
+    headerSecret: req.headers['x-reminder-secret'],
+    configuredSecret: process.env.REMINDER_SECRET,
+  })
+  if (!gate.allowed) return res.status(gate.status).json({ error: gate.reason })
+  const dry = isDryRun(req.query)
+  const now = new Date()
+  // No browser origin on a cron call: the emailed link needs a real APP_URL.
+  const baseUrl = resolveBaseUrl(APP_URL, null)
+  if (/localhost|127\.0\.0\.1/i.test(baseUrl)) {
+    return res.status(503).json({ error: 'APP_URL is not set to the public site; nothing sent', baseUrl })
+  }
+  if (reminderRunInFlight) return res.status(409).json({ error: 'a reminder run is already in flight' })
+  reminderRunInFlight = true
+  try {
+    // `reminder_sent_at` is the migration 20260915_invites_reminder.sql; a
+    // database without it answers a quiet 503 instead of emailing twice.
+    const { data: rows, error } = await supabase
+      .from('invites')
+      .select('id, film_id, link_slug, status, claimed_email, recipient_email, recipient_name, sender_name, claimed_at, reminder_sent_at, ticket_no, films(id, title, creator_id, duration_seconds, show_ghosts)')
+      .eq('status', 'claimed')
+      .is('reminder_sent_at', null)
+      .not('claimed_email', 'is', null)
+      .lte('claimed_at', new Date(now.getTime() - REMINDER_AFTER_DAYS * 86_400_000).toISOString())
+      .gte('claimed_at', new Date(now.getTime() - REMINDER_WINDOW_DAYS * 86_400_000).toISOString())
+      .order('claimed_at', { ascending: true })
+      .limit(REMINDER_MAX_PER_RUN * 4)
+    if (error) {
+      if (/reminder_sent_at/.test(error.message || '')) {
+        return res.status(503).json({ error: 'reminder_sent_at is not migrated yet; nothing sent' })
+      }
+      throw error
+    }
+    const showGhostsByFilm = {}
+    for (const r of rows || []) showGhostsByFilm[r.film_id] = Boolean(r.films?.show_ghosts)
+    const selected = selectReminderRows(rows, { now, showGhostsByFilm })
+    // Responses and the public Actions log carry MASKED addresses only;
+    // full addresses go to Render's own log (like every [claim] line).
+    const preview = selected.map((r) => ({
+      inviteId: r.id,
+      filmId: r.film_id,
+      filmTitle: r.films?.title || null,
+      ticketNo: r.ticket_no,
+      to: maskEmail(r.claimed_email),
+      claimedAt: r.claimed_at,
+      daysAgo: daysBetween(r.claimed_at, now),
+    }))
+    if (dry) {
+      console.log(`[reminders] DRY RUN — ${preview.length} row(s) would be sent:`, selected.map((r) => `${r.id}→${r.claimed_email}`).join(', ') || '(none)')
+      return res.json({ dry: true, baseUrl, window: { afterDays: REMINDER_AFTER_DAYS, withinDays: REMINDER_WINDOW_DAYS }, count: preview.length, rows: preview })
+    }
+    const results = []
+    for (const r of selected) {
+      const result = await sendReminderRow(r, {
+        // Stamp FIRST — the UPDATE claims the row for this run only where
+        // it is still unstamped; 0 rows back means someone else has it.
+        stampIfUnstamped: async (row) => {
+          const { data, error: stampErr } = await supabase
+            .from('invites')
+            .update({ reminder_sent_at: new Date().toISOString() })
+            .eq('id', row.id)
+            .is('reminder_sent_at', null)
+            .select('id')
+          if (stampErr) throw stampErr
+          return (data || []).length
+        },
+        send: async (row) => {
+          const filmmaker = await filmmakerContact(row.films?.creator_id)
+          const message = buildReminderEmail({
+            firstName: row.recipient_name,
+            filmTitle: row.films?.title || 'a film',
+            sharerName: row.sender_name,
+            daysAgo: daysBetween(row.claimed_at, now),
+            durationSeconds: row.films?.duration_seconds,
+            filmmakerName: filmmaker.name,
+            ticketUrl: ticketUrl(baseUrl, row.link_slug, row.claimed_email),
+          })
+          await deliverEmail(
+            withReplyTo({ to: row.claimed_email, subject: message.subject, html: message.html, text: message.text }, filmmaker.email)
+          )
+          console.log('[reminders] sent — invite:', row.id, 'to:', row.claimed_email)
+        },
+        clearStamp: async (row) => {
+          const { error: clearErr } = await supabase.from('invites').update({ reminder_sent_at: null }).eq('id', row.id)
+          if (clearErr) throw clearErr
+        },
+        log: (...args) => console.warn('[reminders]', ...args),
+      })
+      results.push({ ...result, to: maskEmail(r.claimed_email) })
+    }
+    const sent = results.filter((x) => x.outcome === 'sent')
+    const failed = results.filter((x) => x.outcome === 'failed')
+    const skipped = results.filter((x) => x.outcome === 'skipped')
+    console.log(`[reminders] LIVE RUN — sent ${sent.length}, failed ${failed.length}, skipped ${skipped.length}`)
+    return res.json({ dry: false, baseUrl, count: selected.length, sent, failed, skipped })
+  } catch (err) {
+    console.error('[reminders] run failed:', err)
+    return res.status(500).json({ error: 'Reminder run failed' })
+  } finally {
+    reminderRunInFlight = false
+  }
+})
 
 const PORT = process.env.PORT || 3001
 // Never start on Vite's port (3000) — see server/apiPort.js for the story.

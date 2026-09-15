@@ -310,6 +310,10 @@ export default function ClaimLanding() {
   /** Fix B (2026-07-21): this email already holds the film — the duplicate
    *  link was voided server-side and the sender's ticket returned. */
   const [alreadyHeld, setAlreadyHeld] = useState(false)
+  /** "Watch later" (founder decision 2026-09-15): the same claim, no
+   *  navigation — the ticket email is in their inbox; the form becomes one
+   *  line. */
+  const [watchLater, setWatchLater] = useState(false)
 
   useEffect(() => {
     if (!alreadyHeld) return undefined
@@ -337,6 +341,18 @@ export default function ClaimLanding() {
             navigate(isInviteWatched(data) ? '/dashboard' : `/watch/${slug}`, { replace: true })
             return
           }
+          // The ticket email's link (2026-09-15) carries the claimant's own
+          // email as `?email=`; on a fresh device — no stash — that link
+          // must still work in one click, so it goes to the sign-in page
+          // with the email prefilled and `/return` as the destination
+          // (Login sends every one-tap link to /return: the unwatched film's
+          // watch page). A claimed link WITHOUT the email stays the dead-link
+          // page, exactly as before.
+          const emailed = (searchParams.get('email') || '').trim()
+          if (emailed && !emailInputError(emailed)) {
+            navigate(`/login?email=${encodeURIComponent(emailed)}&next=${encodeURIComponent('/return')}`, { replace: true })
+            return
+          }
           setState({ phase: 'claimed', invite: data })
         } else {
           setState({ phase: 'ready', invite: data })
@@ -349,10 +365,20 @@ export default function ClaimLanding() {
     return () => {
       cancelled = true
     }
-  }, [slug, navigate])
+  }, [slug, navigate, searchParams])
 
-  const handleClaim = async (e) => {
+  /** One claim for both actions (founder decision 2026-09-15): "Watch for
+   *  free" and "Watch later" send the SAME request — the server claims the
+   *  ticket and sends the ticket email either way. The only difference is
+   *  what happens next in this browser: the prologue and the film, or one
+   *  line and no navigation. */
+  const handleClaim = (e) => {
     e.preventDefault()
+    return submitClaim('watch')
+  }
+  const handleWatchLater = () => submitClaim('later')
+
+  const submitClaim = async (intent) => {
     const trimmed = email.trim()
     // Our own shape check (the form is noValidate — the browser's grey
     // tooltip never appears). One message covers malformed AND empty.
@@ -416,6 +442,13 @@ export default function ClaimLanding() {
         filmId: result.filmId,
         claimedEmail: trimmed,
       })
+      if (intent === 'later') {
+        // "Watch later": the ticket is theirs and the email is on its way;
+        // nothing navigates. The stash above means re-opening this link in
+        // this browser goes straight to their watch page, as any claim.
+        setWatchLater(true)
+        return
+      }
       // Once-per-claim prologue (founder spec 2026-07-21): entered ONLY from
       // this success path — the early returns above (sharerView, alreadyHeld)
       // and every other page state can never reach it. It navigates to
@@ -597,6 +630,11 @@ export default function ClaimLanding() {
             <p className="font-serif-v3 text-lg italic text-warm">
               You already hold this film.
             </p>
+          ) : watchLater ? (
+            /* "Watch later" (founder copy 2026-09-15): the form is gone, one line remains. */
+            <p className="font-serif-v3 text-lg italic text-warm">
+              It’s in your inbox. Come back whenever you’re ready.
+            </p>
           ) : sharerView ? (
             <p className="font-serif-v3 text-sm italic text-warm/60">
               This invitation is waiting for {firstName} — it can’t be accepted by the person
@@ -629,6 +667,18 @@ export default function ClaimLanding() {
                 className="mt-6 w-full min-h-[52px] touch-manipulation border border-accent/60 px-8 py-4 font-sans text-[0.8125rem] uppercase tracking-[0.28em] text-accent transition-colors duration-300 hover:border-accent hover:bg-accent hover:text-ink focus-visible:border-accent focus-visible:bg-accent focus-visible:text-ink focus-visible:outline-none disabled:opacity-50 cursor-pointer"
               >
                 {claimBusy ? 'One moment…' : 'Watch for free'}
+              </button>
+              {/* "Watch later" (founder decision 2026-09-15): a bare link in
+                  the page's quiet caps, the same email field, the same
+                  claim; it replaces the form with one line instead of
+                  playing the film. */}
+              <button
+                type="button"
+                onClick={handleWatchLater}
+                disabled={claimBusy}
+                className="mt-4 self-center font-sans text-[0.6875rem] uppercase tracking-[0.2em] text-warm/60 transition-colors duration-300 hover:text-warm focus-visible:text-warm focus-visible:outline-none disabled:opacity-50 cursor-pointer"
+              >
+                Watch later
               </button>
             </form>
           )}
