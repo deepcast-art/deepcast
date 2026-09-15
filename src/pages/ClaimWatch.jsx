@@ -44,6 +44,22 @@ const filmProgressKey = (filmId) => `screening_progress_film_${filmId}`
 
 const MuxPlayer = lazy(() => import('@mux/mux-player-react').then((m) => ({ default: m.default })))
 
+/** hls.js overrides for the watch page (Phase 1b, 2026-09-15 — measured with
+ *  `scripts/measure-playback.mjs`). The stock player played the first ~15 s
+ *  on a 3–8 s buffer (mux caps the pre-play buffer at one segment under
+ *  `preload="metadata"`) and stepped straight up to the 7 Mbps 1080p rendition
+ *  at ~5 s in, while that cushion was thinnest — the class-A shape of the
+ *  founder's first-minute freezes on desktop Chrome. With `preload="auto"` the
+ *  buffer fills while the page is read; these widen the cushion and make the
+ *  up-switch need twice the headroom (an estimate of 14 Mbps for 7 Mbps
+ *  content, not 10). Never caps resolution — every rendition stays reachable.
+ *  hls.js's default 60 MB `maxBufferSize` still bounds the buffer, so the
+ *  120 s ceiling binds only below ~4 Mbps (≈68 s at 7 Mbps, ≈120 s at 720p);
+ *  under `preload="auto"` that is also the most a page downloads before play
+ *  (red-team finding, 2026-09-15 — the founder's call; iOS Safari's native
+ *  HLS ignores both). Module-level so the prop keeps one identity. */
+const HLS_CONFIG = { maxBufferLength: 60, maxMaxBufferLength: 120, abrBandWidthUpFactor: 0.5 }
+
 /**
  * Decorative ticket stubs (reference motif, adopted 2026-07-19): one outlined
  * stub per granted ticket, spent ones dimmed newest-first — the same live
@@ -1107,6 +1123,8 @@ export default function ClaimWatch() {
                   <MuxPlayer
                     ref={playerRef}
                     streamType="on-demand"
+                    preload="auto"
+                    _hlsConfig={HLS_CONFIG}
                     playbackId={link?.muxPlaybackId || undefined}
                     poster={filmPosterUrl(link?.muxPlaybackId)}
                     startTime={startSeconds}
@@ -1115,7 +1133,11 @@ export default function ClaimWatch() {
                     onTimeUpdate={handleTimeUpdate}
                     onPlay={handlePlay}
                     onEnded={handleEnded}
-                    className="aspect-video w-full"
+                    // `block`: the custom element defaults to inline-block on
+                    // the text baseline, which left a ~9.5px strip of the
+                    // wrapper's black under the film (root cause of the
+                    // "black bar", 2026-09-15; e2e/player-frame.spec.js).
+                    className="block aspect-video w-full"
                   />
                 </Suspense>
               )}
