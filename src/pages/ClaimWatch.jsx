@@ -56,9 +56,21 @@ const MuxPlayer = lazy(() => import('@mux/mux-player-react').then((m) => ({ defa
  *  hls.js's default 60 MB `maxBufferSize` still bounds the buffer, so the
  *  120 s ceiling binds only below ~4 Mbps (≈68 s at 7 Mbps, ≈120 s at 720p);
  *  under `preload="auto"` that is also the most a page downloads before play
- *  (red-team finding, 2026-09-15 — the founder's call; iOS Safari's native
- *  HLS ignores both). Module-level so the prop keeps one identity. */
+ *  (red-team finding, 2026-09-15 — resolved by the founder: fine pointers
+ *  only, see PLAYER_PRELOAD below; iOS Safari's native HLS ignores both).
+ *  Module-level so the prop keeps one identity. */
 const HLS_CONFIG = { maxBufferLength: 60, maxMaxBufferLength: 120, abrBandWidthUpFactor: 0.5 }
+
+/** FOUNDER DECISION (2026-09-15, PR #12 follow-up): the pre-play buffer is
+ *  for desktops. `preload="auto"` only where the pointer is FINE (a mouse or
+ *  trackpad — where the freezes were seen); coarse pointers (phones, tablets)
+ *  keep the element's default `metadata`, so a phone on cellular never pulls
+ *  41–60 MB of film before play is pressed. Decided ONCE at module level —
+ *  the device does not change mid-visit. `HLS_CONFIG` applies to everyone. */
+const PLAYER_PRELOAD =
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: fine)').matches
+    ? 'auto'
+    : 'metadata'
 
 /**
  * Decorative ticket stubs (reference motif, adopted 2026-07-19): one outlined
@@ -1123,7 +1135,7 @@ export default function ClaimWatch() {
                   <MuxPlayer
                     ref={playerRef}
                     streamType="on-demand"
-                    preload="auto"
+                    preload={PLAYER_PRELOAD}
                     _hlsConfig={HLS_CONFIG}
                     playbackId={link?.muxPlaybackId || undefined}
                     poster={filmPosterUrl(link?.muxPlaybackId)}
