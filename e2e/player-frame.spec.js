@@ -75,9 +75,10 @@ async function frameBoxes(page) {
 
 /**
  * Phase 1b's stall fix lives in two props on the same element —
- * `preload` (FOUNDER DECISION 2026-09-15: "auto" on fine-pointer devices
- * only, so the buffer fills while a desktop reads the page; coarse pointers
- * keep "metadata" and never pull tens of MB before play) and `_hlsConfig`
+ * `preload` (FOUNDER DECISION 2026-09-15: coarse pointers — phones and
+ * tablets — keep "metadata" and never pull tens of MB before play; everyone
+ * else preloads, a fine pointer and a browser reporting no pointer alike,
+ * so the buffer fills while a desktop reads the page) and `_hlsConfig`
  * for everyone (a 60 s cushion, up-switches needing twice the headroom).
  * Both ride library internals (an underscore-private prop applied by
  * @mux/mux-player-react, a deferred load in mux-video), so a caret upgrade
@@ -95,15 +96,15 @@ async function readPlayer(page) {
     const video = media?.nativeEl
     if (!video) return null
     const hls = media._hls ?? media.hls
-    const pointerFine = window.matchMedia('(pointer: fine)').matches
+    const pointerCoarse = window.matchMedia('(pointer: coarse)').matches
     return hls
-      ? { engine: 'hls.js', maxBufferLength: hls.config.maxBufferLength, maxMaxBufferLength: hls.config.maxMaxBufferLength, abrBandWidthUpFactor: hls.config.abrBandWidthUpFactor, preload: video.preload, pointerFine }
-      : { engine: 'native', nativeHls: !!video.canPlayType('application/vnd.apple.mpegurl'), preload: video.preload, pointerFine }
+      ? { engine: 'hls.js', maxBufferLength: hls.config.maxBufferLength, maxMaxBufferLength: hls.config.maxMaxBufferLength, abrBandWidthUpFactor: hls.config.abrBandWidthUpFactor, preload: video.preload, pointerCoarse }
+      : { engine: 'native', nativeHls: !!video.canPlayType('application/vnd.apple.mpegurl'), preload: video.preload, pointerCoarse }
   })
 }
 
 /** The stall-fix pins, for the pointer the context emulates. */
-async function expectStallFix(page, { pointerFine, preload }) {
+async function expectStallFix(page, { pointerCoarse, preload }) {
   const jsErrors = []
   page.on('pageerror', (err) => pushJsError(jsErrors, err))
   await mockWatchPage(page)
@@ -112,11 +113,11 @@ async function expectStallFix(page, { pointerFine, preload }) {
   await expect(page.locator('mux-player')).toHaveAttribute('preload', preload)
   await expect.poll(() => readPlayer(page), { timeout: 15_000 }).not.toBeNull()
   let got = await readPlayer(page)
-  if (got.pointerFine === pointerFine && got.preload !== preload) {
+  if (got.pointerCoarse === pointerCoarse && got.preload !== preload) {
     // Harness artifact, not the app: under full-suite load WebKit applies a
     // context's touch emulation a beat AFTER the page is created, so the
-    // module-level decision ran on a fine pointer while the page now reports
-    // a coarse one. A real phone is touch from the first byte. One reload
+    // module-level decision ran without a coarse pointer while the page now
+    // reports one. A real phone is touch from the first byte. One reload
     // re-decides with the emulation in place; the assertions below still
     // fail if the rule itself is wrong.
     console.log('[player-frame stall fix] pointer emulation arrived after module load — reloading once', JSON.stringify(got))
@@ -127,7 +128,7 @@ async function expectStallFix(page, { pointerFine, preload }) {
   }
   console.log('[player-frame stall fix]', JSON.stringify(got))
   // The rule the page applied is the rule the founder set.
-  expect(got.pointerFine).toBe(pointerFine)
+  expect(got.pointerCoarse).toBe(pointerCoarse)
   expect(got.preload).toBe(preload)
   if (got.engine === 'hls.js') {
     // Under preload="metadata" mux caps maxBufferLength at 1 until the first
@@ -142,14 +143,14 @@ async function expectStallFix(page, { pointerFine, preload }) {
   expect(jsErrors).toEqual([])
 }
 
-test('fine pointer (desktop): the player preloads and hls.js, where it runs, receives the 60 s buffer config', async ({ page }) => {
-  await expectStallFix(page, { pointerFine: true, preload: 'auto' })
+test('not a coarse pointer (desktop — fine, or none as headless Firefox reports): the player preloads and hls.js, where it runs, receives the 60 s buffer config', async ({ page }) => {
+  await expectStallFix(page, { pointerCoarse: false, preload: 'auto' })
 })
 
 test.describe('coarse pointer (phone/tablet)', () => {
   test.use({ hasTouch: true, viewport: { width: 390, height: 844 } })
   test('the player keeps the default "metadata" preload — no pre-play download — and still gets the buffer config', async ({ page }) => {
-    await expectStallFix(page, { pointerFine: false, preload: 'metadata' })
+    await expectStallFix(page, { pointerCoarse: true, preload: 'metadata' })
   })
 })
 

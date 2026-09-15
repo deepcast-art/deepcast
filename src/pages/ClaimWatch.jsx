@@ -56,21 +56,23 @@ const MuxPlayer = lazy(() => import('@mux/mux-player-react').then((m) => ({ defa
  *  hls.js's default 60 MB `maxBufferSize` still bounds the buffer, so the
  *  120 s ceiling binds only below ~4 Mbps (≈68 s at 7 Mbps, ≈120 s at 720p);
  *  under `preload="auto"` that is also the most a page downloads before play
- *  (red-team finding, 2026-09-15 — resolved by the founder: fine pointers
- *  only, see PLAYER_PRELOAD below; iOS Safari's native HLS ignores both).
+ *  (red-team finding, 2026-09-15 — resolved by the founder: coarse pointers
+ *  keep `metadata`, see PLAYER_PRELOAD below; iOS Safari's native HLS
+ *  ignores both).
  *  Module-level so the prop keeps one identity. */
 const HLS_CONFIG = { maxBufferLength: 60, maxMaxBufferLength: 120, abrBandWidthUpFactor: 0.5 }
 
 /** FOUNDER DECISION (2026-09-15, PR #12 follow-up): the pre-play buffer is
- *  for desktops. `preload="auto"` only where the pointer is FINE (a mouse or
- *  trackpad — where the freezes were seen); coarse pointers (phones, tablets)
- *  keep the element's default `metadata`, so a phone on cellular never pulls
- *  41–60 MB of film before play is pressed. Decided ONCE at module level —
- *  the device does not change mid-visit. `HLS_CONFIG` applies to everyone. */
+ *  not for phones and tablets. COARSE pointers keep the element's default
+ *  `metadata`, so a phone on cellular never pulls 41–60 MB of film before
+ *  play is pressed; everyone else — a fine pointer (mouse, trackpad — where
+ *  the freezes were seen) or none at all (a browser that reports no pointer,
+ *  as headless Firefox does) — preloads. Decided ONCE at module level: the
+ *  device does not change mid-visit. `HLS_CONFIG` applies to everyone. */
 const PLAYER_PRELOAD =
-  typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: fine)').matches
-    ? 'auto'
-    : 'metadata'
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches
+    ? 'metadata'
+    : 'auto'
 
 /**
  * Decorative ticket stubs (reference motif, adopted 2026-07-19): one outlined
