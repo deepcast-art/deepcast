@@ -51,7 +51,7 @@ import {
   COMMENT_UNAVAILABLE_MESSAGE,
 } from './commentRules.js'
 import { safeFirstName } from '../src/lib/displayName.js'
-import { buildTicketEmail, buildReminderEmail, returnUrl, wordmarkUrl, clockUrl, daysBetween } from './ticketEmail.js'
+import { buildTicketEmail, buildReminderEmail, returnUrl, wordmarkUrl, clockUrl, dividerUrl, daysBetween } from './ticketEmail.js'
 import {
   selectReminderRows,
   isDryRun,
@@ -3982,6 +3982,7 @@ async function sendTicketEmailAfterClaim({ invite, slug, emailNorm, recipientNam
     watchUrl: emailWatchUrl(baseUrl, slug, token),
     wordmark: wordmarkUrl(baseUrl),
     clock: clockUrl(baseUrl),
+    dividerImg: dividerUrl(baseUrl),
   })
   const accepted = await deliverEmail(
     withReplyTo({ to: emailNorm, subject: message.subject, html: message.html, text: message.text }, filmmaker.email)
@@ -4075,6 +4076,7 @@ async function runReminderSweep({ send }) {
           watchUrl: emailWatchUrl(baseUrl, r.link_slug, token),
           wordmark: wordmarkUrl(baseUrl),
           clock: clockUrl(baseUrl),
+          dividerImg: dividerUrl(baseUrl),
         })
         try {
           await deliverEmail(
