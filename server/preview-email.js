@@ -1,7 +1,7 @@
 import { writeFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { join, dirname } from 'path'
-import { buildTicketEmail, buildReminderEmail, returnUrl, wordmarkUrl } from './ticketEmail.js'
+import { buildTicketEmail, buildReminderEmail, returnUrl, wordmarkUrl, clockUrl } from './ticketEmail.js'
 
 /**
  * `node server/preview-email.js ticket` / `… reminder` render the REAL
@@ -12,16 +12,23 @@ import { buildTicketEmail, buildReminderEmail, returnUrl, wordmarkUrl } from './
  */
 const mode = process.argv[2]
 if (mode === 'ticket' || mode === 'reminder') {
+  // The sample mirrors the REAL Circles row (title, synopsis =
+  // films.transmission_hook, runtime, poster — read-only, 2026-09-16); the
+  // names are fictional. `--base <url>` points the image assets elsewhere
+  // (e.g. a local file:// root when the site has not deployed them yet).
+  const baseArg = process.argv.indexOf('--base')
+  const assetBase = baseArg >= 0 ? process.argv[baseArg + 1] : 'https://deepcast.art'
   const sample = {
     receiverName: 'Alex',
     sharerName: 'Ien Chi',
+    ticketNo: 41,
     filmTitle: 'Circles',
     posterUrl: 'https://image.mux.com/QDUEUyF7WDjjsOtMfeVfqh6M2NVM02arzLHK3IJnwYC00/thumbnail.png?time=5',
-    synopsis: 'What if the people who disagree with you most are the ones you need to hear?',
+    synopsis: 'Five young believers gather at a table outside the church — beyond pulpit, doctrine, and dogma — for one unguarded conversation about Christ, God, and life itself.',
     durationSeconds: 1803.135633,
-    filmmakerName: 'Ien Chi',
     watchUrl: returnUrl('https://deepcast.art', 'a'.repeat(64)),
-    wordmark: wordmarkUrl('https://deepcast.art'),
+    wordmark: wordmarkUrl(assetBase),
+    clock: clockUrl(assetBase),
   }
   const message = mode === 'ticket' ? buildTicketEmail(sample) : buildReminderEmail(sample)
   const outPath = join(dirname(fileURLToPath(import.meta.url)), 'email-preview.html')

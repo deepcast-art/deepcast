@@ -1,18 +1,28 @@
 /**
  * The ticket email and the reminder — the emails a claimant receives from
- * Deepcast (founder decisions, 16 September 2026; every string founder copy,
- * verbatim). Built HERE and nowhere else: the claim route sends the ticket
- * email after the claim commits; the hourly sweep sends the reminders (the
- * same template for reminder 1 and reminder 2).
+ * Deepcast (founder decisions, 16 September 2026, second pass; every string
+ * founder copy, verbatim). Built HERE and nowhere else: the claim route
+ * sends the ticket email after the claim commits; the hourly sweep sends
+ * the reminders (one template for reminder 1 and reminder 2).
  *
- * Layout, both: the film title (Georgia, #dddddd, centred, 28px) · the
- * watch-page poster, full width, 16:9 · the landing page's synopsis line
- * (italic #dddddd; omitted when the film has none) · one sentence · the
- * "Watch for free" button (the landing CTA's anatomy) · the caption
- * "{RuntimeMinutes} min · by {FilmmakerName}" · the Deepcast wordmark PNG at
- * the bottom, 120px wide, by absolute URL. No footer. Every colour inline,
- * tables, max-width 480, a plain-text twin with the same words. The button
- * links to the person's /r/{token} return link — never an auth token.
+ * THE TICKET EMAIL mirrors the landing page's anatomy on a plain #080c18
+ * ground (no background image), a 480px table, everything centred:
+ *   a. `BY PRIVATE INVITATION ONLY · TICKET NO. {n}` — 11px tracked caps, #9a9890
+ *   b. `{Receiver}, {Sharer} has gifted you a film.` — Georgia italic 30px
+ *   c. `It’s yours to watch whenever you’d like.` — Georgia 17px
+ *   d. the landing's divider: hairline — ✳ — hairline, accent at 50%
+ *   e. `{FilmTitle}` — Georgia italic 28px
+ *   f. the watch-page poster, full width, 16:9, a link to /r/{token}
+ *   g. the synopsis — the SAME field the landing renders under the title
+ *      (films.transmission_hook) — Georgia italic 17px
+ *   h. the clock icon + `{RuntimeMinutes} MINUTES` — tracked caps, accent
+ *   i. `Watch for free` → /r/{token}
+ *   j. the wordmark, and beneath it `Private. Trusted. Human.` — the
+ *      shared footer of EVERY Deepcast email built here
+ * THE REMINDER opens with `Hey {Receiver}, just a friendly reminder that
+ * {Sharer} gifted you a film.` (Georgia 20px) then d–j exactly as above.
+ * Every colour inline; a plain-text twin with the same words; the link is
+ * the person's /r/{token} return link — never an auth token.
  *
  * Palette: background #080c18 · text #dddddd · accent #b1a180 · muted #9a9890.
  */
@@ -22,9 +32,14 @@ const BG = '#080c18'
 const TEXT = '#dddddd'
 const ACCENT = '#b1a180'
 const MUTED = '#9a9890'
-const TITLE_FONT = "Georgia, 'Times New Roman', serif"
+/** The landing's hairline is the accent at 50% over the ink; email clients
+ *  do not blend, so the blend is baked in. */
+const HAIRLINE = '#5d574c'
+const SERIF = "Georgia, 'Times New Roman', serif"
 const SANS = "system-ui, -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif"
 export const WORDMARK_PATH = '/email/deepcast-wordmark@2x.png'
+export const CLOCK_PATH = '/email/clock@2x.png'
+export const TAGLINE = 'Private. Trusted. Human.'
 
 export function escapeHtml(s) {
   if (s == null || s === '') return ''
@@ -47,15 +62,20 @@ export function daysBetween(fromIso, now = new Date()) {
   return Math.max(0, Math.floor((to - from) / 86_400_000))
 }
 
-/** The return link: `${base}/r/{token}` — the token is the plaintext the
- *  claim (or reminder) minted; only its hash is stored. */
+const trimBase = (baseUrl) => String(baseUrl || '').replace(/\/$/, '')
+
+/** The return link: `${base}/r/{token}` — the plaintext the claim (or a
+ *  reminder) minted; only its hash is stored. */
 export function returnUrl(baseUrl, token) {
-  return `${String(baseUrl || '').replace(/\/$/, '')}/r/${encodeURIComponent(token)}`
+  return `${trimBase(baseUrl)}/r/${encodeURIComponent(token)}`
 }
 
-/** The wordmark image's absolute URL on the public site. */
+/** The email assets' absolute URLs on the public site. */
 export function wordmarkUrl(baseUrl) {
-  return `${String(baseUrl || '').replace(/\/$/, '')}${WORDMARK_PATH}`
+  return `${trimBase(baseUrl)}${WORDMARK_PATH}`
+}
+export function clockUrl(baseUrl) {
+  return `${trimBase(baseUrl)}${CLOCK_PATH}`
 }
 
 /** A first name for copy, or null when there is none to print. */
@@ -65,113 +85,134 @@ function firstOrNull(name) {
   return safeFirstName(v, null)
 }
 
-function captionText(minutes, filmmakerName) {
-  const parts = []
-  if (minutes != null) parts.push(`${minutes} min`)
-  if (filmmakerName) parts.push(`by ${filmmakerName}`)
-  return parts.join(' · ')
+const caps = (extra = '') => `font-family:${SANS};font-size:11px;letter-spacing:2.5px;text-transform:uppercase;${extra}`
+const row = (inner, pad) => `<tr><td align="center" style="padding:${pad};">${inner}</td></tr>`
+
+function divider() {
+  return `<table cellpadding="0" cellspacing="0" border="0" role="presentation" width="100%" style="max-width:352px;margin:0 auto;">
+    <tr>
+      <td style="vertical-align:middle;"><div style="height:1px;line-height:1px;font-size:1px;background-color:${HAIRLINE};">&nbsp;</div></td>
+      <td width="44" align="center" style="padding:0 14px;vertical-align:middle;font-family:${SANS};font-size:14px;line-height:1;color:${ACCENT};">&#10035;</td>
+      <td style="vertical-align:middle;"><div style="height:1px;line-height:1px;font-size:1px;background-color:${HAIRLINE};">&nbsp;</div></td>
+    </tr>
+  </table>`
 }
 
 function button(href, label) {
   return `<table cellpadding="0" cellspacing="0" border="0" role="presentation" align="center" style="margin:0 auto;">
     <tr><td style="border:1px solid ${ACCENT};">
-      <a href="${escapeHtml(href)}" style="display:inline-block;padding:16px 32px;font-family:${SANS};font-size:12px;letter-spacing:3px;text-transform:uppercase;color:${ACCENT};text-decoration:none;">${escapeHtml(label)}</a>
+      <a href="${escapeHtml(href)}" style="display:inline-block;padding:16px 32px;${caps(`letter-spacing:3px;color:${ACCENT};text-decoration:none;`)}">${escapeHtml(label)}</a>
     </td></tr>
   </table>`
 }
 
-/**
- * The shared body: title · poster · synopsis · sentence · button · caption ·
- * wordmark. `sentence` and `subject`/`preheader` differ between the two
- * emails; everything else is one layout.
- */
-function render({ subject, preheader, filmTitle, posterUrl, synopsis, sentence, buttonLabel, watchUrl, minutes, filmmakerName, wordmark }) {
-  const caption = captionText(minutes, filmmakerName)
-  const rows = [
-    `<tr><td align="center" style="padding:0 0 20px 0;"><p style="margin:0;font-family:${TITLE_FONT};font-size:28px;line-height:1.25;color:${TEXT};">${escapeHtml(filmTitle)}</p></td></tr>`,
+/** d–j: the film block every email shares, then the footer. */
+function filmRows({ filmTitle, posterUrl, synopsis, minutes, watchUrl, wordmark, clock }) {
+  const runtime = minutes != null ? `${minutes} MINUTES` : null
+  return [
+    row(divider(), '0 0 28px 0'),
+    row(`<p style="margin:0;font-family:${SERIF};font-style:italic;font-size:28px;line-height:1.25;color:${TEXT};">${escapeHtml(filmTitle)}</p>`, '0 0 20px 0'),
     posterUrl
-      ? `<tr><td align="center" style="padding:0 0 20px 0;"><img src="${escapeHtml(posterUrl)}" width="480" alt="${escapeHtml(filmTitle)}" style="display:block;width:100%;max-width:480px;height:auto;aspect-ratio:16/9;object-fit:cover;border:0;" /></td></tr>`
+      ? row(
+          `<a href="${escapeHtml(watchUrl)}" style="display:block;text-decoration:none;"><img src="${escapeHtml(posterUrl)}" width="480" alt="${escapeHtml(filmTitle)}" style="display:block;width:100%;max-width:480px;height:auto;aspect-ratio:16/9;object-fit:cover;border:0;" /></a>`,
+          '0 0 20px 0'
+        )
       : '',
     synopsis
-      ? `<tr><td align="center" style="padding:0 0 24px 0;"><p style="margin:0;font-family:${TITLE_FONT};font-style:italic;font-size:16px;line-height:1.5;color:${TEXT};">${escapeHtml(synopsis)}</p></td></tr>`
+      ? row(`<p style="margin:0;font-family:${SERIF};font-style:italic;font-size:17px;line-height:1.6;color:${TEXT};">${escapeHtml(synopsis)}</p>`, '0 0 18px 0')
       : '',
-    `<tr><td align="center" style="padding:0 0 28px 0;"><p style="margin:0;font-family:${TITLE_FONT};font-size:17px;line-height:1.6;color:${TEXT};">${escapeHtml(sentence)}</p></td></tr>`,
-    `<tr><td align="center" style="padding:0 0 24px 0;">${button(watchUrl, buttonLabel)}</td></tr>`,
-    caption
-      ? `<tr><td align="center" style="padding:0 0 40px 0;"><p style="margin:0;font-family:${SANS};font-size:11px;letter-spacing:2px;text-transform:uppercase;color:${MUTED};">${escapeHtml(caption).replace(/ · /g, ' &middot; ')}</p></td></tr>`
+    runtime
+      ? row(
+          `<table cellpadding="0" cellspacing="0" border="0" role="presentation" align="center" style="margin:0 auto;"><tr><td style="padding:0 8px 0 0;vertical-align:middle;"><img src="${escapeHtml(clock)}" width="14" height="14" alt="" style="display:block;width:14px;height:14px;border:0;" /></td><td style="vertical-align:middle;${caps(`letter-spacing:3px;color:${ACCENT};`)}">${runtime}</td></tr></table>`,
+          '0 0 32px 0'
+        )
       : '',
-    `<tr><td align="center" style="padding:0;"><img src="${escapeHtml(wordmark)}" width="120" height="29" alt="deepcast" style="display:block;width:120px;height:auto;border:0;" /></td></tr>`,
-  ].join('\n')
-  const html = `<!DOCTYPE html>
+    row(button(watchUrl, 'Watch for free'), '0 0 40px 0'),
+    row(`<img src="${escapeHtml(wordmark)}" width="120" height="29" alt="deepcast" style="display:block;width:120px;height:auto;border:0;" />`, '0 0 12px 0'),
+    row(`<p style="margin:0;${caps(`color:${MUTED};`)}">${escapeHtml(TAGLINE)}</p>`, '0'),
+  ]
+  .filter(Boolean)
+  .join('\n')
+}
+
+function shell({ subject, preheader, rows }) {
+  return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(subject)}</title></head>
 <body style="margin:0;padding:0;background-color:${BG};">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:${BG};font-size:1px;line-height:1px;">${escapeHtml(preheader)}</div>
 <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="background-color:${BG};">
 <tr><td align="center" style="padding:40px 16px;">
-<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="max-width:480px;background-color:${BG};">
+<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="max-width:480px;background-color:${BG};text-align:center;">
 ${rows}
 </table>
 </td></tr>
 </table>
 </body></html>`
-  const text = [filmTitle, '', synopsis || null, synopsis ? '' : null, sentence, '', `${buttonLabel}: ${watchUrl}`, '', caption || null, caption ? '' : null, 'deepcast']
-    .filter((l) => l !== null)
-    .join('\n')
-  return { subject, preheader, html, text }
+}
+
+function filmText({ filmTitle, synopsis, minutes, watchUrl }) {
+  return [
+    '✳',
+    '',
+    filmTitle,
+    synopsis ? '' : null,
+    synopsis || null,
+    minutes != null ? '' : null,
+    minutes != null ? `${minutes} MINUTES` : null,
+    '',
+    `Watch for free: ${watchUrl}`,
+    '',
+    'deepcast',
+    TAGLINE,
+  ].filter((l) => l !== null)
 }
 
 /**
  * The ticket email — sent once, right after a claim commits.
  * Subject `{Receiver}, {Sharer} gifted you a film` (no receiver name →
- * `{Sharer} gifted you a film`); the sentence `{Sharer} gifted you the film
- * {FilmTitle}. It’s yours to watch whenever you’d like.`
+ * `{Sharer} gifted you a film`).
  */
-export function buildTicketEmail({ receiverName, sharerName, filmTitle, posterUrl, synopsis, durationSeconds, filmmakerName, watchUrl, wordmark }) {
+export function buildTicketEmail({ receiverName, sharerName, ticketNo, filmTitle, posterUrl, synopsis, durationSeconds, watchUrl, wordmark, clock }) {
   const receiver = firstOrNull(receiverName)
   const sharer = safeFirstName(sharerName)
   const subject = receiver ? `${receiver}, ${sharer} gifted you a film` : `${sharer} gifted you a film`
-  const sentence = `${sharer} gifted you the film ${filmTitle}. It’s yours to watch whenever you’d like.`
-  return render({
-    subject,
-    preheader: sentence,
-    filmTitle,
-    posterUrl,
-    synopsis,
-    sentence,
-    buttonLabel: 'Watch for free',
-    watchUrl,
-    minutes: runtimeMinutes(durationSeconds),
-    filmmakerName,
-    wordmark,
-  })
+  const hasNo = Number.isFinite(Number(ticketNo)) && Number(ticketNo) > 0
+  const stamp = hasNo ? `BY PRIVATE INVITATION ONLY · TICKET NO. ${ticketNo}` : 'BY PRIVATE INVITATION ONLY'
+  const headline = receiver ? `${receiver}, ${sharer} has gifted you a film.` : `${sharer} has gifted you a film.`
+  const yours = 'It’s yours to watch whenever you’d like.'
+  const minutes = runtimeMinutes(durationSeconds)
+  const rows = [
+    // The ticket segment never breaks mid-phrase on a narrow client.
+    row(
+      `<p style="margin:0;${caps(`color:${MUTED};`)}">BY PRIVATE INVITATION ONLY${hasNo ? ` &middot; <span style="white-space:nowrap;">TICKET&nbsp;NO.&nbsp;${escapeHtml(String(ticketNo))}</span>` : ''}</p>`,
+      '0 0 20px 0'
+    ),
+    row(`<p style="margin:0;font-family:${SERIF};font-style:italic;font-size:30px;line-height:1.2;color:${TEXT};">${escapeHtml(headline)}</p>`, '0 0 16px 0'),
+    row(`<p style="margin:0;font-family:${SERIF};font-size:17px;line-height:1.5;color:${TEXT};">${escapeHtml(yours)}</p>`, '0 0 28px 0'),
+    filmRows({ filmTitle, posterUrl, synopsis, minutes, watchUrl, wordmark, clock }),
+  ].join('\n')
+  const text = [stamp, '', headline, yours, '', ...filmText({ filmTitle, synopsis, minutes, watchUrl })].join('\n')
+  return { subject, preheader: headline, html: shell({ subject, preheader: headline, rows }), text }
 }
 
 /**
- * The reminder — the same template for reminder 1 (a "Watch later" claim,
- * one day on) and reminder 2 (any unwatched claim, three days on).
+ * The reminder — one template for reminder 1 (a "Watch later" claim, one
+ * day on) and reminder 2 (any unwatched claim, three days on).
  * Subject `{Receiver}, watch the film {Sharer} gifted you` (no name →
- * `Watch the film {Sharer} gifted you`); the sentence `Hey {Receiver}, just a
- * friendly reminder that {Sharer} gifted the film {FilmTitle} to you.` (no
- * name → `Just a friendly reminder that …`).
+ * `Watch the film {Sharer} gifted you`).
  */
-export function buildReminderEmail({ receiverName, sharerName, filmTitle, posterUrl, synopsis, durationSeconds, filmmakerName, watchUrl, wordmark }) {
+export function buildReminderEmail({ receiverName, sharerName, filmTitle, posterUrl, synopsis, durationSeconds, watchUrl, wordmark, clock }) {
   const receiver = firstOrNull(receiverName)
   const sharer = safeFirstName(sharerName)
   const subject = receiver ? `${receiver}, watch the film ${sharer} gifted you` : `Watch the film ${sharer} gifted you`
-  const sentence = receiver
-    ? `Hey ${receiver}, just a friendly reminder that ${sharer} gifted the film ${filmTitle} to you.`
-    : `Just a friendly reminder that ${sharer} gifted the film ${filmTitle} to you.`
-  return render({
-    subject,
-    preheader: sentence,
-    filmTitle,
-    posterUrl,
-    synopsis,
-    sentence,
-    buttonLabel: 'Watch for free',
-    watchUrl,
-    minutes: runtimeMinutes(durationSeconds),
-    filmmakerName,
-    wordmark,
-  })
+  const opener = receiver
+    ? `Hey ${receiver}, just a friendly reminder that ${sharer} gifted you a film.`
+    : `Just a friendly reminder that ${sharer} gifted you a film.`
+  const minutes = runtimeMinutes(durationSeconds)
+  const rows = [
+    row(`<p style="margin:0;font-family:${SERIF};font-size:20px;line-height:1.4;color:${TEXT};">${escapeHtml(opener)}</p>`, '0 0 28px 0'),
+    filmRows({ filmTitle, posterUrl, synopsis, minutes, watchUrl, wordmark, clock }),
+  ].join('\n')
+  const text = [opener, '', ...filmText({ filmTitle, synopsis, minutes, watchUrl })].join('\n')
+  return { subject, preheader: opener, html: shell({ subject, preheader: opener, rows }), text }
 }

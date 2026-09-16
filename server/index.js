@@ -51,7 +51,7 @@ import {
   COMMENT_UNAVAILABLE_MESSAGE,
 } from './commentRules.js'
 import { safeFirstName } from '../src/lib/displayName.js'
-import { buildTicketEmail, buildReminderEmail, returnUrl, wordmarkUrl, daysBetween } from './ticketEmail.js'
+import { buildTicketEmail, buildReminderEmail, returnUrl, wordmarkUrl, clockUrl, daysBetween } from './ticketEmail.js'
 import {
   selectReminderRows,
   isDryRun,
@@ -3972,13 +3972,16 @@ async function sendTicketEmailAfterClaim({ invite, slug, emailNorm, recipientNam
   const message = buildTicketEmail({
     receiverName: recipientName,
     sharerName: invite.sender_name,
+    ticketNo: invite.ticket_no,
     filmTitle: film.title || 'a film',
     posterUrl: film.mux_playback_id ? filmPosterUrl(film.mux_playback_id) : null,
+    // The synopsis is the SAME field the landing renders under the title
+    // (ClaimLanding.jsx `transmissionHook` → films.transmission_hook).
     synopsis: film.transmission_hook || null,
     durationSeconds: film.duration_seconds,
-    filmmakerName: filmmaker.name,
     watchUrl: emailWatchUrl(baseUrl, slug, token),
     wordmark: wordmarkUrl(baseUrl),
+    clock: clockUrl(baseUrl),
   })
   const accepted = await deliverEmail(
     withReplyTo({ to: emailNorm, subject: message.subject, html: message.html, text: message.text }, filmmaker.email)
@@ -4068,9 +4071,9 @@ async function runReminderSweep({ send }) {
           posterUrl: r.films?.mux_playback_id ? filmPosterUrl(r.films.mux_playback_id) : null,
           synopsis: r.films?.transmission_hook || null,
           durationSeconds: r.films?.duration_seconds,
-          filmmakerName: filmmaker.name,
           watchUrl: emailWatchUrl(baseUrl, r.link_slug, token),
           wordmark: wordmarkUrl(baseUrl),
+          clock: clockUrl(baseUrl),
         })
         try {
           await deliverEmail(

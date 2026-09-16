@@ -63,8 +63,27 @@ test.describe('/r/{token}', () => {
       return route.fulfill({ json: { status: 'ok', slug: 'alex-h4k2', inviteId: 'inv-you', filmId: 'film-1', email: 'alex@example.com', sessionTokenHash: null } })
     })
     await page.goto(`/r/${TOKEN}`, { waitUntil: 'domcontentloaded' })
-    // The prologue: the landing, with the three lines.
-    await expect(page.getByText('Alex, Ien saw this and thought of you.')).toBeVisible({ timeout: 15000 })
+    // THE IDENTICAL PROLOGUE the landing button plays — the same component
+    // (ClaimPrologue), the same three founder lines, the same timing (fades
+    // at 0 / 3 / 6 s): each line is awaited in order, none clicked through.
+    const lines = [
+      'Alex, Ien saw this and thought of you.',
+      'No algorithm sent you this. A person did.',
+      'After watching, you’ll do the same — choose the few people who need it next.',
+    ]
+    // The lines are in the DOM from the start and FADE in (opacity), so
+    // "visible" is not the measure — their painted opacity is.
+    const opacityOf = (line) => page.getByText(line).evaluate((el) => parseFloat(getComputedStyle(el).opacity))
+    const seenAt = []
+    for (const line of lines) {
+      await expect.poll(() => opacityOf(line), { timeout: 20000 }).toBeGreaterThanOrEqual(0.9)
+      seenAt.push(Date.now())
+    }
+    // Line 2 and line 3 arrive on the landing's own schedule (fades at
+    // 0 / 3 / 6 s), in order — and every line stays once shown.
+    expect(seenAt[1] - seenAt[0]).toBeGreaterThanOrEqual(2000)
+    expect(seenAt[2] - seenAt[1]).toBeGreaterThanOrEqual(2000)
+    for (const line of lines) expect(await opacityOf(line)).toBeGreaterThanOrEqual(0.9)
     await expect(page).toHaveURL(/\/alex-h4k2$/)
     expect(bodies).toEqual([{ method: 'POST', body: { token: TOKEN } }])
     // The token travelled ONLY in that POST body — never in a GET's URL
@@ -73,8 +92,7 @@ test.describe('/r/{token}', () => {
     expect(tokenRequests).toEqual([])
     const stash = await page.evaluate(() => JSON.parse(window.localStorage.getItem('deepcast:claim') || 'null'))
     expect(stash).toMatchObject({ slug: 'alex-h4k2', inviteId: 'inv-you', claimedEmail: 'alex@example.com' })
-    // Skip the prologue → the watch page.
-    await page.getByRole('button', { name: 'Continue to the film' }).click()
+    // All three shown: one tap continues to the film.
     await page.getByRole('button', { name: 'Continue to the film' }).click()
     await expect(page).toHaveURL(/\/watch\/alex-h4k2$/, { timeout: 15000 })
     await expect(page.getByRole('button', { name: 'Pass it on' })).toBeVisible({ timeout: 15000 })
