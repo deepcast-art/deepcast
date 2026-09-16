@@ -25,6 +25,7 @@ const About = lazy(() => import('./pages/About.jsx'))
 const ClaimLanding = lazy(() => import('./pages/ClaimLanding.jsx'))
 const ClaimWatch = lazy(() => import('./pages/ClaimWatch.jsx'))
 const ReturnGate = lazy(() => import('./pages/ReturnGate.jsx'))
+const ReturnLink = lazy(() => import('./pages/ReturnLink.jsx'))
 
 function RouteFallback({ inverse = false }) {
   return (
@@ -231,6 +232,16 @@ export default function App() {
         element={
           <Suspense fallback={<RouteFallback />}>
             <ReturnGate />
+          </Suspense>
+        }
+      />
+      {/* The emailed return link (2026-09-16): public, spends its token from
+          the page's code, then the claimant's own landing → prologue → film. */}
+      <Route
+        path="/r/:token"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <ReturnLink />
           </Suspense>
         }
       />

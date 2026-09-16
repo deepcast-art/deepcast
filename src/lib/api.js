@@ -172,11 +172,19 @@ export const api = {
   // 2026-07-31) carries the claimant's own typed name; the server derives
   // first/last from it. accessToken (when a session exists) lets the server
   // recognize the sharer opening their own link and refuse to claim it.
-  claimLinkInvite: (slug, email, accessToken = null, fullName = null, claimContext = null) =>
+  claimLinkInvite: (slug, email, accessToken = null, fullName = null, claimContext = null, intent = 'now') =>
     request('/invites/claim', {
       method: 'POST',
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-      body: JSON.stringify({ slug, email, fullName, claimContext }),
+      body: JSON.stringify({ slug, email, fullName, claimContext, intent }),
+    }),
+
+  /** Spend an emailed return link (/r/{token}) — POSTed by the page's code
+   *  after it runs, never on the bare GET (2026-09-16). */
+  returnLink: (token) =>
+    request('/invites/return', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
     }),
 
   // Passwordless invite-first sign-in

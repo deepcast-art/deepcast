@@ -44,6 +44,8 @@ Migrations, data scripts, ticket-counter changes, `films` row edits (video swaps
 
 Flow: Claude Code writes the script or states the exact change, dry-run by default, typed-phrase confirmation, JSON backup of every affected row BEFORE the write, hard-abort guards on every named condition, and shows the founder the exact rows. The founder runs it. The verifier confirms the after-state with independent queries. The 2026-07-21 ABSOLUTE RULE stands: no production change without the founder's approval in that session, and a permission prompt is not approval.
 
+**Amendment, 16 September 2026 (founder decision): ADDITIVE, NULLABLE-COLUMN migrations may be run by the verifier through the Supabase connector on the founder's explicit "approved" in that session** — the builder prints the exact SQL in the report, the founder says "approved", the verifier applies it and confirms the columns through `information_schema`. Only migrations of that shape (add column … if not exists, nullable, no default that rewrites rows, plus an index on the new column). Everything else — data writes, film-row edits, counter changes, drops, renames, defaults, environment variables — stays founder-run.
+
 ## Red-team checklist (the review subagent's brief — Tier 2, every time)
 
 Fresh context. Read only the diff plus the files it touches. Answer each in writing with file:line evidence, or "not applicable, because…":

@@ -1,6 +1,46 @@
 import { writeFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { join, dirname } from 'path'
+import { buildTicketEmail, buildReminderEmail, returnUrl, wordmarkUrl, clockUrl } from './ticketEmail.js'
+
+/**
+ * `node server/preview-email.js ticket` / `… reminder` render the REAL
+ * builders from server/ticketEmail.js (the ones the claim and reminder
+ * routes send) into server/email-preview.html, with sample data. The
+ * legacy invite-email preview below stays as it was (a drifted copy — see
+ * CLAUDE.md).
+ */
+const mode = process.argv[2]
+if (mode === 'ticket' || mode === 'reminder') {
+  // The sample mirrors the REAL Circles row (title, synopsis =
+  // films.transmission_hook, runtime, poster — read-only, 2026-09-16); the
+  // names are fictional. `--base <url>` points the image assets elsewhere
+  // (e.g. a local file:// root when the site has not deployed them yet).
+  const baseArg = process.argv.indexOf('--base')
+  const assetBase = baseArg >= 0 ? process.argv[baseArg + 1] : 'https://deepcast.art'
+  const sample = {
+    receiverName: 'Alex',
+    sharerName: 'Ien Chi',
+    ticketNo: 41,
+    filmTitle: 'Circles',
+    posterUrl: 'https://image.mux.com/QDUEUyF7WDjjsOtMfeVfqh6M2NVM02arzLHK3IJnwYC00/thumbnail.png?time=5',
+    synopsis: 'Five young believers gather at a table outside the church — beyond pulpit, doctrine, and dogma — for one unguarded conversation about Christ, God, and life itself.',
+    durationSeconds: 1803.135633,
+    watchUrl: returnUrl('https://deepcast.art', 'a'.repeat(64)),
+    wordmark: wordmarkUrl(assetBase),
+    clock: clockUrl(assetBase),
+  }
+  const message = mode === 'ticket' ? buildTicketEmail(sample) : buildReminderEmail(sample)
+  const outPath = join(dirname(fileURLToPath(import.meta.url)), 'email-preview.html')
+  writeFileSync(outPath, message.html, 'utf8')
+  console.log(`Subject: ${message.subject}`)
+  console.log(`Preheader: ${message.preheader}`)
+  console.log('--- plain text ---')
+  console.log(message.text)
+  console.log('---')
+  console.log('Preview written to', outPath)
+  process.exit(0)
+}
 
 function escapeHtml(s) {
   if (s == null || s === '') return ''

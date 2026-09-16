@@ -22,6 +22,9 @@ export default function Login() {
    *  instead of a silent plain login page. Cleared once a fresh link is sent. */
   const [expiredLinkNotice, setExpiredLinkNotice] = useState(() => Boolean(consumeAuthLinkError()))
   const { signIn, sendSignInLink, user, profile, loading: authLoading, isRecovery } = useAuth()
+  /** The ticket email's link on a fresh device: the landing forwards
+   *  `?email=…&next=/return` here (2026-09-15). */
+  const returningToFilm = searchParams.get('next') === '/return'
 
   // Same-device return: a valid stored session lands straight on the dashboard.
   useEffect(() => {
@@ -115,7 +118,14 @@ export default function Login() {
             <DeepcastLogo variant="ink" className="h-8" />
           </Link>
           <h1 className="text-2xl font-display mt-6 mb-2">Welcome back</h1>
-          <p className="text-text-muted text-sm">Enter your email and we’ll send a sign-in link.</p>
+          {/* A ticket-email link opened on a fresh device lands here with
+              next=/return (founder copy 2026-09-15); the one-tap link then
+              routes to the unwatched film's watch page. */}
+          <p className="text-text-muted text-sm">
+            {returningToFilm
+              ? 'You already hold this film. We’ll send a one-tap link to sign you in.'
+              : 'Enter your email and we’ll send a sign-in link.'}
+          </p>
         </div>
 
         <form onSubmit={handleSendLink} className="space-y-5 animate-fade-in animate-delay-300">

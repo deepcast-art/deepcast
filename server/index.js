@@ -51,6 +51,19 @@ import {
   COMMENT_UNAVAILABLE_MESSAGE,
 } from './commentRules.js'
 import { safeFirstName } from '../src/lib/displayName.js'
+import { buildTicketEmail, buildReminderEmail, returnUrl, wordmarkUrl, clockUrl, daysBetween } from './ticketEmail.js'
+import {
+  selectReminderRows,
+  isDryRun,
+  remindersLive,
+  sendReminderRow,
+  maskEmail,
+  MAX_PER_RUN as REMINDER_MAX_PER_RUN,
+  REMINDER1_AFTER_DAYS,
+  REMINDER_WINDOW_DAYS,
+} from './reminderRules.js'
+import { filmPosterUrl } from '../src/content/filmStory.js'
+import { returnLinkDecision, isWellFormedReturnToken, mayMintSession, RETURN_TOKEN_DAYS } from './returnLinkRules.js'
 
 const app = express()
 app.use(cors())
@@ -1588,10 +1601,13 @@ app.post('/api/invites/claim', async (req, res) => {
     // with the claim, and NON-FATAL end to end (junk is dropped; missing
     // columns fall back below). Data only, never displayed.
     const claimContextFields = sanitizeClaimContext(req.body?.claimContext)
+    // Which button (founder decision 2026-09-16): 'later' stamps
+    // watch_later_at; anything else is 'now'. The claim itself is identical.
+    const claimIntent = req.body?.intent === 'later' ? 'later' : 'now'
 
     const { data: invite, error: lookupError } = await supabase
       .from('invites')
-      .select('id, film_id, sender_id, status, claimed_email, recipient_name, films(*)')
+      .select('id, film_id, sender_id, status, claimed_email, recipient_name, sender_name, ticket_no, films(*)')
       .eq('link_slug', slug)
       .maybeSingle()
     if (lookupError || !invite) {
@@ -1702,6 +1718,7 @@ app.post('/api/invites/claim', async (req, res) => {
       status: 'claimed',
       claim_ordinal: claimOrdinal,
       ...claimContextFields,
+      ...(claimIntent === 'later' ? { watch_later_at: new Date().toISOString() } : {}),
     }
     let { data: claimedRow, error: claimError } = await supabase
       .from('invites')
@@ -1711,6 +1728,20 @@ app.post('/api/invites/claim', async (req, res) => {
       .is('claimed_email', null)
       .select('id')
       .maybeSingle()
+    if (claimError && /watch_later_at/.test(claimError.message || '')) {
+      // Pre-migration fallback: the 20260916 column is missing — claim
+      // WITHOUT recording the button rather than blocking anyone.
+      console.warn('[claim] watch_later_at missing — claiming without it (apply the 20260916 migration)')
+      const { watch_later_at: _dropped, ...withoutLater } = fullClaimUpdate
+      ;({ data: claimedRow, error: claimError } = await supabase
+        .from('invites')
+        .update(withoutLater)
+        .eq('id', invite.id)
+        .eq('status', 'created')
+        .is('claimed_email', null)
+        .select('id')
+        .maybeSingle())
+    }
     if (claimError && /claim_timezone|claim_locale|claim_device/.test(claimError.message || '')) {
       // Pre-migration fallback: context columns missing — claim WITHOUT the
       // capture rather than blocking anyone (apply the 20260731 migration).
@@ -1754,6 +1785,9 @@ app.post('/api/invites/claim', async (req, res) => {
     // either way — no password, no confirmation email, same response. ──
     let accountBalance = null
     let sessionTokenHash = null
+    // The name the ticket email greets: the account's, once the claim has
+    // stamped it (canonical-name rule), else the typed placeholder.
+    let recipientNameForEmail = invite.recipient_name
     try {
       // The claimant's own typed first name wins (2026-07-31); the sharer's
       // typed placeholder, then the email local part, remain the legacy
@@ -1797,6 +1831,7 @@ app.post('/api/invites/claim', async (req, res) => {
           .from('invites')
           .update({ recipient_name: nameStamp.name })
           .eq('id', invite.id)
+        recipientNameForEmail = nameStamp.name
       }
       const remaining = filmTicketsRemaining(acct, wallet)
       accountBalance = Number.isFinite(remaining) ? remaining : null
@@ -1826,6 +1861,20 @@ app.post('/api/invites/claim', async (req, res) => {
         acctErr?.message || acctErr
       )
     }
+
+    // ── THE TICKET EMAIL (founder decision 2026-09-15): once, after the
+    // claim has committed, for BOTH "Watch for free" and "Watch later" (the
+    // request is identical). Scheduled AFTER this response is written —
+    // never blocks the claim, never surfaces a failure to the viewer; the
+    // dispatcher's retry + the log line are the record. Duplicates, voids
+    // and the sharer's own visit return earlier in this route and never
+    // reach here. ──
+    const emailBaseUrl = resolveBaseUrl(APP_URL, req.get('origin'))
+    setImmediate(() => {
+      sendTicketEmailAfterClaim({ invite, slug, emailNorm, recipientName: recipientNameForEmail, baseUrl: emailBaseUrl }).catch((e) =>
+        console.warn('[ticket-email] not sent (claim stands):', e?.message || e)
+      )
+    })
 
     // Claim routes DIRECTLY to the watch page (final spec 2026-07-16) — no
     // reveal beat, so no graph payload here; the dashboard fetches its own.
@@ -3768,6 +3817,352 @@ ${gifBlock}
 }
 
 // ============ START SERVER ============
+
+/** The filmmaker's name and email for a film — the reply-to of the ticket
+ *  email and the caption's "by {name}". Best effort: nulls when RLS or a
+ *  missing row hides it (the email still sends, without the reply-to). */
+async function filmmakerContact(creatorId) {
+  if (!creatorId) return { name: null, email: null }
+  const { data } = await supabase.from('users').select('name, email').eq('id', creatorId).maybeSingle()
+  return { name: data?.name || null, email: data?.email || null }
+}
+
+/* ============ THE RETURN LINK (founder decision 2026-09-16) ============
+ * A 32-byte random token, minted at claim (and re-minted for each reminder),
+ * whose sha256 is the only thing stored (invites.return_token_hash, with
+ * _expires_at = +RETURN_TOKEN_DAYS (180) and _used_at). The plaintext rides in the email as
+ * /r/{token}. The PAGE at /r/ spends it by POSTing here after it runs — the
+ * bare GET is a static page, so a link scanner's prefetch never burns it.
+ * Spent once (a conditional update); then the sign-in page. */
+const RETURN_TOKEN_BYTES = 32
+
+function hashReturnToken(token) {
+  return crypto.createHash('sha256').update(String(token), 'utf8').digest('hex')
+}
+
+/** Mint a fresh token for an invite and store ONLY its hash. Returns the
+ *  plaintext, or null when the columns are missing (pre-migration) or the
+ *  write failed — the caller then links to the bare slug instead. */
+async function mintReturnToken(inviteId) {
+  const token = crypto.randomBytes(RETURN_TOKEN_BYTES).toString('hex')
+  const { error } = await supabase
+    .from('invites')
+    .update({
+      return_token_hash: hashReturnToken(token),
+      return_token_used_at: null,
+      return_token_expires_at: new Date(Date.now() + RETURN_TOKEN_DAYS * 86_400_000).toISOString(),
+    })
+    .eq('id', inviteId)
+  if (error) {
+    console.warn('[return-token] not stored (linking to the bare slug):', error.message)
+    return null
+  }
+  return token
+}
+
+/** The stored token state of a row, so a failed reminder send can put the
+ *  previous (still-live) link back (red-team, 2026-09-16). */
+async function readReturnTokenState(inviteId) {
+  const { data } = await supabase
+    .from('invites')
+    .select('return_token_hash, return_token_used_at, return_token_expires_at')
+    .eq('id', inviteId)
+    .maybeSingle()
+  return data || null
+}
+async function restoreReturnTokenState(inviteId, state) {
+  if (!state) return
+  const { error } = await supabase
+    .from('invites')
+    .update({
+      return_token_hash: state.return_token_hash,
+      return_token_used_at: state.return_token_used_at,
+      return_token_expires_at: state.return_token_expires_at,
+    })
+    .eq('id', inviteId)
+  if (error) console.warn('[return-token] previous link not restored:', error.message)
+}
+
+/** The link an email carries: /r/{token}, or the bare slug when no token
+ *  could be stored (pre-migration: apply 20260916 BEFORE deploying). */
+function emailWatchUrl(baseUrl, slug, token) {
+  return token ? returnUrl(baseUrl, token) : `${String(baseUrl || '').replace(/\/$/, '')}/${encodeURIComponent(slug)}`
+}
+
+/**
+ * POST /api/invites/return { token } — spend the return link. Answers, all
+ * 200 with a `status`, so the page can route:
+ *   ok       → { slug, inviteId, filmId, email, sessionTokenHash } — the
+ *              token is spent (conditional update; a replay sees 'spent'),
+ *              and a single-use in-band sign-in is minted for the claimant's
+ *              account (generateLink → client verifyOtp, no email);
+ *   spent    → { email } — a valid token that was already used: the sign-in
+ *              page, prefilled;
+ *   expired  → {} — past its 30 days;
+ *   unknown  → {} — no such token (or the columns are not migrated).
+ * A malformed token is 400. The plaintext is never logged.
+ */
+app.post('/api/invites/return', async (req, res) => {
+  const token = typeof req.body?.token === 'string' ? req.body.token.trim().toLowerCase() : ''
+  if (!isWellFormedReturnToken(token)) return res.status(400).json({ error: 'Malformed return link' })
+  try {
+    const hash = hashReturnToken(token)
+    const { data: invite, error } = await supabase
+      .from('invites')
+      .select('id, film_id, link_slug, status, claimed_email, claimed_by, return_token_used_at, return_token_expires_at')
+      .eq('return_token_hash', hash)
+      .maybeSingle()
+    if (error) {
+      if (/return_token/.test(error.message || '')) return res.json({ status: 'unknown' })
+      throw error
+    }
+    // The decision is server/returnLinkRules.js (unit-tested); only the
+    // conditional spend below is the route's own.
+    const decision = returnLinkDecision({ invite, voidStatus: VOID_INVITE_STATUS })
+    if (decision.status !== 'ok') return res.json(decision)
+    // Spend it — only if still unspent (two tabs racing: one wins).
+    const { data: spent } = await supabase
+      .from('invites')
+      .update({ return_token_used_at: new Date().toISOString() })
+      .eq('id', invite.id)
+      .eq('return_token_hash', hash)
+      .is('return_token_used_at', null)
+      .select('id')
+    if (!spent?.length) return res.json({ status: 'spent', email: invite.claimed_email })
+    let sessionTokenHash = null
+    // An accountless claim (account creation failed at claim time) never
+    // mints a session: generateLink for an email with no auth user could
+    // sign one up. The page still arrives on the stash alone.
+    if (!mayMintSession(invite)) {
+      console.warn('[return] claim holds no account — arriving without a session; invite:', invite.id)
+    } else try {
+      const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
+        type: 'magiclink',
+        email: invite.claimed_email,
+      })
+      if (!linkErr && linkData?.properties?.hashed_token) sessionTokenHash = linkData.properties.hashed_token
+      else if (linkErr) console.warn('[return] in-band session mint failed (the page falls back to sign-in):', linkErr.message)
+    } catch (e) {
+      console.warn('[return] in-band session mint threw (the page falls back to sign-in):', e?.message || e)
+    }
+    console.log('[return] link spent — invite:', invite.id)
+    return res.json({
+      status: 'ok',
+      slug: invite.link_slug,
+      inviteId: invite.id,
+      filmId: invite.film_id,
+      email: invite.claimed_email,
+      sessionTokenHash,
+    })
+  } catch (err) {
+    console.error('[return] failed:', err)
+    return res.status(500).json({ error: 'Return link failed' })
+  }
+})
+
+/**
+ * The ticket email, sent once after a claim commits (server/ticketEmail.js
+ * builds it; deliverEmail is the ONE dispatch path). Mints the return token
+ * first (after the response, so the claim never waits), reply-to the
+ * filmmaker; never a token in the email beyond /r/{token} itself.
+ */
+async function sendTicketEmailAfterClaim({ invite, slug, emailNorm, recipientName, baseUrl }) {
+  const film = invite.films || {}
+  const [filmmaker, token] = await Promise.all([filmmakerContact(film.creator_id), mintReturnToken(invite.id)])
+  const message = buildTicketEmail({
+    receiverName: recipientName,
+    sharerName: invite.sender_name,
+    ticketNo: invite.ticket_no,
+    filmTitle: film.title || 'a film',
+    posterUrl: film.mux_playback_id ? filmPosterUrl(film.mux_playback_id) : null,
+    // The synopsis is the SAME field the landing renders under the title
+    // (ClaimLanding.jsx `transmissionHook` → films.transmission_hook).
+    synopsis: film.transmission_hook || null,
+    durationSeconds: film.duration_seconds,
+    watchUrl: emailWatchUrl(baseUrl, slug, token),
+    wordmark: wordmarkUrl(baseUrl),
+    clock: clockUrl(baseUrl),
+  })
+  const accepted = await deliverEmail(
+    withReplyTo({ to: emailNorm, subject: message.subject, html: message.html, text: message.text }, filmmaker.email)
+  )
+  console.log('[ticket-email] Resend accepted — id:', accepted?.id || '?', 'invite:', invite.id)
+  return accepted
+}
+
+/* ============ THE REMINDERS — an in-process hourly sweep ============
+ * (founder decision 2026-09-16; rules in server/reminderRules.js). Every
+ * hour, first 60 s after boot: the unwatched claims that are due a reminder
+ * (1 at ≥1 day for "Watch later" claims, 2 at ≥3 days for any claim, nothing
+ * past 7 days, never ghosts, never a show_ghosts film), each sent at most
+ * once — the row is STAMPED FIRST (reminder{n}_sent_at, conditional), then
+ * sent through the one dispatcher; a rejected send clears the stamp for the
+ * next sweep. The sweep SENDS only when REMINDERS_LIVE === '1'; otherwise it
+ * logs the counts (masked addresses). Each reminder re-mints the return
+ * token (the older /r/ link then reads "unknown" → the sign-in page). */
+const REMINDER_SWEEP_MS = 60 * 60 * 1000
+const REMINDER_FIRST_SWEEP_MS = 60 * 1000
+let reminderSweepInFlight = false
+
+async function loadReminderCandidates(now) {
+  const { data: rows, error } = await supabase
+    .from('invites')
+    .select('id, film_id, link_slug, status, claimed_email, recipient_email, recipient_name, sender_name, claimed_at, watch_later_at, reminder1_sent_at, reminder2_sent_at, ticket_no, films(id, title, creator_id, duration_seconds, mux_playback_id, transmission_hook, show_ghosts)')
+    .eq('status', 'claimed')
+    .not('claimed_email', 'is', null)
+    .lte('claimed_at', new Date(now.getTime() - REMINDER1_AFTER_DAYS * 86_400_000).toISOString())
+    .gte('claimed_at', new Date(now.getTime() - REMINDER_WINDOW_DAYS * 86_400_000).toISOString())
+    .order('claimed_at', { ascending: true })
+    .limit(REMINDER_MAX_PER_RUN * 4)
+  if (error) throw error
+  const showGhostsByFilm = {}
+  for (const r of rows || []) showGhostsByFilm[r.film_id] = Boolean(r.films?.show_ghosts)
+  return selectReminderRows(rows, { now, showGhostsByFilm })
+}
+
+/**
+ * One sweep. `send: false` lists only. Returns counts and MASKED rows —
+ * this shape is what the owner's dry-run route answers too.
+ */
+async function runReminderSweep({ send }) {
+  const now = new Date()
+  const baseUrl = resolveBaseUrl(APP_URL, null)
+  const selected = await loadReminderCandidates(now)
+  const preview = selected.map(({ row, which }) => ({
+    inviteId: row.id,
+    filmId: row.film_id,
+    filmTitle: row.films?.title || null,
+    ticketNo: row.ticket_no,
+    to: maskEmail(row.claimed_email),
+    which,
+    claimedAt: row.claimed_at,
+    daysAgo: daysBetween(row.claimed_at, now),
+    watchLater: Boolean(row.watch_later_at),
+  }))
+  if (!send) return { live: false, baseUrl, count: preview.length, rows: preview, sent: [], failed: [], skipped: [] }
+  if (/localhost|127\.0\.0\.1/i.test(baseUrl)) {
+    console.warn('[reminders] APP_URL is not the public site — nothing sent')
+    return { live: false, baseUrl, count: preview.length, rows: preview, sent: [], failed: [], skipped: [], error: 'APP_URL is not set' }
+  }
+  const results = []
+  for (const { row, which } of selected) {
+    const column = which === 1 ? 'reminder1_sent_at' : 'reminder2_sent_at'
+    const result = await sendReminderRow(row, which, {
+      stampIfUnstamped: async (r) => {
+        const { data, error } = await supabase
+          .from('invites')
+          .update({ [column]: new Date().toISOString() })
+          .eq('id', r.id)
+          .is(column, null)
+          .select('id')
+        if (error) throw error
+        return (data || []).length
+      },
+      send: async (r) => {
+        // Re-mint the return link for this email; if Resend rejects, put the
+        // previous (still-live) link back so the person's earlier email keeps
+        // working (red-team, 2026-09-16).
+        const previous = await readReturnTokenState(r.id)
+        const [filmmaker, token] = await Promise.all([filmmakerContact(r.films?.creator_id), mintReturnToken(r.id)])
+        const message = buildReminderEmail({
+          receiverName: r.recipient_name,
+          sharerName: r.sender_name,
+          ticketNo: r.ticket_no,
+          filmTitle: r.films?.title || 'a film',
+          posterUrl: r.films?.mux_playback_id ? filmPosterUrl(r.films.mux_playback_id) : null,
+          synopsis: r.films?.transmission_hook || null,
+          durationSeconds: r.films?.duration_seconds,
+          watchUrl: emailWatchUrl(baseUrl, r.link_slug, token),
+          wordmark: wordmarkUrl(baseUrl),
+          clock: clockUrl(baseUrl),
+        })
+        try {
+          await deliverEmail(
+            withReplyTo({ to: r.claimed_email, subject: message.subject, html: message.html, text: message.text }, filmmaker.email)
+          )
+        } catch (e) {
+          if (token) await restoreReturnTokenState(r.id, previous)
+          throw e
+        }
+        console.log(`[reminders] sent reminder ${which} — invite:`, r.id, 'to:', r.claimed_email)
+      },
+      clearStamp: async (r) => {
+        const { error } = await supabase.from('invites').update({ [column]: null }).eq('id', r.id)
+        if (error) throw error
+      },
+      log: (...args) => console.warn('[reminders]', ...args),
+    })
+    results.push({ ...result, to: maskEmail(row.claimed_email) })
+  }
+  return {
+    live: true,
+    baseUrl,
+    count: selected.length,
+    rows: preview,
+    sent: results.filter((x) => x.outcome === 'sent'),
+    failed: results.filter((x) => x.outcome === 'failed'),
+    skipped: results.filter((x) => x.outcome === 'skipped'),
+  }
+}
+
+/** The hourly tick: sends only when REMINDERS_LIVE === '1'; logs otherwise.
+ *  Never overlaps itself. Errors (a missing column before the migration,
+ *  a database blip) are logged and the next tick tries again. */
+async function reminderSweepTick() {
+  if (reminderSweepInFlight) return
+  reminderSweepInFlight = true
+  try {
+    const live = remindersLive()
+    const result = await runReminderSweep({ send: live })
+    if (live) {
+      console.log(`[reminders] sweep — sent ${result.sent.length}, failed ${result.failed.length}, skipped ${result.skipped.length}`)
+    } else {
+      console.log(`[reminders] sweep (REMINDERS_LIVE is not 1 — nothing sent) — ${result.count} row(s) due:`, result.rows.map((r) => `${r.which}→${r.to}`).join(', ') || '(none)')
+    }
+  } catch (e) {
+    console.warn('[reminders] sweep failed (next hour retries):', e?.message || e)
+  } finally {
+    reminderSweepInFlight = false
+  }
+}
+const reminderFirstTimer = setTimeout(() => {
+  reminderSweepTick()
+  setInterval(reminderSweepTick, REMINDER_SWEEP_MS).unref()
+}, REMINDER_FIRST_SWEEP_MS)
+reminderFirstTimer.unref()
+
+/**
+ * POST /api/admin/reminders/run — the owner's window on the sweep (the
+ * ADMIN_USER_ID pin, verified session). Default (`?dry=1`): the would-send
+ * list, addresses masked. `?dry=0`: run a sweep now — it still sends only
+ * when REMINDERS_LIVE === '1'.
+ */
+app.post('/api/admin/reminders/run', async (req, res) => {
+  try {
+    const caller = await requireAdminCaller(req, res)
+    if (!caller) return
+    const dry = isDryRun(req.query)
+    if (dry) {
+      const result = await runReminderSweep({ send: false })
+      return res.json({ dry: true, remindersLive: remindersLive(), ...result })
+    }
+    if (reminderSweepInFlight) return res.status(409).json({ error: 'a sweep is already in flight' })
+    reminderSweepInFlight = true
+    try {
+      const live = remindersLive()
+      const result = await runReminderSweep({ send: live })
+      return res.json({ dry: false, remindersLive: live, ...result })
+    } finally {
+      reminderSweepInFlight = false
+    }
+  } catch (err) {
+    if (/reminder1_sent_at|reminder2_sent_at|watch_later_at/.test(err?.message || '')) {
+      return res.status(503).json({ error: 'the 20260916 migration has not been applied; nothing sent' })
+    }
+    console.error('[reminders] run failed:', err)
+    return res.status(500).json({ error: 'Reminder run failed' })
+  }
+})
 
 const PORT = process.env.PORT || 3001
 // Never start on Vite's port (3000) — see server/apiPort.js for the story.
