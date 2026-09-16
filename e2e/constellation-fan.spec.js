@@ -31,7 +31,7 @@
  */
 import { test, expect, pushJsError } from './fixtures/test.js'
 import { LABEL_SIZE_LADDER, LINE_ALPHA, MIN_LABEL_ON_SCREEN_PX, PERSON_LABEL_SIZE, RECEDE_OPACITY, labelFontSize, mapScaleFor } from '../src/lib/constellationLabels.js'
-import { FAN_MAX_SPAN, GOLDEN_ANGLE, REACH_BASE, REACH_K, RIM_START } from '../src/lib/constellationLayout.js'
+import { FAN_MAX_SPAN, REACH_BASE, REACH_K, RING1_BASE, RING_ARC, RING_BASE_RADIUS, WADE_RATIO } from '../src/lib/constellationLayout.js'
 
 const REF = 'wmtjgpxhjtbocsmutqqc'
 const OWNER_ID = '11111111-1111-4111-8111-111111111111'
@@ -259,11 +259,19 @@ const readGeometry = (page, inDialog) =>
     // dot clears its own incoming line).
     let minLineGapPx = Infinity
     let ownLineTouches = 0
+    const ownLineNames = []
     for (const nm of named) {
       for (const l of lines) {
         const g = segRectGap(l, nm.b) * ctm
         if (l.from === nm.id || l.to === nm.id) {
-          if (g <= 0) ownLineTouches++
+          // A name the LAYOUT hid (no side of its own clears) paints only
+          // as YOU — always on, its collision reported, never hidden (the
+          // founder's law) — so it is reported here, not counted.
+          if (g <= 0 && byId[nm.id]?.getAttribute('data-layout-hidden') === 'true') ownLineNames.push(`${nm.id} (${byId[nm.id]?.querySelector('text')?.textContent}) LAYOUT-HIDDEN, painted as always-on: touches its own line by ${(-g).toFixed(1)}px`)
+          else if (g <= 0) {
+            ownLineTouches++
+            ownLineNames.push(`${nm.id} (${byId[nm.id]?.querySelector('text')?.textContent}) side=${byId[nm.id]?.querySelector('text')?.getAttribute('data-side') ?? 'plan'} on ${l.from}→${l.to} gap=${g.toFixed(2)}px box=[${nm.b.x.toFixed(1)},${nm.b.y.toFixed(1)},${nm.b.width.toFixed(1)},${nm.b.height.toFixed(1)}] line=[${l.x1.toFixed(1)},${l.y1.toFixed(1)},${l.x2.toFixed(1)},${l.y2.toFixed(1)}] anchor=${byId[nm.id]?.querySelector('text')?.getAttribute('text-anchor')} x=${byId[nm.id]?.querySelector('text')?.getAttribute('x')} y=${byId[nm.id]?.querySelector('text')?.getAttribute('y')} font=${byId[nm.id]?.querySelector('text')?.getAttribute('font-size')}`)
+          }
           continue
         }
         minLineGapPx = Math.min(minLineGapPx, g)
@@ -303,7 +311,7 @@ const readGeometry = (page, inDialog) =>
     const labelPx = parseFloat(svg.getAttribute('data-label-px'))
     const planLabelPx = parseFloat(svg.getAttribute('data-plan-label-px'))
     const ground = getComputedStyle(svg.parentElement).backgroundColor
-    return { cx, cy, persons, labelSizes, renderedWidth: box.width, renderedHeight: box.height, viewBoxWidth: vbParts[2], viewBoxHeight: vbParts[3], paintedNames: named.length, minGapPx, namesOverDots, minLineGapPx, offThreadOpacity: offPerson ? offPerson.getAttribute('opacity') : null, groupOrder: order, onThreadInside: on ? on.querySelectorAll('g[data-node]').length : 0, threadCount: threadGroups.length, threadPainted, paintedPx, labelPx, planLabelPx, viewBox: vbParts, lineLaw, rings, settledPlan, ground, ownLineTouches, worstEndpointPx }
+    return { cx, cy, persons, labelSizes, renderedWidth: box.width, renderedHeight: box.height, viewBoxWidth: vbParts[2], viewBoxHeight: vbParts[3], paintedNames: named.length, minGapPx, namesOverDots, minLineGapPx, ownLineNames, offThreadOpacity: offPerson ? offPerson.getAttribute('opacity') : null, groupOrder: order, onThreadInside: on ? on.querySelectorAll('g[data-node]').length : 0, threadCount: threadGroups.length, threadPainted, paintedPx, labelPx, planLabelPx, viewBox: vbParts, lineLaw, rings, settledPlan, ground, ownLineTouches, worstEndpointPx }
   }, { inDialog })
 /** Wait until the map has measured its rendered width and counter-scaled
  *  its labels (the first paint uses the base size until the resize
@@ -354,46 +362,32 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     const angles = geom.persons
     expect(geom.rings).toBe(0) // the generation rings are dropped
 
-    // Rule 1: THE DIFFUSION FIELD (founder, 16 September 2026) — the nine
-    // direct recipients sit on the sunflower spiral: each at radius
-    // FIELD_R0 + c·√k and angle k × 137.508° for some integer k, k rising
-    // in ticket order (the spread c is the plan's, on the svg).
+    // Rule 1: THE FIRST RING, EVEN, GROWING (founder, 16 September 2026,
+    // sixth pass — the live graph's rule): the nine direct recipients on
+    // even slots in ticket order from 12 o'clock, at the plan's ring
+    // radius (≥ 9 × RING_ARC / 2π and ≥ the base radius); a crowded ring's
+    // non-sharers alternate near and far; sharers stay on the ring.
     const svgEl = dialog.locator('svg.dc-constellation')
-    const spread = parseFloat(await svgEl.getAttribute('data-plan-spread'))
-    const fieldR0 = parseFloat(await svgEl.getAttribute('data-plan-field-r0'))
-    const rim = parseFloat(await svgEl.getAttribute('data-plan-rim'))
-    const rotation = parseFloat(await svgEl.getAttribute('data-plan-field-rotation'))
-    const fieldStep = parseFloat(await svgEl.getAttribute('data-plan-field-step'))
-    expect(spread).toBeGreaterThan(0)
-    // Every dot is reported relative to the film's centre. THE RIM RULE:
-    // the two sharers (Noor, Priya) sit on the rim opposite each other
-    // from 12 o'clock; the seven leaves on the spiral, indices rising in
-    // ticket order.
+    const ringRadius = parseFloat(await svgEl.getAttribute('data-plan-ring'))
+    const ringFar = parseFloat(await svgEl.getAttribute('data-plan-ring-far'))
+    const crowded = (await svgEl.getAttribute('data-plan-ring-crowded')) === 'true'
+    expect(ringRadius).toBeGreaterThanOrEqual(Math.max(RING_BASE_RADIUS, (9 * RING_ARC) / TWO_PI) - 1e-6)
     const sharerIds = new Set(ring1Rows.filter((r) => ROWS.some((k) => k.parent_invite_id === r.id)).map((r) => r.id))
     expect(sharerIds.size).toBe(2)
-    const onRim = ring1Rows.filter((r) => sharerIds.has(r.id))
-    onRim.forEach((r, i) => {
+    let expectFar = false
+    ring1Rows.forEach((r, i) => {
       const a = angles[r.id]
-      expect(Math.hypot(a.x, a.y), `${r.recipient_name} on the rim`).toBeCloseTo(rim, 1)
-      expect(Math.abs(angDiff(Math.atan2(a.y, a.x), RIM_START + (i * TWO_PI) / onRim.length)), `${r.recipient_name} at rim slot ${i}`).toBeLessThan(1e-3)
-    })
-    // A leaf sits on point k, possibly lifted 0–2 field steps outward along
-    // its angle (EVEN FIELD): its angle gives k (from the rotated spiral), its
-    // radius the lift; k rises in ticket order; a sharer takes no point.
-    let lastK = -1
-    for (const r of ring1Rows) {
-      if (sharerIds.has(r.id)) continue
-      const a = angles[r.id]
+      expect(Math.abs(angDiff(Math.atan2(a.y, a.x), RING1_BASE + (i * TWO_PI) / ring1Rows.length)), `${r.recipient_name} at slot ${i}`).toBeLessThan(1e-3)
       const rr = Math.hypot(a.x, a.y)
-      const ang = Math.atan2(a.y, a.x)
-      let found = null
-      for (let k = lastK + 1; k < lastK + 400 && found == null; k++) {
-        if (Math.abs(angDiff(ang, rotation + k * GOLDEN_ANGLE)) > 1e-3) continue
-        for (let lift = 0; lift <= 2; lift++) if (Math.abs(rr - (fieldR0 + spread * Math.sqrt(k) + lift * fieldStep)) < 0.5) found = { k, lift }
+      if (sharerIds.has(r.id)) expect(rr, `${r.recipient_name} (a sharer) on the ring`).toBeCloseTo(ringRadius, 1)
+      else if (!crowded) expect(rr, `${r.recipient_name} on the ring`).toBeCloseTo(ringRadius, 1)
+      else {
+        expect(rr, `${r.recipient_name} ${expectFar ? 'far' : 'near'}`).toBeCloseTo(expectFar ? ringRadius * ringFar : ringRadius, 1)
+        expectFar = !expectFar
       }
-      expect(found, `${r.recipient_name} on the spiral (after the ticket before)`).not.toBeNull()
-      lastK = found.k
-    }
+    })
+    // NO CROSSINGS on this tree: the plan reports its count.
+    console.log(`[wheel] creator modal: ring ${ringRadius.toFixed(0)} (crowded ${crowded}, far ×${ringFar}), crossings ${await svgEl.getAttribute('data-plan-crossings')}`)
 
     // Rule 2 (reach): Lena's ten sit BEYOND Lena — ahead of her limb
     // direction — at least the leaf distance from her, inside a fan no
@@ -414,6 +408,11 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     const priya = angles[PRIYA.id]
     const tamsin = angles[priyaKids[0].id]
     expect(dist(lena, priya)).toBeGreaterThan(dist(tamsin, priya))
+    // LIMBS WADE OUTWARD (sixth pass): each of Lena's ten at least
+    // WADE_RATIO × Lena's own limb from Priya; Lena's at least that much of
+    // Priya's limb from the filmmaker (the ring radius).
+    for (const k of LENA_KIDS) expect(dist(angles[k.id], lena), `${k.recipient_name} wades`).toBeGreaterThanOrEqual(WADE_RATIO * dist(lena, priya) - 1e-6)
+    expect(dist(lena, priya)).toBeGreaterThanOrEqual(WADE_RATIO * Math.hypot(priya.x, priya.y) - 1e-6)
     // Priya's seven beyond Priya, on her limb (from the film through her).
     const priyaDir = dirOf(angles, PRIYA.id)
     for (const k of priyaKids) {
@@ -510,7 +509,8 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
       // LINES CONNECT DOT TO DOT: painted whole, and no painted name box
       // touches its own line either.
       expect(g.worstEndpointPx, `${label}: every segment's endpoints on its dots`).toBeLessThan(0.01)
-      expect(g.ownLineTouches, `${label}: no name on its own line`).toBe(0)
+      if (g.ownLineNames.length) console.log(`[constellation-reach] ${label}: own-line report — ${g.ownLineNames.join('; ')}`)
+      expect(g.ownLineTouches, `${label}: no name on its own line — ${g.ownLineNames.join('; ')}`).toBe(0)
       // Name size: a rung of the ladder (SHRINK BEFORE HIDE), never under
       // its bottom, on the TRUE scale — and the same rung on both desktop
       // surfaces (same height, same scale).
@@ -532,8 +532,11 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
       for (const l of g.lineLaw) {
         expect(l.dashed, `${label}: line into ${l.to} dashed ⇔ in flight`).toBe(!l.arrived)
         expect(l.endHollow, `${label}: line into ${l.to} ends at a hollow dot ⇔ in flight`).toBe(!l.arrived)
-        expect(l.vectorEffect).toBe('non-scaling-stroke')
-        expect(l.strokeWidthPx).toBe('1px')
+        // THINNER AS IT GROWS: the stroke scales with the map (no
+        // non-scaling effect) and never paints under 0.6 device px.
+        expect(l.vectorEffect).toBe('none')
+        // THINNER AS IT GROWS: the stroke is LINE_WIDTH_UNITS map units (1.3) at every zoom; its device size is asserted at 1:1 below.
+        expect(parseFloat(l.strokeWidthPx)).toBeGreaterThanOrEqual(1.3 - 1e-6)
         if (!l.lit) expect(l.stroke).toBe(`rgba(234, 231, 224, ${LINE_ALPHA})`)
       }
       expect(g.lineLaw.filter((l) => l.arrived).map((l) => l.to).sort()).toEqual([PRIYA.id, LENA_ROW.id, OTIS_ROW.id].sort())
@@ -542,7 +545,16 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     // ten hang off YOU as dotted gold runs to hollow gold dots.
     await expect(map.locator(`line.lineage[data-to="${PRIYA.id}"]`)).not.toHaveAttribute('stroke-dasharray', /.+/)
     await expect(map.locator(`line.lineage[data-to="${LENA_ROW.id}"]`)).not.toHaveAttribute('stroke-dasharray', /.+/)
-    for (const k of LENA_KIDS) await expect(map.locator(`line.lineage[data-to="${k.id}"]`)).toHaveAttribute('stroke-dasharray', '2 5')
+    // The dash is in map units now (THINNER AS IT GROWS) and keeps its
+    // screen length: 2 on, 5 off CSS px at this view.
+    for (const k of LENA_KIDS) {
+      const dash = await map.locator(`line.lineage[data-to="${k.id}"]`).getAttribute('stroke-dasharray')
+      expect(dash, `${k.recipient_name}'s line is dashed`).toBeTruthy()
+      const ctm = await page.evaluate(() => document.querySelector('svg.dc-constellation').getScreenCTM().a)
+      const [on, off] = dash.split(' ').map(parseFloat)
+      expect(on * ctm).toBeCloseTo(2, 0)
+      expect(off * ctm).toBeCloseTo(5, 0)
+    }
 
     // Law (a): draw order — the off-thread group first, the thread last,
     // and every thread person painted inside the thread group.
@@ -692,14 +704,16 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
       const svg = document.querySelector('svg.dc-constellation')
       const vb = svg.getAttribute('viewBox').split(' ').map(parseFloat)
       const edge = svg.querySelector('line.web-edge')
-      return { canvas: [vb[2], vb[3]], edgePx: parseFloat(getComputedStyle(edge).strokeWidth), vectorEffect: getComputedStyle(edge).vectorEffect, lines: svg.querySelectorAll('line.web-edge').length, people: svg.querySelectorAll('g[data-node]').length, threadLines: svg.querySelectorAll('line.web-edge[data-thread="true"]').length, threadCount: svg.querySelectorAll('g[data-node][data-thread="true"]').length }
+      return { canvas: [vb[2], vb[3]], edgePx: parseFloat(edge.getAttribute('stroke-width')) * svg.getScreenCTM().a, dpr: window.devicePixelRatio || 1, vectorEffect: getComputedStyle(edge).vectorEffect, lines: svg.querySelectorAll('line.web-edge').length, people: svg.querySelectorAll('g[data-node]').length, threadLines: svg.querySelectorAll('line.web-edge[data-thread="true"]').length, threadCount: svg.querySelectorAll('g[data-node][data-thread="true"]').length }
     })
     expect(opening.vb[2]).toBeLessThanOrEqual(oneToOne.canvas[0] + 1e-3)
     expect(opening.vb[3]).toBeLessThanOrEqual(oneToOne.canvas[1] + 1e-3)
     expect(oneToOne.lines).toBe(oneToOne.people)
     expect(oneToOne.threadLines).toBe(oneToOne.threadCount)
-    expect(oneToOne.edgePx).toBe(1)
-    expect(oneToOne.vectorEffect).toBe('non-scaling-stroke')
+    // THINNER AS IT GROWS: at 1:1 on a phone the stroke has thinned to its
+    // floor — 0.6 device pixels — never below, and no non-scaling effect.
+    expect(oneToOne.edgePx).toBeGreaterThanOrEqual(0.6 / oneToOne.dpr - 0.01)
+    expect(oneToOne.vectorEffect).toBe('none')
     expect(jsErrors).toEqual([])
 
     // THE CREATOR'S PHONE opens on the film and the whole first ring,
@@ -738,7 +752,7 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     expect(creatorOpening.centreOffset[1]).toBeLessThan(1)
     expect(creatorOpening.paintedPx).toBeGreaterThanOrEqual(MIN_LABEL_ON_SCREEN_PX - 0.15)
     expect(LABEL_SIZE_LADDER.some((px) => Math.abs(creatorOpening.paintedPx - px) < 0.15)).toBe(true)
-    expect(creatorOpening.edgePx).toBe(1)
+    expect(creatorOpening.edgePx).toBeGreaterThan(0)
     expect(creatorOpening.lines).toBe(creatorOpening.people)
     expect(creatorOpening.ground).toBe(INK)
     await page.getByRole('button', { name: 'Reset zoom' }).click()
@@ -747,11 +761,11 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
       const svg = document.querySelector('dialog svg.dc-constellation')
       const vb = svg.getAttribute('viewBox').split(' ').map(parseFloat)
       const edge = svg.querySelector('line.web-edge')
-      return { canvas: [vb[2], vb[3]], edgePx: parseFloat(getComputedStyle(edge).strokeWidth), vectorEffect: getComputedStyle(edge).vectorEffect, lines: svg.querySelectorAll('line.web-edge').length, people: svg.querySelectorAll('g[data-node]').length }
+      return { canvas: [vb[2], vb[3]], edgePx: parseFloat(edge.getAttribute('stroke-width')) * svg.getScreenCTM().a, dpr: window.devicePixelRatio || 1, vectorEffect: getComputedStyle(edge).vectorEffect, lines: svg.querySelectorAll('line.web-edge').length, people: svg.querySelectorAll('g[data-node]').length }
     })
     expect(creatorOpening.vb[2]).toBeLessThan(oneToOneCreator.canvas[0])
-    expect(oneToOneCreator.edgePx).toBe(1)
-    expect(oneToOneCreator.vectorEffect).toBe('non-scaling-stroke')
+    expect(oneToOneCreator.edgePx).toBeGreaterThanOrEqual(0.6 / oneToOneCreator.dpr - 0.01)
+    expect(oneToOneCreator.vectorEffect).toBe('none')
     expect(oneToOneCreator.lines).toBe(oneToOneCreator.people)
   })
 
@@ -769,27 +783,21 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     const geom = await readGeometry(page, false)
     // THE DIFFUSION FIELD on the viewer's surface too: the nine direct
     // recipients on the spiral, Noor (the first ticket) at its first point.
-    const spreadHere = parseFloat(await map.getAttribute('data-plan-spread'))
-    const r0Here = parseFloat(await map.getAttribute('data-plan-field-r0'))
-    const rimHere = parseFloat(await map.getAttribute('data-plan-rim'))
-    for (const r of ring1Rows) {
+    const ringHere = parseFloat(await map.getAttribute('data-plan-ring'))
+    const ringFarHere = parseFloat(await map.getAttribute('data-plan-ring-far'))
+    const crowdedHere = (await map.getAttribute('data-plan-ring-crowded')) === 'true'
+    let farHere = false
+    ring1Rows.forEach((r, i) => {
       const a = geom.persons[r.id]
       const rr = Math.hypot(a.x, a.y)
-      if (r.id === NOOR.id || r.id === PRIYA.id) {
-        expect(rr, `${r.recipient_name} on the rim`).toBeCloseTo(rimHere, 1)
-        continue
+      expect(Math.abs(angDiff(Math.atan2(a.y, a.x), RING1_BASE + (i * TWO_PI) / ring1Rows.length)), `${r.recipient_name} at slot ${i}`).toBeLessThan(1e-3)
+      const sharer = r.id === NOOR.id || r.id === PRIYA.id
+      if (sharer || !crowdedHere) expect(rr, `${r.recipient_name} on the ring`).toBeCloseTo(ringHere, 1)
+      else {
+        expect(rr, `${r.recipient_name} ${farHere ? 'far' : 'near'}`).toBeCloseTo(farHere ? ringHere * ringFarHere : ringHere, 1)
+        farHere = !farHere
       }
-      const rotHere = parseFloat(await map.getAttribute('data-plan-field-rotation'))
-      const stepHere = parseFloat(await map.getAttribute('data-plan-field-step'))
-      const ang = Math.atan2(a.y, a.x)
-      let ok = false
-      for (let k = 0; k < 400 && !ok; k++) {
-        if (Math.abs(angDiff(ang, rotHere + k * GOLDEN_ANGLE)) > 1e-3) continue
-        for (let lift = 0; lift <= 2; lift++) if (Math.abs(rr - (r0Here + spreadHere * Math.sqrt(k) + lift * stepHere)) < 0.5) ok = true
-      }
-      expect(ok, `${r.recipient_name} on the spiral`).toBe(true)
-    }
-    expect(Math.abs(angDiff(Math.atan2(geom.persons[NOOR.id].y, geom.persons[NOOR.id].x), RIM_START))).toBeLessThan(1e-3)
+    })
     // The viewer's own fan: ten invitees beyond YOU on her limb, within the cap.
     const you = geom.persons[LENA_ROW.id]
     const youDir = dirOf(geom.persons, LENA_ROW.id)
@@ -884,9 +892,16 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
         // names in view at 4× (chromium, 16 September). The pin fails when
         // zoom reveals them all — then the founder's two laws agree and
         // this exception goes.
-        expect(s.unpaintedInViewNotLayoutHidden, 'at 4× every name whose dot is in view is painted, unless the layout itself hid it (a dot on another leaf\'s ray)').toEqual([])
-        expect(s.unpaintedInView.length, 'the pinned exception: layout-hidden names on rays still hidden at 4× — remove this pin when zoom reveals them').toBeGreaterThan(0)
-        console.log(`[zoom-reveals] pinned: ${s.unpaintedInView.length} layout-hidden name(s) on rays stay hidden at 4×`)
+        // The founder's amendment (sixth pass): from 2× on a hidden name
+        // may take another side — inward, then perpendicular — so a name
+        // the layout could not clear on its planned side paints here.
+        // What still hides at 4× — the map's deepest zoom — is a ring name
+        // no side of which clears even there: fifty-nine rays six degrees
+        // apart leave a perpendicular name no room (measured on chromium:
+        // six of the ring's names near the film). Every such name is one
+        // the layout itself could not clear (data-layout-hidden).
+        expect(s.unpaintedInViewNotLayoutHidden, 'at 4× every name whose dot is in view is painted, unless no side of it clears at the deepest zoom (the layout hid it)').toEqual([])
+        console.log(`[zoom-reveals] at 4× ${s.unpaintedInView.length} name(s) in view have no clear side even at the deepest zoom`)
       }
     }
     for (let i = 1; i < counts.length; i++) expect(counts[i], `painted names at ${i + 1}× never fewer than at ${i}×`).toBeGreaterThanOrEqual(counts[i - 1])

@@ -5,8 +5,12 @@ import {
   REACH_BASE,
   REACH_K,
   FAN_MAX_SPAN,
-  GOLDEN_ANGLE,
-  RIM_START,
+  RING1_BASE,
+  RING_ARC,
+  RING_BASE_RADIUS,
+  RING_FAR_MAX,
+  RING_FAR_MIN,
+  WADE_RATIO,
   STAGGER_RATIO,
   EXTRA_MAX,
   LABEL_SIDES,
@@ -126,55 +130,43 @@ const assertOnCanvas = (layout) => {
     expect(f.x >= -1e-6 && f.y >= -1e-6 && f.x + f.w <= layout.width + 1e-6 && f.y + f.h <= layout.height + 1e-6, 'frame inside the canvas').toBe(true)
   }
 }
-/** THE DIFFUSION FIELD (founder, 16 September 2026), asked of the
- *  filmmaker's direct recipients: each holds a field index k — strictly
- *  increasing in ticket order (`rows` in creation order, when given) —
- *  and sits at radius FIELD_R0 + c·√k and angle k × the golden angle from
- *  the filmmaker, c = layout.plan.spread. Nobody else carries an index. */
-const assertField = (layout, rows = null) => {
+/** THE FIRST RING, EVEN, GROWING (founder, 16 September 2026, sixth
+ *  pass — the live graph's rule): the filmmaker's direct recipients sit
+ *  evenly round the circle in ticket order from 12 o'clock, at a radius
+ *  of at least RING_BASE_RADIUS that grows with their count (≥ count ×
+ *  RING_ARC / 2π); a crowded ring's NON-SHARERS alternate near and far in
+ *  ticket order; sharers stay on the ring. */
+const assertRing = (layout, rows = null) => {
   const film = layout.nodes.find((n) => n.kind === 'film')
-  const c = layout.plan.spread
-  const r0 = layout.plan.fieldR0
-  expect(c).toBeGreaterThan(0)
-  expect(r0).toBeGreaterThan(EMBLEM_R)
   const first = layout.nodes.filter((n) => n.parentId === ROOT_ID)
-  const sharers = first.filter((n) => layout.nodes.some((m) => m.parentId === n.id))
-  for (const n of first) {
-    expect(n.rim || (Number.isInteger(n.fieldIndex) && n.fieldIndex >= 0), `${n.name} holds a field index`).toBe(true)
+  const R = layout.plan.ringRadius
+  expect(R).toBeGreaterThanOrEqual(Math.max(RING_BASE_RADIUS, (first.length * RING_ARC) / (2 * Math.PI)) - 1e-9)
+  const byId = byIdOf(layout)
+  const order = rows ? rows.filter((r) => byId.get(r.id)?.parentId === ROOT_ID).map((r) => byId.get(r.id)) : first
+  order.forEach((n, i) => {
     expect(n.dist).toBeCloseTo(n.r, 6)
-    if (n.rim) continue
-    expect([0, 1, 2]).toContain(n.fieldLift)
-    expect(Math.hypot(n.x - film.x, n.y - film.y), `${n.name}'s radius`).toBeCloseTo(r0 + c * Math.sqrt(n.fieldIndex) + n.fieldLift * layout.plan.fieldStep, 6)
-    expect(Math.abs(angDiff(Math.atan2(n.y - film.y, n.x - film.x), layout.plan.fieldRotation + n.fieldIndex * GOLDEN_ANGLE)), `${n.name}'s angle`).toBeLessThan(1e-6)
-  }
-  // THE RIM RULE: exactly the sharers sit on the rim — at the rim radius,
-  // evenly round the compass from 12 o'clock in ticket order.
-  expect(first.filter((n) => n.rim).map((n) => n.id).sort()).toEqual(sharers.map((n) => n.id).sort())
-  const outerK = Math.max(0, ...first.filter((n) => !n.rim).map((n) => n.fieldIndex))
-  // THE RIM RULE, exact (fifth pass): one field step beyond the field's
-  // outermost POINT — the last index's radius, or a lifted point beyond it.
-  const onField = first.filter((n) => !n.rim)
-  const outerR = Math.max(r0 + c * Math.sqrt(outerK), ...onField.map((n) => Math.hypot(n.x - film.x, n.y - film.y)))
-  expect(layout.plan.rimRadius).toBeCloseTo(outerR + c * Math.sqrt(Math.PI), 6)
-  for (const n of onField) expect(Math.hypot(n.x - film.x, n.y - film.y), `${n.name} inside the rim`).toBeLessThanOrEqual(layout.plan.rimRadius - c * Math.sqrt(Math.PI) + 1e-6)
-  for (const n of sharers) expect(n.fieldIndex, `${n.name} (a sharer) takes no spiral point`).toBeNull()
-  const onRim = sharers.slice().sort((a, b) => a.rimIndex - b.rimIndex)
-  onRim.forEach((n, i) => {
-    expect(Math.hypot(n.x - film.x, n.y - film.y), `${n.name} on the rim`).toBeCloseTo(layout.plan.rimRadius, 6)
-    expect(Math.abs(angDiff(Math.atan2(n.y - film.y, n.x - film.x), RIM_START + (i * 2 * Math.PI) / onRim.length)), `${n.name} at rim slot ${i}`).toBeLessThan(1e-6)
+    const isSharer = layout.nodes.some((m) => m.parentId === n.id)
+    if (isSharer) expect(n.row, `${n.name} (a sharer) stays on the ring`).toBe(0)
+    expect([0, 1]).toContain(n.row)
+    expect(Math.hypot(n.x - film.x, n.y - film.y), `${n.name}'s radius`).toBeCloseTo(n.row ? R * layout.plan.ringFar : R, 6)
+    if (rows) expect(Math.abs(angDiff(Math.atan2(n.y - film.y, n.x - film.x), RING1_BASE + (i * 2 * Math.PI) / first.length)), `${n.name} at slot ${i}`).toBeLessThan(1e-6)
   })
-  for (const n of layout.nodes) if (n.parentId !== ROOT_ID) expect(n.fieldIndex).toBeNull()
-  if (rows) {
-    const byId = byIdOf(layout)
-    const order = rows.filter((r) => byId.get(r.id)?.parentId === ROOT_ID && !byId.get(r.id).rim).map((r) => byId.get(r.id).fieldIndex)
-    for (let i = 1; i < order.length; i++) expect(order[i], 'field indices rise in ticket order').toBeGreaterThan(order[i - 1])
-    const rimOrder = rows.filter((r) => byId.get(r.id)?.rim).map((r) => byId.get(r.id).rimIndex)
-    for (let i = 1; i < rimOrder.length; i++) expect(rimOrder[i], 'rim slots follow ticket order').toBe(rimOrder[i - 1] + 1)
+  if (layout.plan.ringCrowded) {
+    expect(layout.plan.ringFar).toBeGreaterThanOrEqual(RING_FAR_MIN - 1e-9)
+    expect(layout.plan.ringFar).toBeLessThanOrEqual(RING_FAR_MAX + 1e-9)
+    // The alternation: near, far, near, far… among the non-sharers in ticket order.
+    let expectFar = false
+    for (const n of order) {
+      if (layout.nodes.some((m) => m.parentId === n.id)) continue
+      expect(n.row, `${n.name} alternates`).toBe(expectFar ? 1 : 0)
+      expectFar = !expectFar
+    }
+  } else {
+    expect(layout.plan.ringFar).toBe(1)
+    for (const n of first) expect(n.row).toBe(0)
   }
   // No two first-degree dots within the clearance of each other.
   for (let i = 0; i < first.length; i++) for (let j = i + 1; j < first.length; j++) expect(Math.hypot(first[i].x - first[j].x, first[i].y - first[j].y)).toBeGreaterThan(layout.plan.clearance)
-  // ONE DIRECTION FOR NAMES: a field name is outward or (flipped) inward, never perpendicular.
-  for (const n of first) if (!n.rim && !n.hidden) expect(['out', 'in'], `${n.name}'s side`).toContain(n.labelSide)
 }
 /** THE REACH RULE, asked of every person beyond the first ring. */
 const assertReach = (layout) => {
@@ -188,10 +180,15 @@ const assertReach = (layout) => {
     // never anything else. A sharer is always in the near row.
     expect([0, 1]).toContain(n.row)
     if (childrenOf(layout, n.id).length) expect(n.row, `${n.name} shared onward: near row`).toBe(0)
-    expect(n.dist - n.extra, `${n.name}'s distance from ${p.name}`).toBeCloseTo((layout.plan.reachBase + layout.plan.reachK * Math.sqrt(n.subtreeSize)) * (n.row ? STAGGER_RATIO : 1), 9)
+    // LIMBS WADE OUTWARD (sixth pass): the reach rule's length, or WADE_RATIO
+    // × the parent's own limb, whichever is longer (a first-ring sharer's
+    // limb is the ring radius).
+    const parentLimb = p.dist
+    const reach = Math.max(layout.plan.reachBase + layout.plan.reachK * Math.sqrt(n.subtreeSize), WADE_RATIO * parentLimb)
+    expect(n.dist - n.extra, `${n.name}'s distance from ${p.name}`).toBeCloseTo(reach * (n.row ? STAGGER_RATIO : 1), 9)
     expect(Math.hypot(n.x - p.x, n.y - p.y), `${n.name} sits at its distance`).toBeCloseTo(n.dist, 6)
     const siblings = childrenOf(layout, p.id)
-    const fanReach = Math.min(...siblings.map((s) => layout.plan.reachBase + layout.plan.reachK * Math.sqrt(s.subtreeSize)))
+    const fanReach = Math.min(...siblings.map((s) => Math.max(layout.plan.reachBase + layout.plan.reachK * Math.sqrt(s.subtreeSize), WADE_RATIO * parentLimb)))
     expect(n.extra, `${n.name}'s fan never balloons`).toBeLessThanOrEqual(EXTRA_MAX * fanReach + 1e-9)
     for (const s of siblings) expect(s.extra, `${s.name} shares ${p.name}'s fan move`).toBe(n.extra)
     // BEYOND the parent: ahead of the parent's own outward direction —
@@ -289,59 +286,39 @@ describe('buildConstellationLayout', () => {
   // movement; rule 4 is one drawing on every surface. v4's "step out to
   // the next radius level" and the generation rings are gone. ──
 
-  it('rule 1: THE DIFFUSION FIELD (founder, 16 September 2026) — the filmmaker\'s direct recipients sit on the sunflower spiral in ticket order; the first at the field\'s first clear point; a point within the clearance of a placed dot or name is skipped', () => {
+  it('rule 1: THE FIRST RING, EVEN, GROWING (founder, 16 September 2026, sixth pass) — the direct recipients evenly round the circle in ticket order from 12 o\'clock, at a radius that grows with their count; sharers on the ring', () => {
     const layout = fixture()
-    assertField(layout, fixtureRows())
+    assertRing(layout, fixtureRows())
     const a = layout.nodes.find((n) => n.id === 'a')
     const w1 = layout.nodes.find((n) => n.id === 'w1')
-    // 'a' and 'w1' both shared onward: they RESERVE the spiral's first
-    // points (a's is point 0) and sit on the rim, opposite each other.
-    expect(a.rim).toBe(true)
-    expect(w1.rim).toBe(true)
-    expect(a.rimIndex).toBe(0)
-    expect(w1.rimIndex).toBe(1)
+    // Two direct recipients: opposite each other, 'a' (the first ticket) at 12 o'clock.
     expect(Math.abs(angDiff(a.theta, w1.theta))).toBeCloseTo(Math.PI, 9)
-    expect(a.r).toBeCloseTo(layout.plan.rimRadius, 6)
+    expect(Math.abs(angDiff(a.theta, RING1_BASE))).toBeLessThan(1e-9)
+    expect(a.r).toBeCloseTo(layout.plan.ringRadius, 6)
+    expect(layout.plan.ringRadius).toBeCloseTo(RING_BASE_RADIUS, 9)
 
-    // Nine creator-sent tickets, one with a large branch: indices rise in
-    // ticket order; the branch is placed the moment its sharer is, so the
-    // people after it flow around the limb (their indices may skip).
+    // Nine creator-sent tickets, one with a large branch: nine even slots.
     seq = 0
     const rows = []
     for (let i = 0; i < 9; i++) rows.push(inv(`r${i}`, CREATOR))
     for (let i = 0; i < 12; i++) rows.push(inv(`big${i}`, 'user-r3', 'r3'))
-    const field = buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR })
-    assertField(field, rows)
-    const byId = byIdOf(field)
-    expect(byId.get('r0').fieldIndex).toBe(0)
-    expect(byId.get('r3').rim).toBe(true) // the sharer: on the rim, no spiral point
-    const ks = ['r0', 'r1', 'r2', 'r4', 'r5', 'r6', 'r7', 'r8'].map((id) => byId.get(id).fieldIndex)
-    expect(ks[7]).toBeGreaterThanOrEqual(7)
-    assertReach(field)
+    const ring = buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR })
+    assertRing(ring, rows)
+    assertReach(ring)
   })
 
-  it('rule 1: a crowded field — twenty-four long names skip the points their names would not fit and spread outward; adding a twenty-fifth moves nobody', () => {
-    expect(GOLDEN_ANGLE).toBeCloseTo((137.508 * Math.PI) / 180, 4)
+  it('rule 1: THE FIRST RING GROWS WITH ITS COUNT — forty first-ring people sit at ≥ 40 × RING_ARC / 2π; a crowded ring\'s non-sharers alternate near and far, its sharers stay on the ring', () => {
     seq = 0
     const rows = []
-    for (let i = 0; i < 24; i++) rows.push(inv(`r${i}`, CREATOR, null, { recipient_name: 'Marguerite' }))
+    for (let i = 0; i < 40; i++) rows.push(inv(`r${i}`, CREATOR, null, { recipient_name: 'Marguerite' }))
+    rows.push(inv('k5', 'user-r5', 'r5'), inv('k20', 'user-r20', 'r20'))
     const layout = buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR })
-    assertField(layout, rows)
-    const first = layout.nodes.filter((n) => n.parentId === ROOT_ID)
-    // Long names cannot take consecutive points: skips happen.
-    expect(Math.max(...first.map((n) => n.fieldIndex))).toBeGreaterThan(23)
-    // Stability: a twenty-fifth person moves no one placed before them.
-    const more = [...rows, inv('r24', CREATOR, null, { recipient_name: 'Marguerite' })]
-    // The ladder is held at the base's rung: a rung change rescales the whole field (the size law's doing, not a move).
-    const grown = buildConstellationLayout({ filmInvites: more, creatorId: CREATOR, labelFloorPx: layout.plan.labelPx })
-    const film0 = layout.nodes.find((n) => n.kind === 'film')
-    const film1 = grown.nodes.find((n) => n.kind === 'film')
-    for (const n of first) {
-      const m = grown.nodes.find((x) => x.id === n.id)
-      expect(m.fieldIndex).toBe(n.fieldIndex)
-      expect(m.x - film1.x).toBeCloseTo(n.x - film0.x, 6)
-      expect(m.y - film1.y).toBeCloseTo(n.y - film0.y, 6)
-    }
+    assertRing(layout, rows)
+    expect(layout.plan.ringRadius).toBeCloseTo((40 * RING_ARC) / (2 * Math.PI), 9)
+    expect(layout.plan.ringCrowded, 'forty long names crowd the ring').toBe(true)
+    const byId = byIdOf(layout)
+    expect(byId.get('r5').row).toBe(0)
+    expect(byId.get('r20').row).toBe(0)
     if (layout.plan.settled) expect(assertClearance(layout)).toBeGreaterThanOrEqual(LABEL_CLEARANCE - 1e-9)
   })
 
@@ -358,18 +335,19 @@ describe('buildConstellationLayout', () => {
     expect(byId.get('leaf').subtreeSize).toBe(1)
     expect(byId.get('mid').subtreeSize).toBe(4)
     expect(byId.get('big').subtreeSize).toBe(9)
-    expect(byId.get('leaf').dist).toBeLessThan(byId.get('mid').dist)
+    // (LIMBS WADE OUTWARD holds both at WADE_RATIO × the ring radius here: equal.)
+    expect(byId.get('leaf').dist).toBeLessThanOrEqual(byId.get('mid').dist + 1e-9)
     expect(byId.get('mid').dist).toBeLessThan(byId.get('big').dist)
     // The rule itself, to the unit: BASE + K√size, plus the fan's move.
     assertReach(layout)
-    expect(byId.get('big').dist - byId.get('big').extra).toBeCloseTo(layout.plan.reachBase + layout.plan.reachK * 3, 9)
-    expect(byId.get('leaf').dist - byId.get('leaf').extra).toBeCloseTo(layout.plan.reachBase + layout.plan.reachK, 9)
+    // (LIMBS WADE OUTWARD: never under WADE_RATIO × the parent's limb — the ring radius here.)
+    expect(byId.get('big').dist - byId.get('big').extra).toBeCloseTo(Math.max(layout.plan.reachBase + layout.plan.reachK * 3, WADE_RATIO * layout.plan.ringRadius), 9)
+    expect(byId.get('leaf').dist - byId.get('leaf').extra).toBeCloseTo(Math.max(layout.plan.reachBase + layout.plan.reachK, WADE_RATIO * layout.plan.ringRadius), 9)
     expect(layout.plan.reachBase).toBeGreaterThanOrEqual(REACH_BASE - 1e-9) // THE LIMB FLOOR: never under the design base
     // The direct recipients are NOT under the reach rule: 'p' holds a
-    // 13-person subtree and 'q' one; both sit on the field by ticket order.
-    assertField(layout, rows)
-    expect(byId.get('p').rim).toBe(true)
-    expect(byId.get('q').fieldIndex).toBe(0)
+    // 13-person subtree and 'q' one; both sit on the ring by ticket order.
+    assertRing(layout, rows)
+    expect(byId.get('p').r).toBeCloseTo(layout.plan.ringRadius, 6)
   })
 
   // Three full builds (the Circles-shaped tree among them): under a loaded
@@ -436,7 +414,7 @@ describe('buildConstellationLayout', () => {
     expect(new Set(leaves.map((k) => k.row))).toEqual(new Set([0, 1]))
     expect(kids.find((k) => k.id === 'k7').row).toBe(0)
     // The HARD CAP on the outward move: never past half the leaf reach.
-    const leafReach = layout.plan.reachBase + layout.plan.reachK
+    const leafReach = Math.max(layout.plan.reachBase + layout.plan.reachK, WADE_RATIO * layout.plan.ringRadius)
     for (const k of kids) expect(k.extra).toBeLessThanOrEqual(EXTRA_MAX * leafReach + 1e-9)
     for (const k of kids) expect(k.extra).toBe(kids[0].extra)
     // The sharer among them still sits further out than a near-row leaf
@@ -444,7 +422,8 @@ describe('buildConstellationLayout', () => {
     const byId = byIdOf(layout)
     const near = leaves.find((k) => k.row === 0)
     const far = leaves.find((k) => k.row === 1)
-    expect(byId.get('k7').dist).toBeGreaterThan(near.dist)
+    // (Under LIMBS WADE OUTWARD both can sit at the wading minimum: never nearer.)
+    expect(byId.get('k7').dist).toBeGreaterThanOrEqual(near.dist - 1e-9)
     expect(far.dist - far.extra).toBeCloseTo(STAGGER_RATIO * leafReach, 9)
     assertReach(layout)
     assertOnCanvas(layout)
@@ -459,7 +438,7 @@ describe('buildConstellationLayout', () => {
     const layout = buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR, labelFloorPx: 9 })
     const kids = childrenOf(layout, 'r1')
     expect(kids[59].dir - kids[0].dir).toBeLessThanOrEqual(FAN_MAX_SPAN + 1e-9)
-    for (const k of kids) expect(k.extra).toBeLessThanOrEqual(EXTRA_MAX * (layout.plan.reachBase + layout.plan.reachK) + 1e-9)
+    for (const k of kids) expect(k.extra).toBeLessThanOrEqual(EXTRA_MAX * Math.max(layout.plan.reachBase + layout.plan.reachK, WADE_RATIO * layout.plan.ringRadius) + 1e-9)
     expect(layout.plan.settled).toBe(false) // the safety net's case, reported
     assertReach(layout)
     assertOnCanvas(layout)
@@ -498,7 +477,7 @@ describe('buildConstellationLayout', () => {
     expect(angDiff(byId.get('lone').dir, byId.get('r3').dir)).toBeCloseTo(0, 9)
     // Nobody stepped to a "next level": every distance is the rule plus
     // (at most) that fan's own cap move.
-    for (const k of childrenOf(layout, 'r0')) expect(k.dist - k.extra).toBeCloseTo(layout.plan.reachBase + layout.plan.reachK, 9)
+    for (const k of childrenOf(layout, 'r0')) expect(k.dist - k.extra).toBeCloseTo(Math.max(layout.plan.reachBase + layout.plan.reachK, WADE_RATIO * layout.plan.ringRadius), 9)
   })
 
   it('THE HARD RULE holds on every settled layout at the production floor: names 6px apart, no name across a dot, no name on a line it is not attached to — the fixture and the Circles-shaped tree', () => {
@@ -516,7 +495,7 @@ describe('buildConstellationLayout', () => {
     // Under the field (16 September) the tree is measured, not assumed;
     // the strict settle is a design-gate question for the founder.
     expect(typeof circles.plan.settled).toBe('boolean')
-    console.log(`[field] Circles-shaped tree: rung ${circles.plan.labelPx}, settled ${circles.plan.settled}, hidden ${circles.plan.hidden}, colliding ${circles.plan.colliding}, dotsOnLines ${circles.plan.dotsOnLines}, spokes across dots ${circles.plan.raysAcrossDots}`)
+    console.log(`[ring] Circles-shaped tree: rung ${circles.plan.labelPx}, settled ${circles.plan.settled}, hidden ${circles.plan.hidden}, colliding ${circles.plan.colliding}, dotsOnLines ${circles.plan.dotsOnLines}, crossings ${circles.plan.crossings}, ring ${circles.plan.ringRadius.toFixed(0)} crowded ${circles.plan.ringCrowded}`)
     assertLinesWhole(circles)
     assertOnCanvas(circles)
     // The limb the founder described: Ien → Arielle → Krist → Alexander,
@@ -526,8 +505,11 @@ describe('buildConstellationLayout', () => {
     expect(byId.get('a-Krist').r).toBeGreaterThan(byId.get('r2').r)
     expect(byId.get('k-Alexander').r).toBeGreaterThan(byId.get('a-Krist').r)
     expect(byId.get('a-Krist').dist).toBeGreaterThan(byId.get('a-Cal').dist)
-    expect(byId.get('k-Alexander').dist).toBeGreaterThan(byId.get('k-Patti').dist)
-    assertField(circles, circlesRows()) // Marcus and the other direct recipients: on the field
+    // (Under LIMBS WADE OUTWARD Alexander and Patti both sit at the wading
+    // minimum from Krist — Patti's far row further — so the reach ORDER is
+    // asserted as the minimum itself.)
+    expect(byId.get('k-Alexander').dist - byId.get('k-Alexander').extra).toBeGreaterThanOrEqual(WADE_RATIO * byId.get('a-Krist').dist - 1e-6)
+    assertRing(circles, circlesRows()) // Marcus and the other direct recipients: on the ring
     // Krist's ten stay inside the cap, centred near Krist's own direction
     // (any turn is the least the neighbours needed).
     const ten = childrenOf(circles, 'a-Krist')
@@ -570,7 +552,7 @@ describe('buildConstellationLayout', () => {
     expect(big).toHaveLength(60)
     expect(big[59].dir - big[0].dir).toBeLessThanOrEqual(FAN_MAX_SPAN + 1e-9)
     // A FAN NEVER BALLOONS: even sixty names move at most half a leaf reach out.
-    expect(big[0].extra).toBeLessThanOrEqual(EXTRA_MAX * (layout.plan.reachBase + layout.plan.reachK) + 1e-9)
+    expect(big[0].extra).toBeLessThanOrEqual(EXTRA_MAX * Math.max(layout.plan.reachBase + layout.plan.reachK, WADE_RATIO * layout.plan.ringRadius) + 1e-9)
     for (const n of layout.nodes) expect(Number.isFinite(n.x) && Number.isFinite(n.y)).toBe(true)
     expect(layout.width).toBeLessThan(8000)
     expect(typeof layout.plan.settled).toBe('boolean')
@@ -596,8 +578,8 @@ describe('buildConstellationLayout', () => {
       expect(at(a, id).theta).toBeCloseTo(at(b, id).theta, 12)
       expect(at(a, id).dir).toBeCloseTo(at(b, id).dir, 12)
     }
-    expect(at(a, 'early').rimIndex).toBe(0) // the first ticket among the sharers takes the rim's first slot (12 o'clock)
-    expect(at(a, 'late').fieldIndex).toBeGreaterThan(at(a, 'mid').fieldIndex) // ticket order = field order (early, a sharer, is on the rim)
+    expect(Math.abs(angDiff(at(a, 'early').theta, RING1_BASE))).toBeLessThan(1e-9) // the first ticket takes 12 o'clock
+    expect(angDiff(at(a, 'mid').theta, at(a, 'early').theta)).toBeGreaterThan(0) // ticket order round the ring
     // Inside a fan: chronological, counter-clockwise to clockwise.
     expect(childrenOf(a, 'early').map((n) => n.id)).toEqual(['k-early', 'k-mid', 'k-late'])
   })
@@ -725,21 +707,19 @@ describe('buildConstellationLayout', () => {
     expect(names.some((n) => n === 'ghost' || n === 'pat' || n === 'deepcast')).toBe(false)
   })
 
-  it('the canvas is CENTRED on the filmmaker with equal margins (founder, 16 September 2026), never smaller than the base canvas, and everything lies inside it', () => {
+  it('the canvas is FITTED to the drawing (the live graph\'s rule, restored in the sixth pass), never smaller than the base canvas, everything inside it; a small drawing is centred inside the base canvas', () => {
     const circles = buildConstellationLayout({ filmInvites: circlesRows(), creatorId: CREATOR, creatorName: 'Ien' })
     assertOnCanvas(circles)
-    // CENTRED (founder, 16 September 2026): the filmmaker sits at the
-    // canvas's exact middle on both axes, equal margins either side.
-    expect(circles.cx).toBeCloseTo(circles.width / 2, 9)
-    expect(circles.cy).toBeCloseTo(circles.height / 2, 9)
     expect(circles.width).toBeGreaterThanOrEqual(900)
     expect(circles.height).toBeGreaterThanOrEqual(715)
     // A small drawing is centred inside the base canvas (900×715 — the
     // reference view's proportion, so the first ring paints at 95px).
     const small = buildConstellationLayout({ filmInvites: [inv('a', CREATOR), inv('b', CREATOR)], creatorId: CREATOR })
     expect([small.width, small.height]).toEqual([900, 715])
-    expect(small.cx).toBeCloseTo(450, 6)
-    expect(small.cy).toBeCloseTo(357.5, 6)
+    // (FITTED: the drawing's box is centred, so the filmmaker sits within a
+    // name's height of the exact middle, not on it.)
+    expect(Math.abs(small.cx - 450)).toBeLessThan(15)
+    expect(Math.abs(small.cy - 357.5)).toBeLessThan(15)
   })
 
   it('show_ghosts flag ON: ghosts join every count and render indistinguishably from real nodes', () => {
@@ -1035,11 +1015,11 @@ describe('the fallback is a REAL placement, never a stand-in (red team, 9 Septem
     const rows = names.map((name, i) => inv(`r${i}`, CREATOR, null, { recipient_name: name }))
     for (let i = 0; i < 12; i += 3) rows.push(inv(`k${i}`, `user-r${i}`, `r${i}`, { recipient_name: 'Kid' }))
     const layout = buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR, creatorName: 'Ien' })
-    // Under the field the twelve sit on the spiral; whether the plan
-    // settles is measured, not assumed (the design gate of 16 September).
-    assertField(layout, rows)
+    // The twelve sit on the ring; whether the plan settles is measured,
+    // not assumed (the design gate of 16 September).
+    assertRing(layout, rows)
     expect(typeof layout.plan.settled).toBe('boolean')
-    console.log(`[field] twelve long names: rung ${layout.plan.labelPx}, settled ${layout.plan.settled}, hidden ${layout.plan.hidden}, dotsOnLines ${layout.plan.dotsOnLines}, raysAcrossDots ${layout.plan.raysAcrossDots}`)
+    console.log(`[ring] twelve long names: rung ${layout.plan.labelPx}, settled ${layout.plan.settled}, hidden ${layout.plan.hidden}, dotsOnLines ${layout.plan.dotsOnLines}, crossings ${layout.plan.crossings}, crowded ${layout.plan.ringCrowded}`)
     const ps = persons(layout).filter((n) => !n.hidden)
     const film = layout.nodes.find((n) => n.kind === 'film')
     for (const n of ps.filter((p) => p.depth === 1)) {

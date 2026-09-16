@@ -88,7 +88,23 @@ import {
   labelVisibility,
   mapScaleFor,
   pickLabelSize,
+  rectsCollide,
+  segmentTouchesRect,
 } from '../lib/constellationLabels'
+import { PERP_OFFSET, radialLabel } from '../lib/constellationLayout'
+
+/** THINNER AS IT GROWS (founder, 16 September 2026, sixth pass): a line is
+ *  LINE_WIDTH_UNITS map units wide — it thins as the map scales down, as
+ *  the drawing grows — and never under LINE_MIN_DEVICE_PX device pixels
+ *  (the fixed one-pixel non-scaling stroke is gone). */
+const LINE_WIDTH_UNITS = 1.3
+const LINE_MIN_DEVICE_PX = 0.6
+/** ZOOM REVEALS EVERYTHING (founder law): from this zoom on (against the
+ *  whole-graph view) a name the plan could not clear on its planned side
+ *  may take another — inward, then perpendicular — if that side clears
+ *  here (the founder's amendment of the sixth pass: perpendicular allowed
+ *  at ≥ 2×). */
+const RETRY_SIDES_FROM_ZOOM = 2
 
 const MIN_ZOOM_DIV = 4 // deepest zoom-in shows 1/4 of the canvas
 /** How far (as a fraction of the current view) the map may be dragged past
@@ -311,10 +327,10 @@ export default function ConstellationMap({ layout }) {
    *  unattached line. The measurement is translation-invariant (every
    *  rect shifts alike when the map pans), so it is taken at the origin
    *  and recomputed only when the scale changes. */
-  const { visibleIds, goldOverlaps, labelPx } = useMemo(() => {
+  const { visibleIds, goldOverlaps, labelPx, labelAt } = useMemo(() => {
     const fallbackPx = layout?.plan?.labelPx ?? MIN_LABEL_ON_SCREEN_PX
     if (!layout || !personItems.length || !mapScale) {
-      return { visibleIds: new Set(personItems.map((it) => it.id)), goldOverlaps: [], labelPx: fallbackPx }
+      return { visibleIds: new Set(personItems.map((it) => it.id)), goldOverlaps: [], labelPx: fallbackPx, labelAt: new Map() }
     }
     const scale = mapScale
     const film = layout.nodes.find((n) => n.kind === 'film')
@@ -347,8 +363,39 @@ export default function ConstellationMap({ layout }) {
       }
       return { ...labelVisibility(items, undefined, obstacles, lines), required: [...required, ...items.filter((it) => it.gold).map((it) => it.id)] }
     })
-    return { visibleIds: picked.visibleIds, goldOverlaps: picked.goldOverlaps, labelPx: picked.px }
-  }, [layout, personItems, mapScale, segments])
+    // The zoomed retry: at RETRY_SIDES_FROM_ZOOM× and beyond, every name
+    // still hidden tries the other sides of its dot in turn — inward, then
+    // the two perpendiculars — and paints on the first that clears every
+    // painted name, every other dot and every line it is not attached to
+    // at this view. The layout's own side stays the plan; this is the
+    // renderer's, per view, so zooming reveals a name whose planned side
+    // a neighbour's line runs along.
+    const zoomFactor = layout.width && rendered.w ? scale / mapScaleFor(rendered.w, rendered.h, layout.width, layout.height) : 1
+    const labelAt = new Map()
+    if (zoomFactor >= RETRY_SIDES_FROM_ZOOM - 1e-9) {
+      const view = { vbX: 0, vbY: 0, scale, minPx: picked.px }
+      const painted = personItems.filter((it) => picked.visibleIds.has(it.id)).map((it) => ({ id: it.id, rect: labelScreenRect(it, view) }))
+      const byId = new Map(layout.nodes.map((n) => [n.id, n]))
+      for (const it of personItems) {
+        if (picked.visibleIds.has(it.id)) continue
+        const n = byId.get(it.id)
+        if (!n) continue
+        for (const [side, hang] of [['in', 'out'], ['left', 'out'], ['right', 'out'], ['left', 'in'], ['right', 'in']]) {
+          const l = radialLabel(n.dir, n.x, n.y, side, PERP_OFFSET, hang)
+          const rect = labelScreenRect({ ...it, x: l.x, y: l.y, anchor: l.anchor }, view)
+          if (painted.some((q) => rectsCollide(rect, q.rect, LABEL_GAP_PX))) continue
+          if (obstacles.some((o) => o.id !== it.id && rectsCollide(rect, o.rect, LABEL_GAP_PX))) continue
+          if (lines.some((ln) => ln.fromId !== it.id && ln.toId !== it.id && segmentTouchesRect(ln.x1, ln.y1, ln.x2, ln.y2, rect, LABEL_GAP_PX))) continue
+          if (lines.some((ln) => (ln.fromId === it.id || ln.toId === it.id) && segmentTouchesRect(ln.x1, ln.y1, ln.x2, ln.y2, rect, 0))) continue
+          picked.visibleIds.add(it.id)
+          painted.push({ id: it.id, rect })
+          labelAt.set(it.id, { x: l.x, y: l.y, anchor: l.anchor, side })
+          break
+        }
+      }
+    }
+    return { visibleIds: picked.visibleIds, goldOverlaps: picked.goldOverlaps, labelPx: picked.px, labelAt }
+  }, [layout, personItems, mapScale, segments, rendered.w, rendered.h])
 
   /** The filmmaker's center labels for this scale (shared geometry), on
    *  the rung the ladder chose. */
@@ -543,9 +590,10 @@ export default function ConstellationMap({ layout }) {
         {n.label && (visibleIds.has(n.id) || explored) && (
           <text
             key={`label-${n.id}`}
-            x={n.label.x}
-            y={n.label.y}
-            textAnchor={n.label.anchor}
+            x={(labelAt.get(n.id) ?? n.label).x}
+            y={(labelAt.get(n.id) ?? n.label).y}
+            textAnchor={(labelAt.get(n.id) ?? n.label).anchor}
+            data-side={labelAt.get(n.id)?.side}
             fontSize={fontSize}
             letterSpacing="2"
             className={onThread ? 'web-label lineage' : 'web-label dim-label'}
@@ -558,6 +606,10 @@ export default function ConstellationMap({ layout }) {
     )
   }
 
+  /** Map units per CSS pixel at this view, and the stroke (map units). */
+  const unitsPerPx = mapScale ? 1 / mapScale : 1
+  const dpr = typeof window !== 'undefined' && window.devicePixelRatio ? window.devicePixelRatio : 1
+  const strokeUnits = Math.max(LINE_WIDTH_UNITS, (LINE_MIN_DEVICE_PX / dpr) * unitsPerPx)
   const edge = (s, i) => {
     const lit = litSet.has(s.fromId) && litSet.has(s.toId)
     const onThread = threadSet.has(s.fromId) && threadSet.has(s.toId)
@@ -568,12 +620,13 @@ export default function ConstellationMap({ layout }) {
         y1={s.y1}
         x2={s.x2}
         y2={s.y2}
-        strokeWidth="1"
+        // THINNER AS IT GROWS: LINE_WIDTH_UNITS map units, never under
+        // LINE_MIN_DEVICE_PX device pixels at this view.
+        strokeWidth={strokeUnits}
         // The line law: solid = arrived (the recipient claimed), dotted =
-        // still in flight. The dash is in SCREEN pixels (non-scaling
-        // stroke), so it never dissolves at 1:1 on a phone.
-        strokeDasharray={s.arrived ? undefined : '2 5'}
-        vectorEffect="non-scaling-stroke"
+        // still in flight. The dash keeps its screen length (2 on, 5 off
+        // CSS px) at every zoom, so it never dissolves at 1:1 on a phone.
+        strokeDasharray={s.arrived ? undefined : `${2 * unitsPerPx} ${5 * unitsPerPx}`}
         opacity={onThread || (exploreSet.has(s.fromId) && exploreSet.has(s.toId)) || !hasThread ? undefined : RECEDE_OPACITY}
         data-from={s.fromId}
         data-to={s.toId}
@@ -646,11 +699,11 @@ export default function ConstellationMap({ layout }) {
         viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
         data-plan-settled={layout.plan?.settled ? 'true' : 'false'}
         data-plan-label-px={layout.plan?.labelPx}
-        data-plan-spread={layout.plan?.spread}
-        data-plan-field-r0={layout.plan?.fieldR0}
-        data-plan-field-rotation={layout.plan?.fieldRotation}
-        data-plan-field-step={layout.plan?.fieldStep}
-        data-plan-rim={layout.plan?.rimRadius}
+        data-plan-ring={layout.plan?.ringRadius}
+        data-plan-ring-far={layout.plan?.ringFar}
+        data-plan-ring-crowded={layout.plan?.ringCrowded ? 'true' : 'false'}
+        data-plan-crossings={layout.plan?.crossings}
+        data-stroke-units={strokeUnits}
         data-label-px={labelPx}
         role="img"
         aria-label={
