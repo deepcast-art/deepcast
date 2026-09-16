@@ -253,6 +253,17 @@ export const RIM_START = -Math.PI / 2
  *  regardless (reported as best effort). */
 const FIELD_STRICT_SKIPS = 40
 const FIELD_MAX_SKIPS = 400
+/** How many field steps a point blocked only by a spoke may lift outward
+ *  along its own angle before the next point is tried. */
+const FIELD_LIFT_MAX = 2
+/** The reference name whose painted width sets the field's spread with
+ *  the box height — six letters of average glyph width (the mean of the
+ *  Phoenix uppercase advances is ≈ 0.58 em; "MARCUS" measures 0.57 em a
+ *  letter). Fixed, so the spread depends on the rung alone. */
+const REFERENCE_NAME = 'MARCUS'
+/** How many spiral points the start rotation is scored over — fixed, so
+ *  the rotation depends on the sharers' spokes alone. */
+const FIELD_ROTATION_POINTS = 60
 /** The least-movement separation of fans (rule 3): passes of small equal
  *  turns, each fan about its own parent, until every rule holds — or until
  *  the count of violations has not improved for STALL_PASSES (a wedged
@@ -509,7 +520,14 @@ export function buildConstellationLayout({
   const arrivedOf = (id) => (claimedById.has(id) ? claimedById.get(id) : true)
 
   /** The reach rule's distance for a child (before any stagger or fan `extra`). */
-  const reachOf = (n) => REACH_BASE + REACH_K * Math.sqrt(n.size)
+  /** THE LIMB FLOOR (founder, 16 September 2026, fourth pass): a limb's
+   *  painted length is never shorter than three painted name heights, so
+   *  the reach rule's base scales with the round's label size relative to
+   *  the base canvas's (the same base-geometry rule the field uses) —
+   *  when the canvas grows and names grow in map units, the reach grows
+   *  with them and the limb keeps its proportion. Set per placement. */
+  let reachBase = REACH_BASE
+  const reachOf = (n) => reachBase + REACH_K * Math.sqrt(n.size)
   /** Each fan's stagger pattern (parent id → child id → row), decided at
    *  the FIRST rung of the ladder that staggered it and held at every rung
    *  below (the founder's stability law; see `spread`). Per build. */
@@ -588,6 +606,10 @@ export function buildConstellationLayout({
    */
   const runPlacement = (fontMap, clearance, scale, floorPx, field) => {
     const { spreadC, r0: fieldR0 } = field
+    /** One field step: the spacing of adjacent sunflower points. */
+    const fieldStep = spreadC * Math.sqrt(Math.PI)
+    // THE LIMB FLOOR: the reach base in this round's units.
+    reachBase = REACH_BASE * (fontMap / field.fontMap)
     let bestEffort = false
     let hopeless = false // a fan no rung of the ladder could fit
     /** The name a node's box is measured with: its real name, or "YOU" if
@@ -680,6 +702,8 @@ export function buildConstellationLayout({
       n.row = 0
       n.rim = false
       n.fieldIndex = undefined
+      n.fieldLift = 0
+      n.rimIndex = undefined
     }
     root.px = 0
     root.py = 0
@@ -715,10 +739,18 @@ export function buildConstellationLayout({
      *  per rung like the spread (derived from the round's own labels it
      *  fed the canvas feedback and pushed the field to 150–210 units on
      *  the fifty). */
-    /** Field point k: radius fieldR0 + c·√k, angle k × the golden angle. */
+    /** EVEN FIELD (founder, 16 September 2026, fourth pass): the spiral's
+     *  START is rotated so the sharers' spokes fall BETWEEN its points —
+     *  on Circles today points 2 and 5 sat on Oliver's and Yan's spokes
+     *  and their skips left a 117° hole. Chosen deterministically from
+     *  the spoke angles and the leaf count: of the rotations within one
+     *  spoke interval (1° apart), the one whose leaf points keep the
+     *  greatest angular distance from every spoke; 0 without sharers. */
+    let fieldRotation = 0
+    /** Field point k: radius fieldR0 + c·√k, angle rotation + k × the golden angle. */
     const fieldPoint = (k) => {
       const r = fieldR0 + spreadC * Math.sqrt(k)
-      const a = k * GOLDEN_ANGLE
+      const a = fieldRotation + k * GOLDEN_ANGLE
       const x = r * Math.cos(a)
       const y = r * Math.sin(a)
       return { x, y, dir: Math.atan2(y, x), r }
@@ -839,13 +871,13 @@ export function buildConstellationLayout({
     /** Is c's name, on `side`, clear by the field's measure — of the centre
      *  labels, its own line (touch), every spoke, and every placed
      *  person's line, name and dot? */
-    const fieldSideOk = (c, side) => {
+    const fieldSideOk = (c, side, ignoreSpokes = false) => {
       const r = fieldRect(c, side)
       const gap = field.clearance
       for (const cr of field.center) if (rectsCollide(r, cr, gap)) return false
       const own = segmentOf(c)
       if (segHits(own, r, 0)) return false
-      for (const sg of rimSegs) if (segHits(sg, r, sg.toId === c.id ? 0 : gap)) return false
+      if (!ignoreSpokes) for (const sg of rimSegs) if (segHits(sg, r, sg.toId === c.id ? 0 : gap)) return false
       for (const o of placed) {
         if (segHits(segmentOf(o), r, gap)) return false
         if (Math.abs(o.px - c.px) > NEAR_REACH || Math.abs(o.py - c.py) > NEAR_REACH) continue
@@ -854,13 +886,14 @@ export function buildConstellationLayout({
       }
       return true
     }
-    const fieldClear = (c, strict) => {
+    const fieldClear = (c, strict, ignoreSpokes = false) => {
       const cd = dotRect(c.px, c.py)
       const gap = field.clearance
       for (const cr of field.center) if (rectsCollide(cd, cr, gap)) return false
       // A dot never sits on a sharer's spoke (the rim's rays, known before
-      // the field is laid).
-      for (const sg of rimSegs) if (sg.toId !== c.id && segHits(sg, cd, LINE_DOT_GAP * gap)) return false
+      // the field is laid). `ignoreSpokes` asks whether the spokes ALONE
+      // block the point (then it is lifted outward rather than skipped).
+      if (!ignoreSpokes) for (const sg of rimSegs) if (sg.toId !== c.id && segHits(sg, cd, LINE_DOT_GAP * gap)) return false
       const cs = segmentOf(c)
       for (const o of placed) {
         if (segHits(segmentOf(o), cd, LINE_DOT_GAP * gap)) return false
@@ -871,7 +904,7 @@ export function buildConstellationLayout({
       }
       // ONE DIRECTION FOR NAMES: outward, else inward; never perpendicular.
       for (const side of ['out', 'in']) {
-        if (fieldSideOk(c, side)) {
+        if (fieldSideOk(c, side, ignoreSpokes)) {
           c.side = side
           return true
         }
@@ -890,16 +923,35 @@ export function buildConstellationLayout({
     const placeOnField = (c) => {
       c.row = 0
       c.extra = 0
-      const at = (k) => {
+      /** Point k, lifted `lift` field steps outward along its own angle
+       *  (EVEN FIELD, fourth pass: a point blocked only by a sharer's
+       *  spoke retries one step outward instead of leaving a hole — a
+       *  skipped point is the field's largest wedge). */
+      const at = (k, lift = 0) => {
         const s = fieldPoint(k)
-        c.px = s.x
-        c.py = s.y
+        const r = s.r + lift * fieldStep
+        c.px = r * Math.cos(s.dir)
+        c.py = r * Math.sin(s.dir)
         c.dir = s.dir
-        c.dist = s.r
+        c.dist = r
+        c.fieldLift = lift
         setPolar(c)
         c.side = 'out'
         c.perpOffset = PERP_OFFSET
         c.hang = 'out'
+      }
+      /** The first placement of point k that clears: the point itself, or
+       *  — when only a spoke stands in its way — the point lifted one or
+       *  two steps outward. Null when none does. */
+      const clearAt = (k, strict) => {
+        at(k)
+        if (fieldClear(c, strict)) return 0
+        if (!fieldClear(c, strict, true)) return null // names or dots in the way: a real skip
+        for (let lift = 1; lift <= FIELD_LIFT_MAX; lift++) {
+          at(k, lift)
+          if (fieldClear(c, strict)) return lift
+        }
+        return null
       }
       const take = (k) => {
         // The field chose the point and its side by the base measure; the
@@ -919,12 +971,10 @@ export function buildConstellationLayout({
       }
       const start = fieldNext
       for (let k = start; k < start + FIELD_STRICT_SKIPS; k++) {
-        at(k)
-        if (fieldClear(c, true)) return take(k)
+        if (clearAt(k, true) != null) return take(k)
       }
       for (let k = start; k < start + FIELD_MAX_SKIPS; k++) {
-        at(k)
-        if (fieldClear(c, false)) {
+        if (clearAt(k, false) != null) {
           raysAcrossDots += 1
           return take(k)
         }
@@ -1425,13 +1475,43 @@ export function buildConstellationLayout({
     const sharers = ring1.filter((c) => c.children.length)
     const rimAngleOf = (i) => RIM_START + (i * TWO_PI) / sharers.length
     sharers.forEach((s, i) => rimSegs.push({ x1: 0, y1: 0, x2: 1e4 * Math.cos(rimAngleOf(i)), y2: 1e4 * Math.sin(rimAngleOf(i)), fromId: ROOT_ID, toId: s.id }))
+    if (sharers.length) {
+      const spokeGap = (a) => {
+        let best = Infinity
+        for (let i = 0; i < sharers.length; i++) best = Math.min(best, Math.abs(angDiff(a, rimAngleOf(i))))
+        return best
+      }
+      // Scored over a FIXED run of points (not the film's leaf count): a
+      // rotation that followed the count turned the whole spiral when one
+      // leaf joined (16 September). It depends on the spoke angles alone.
+      const leafCount = FIELD_ROTATION_POINTS
+      const interval = TWO_PI / sharers.length
+      let bestRot = 0
+      let bestScore = -1
+      for (let deg = 0; deg * (Math.PI / 180) < interval; deg++) {
+        const rot = deg * (Math.PI / 180)
+        let score = Infinity
+        for (let k = 0; k < leafCount; k++) score = Math.min(score, spokeGap(rot + k * GOLDEN_ANGLE))
+        if (score > bestScore + 1e-9) {
+          bestScore = score
+          bestRot = rot
+        }
+      }
+      fieldRotation = bestRot
+    }
     // THE FIELD: every direct recipient takes a point in ticket order — a
     // sharer RESERVES theirs, so nobody after them moves when they leave
     // it for the rim.
-    for (const c of ring1) placeOnField(c)
-    // Then the sharers leave the spiral for the field's outer edge (its
-    // outer radius + one field step); their branches grow outward.
-    const outerK = Math.max(0, ...ring1.map((c) => c.fieldIndex))
+    // THE FIELD: every direct recipient who shared with nobody takes the
+    // next clear point in ticket order. A sharer takes NONE (fourth pass,
+    // 16 September: the reserved vacancies of the first tickets — Oliver's
+    // point 0, Yan's 3, Arielle's 4 — were most of the 105° hole between
+    // Jan and Tony; the founder chose symmetry over a fixed spiral when a
+    // sharer joins, so nothing is reserved).
+    for (const c of ring1) if (!c.children.length) placeOnField(c)
+    // Then the sharers take the field's outer edge (its outer radius + one
+    // field step); their branches grow outward.
+    const outerK = Math.max(0, ...ring1.filter((c) => !c.children.length).map((c) => c.fieldIndex))
     const rimRadius = fieldR0 + spreadC * Math.sqrt(outerK) + spreadC * Math.sqrt(Math.PI)
     sharers.forEach((s, i) => {
       const a = rimAngleOf(i)
@@ -1440,7 +1520,11 @@ export function buildConstellationLayout({
       s.dir = Math.atan2(s.py, s.px)
       s.dist = rimRadius
       s.rim = true
+      s.rimIndex = i
       setPolar(s)
+      // A sharer joins the placed set here (it takes no spiral point), so
+      // the relaxation, the final side pass and the safety net see its name.
+      placed.push(s)
       // The spoke now ENDS at the sharer's dot: as a ray it lay along the
       // sharer's whole limb and rejected every outward name on a straight
       // branch (the chain test, 16 September).
@@ -1833,7 +1917,7 @@ export function buildConstellationLayout({
     // ONE DIRECTION FOR NAMES: how many field names had to flip inward.
     let fieldFlips = 0
     for (const c of ring1) if (!c.children.length && !c.hidden && c.side === 'in') fieldFlips += 1
-    return { width, height, cx, cy, spreadC, fieldR0, rimRadius, fieldFlips, raysAcrossDots, bestEffort, hopeless, hiddenCount, collidingCount, dotConflictCount, rectsOf, centerRects }
+    return { width, height, cx, cy, spreadC, fieldR0, fieldStep, fieldRotation, rimRadius, reachBase, fieldFlips, raysAcrossDots, bestEffort, hopeless, hiddenCount, collidingCount, dotConflictCount, rectsOf, centerRects }
   }
 
   /* ---- Plan for the reference view: the hard rule holds on SCREEN there ----
@@ -1868,7 +1952,19 @@ export function buildConstellationLayout({
     // the rung's size on the base canvas, plus the clearance, over √π
     // (adjacent sunflower points sit c·√π apart) — times the option.
     const baseBoxH = labelScreenRect({ x: 0, y: 0, anchor: 'start', name: 'A', baseSize: plan.fontMap }, DESIGN_VIEW).h
-    const spreadC = (baseBoxH + plan.clearance) / Math.sqrt(Math.PI)
+    // EVEN FIELD (fourth pass, 16 September): a name box is cleared in
+    // BOTH its dimensions — names are horizontal, so points side by side
+    // at the top and bottom of the field need the box's WIDTH between
+    // them where stacked points at its sides need its height; the spread
+    // takes the mean of the two (the mean width of the film's own leaf
+    // names at this rung). Height alone skipped most points near 12 and
+    // 6 o'clock and left the field ragged.
+    // The width is a FIXED reference (a six-letter name of average glyphs,
+    // REFERENCE_NAME), never the film's own names: a spread that followed
+    // the film's mean name width changed whenever a leaf joined and moved
+    // every point on the spiral.
+    const refBoxW = labelTextWidth(REFERENCE_NAME, plan.fontMap, 2)
+    const spreadC = ((baseBoxH + refBoxW) / 2 + plan.clearance) / Math.sqrt(Math.PI)
     // Where the field starts (CENTRED, founder 16 September): one full
     // name-height clear of the filmmaker's two centre labels, measured
     // on the base canvas at this rung — never a fixed radius.
@@ -2048,6 +2144,11 @@ export function buildConstellationLayout({
       /** THE RIM RULE: true for a direct recipient who shared onward and
        *  therefore sits on the rim, not on the spiral. */
       rim: isFilm ? null : Boolean(n.rim),
+      /** The rim slot (0 = 12 o'clock, then clockwise in ticket order); null off the rim. */
+      rimIndex: isFilm || !n.rim ? null : n.rimIndex,
+      /** EVEN FIELD: how many field steps this point was lifted outward
+       *  along its angle to clear a sharer's spoke (0 = on the spiral). */
+      fieldLift: isFilm || n.parentId !== ROOT_ID || n.rim ? null : n.fieldLift ?? 0,
       subtreeSize: n.size,
       label: isFilm ? null : radialLabel(n.dir, x, y, n.side, n.perpOffset, n.hang),
       /** The name the layout MEASURED this node's box with — the real name,
@@ -2124,7 +2225,14 @@ export function buildConstellationLayout({
       /** Where the field starts (map units from the filmmaker) and where
        *  the rim of sharers sits. */
       fieldR0: result.fieldR0,
+      fieldStep: result.fieldStep,
+      /** EVEN FIELD: the spiral's start angle (radians), rotated so the
+       *  sharers' spokes fall between its points; 0 without sharers. */
+      fieldRotation: result.fieldRotation,
       rimRadius: result.rimRadius,
+      /** THE LIMB FLOOR: the reach rule's base in this plan's map units
+       *  (REACH_BASE scaled with the round's label size). */
+      reachBase: result.reachBase,
       /** ONE DIRECTION FOR NAMES: field names that flipped inward. */
       fieldFlips: result.fieldFlips,
       /** Direct recipients placed without a strict point — their spoke
