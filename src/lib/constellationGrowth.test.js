@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildConstellationLayout, ROOT_ID, REACH_BASE, REACH_K, FAN_MAX_SPAN, EXTRA_MAX, RING_ARC } from './constellationLayout.js'
+import { buildConstellationLayout, ROOT_ID, REACH_BASE, REACH_K, FAN_MAX_SPAN, EXTRA_MAX, FIRST_RING_ROWS } from './constellationLayout.js'
 import { LABEL_SIZE_LADDER, REFERENCE_VIEW, mapScaleFor } from './constellationLabels.js'
 
 /**
@@ -9,7 +9,11 @@ import { LABEL_SIZE_LADDER, REFERENCE_VIEW, mapScaleFor } from './constellationL
  *  A FAN NEVER BALLOONS — a crowded fan solves its crowding in place
  *  (spread ≤ 140°, then two rows, then the names, then at most half a
  *  reach outward) and nothing else ever moves a fan outward.
- *  THE FIRST RING GROWS WITH ITS COUNT — RING_ARC of arc per person.
+ *  FIRST-RING PEOPLE NO LONGER SHARE ONE RADIUS (11 September, confirmed
+ *  15 September) — a non-sharing first-ring person may be lifted to 1.35
+ *  or 1.7 times the ring's radius (FIRST_RING_ROWS), rows the solver
+ *  assigns; sharers keep the base radius; the base radius NEVER grows
+ *  (the 11 September "grows with its count" ring is retired by this rule).
  *  STABILITY — adding one person moves no existing dot by more than 20% of
  *  its distance from the centre and changes no OTHER fan's row structure;
  *  adding fifteen first-ring people rotates the first ring evenly.
@@ -51,7 +55,7 @@ function circlesToday() {
   rows.push(inv('c-Jacob', 'user-r7', 'r7', { recipient_name: 'Jacob' }), inv('t-Enrico', 'user-r5', 'r5', { recipient_name: 'Enrico' }), inv('y-Christina', 'user-r1', 'r1', { recipient_name: 'Christina' }))
   return rows
 }
-const CAST = ['Ava', 'Ben', 'Cleo', 'Dev', 'Esme', 'Finn', 'Gia', 'Hugo', 'Isla', 'Jude', 'Kai', 'Lena', 'Milo', 'Nia', 'Otto']
+const CAST = ['Ava', 'Ben', 'Cleo', 'Dev', 'Esme', 'Finn', 'Gia', 'Hugo', 'Isla', 'Jude', 'Kai', 'Lena', 'Milo', 'Nia', 'Otto', 'Pia', 'Quinn', 'Rosa', 'Sven', 'Tess', 'Uma', 'Vera', 'Wes', 'Xena', 'Yara', 'Zane', 'Amir', 'Bea', 'Cy', 'Dara', 'Eli', 'Fay', 'Gus', 'Hana', 'Ivo', 'Jo', 'Kip', 'Liv', 'Max', 'Nell', 'Omar', 'Poppy', 'Ray', 'Sol', 'Tia', 'Ulla', 'Vic', 'Wren', 'Yosef', 'Zara']
 const firstRing = (rows, count) => {
   const start = seq
   return [...rows, ...CAST.slice(0, count).map((name, i) => inv(`cast-${i}`, CREATOR, null, { recipient_name: name, created_at: new Date(Date.UTC(2026, 8, 12, 0, 0, start + i + 1)).toISOString() }))]
@@ -88,6 +92,13 @@ const SCENARIOS = {
     for (const p of ['r0', 'r1', 'r3', 'o-Steve', 'a-Cal', 'a-Bianca', 'k-Mom', 'x-Zeke', 'c-Jacob', 't-Enrico']) rows = leavesUnder(rows, p, 1, `${p}k`)
     return rows
   },
+  // THE FIFTY (founder, 15 September 2026: he will share with 50+ directly, soon).
+  '(ix) +50 first ring, none sharing': () => firstRing(circlesToday(), 50),
+  '(x) +50 first ring, ten of them share 3 each': () => {
+    let rows = firstRing(circlesToday(), 50)
+    for (const i of [0, 5, 10, 15, 20, 25, 30, 35, 40, 45]) rows = leavesUnder(rows, `cast-${i}`, 3, `cast${i}k`)
+    return rows
+  },
 }
 
 const build = (rows, over = {}) => buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR, creatorName: 'Ien', ...over })
@@ -113,14 +124,18 @@ const distPx = (l, a, b) => (a && b ? Math.hypot(a.x - b.x, a.y - b.y) * pxAt(l)
 function assertLaws(l) {
   const byId = byIdOf(l)
   const film = l.nodes.find((n) => n.kind === 'film')
-  // The first ring: even, at least RING_ARC of arc per person.
+  // The first ring: even slots; sharers on the base radius, leaves on one of the rows.
   const ring1 = childrenOf(l, ROOT_ID)
   const thetas = ring1.map((n) => norm(Math.atan2(n.y - film.y, n.x - film.x))).sort((a, b) => a - b)
   for (let i = 0; i < thetas.length; i++) {
     const next = i === thetas.length - 1 ? thetas[0] + TWO_PI : thetas[i + 1]
     expect(next - thetas[i]).toBeCloseTo(TWO_PI / thetas.length, 6)
   }
-  for (const n of ring1) expect(n.r).toBeGreaterThanOrEqual(Math.max(118, (ring1.length * RING_ARC) / TWO_PI) - 1e-9)
+  for (const n of ring1) {
+    if (childrenOf(l, n.id).length) expect(n.row, `${n.name} (a sharer) on the base radius`).toBe(0)
+    expect(FIRST_RING_ROWS[n.row]).toBeDefined()
+    expect(n.r, `${n.name} on row ${n.row}`).toBeCloseTo(118 * FIRST_RING_ROWS[n.row], 6)
+  }
   for (const n of persons(l)) {
     const p = byId.get(n.parentId)
     if (p.kind === 'film') continue
@@ -157,6 +172,23 @@ const KNOWN_GAPS = {
     '(vi) four quiet first-ring +4 each',
     "(vii) Krist's other nine +2 each",
     '(viii) one leaf under each of ten people',
+    // THE FIFTY cannot settle under the laws as they stand (16 September
+    // 2026, measured at the reference view, the base radius fixed at 118):
+    // 63 first-ring slots are 5.7° = 11.6 map units of arc apart at the
+    // ring; a name at 9.5px is 26–81 units wide and 14 tall, and every
+    // name is a horizontal strip — ALONG the ring near 12 and 6 o'clock,
+    // ACROSS it near 3 and 9. Near the poles a name needs its width plus
+    // the 7.45-unit clearance of arc — 34–88 units — and three rows give
+    // it at most three slots, 35 units, so most of the pole names cannot
+    // be placed on ANY row; the six first-ring sharers' perpendicular
+    // names lie across 4–7 neighbouring rays (a ray is fixed: a lifted
+    // leaf keeps its angle), and the sharers' fans (Arielle's eight at
+    // 185–218 units) sit exactly in the band the lifted rows use (159 and
+    // 200). Measured 16 September (the table prints the live numbers):
+    // (ix) 11px · 41 hidden + 16 colliding + 54 dots on lines · (x) 9.5px ·
+    // 72 hidden + 11 colliding. The founder decides which law moves.
+    '(ix) +50 first ring, none sharing',
+    '(x) +50 first ring, ten of them share 3 each',
   ]),
   // The longest segment stays under 2.5 × the leaf reach: Krist's own
   // limb is the reach rule's √16 = 4 → (30 + 31 × 4) / 61 = 2.52 leaf
@@ -168,7 +200,9 @@ const KNOWN_GAPS = {
 describe("the growth table — Circles today and tomorrow's screening (founder, 11 September 2026)", () => {
   const rowsOut = []
   for (const [name, make] of Object.entries(SCENARIOS)) {
-    it(`${name}: the laws hold; the targets are measured`, () => {
+    // The fifty scenarios place 89 and 119 people through the whole ladder
+    // (14–25 s on this machine): a generous per-test budget, bounded work.
+    it(`${name}: the laws hold; the targets are measured`, { timeout: 120000 }, () => {
       const l = build(make())
       assertLaws(l)
       const arielle = named(l, 'Arielle')
@@ -181,6 +215,7 @@ describe("the growth table — Circles today and tomorrow's screening (founder, 
         settled: l.plan.settled,
         hidden: l.plan.hidden,
         colliding: l.plan.colliding,
+        dotsOnLines: l.plan.dotsOnLines,
         longestPx: +longestSegmentPx(l).toFixed(1),
         longestOverLeaf: +(longestSegmentPx(l) / leafReachPx(l)).toFixed(2),
         ienArielle: distPx(l, film, arielle)?.toFixed(1),
@@ -196,6 +231,44 @@ describe("the growth table — Circles today and tomorrow's screening (founder, 
       else expect(under25).toBe(true)
     })
   }
+})
+
+/** Circles as of 16 September 2026 (43 tickets): the 11 September shape
+ *  plus four first-ring people (Lillian, Connor, Hugo — and Lillian's Jie). */
+function circlesNow() {
+  const rows = circlesToday()
+  for (const name of ['Lillian', 'Connor', 'Hugo']) rows.push(inv(`r-${name}`, CREATOR, null, { recipient_name: name }))
+  rows.push(inv('l-Jie', 'user-r-Lillian', 'r-Lillian', { recipient_name: 'Jie' }))
+  return rows
+}
+
+describe('the two defects of 16 September 2026 — a dot never sits on a line (the live 43-row shape)', () => {
+  it("Krist's ten: no two dots on each other, no adjacent gap collapsed, no dot on a line — at the rung the ladder chooses", () => {
+    const l = build(circlesNow())
+    assertLaws(l)
+    const byId = byIdOf(l)
+    const krist = named(l, 'Krist')
+    const ten = childrenOf(l, krist.id).sort((a, b) => angDiff(a.dir, krist.dir) - angDiff(b.dir, krist.dir))
+    expect(ten).toHaveLength(10)
+    // The stacked dots (Mom / Rachael / Taylor 1–2px apart, Grace on
+    // Brooks): every pair of Krist's children at least four dot radii apart.
+    for (let i = 0; i < ten.length; i++) for (let j = i + 1; j < ten.length; j++) expect(Math.hypot(ten[i].x - ten[j].x, ten[i].y - ten[j].y), `${ten[i].name} / ${ten[j].name}`).toBeGreaterThan(4 * 2.4)
+    // The starved tail (0.3° gaps): no adjacent pair closer than 3°.
+    for (let i = 1; i < ten.length; i++) expect(angDiff(ten[i].dir, ten[i - 1].dir), `${ten[i - 1].name} → ${ten[i].name}`).toBeGreaterThan(Math.PI / 60)
+    // Stacy's dot off the Krist → Alexander line, by the clearance; and
+    // the audit sees every dot: none on a line it is not attached to.
+    const alexander = named(l, 'Alexander')
+    const stacy = named(l, 'Stacy')
+    const dx = alexander.x - krist.x
+    const dy = alexander.y - krist.y
+    const t = Math.max(0, Math.min(1, ((stacy.x - krist.x) * dx + (stacy.y - krist.y) * dy) / (dx * dx + dy * dy)))
+    expect(Math.hypot(stacy.x - (krist.x + t * dx), stacy.y - (krist.y + t * dy))).toBeGreaterThanOrEqual(l.plan.clearance + 2.4 - 1e-6)
+    expect(l.plan.dotsOnLines).toBe(0)
+    expect(l.plan.colliding).toBe(0)
+    expect(l.plan.labelPx).toBeGreaterThanOrEqual(9.5)
+    console.log(`[defects] live shape: rung ${l.plan.labelPx}, hidden ${l.plan.hidden} [${persons(l).filter((n) => n.hidden).map((n) => n.name)}], colliding ${l.plan.colliding}, dotsOnLines ${l.plan.dotsOnLines}`)
+    expect(byId.get(krist.id)).toBeTruthy()
+  })
 })
 
 describe('STABILITY (founder, 11 September 2026)', () => {
@@ -230,10 +303,13 @@ describe('STABILITY (founder, 11 September 2026)', () => {
    *  2026 — the relaxation turns a neighbouring fan, and the size ladder
    *  can change the whole film's rung (11 → 9), which moves every fan's
    *  gaps. Pinned so the list is pruned as the layout improves. */
-  const KNOWN_OVER_20 = new Set(['r0', 'r1', 'r2', 'r3', 'a-Krist', 'k-Alexander', 'k-Stacy', 'x-Zeke'])
+  // (16 September 2026: r0 and r3 closed — 13% and 19% — once a fan's
+  // stagger pattern was decided once per build; the rest still move a
+  // dot 36–70% because the ladder re-chooses the film's rung.)
+  const KNOWN_OVER_20 = new Set(['r1', 'r2', 'a-Krist', 'k-Alexander', 'k-Stacy', 'x-Zeke'])
   const additions = ['r0', 'r1', 'r2', 'r3', 'r5', 'a-Krist', 'k-Alexander', 'k-Stacy', 'x-Zeke']
   for (const under of additions) {
-    it(`adding one person under ${under}: no OTHER fan's rows change; the worst dot move is measured against the 20% rule`, () => {
+    it(`adding one person under ${under}: no OTHER fan's rows change; the worst dot move is measured against the 20% rule`, { timeout: 30000 }, () => {
       seq = 200
       const rows = [...circlesToday(), inv('newcomer', `user-${under}`, under, { recipient_name: 'Newcomer' })]
       const l = build(rows)
@@ -245,19 +321,18 @@ describe('STABILITY (founder, 11 September 2026)', () => {
       else expect(worst.frac, `worst move ≤ 20% of the dot's distance from the centre`).toBeLessThanOrEqual(0.2)
     })
   }
-  it('adding fifteen first-ring people rotates the first ring evenly (its radius grows with the count); the fans keep their row structure', () => {
+  it('adding fifteen first-ring people rotates the first ring evenly (its base radius never grows; leaves take the rows); the fans keep their row structure', { timeout: 60000 }, () => {
     const l = build(firstRing(circlesToday(), 15))
     assertLaws(l)
     const ring1 = childrenOf(l, ROOT_ID)
     expect(ring1).toHaveLength(25)
-    expect(ring1[0].r).toBeGreaterThanOrEqual((25 * RING_ARC) / TWO_PI - 1e-9)
+    for (const n of ring1) expect(n.r).toBeCloseTo(118 * FIRST_RING_ROWS[n.row], 6)
     const { changed } = compare(l, ROOT_ID)
-    // KNOWN GAP (11 September 2026): with the first ring re-slotted at
-    // 14.4° and the ladder's rung re-chosen, Alexander's fan re-chooses
-    // its stagger pattern (the pattern with the fewest broken pairs at the
-    // new absolute angles and sizes) — the one fan whose rows change.
-    // Pinned; prune when it stops.
-    expect(changed).toEqual(['Alexander'])
+    // The founder's law holds here since 16 September 2026: a fan's stagger
+    // pattern is decided ONCE per build (at the first rung that staggers
+    // it), so re-slotting the ring and re-choosing the rung change no
+    // fan's rows (on 11 September Alexander's fan re-patterned).
+    expect(changed).toEqual([])
     // "…and nothing else": every fan's children keep their positions
     // RELATIVE to their parent up to the parent's rotation — measured and
     // reported; the relaxation's turns against new neighbours break it

@@ -12,12 +12,19 @@
  *
  * THE RULES (binding, unit-tested):
  *
- *  1. THE FIRST RING IS EXACTLY v4: the filmmaker sits at the exact center
+ *  1. THE FIRST RING IS v4's SLOTS: the filmmaker sits at the exact center
  *     (the emblem and its two labels unchanged); his own invitations are
  *     spaced EVENLY around the full circle in ticket order (first ticket at
  *     12 o'clock, clockwise; team-member nodes, which hold no ticket, sort
- *     first). If the ring is too crowded for its names to clear, the whole
- *     ring moves outward — still even.
+ *     first). FIRST-RING PEOPLE NO LONGER SHARE ONE RADIUS (founder,
+ *     11 September 2026, confirmed 15 September): a first-ring person who
+ *     shared with nobody may be LIFTED to 1.35 or 1.7 times the ring's
+ *     radius (FIRST_RING_ROWS) — rows the solver assigns, in ticket order,
+ *     each person the lowest row at which their name and dot clear
+ *     everything already placed; sharers keep the base radius, so their
+ *     branches never move; and the base radius NEVER grows to make room
+ *     (the bump loop is gone). A leaf's row is a move the relaxation
+ *     tries before any fan turns.
  *  2. REACH: every other person sits BEYOND the person who gave them the
  *     film, inside a fan centred on that parent's OUTWARD direction (from
  *     the centre through a first-ring parent; for a deeper parent, the
@@ -37,16 +44,11 @@
  *     that would collide are separated by the LEAST MOVEMENT — each turns
  *     about its own parent, the two equally, damped, the smallest amount
  *     that clears — never by changing anyone's distance. v4's "step out to
- *     the next radius level" is GONE. THE THREE TRIGGERS OF `extra`, all
- *     of them "this fan cannot fit where it is" and named so the founder
- *     can strike any: (a) its own names need more than FAN_MAX_SPAN (the
- *     fit search); (c) a sharer's branch is WEDGED between that sharer's
- *     own siblings and the outer fan has already spread to its cap (the
- *     outer fan moves, so the same angular gaps span more room); (d) a
- *     fan is wedged against what cannot move — the film node's labels, a
- *     first-ring name or line — and turning has stopped helping (a
- *     stall). Nothing else ever changes a distance (a former trigger — a
- *     line swallowed by its two name boxes — went with the clipping). Every clearance rule
+ *     the next radius level" is GONE, and so are the 10 September triggers
+ *     of `extra` (a wedged sharer's branch, a stall against the first
+ *     ring): since 11 September A FAN NEVER BALLOONS — the only outward
+ *     move is the capped one at the end of the fan's own ladder (spread →
+ *     stagger → names → at most EXTRA_MAX × d), see below. Every clearance rule
  *     of v4/v5 stays, measured on real rendered boxes at the reference
  *     view: label-vs-label, label-vs-dot (a hollow dot's stroke included),
  *     label-vs-line; and the label-SIDE rule (founder amendment,
@@ -180,6 +182,10 @@ const FAN_WIDEN = 0.01
    Arielle's branch far from her with long lines and hidden names). */
 /** The far row's distance as a multiple of the reach distance. */
 export const STAGGER_RATIO = 1.55
+/** A stagger pattern replaces the one before it in order only when its
+ *  sweep is tighter by at least this (radians, ≈3°) — a near-tie keeps
+ *  the earlier pattern, so a fan's rows do not flip on a hair. */
+const PATTERN_MARGIN = Math.PI / 60
 /** The hard cap on a fan's outward move, as a multiple of the fan's reach
  *  distance d (the smallest reach among its children — a leaf's 48). */
 export const EXTRA_MAX = 0.5
@@ -195,20 +201,27 @@ const SWEEP_LOOKBACK = 4
  *  dots cannot touch — the longest name plus the widest perpendicular
  *  offset, with room. */
 const NEAR_REACH = 260
-/** A line keeps this fraction of the clearance from every dot it is not
- *  attached to (a line may pass nearer a dot than a name may, but never
- *  through it). */
-const LINE_DOT_GAP = 0.6
-/** THE FIRST RING GROWS WITH ITS COUNT (founder, 11 September 2026): the
- *  ring's radius is at least count × RING_ARC / 2π map units — RING_ARC of
- *  arc per person at the dots — so twenty-plus first-ring names never
- *  collide (tomorrow's screening adds cast and crew to the first ring in
- *  one day); v4's radius (R0) when that is larger. */
-export const RING_ARC = 34
-/** How far the first ring is pushed outward, per push, when its names
- *  still cannot clear; and how many pushes at most (best effort beyond that). */
-export const RING_BUMP = 46
-const MAX_BUMPS = 24
+/** A line keeps the FULL clearance from every dot it is not attached to
+ *  (founder, 15 September 2026: "no dot within clearance of a line"; the
+ *  0.6 fraction of 11 September let Stacy's dot sit 4px off the Krist →
+ *  Alexander line). */
+const LINE_DOT_GAP = 1
+/** The coarse step of the sweep's first-clear search (see `smallestGap`):
+ *  a clear window narrower than this between two violating ranges is a
+ *  knife edge the sweep does not stop in. */
+const GAP_SCAN = Math.PI / 90
+/** FIRST-RING PEOPLE NO LONGER SHARE ONE RADIUS (founder rule,
+ *  11 September 2026, confirmed 15 September): a first-ring person who
+ *  shared with nobody may sit at the ring's radius or lifted to one of
+ *  these multiples of it — rows the solver assigns to keep every name
+ *  painted and no dot within the clearance of a line (a first-ring LEAF's
+ *  row is the cheapest move on the map: tried before any fan turns).
+ *  Sharers keep the base radius, so their branches' geometry — the reach
+ *  rule from wherever they sit — is untouched; the base radius itself
+ *  NEVER grows to make room (v4's bump loop and the 11 September "grows
+ *  with its count" radius are retired by this rule; what three rows cannot
+ *  hold goes down the size ladder, then to the safety net). */
+export const FIRST_RING_ROWS = [1, 1.35, 1.7]
 /** The least-movement separation of fans (rule 3): passes of small equal
  *  turns, each fan about its own parent, until every rule holds — or until
  *  the count of violations has not improved for STALL_PASSES (a wedged
@@ -366,7 +379,9 @@ export function buildConstellationLayout({
       perpOffset: PERP_OFFSET, // how far a perpendicular name sits from the dot
       hang: 'out', // which way a perpendicular name hangs along the limb (out = away from the sharer)
       hidden: false, // no side clears: the safety net hides the name until zoom
-      row: 0, // the fan's stagger: 0 = the reach distance, 1 = the far row
+      // A fan's stagger: 0 = the reach distance, 1 = the far row. On the
+      // first ring: the index into FIRST_RING_ROWS (0 = the ring's radius).
+      row: 0,
       size: 1,
     }
     nodes.set(id, n)
@@ -464,6 +479,10 @@ export function buildConstellationLayout({
 
   /** The reach rule's distance for a child (before any stagger or fan `extra`). */
   const reachOf = (n) => REACH_BASE + REACH_K * Math.sqrt(n.size)
+  /** Each fan's stagger pattern (parent id → child id → row), decided at
+   *  the FIRST rung of the ladder that staggered it and held at every rung
+   *  below (the founder's stability law; see `spread`). Per build. */
+  const staggerMemo = new Map()
   /** A child's distance from its sharer: the reach rule, the far row's
    *  multiple when the fan staggers this leaf, plus the fan's (capped)
    *  outward move. */
@@ -471,6 +490,48 @@ export function buildConstellationLayout({
   /** The hard cap on a fan's outward move: EXTRA_MAX × its reach distance
    *  (the smallest reach among its children). */
   const extraMaxOf = (fan) => EXTRA_MAX * Math.min(...fan.kids.map(reachOf))
+  /** The side a sibling is MEASURED on while its fan spreads (the side
+   *  decision proper comes after placement): a leaf outward; a SHARER on
+   *  the perpendicular it will take — its outward side is its own fan's
+   *  axis and its inward side its incoming line, so its name is never
+   *  outward (the founder's sketch). Measuring a sharer outward asked too
+   *  little room of its neighbours: the first-clear sweep of 16 September
+   *  then packed Stacy and Patti against Alexander and his perpendicular
+   *  name had nowhere to go (a regression the 33-ticket tree caught). The
+   *  provisional perpendicular is the one pointing down the screen,
+   *  hanging inward — sideOrder's own default for a sharer with no
+   *  placed children. */
+  const resetSide = (k, fan, incomingClear = null, limbDir = null) => {
+    k.perpOffset = PERP_OFFSET
+    if (!k.children.length) {
+      k.side = 'out'
+      k.hang = 'out'
+      return
+    }
+    // The fan's AXIS, not the sibling's own slot: measured on the slot
+    // (red team, 16 September) the provisional flipped with the fan's
+    // absolute angle, and +15 first-ring people re-patterned Krist's rows
+    // — the axis holds the founder's stability law; a caller may still
+    // pass a direction.
+    const dir = limbDir ?? fan.p.dir + fan.turn
+    const down = Math.sin(dir + Math.PI / 2) > 0 ? 'right' : 'left'
+    const up = down === 'right' ? 'left' : 'right'
+    // Of the four perpendicular placements, the first (down the screen
+    // hanging inward, sideOrder's default) that does NOT cross the
+    // sharer's own incoming line: on a steep limb an inward-hanging
+    // horizontal strip lies across the line that arrives from below it
+    // (Alexander on the 33-ticket tree), and room measured for that strip
+    // is room the name can never use.
+    for (const [side, hang] of [[down, 'in'], [up, 'in'], [down, 'out'], [up, 'out']]) {
+      if (!incomingClear || incomingClear(k, dir, side, hang)) {
+        k.side = side
+        k.hang = hang
+        return
+      }
+    }
+    k.side = down
+    k.hang = 'in'
+  }
   /** THE STAGGER (step 2): leaves alternate between the near row and the
    *  far row in sibling order; a child who shared onward always keeps the
    *  near row (their reach distance) so their branch's geometry is the
@@ -570,6 +631,13 @@ export function buildConstellationLayout({
       const parent = nodes.get(n.parentId)
       return { x1: parent.px, y1: parent.py, x2: n.px, y2: n.py, fromId: parent.id, toId: n.id }
     }
+    /** Would a sharer's perpendicular name at (side, hang), PERP_OFFSET
+     *  out, lie across its own incoming line arriving along `dir`? Asked
+     *  at the origin — only the directions matter (resetSide's question). */
+    const incomingClear = (k, dir, side, hang) => {
+      const r = rectsAt(k, 0, 0, dir, side, PERP_OFFSET, hang)
+      return !segmentTouchesRect(-200 * Math.cos(dir), -200 * Math.sin(dir), 0, 0, r.label, 0)
+    }
 
     for (const n of nodes.values()) {
       n.side = 'out'
@@ -590,39 +658,24 @@ export function buildConstellationLayout({
       n.theta = Math.atan2(n.py, n.px)
     }
 
-    /* ---- Rule 1: the first ring — v4 exactly: even, pushed outward only
-            if its names cannot clear each other or the center labels ---- */
+    /* ---- Rule 1: the first ring — v4's even slots at a FIXED base
+            radius; everyone starts on it, and a leaf may be LIFTED to a
+            higher row once the sides can be asked (`rerow`, below). ---- */
     const ring1 = root.children
     const slot = ring1.length ? TWO_PI / ring1.length : 0
-    // THE FIRST RING GROWS WITH ITS COUNT: RING_ARC of arc per person at
-    // the dots, never under v4's radius — then pushed further only if the
-    // names still cannot clear.
-    let r1 = Math.max(R0, (ring1.length * RING_ARC) / TWO_PI)
-    for (let bumps = 0; ; bumps++) {
-      ring1.forEach((c, i) => {
-        c.dir = RING1_BASE + i * slot
-        c.dist = r1
-        c.px = r1 * Math.cos(c.dir)
-        c.py = r1 * Math.sin(c.dir)
-        setPolar(c)
-      })
-      if (bumps >= MAX_BUMPS) {
-        bestEffort = true
-        break
-      }
-      let bad = false
-      const rects = ring1.map((c) => rectsOf(c))
-      const segs = ring1.map((c) => segmentOf(c))
-      for (let i = 0; i < rects.length && !bad; i++) {
-        for (const cr of centerRects) if (rectsCollide(rects[i].label, cr, clearance)) bad = true
-        for (let j = i + 1; j < rects.length && !bad; j++) if (violates(rects[i], rects[j])) bad = true
-        // A first-ring name against every first-ring line — the others by
-        // the clearance, its own by touch.
-        for (let j = 0; j < segs.length && !bad; j++) if (labelTouchesLine(ring1[i].id, rects[i].label, segs[j])) bad = true
-      }
-      if (!bad) break
-      r1 += RING_BUMP
+    const r1 = R0
+    /** Put a first-ring person on row `row` of FIRST_RING_ROWS, on their slot. */
+    const ringPlace = (c, row) => {
+      c.row = row
+      c.dist = r1 * FIRST_RING_ROWS[row]
+      c.px = c.dist * Math.cos(c.dir)
+      c.py = c.dist * Math.sin(c.dir)
+      setPolar(c)
     }
+    ring1.forEach((c, i) => {
+      c.dir = RING1_BASE + i * slot
+      ringPlace(c, 0)
+    })
     const placed = [...ring1]
 
     /** Is this side of n's name clear of everything placed — the film
@@ -670,28 +723,130 @@ export function buildConstellationLayout({
      *  order that clears everything. Returns true when the side changed;
      *  leaves it as it was when no side clears (the renderer's safety net
      *  then hides the name until zoom). */
-    const chooseSide = (n, others, rectFor = rectsOf) => {
+    /** The first side in n's order that clears everything in `others`, or
+     *  null when none does. Changes nothing. */
+    const findSide = (n, others, rectFor = rectsOf) => {
       for (const { side, hang } of sideOrder(n)) {
         const perp = side === 'left' || side === 'right'
         for (let off = PERP_OFFSET; off <= PERP_OFFSET_MAX + 1e-9; off += perp ? PERP_OFFSET_STEP : Infinity) {
-          if (sideClear(n, side, others, off, hang, rectFor)) {
-            if (n.side === side && n.perpOffset === off && n.hang === hang) return false
-            n.side = side
-            n.perpOffset = off
-            n.hang = hang
-            return true
-          }
+          if (sideClear(n, side, others, off, hang, rectFor)) return { side, off, hang }
         }
       }
+      return null
+    }
+    const chooseSide = (n, others, rectFor = rectsOf) => {
+      const found = findSide(n, others, rectFor)
+      if (!found) return false
+      if (n.side === found.side && n.perpOffset === found.off && n.hang === found.hang) return false
+      n.side = found.side
+      n.perpOffset = found.off
+      n.hang = found.hang
+      return true
+    }
+    /** THE FIRST-RING ROWS (founder, 11/15 September 2026). Is first-ring
+     *  person c's DOT clean where it stands — off every line in `others`
+     *  it is not attached to, its own line off every other dot, and no
+     *  painted name in `others` across it? (Its NAME is findSide's
+     *  question.) */
+    const ringDotClear = (c, others, rectFor = rectsOf) => {
+      const cd = dotRect(c.px, c.py)
+      const cs = segmentOf(c)
+      for (const o of others) {
+        if (o === c) continue
+        if (lineTouchesDot(segmentOf(o), cd, c.id)) return false
+        if (Math.abs(o.px - c.px) > NEAR_REACH || Math.abs(o.py - c.py) > NEAR_REACH) continue
+        const or = rectFor(o)
+        if (lineTouchesDot(cs, or.dot, o.id)) return false
+        if (rectsCollide(or.label, cd, clearance)) return false
+      }
+      return true
+    }
+    /** Give a first-ring LEAF the lowest row of FIRST_RING_ROWS at which
+     *  its dot and its name (on some side) clear everything in `others`;
+     *  a sharer keeps the base radius (their branch hangs off it). Returns
+     *  true when the row or the side CHANGED to a clean one; false when
+     *  nothing changed — already clean where it stood, or no row is clean
+     *  (then it stays where it was, for the fans to turn or the safety
+     *  net). The cheapest move on the map, tried before any fan turns. */
+    const rerow = (c, others, rectFor = rectsOf) => {
+      if (c.children.length) return false
+      const was = { row: c.row, side: c.side, off: c.perpOffset, hang: c.hang }
+      const take = (row, found) => {
+        c.side = found.side
+        c.perpOffset = found.off
+        c.hang = found.hang
+        return row !== was.row || found.side !== was.side || found.off !== was.off || found.hang !== was.hang
+      }
+      // The name OUTWARD at the lowest row that holds it first — every
+      // row before any perpendicular: a leaf's perpendicular name lies
+      // along the ring, across its neighbours' slots, and a leaf that took
+      // one at row 0 cost the next three their rows (the fifty simulation,
+      // 16 September). Only when no row holds the name outward do the
+      // other sides get their turn, row by row.
+      for (let row = 0; row < FIRST_RING_ROWS.length; row++) {
+        ringPlace(c, row)
+        if (ringDotClear(c, others, rectFor) && sideClear(c, 'out', others, PERP_OFFSET, 'out', rectFor)) return take(row, { side: 'out', off: PERP_OFFSET, hang: 'out' })
+      }
+      for (let row = 0; row < FIRST_RING_ROWS.length; row++) {
+        ringPlace(c, row)
+        if (!ringDotClear(c, others, rectFor)) continue
+        const found = findSide(c, others, rectFor)
+        if (found) return take(row, found)
+      }
+      ringPlace(c, was.row)
+      c.side = was.side
+      c.perpOffset = was.off
+      c.hang = was.hang
+      return false
+    }
+    /** A first-ring SHARER whose name has no clean side, blocked by a
+     *  first-ring LEAF's name or dot: the leaf lifts to a higher row when
+     *  it stays clean there and that frees the sharer a side (Charles on
+     *  Circles, whose right side Evan's outward name alone blocked). The
+     *  leaf's row is the solver's to assign — for every name on the ring,
+     *  not only its own. Returns true when both moved to clean places. */
+    const liftFor = (sharer, leaf, others, rectFor = rectsOf) => {
+      if (leaf.children.length || !sharer.children.length) return false
+      const fresh = (o) => (o === leaf ? rectsOf(o) : rectFor(o))
+      if (findSide(sharer, others, fresh)) return false // a side exists: chooseSide's job
+      const was = { row: leaf.row, side: leaf.side, off: leaf.perpOffset, hang: leaf.hang }
+      for (let row = was.row + 1; row < FIRST_RING_ROWS.length; row++) {
+        ringPlace(leaf, row)
+        if (!ringDotClear(leaf, others, fresh)) continue
+        const leafSide = findSide(leaf, others, fresh)
+        if (!leafSide) continue
+        leaf.side = leafSide.side
+        leaf.perpOffset = leafSide.off
+        leaf.hang = leafSide.hang
+        const found = findSide(sharer, others, fresh)
+        if (found) {
+          sharer.side = found.side
+          sharer.perpOffset = found.off
+          sharer.hang = found.hang
+          return true
+        }
+      }
+      ringPlace(leaf, was.row)
+      leaf.side = was.side
+      leaf.perpOffset = was.off
+      leaf.hang = was.hang
       return false
     }
     /** Every fan, all depths, parents before children; and each child's fan. */
     const fans = []
     const fanOf = new Map()
-    // First-ring names: settle each side against the film node and the
-    // other first-ring names and lines now (a sharer's fan re-checks it
-    // once placed, when its own lines exist).
-    for (const c of ring1) chooseSide(c, ring1)
+    // The first ring's rows and names: the sharers first, on the base
+    // radius, each name settled against the whole ring (their fans
+    // re-check them once placed, when their own lines exist); then every
+    // leaf in ticket order takes the lowest row at which it clears the
+    // film node and everyone on the ring placed before it.
+    const ringSoFar = ring1.filter((c) => c.children.length)
+    for (const c of ringSoFar) chooseSide(c, ring1)
+    for (const c of ring1) {
+      if (c.children.length) continue
+      rerow(c, ringSoFar)
+      ringSoFar.push(c)
+    }
 
     /* ---- Rules 2 and 3: every deeper generation, parent by parent ---- */
     const spanOf = (fan) => fan.gaps.reduce((x, y) => x + y, 0)
@@ -815,25 +970,24 @@ export function buildConstellationLayout({
      *  gaps on both sides of it — the fan spreads away from the parent's
      *  own name). Returns false when the fan is already at its cap. */
     const widenFor = (fan, [i, j], need = 0) => {
-      if (spanOf(fan) >= FAN_MAX_SPAN - 1e-12 || !fan.gaps.length) return false
+      const room = FAN_MAX_SPAN - spanOf(fan)
+      if (room <= 1e-12 || !fan.gaps.length) return false
       const lo = j < 0 ? Math.max(i - 1, 0) : Math.min(i, j)
       const hi = j < 0 ? Math.min(i, fan.gaps.length - 1) : Math.max(i, j) - 1
+      const count = Math.max(hi - lo + 1, 1)
       // By at least the fixed increment, or by what the penetration asks
       // for at the nearer sibling's distance (one or two widenings, not
       // hundreds — the 60-wide fan of the scale test).
       const nearer = Math.min(...[i, j].filter((x) => x >= 0).map((x) => distOf(fan.kids[x], fan)))
       // Half of what the penetration asks for, so a step never overshoots
-      // past the clearance (the next measurement takes the rest).
-      const amount = Math.max(FAN_WIDEN, (0.5 * need) / Math.max(nearer, 1) / Math.max(hi - lo + 1, 1))
-      let opened = false
-      for (let g = lo; g <= hi; g++) {
-        fan.gaps[g] += amount
-        opened = true
-      }
-      if (!opened) fan.gaps[0] += amount
-      // Never past the cap: scale the gaps back to it.
-      const span = spanOf(fan)
-      if (span > FAN_MAX_SPAN) fan.gaps = fan.gaps.map((g) => (g * FAN_MAX_SPAN) / span)
+      // past the clearance (the next measurement takes the rest) — and
+      // never more than the ROOM LEFT inside the cap. A pair is given only
+      // what the cap still holds, never what the other pairs need: the old
+      // "scale every gap back to the cap" took room from gaps the sweep
+      // had found as their pairs' minimum, and on Circles squeezed six of
+      // Krist's ten into 7° with their dots on each other (16 September 2026).
+      const amount = Math.min(Math.max(FAN_WIDEN, (0.5 * need) / Math.max(nearer, 1) / count), room / count)
+      for (let g = lo; g <= hi; g++) fan.gaps[g] += amount
       return true
     }
     /** Does sibling g+1 of the fan clear its parent and every sibling
@@ -863,39 +1017,65 @@ export function buildConstellationLayout({
     }
     /** Step 1 — SPREAD: every adjacent pair's gap is the SMALLEST at which
      *  that sibling clears the parent and every sibling before it (a
-     *  binary search per gap, left to right), so a fan is tight and evenly
+     *  first-clear search per gap, left to right), so a fan is tight and evenly
      *  packed — never a few wide gaps and the rest crammed at the cap (the
      *  incremental widening of 10 September did exactly that once the
      *  outward move was capped). Then the whole fan is re-checked and any
      *  residual pair widened, never past FAN_MAX_SPAN. Returns the
      *  violation left at the cap, or null when clean. */
-    /** The smallest gap g at which sibling g+1 clears (a binary search
+    /** The smallest gap g at which sibling g+1 clears (a first-clear walk then a narrowing
      *  inside the room the cap leaves), or null when none does. Leaves
      *  fan.gaps[g] at the answer (or at the room, when none). */
     const smallestGap = (fan, g) => {
-      let lo = STEP_FLOOR
       // The room left inside the cap after the gaps already set (the ones
       // still to come sit at the floor): a gap never probes past it — a
       // probe beyond the cap wraps the fan behind its parent and measures
       // nothing real.
-      let hi = Math.max(STEP_FLOOR, FAN_MAX_SPAN - (spanOf(fan) - fan.gaps[g]))
-      fan.gaps[g] = hi
-      if (!pairClear(fan, g)) {
+      const room = Math.max(STEP_FLOOR, FAN_MAX_SPAN - (spanOf(fan) - fan.gaps[g]))
+      // Clearance is NOT monotone in the gap: with a sharer among the
+      // leaves (Alexander at 136 units beside Patti at 91 and Daniel at
+      // 125 on Circles) a pair clears, collides — the far sibling's line
+      // across the near one's name — and clears again as the gap grows.
+      // A bisection between the floor and the room lands on the edge of
+      // WHICHEVER clear range it stumbles into: 52.9° for Patti →
+      // Alexander, where 15° clears (16 September 2026) — and that wasted
+      // room starved the fan's tail. So: walk UP from the floor to the
+      // FIRST gap that clears, then narrow inside that one transition.
+      let lastBad = null
+      let firstGood = null
+      for (let gap = STEP_FLOOR; gap <= room + 1e-12; gap += GAP_SCAN) {
+        fan.gaps[g] = gap
+        if (pairClear(fan, g)) {
+          firstGood = gap
+          break
+        }
+        lastBad = gap
+      }
+      if (firstGood == null) {
+        fan.gaps[g] = room
+        if (pairClear(fan, g)) firstGood = room
+      }
+      if (firstGood == null) {
         // No gap inside the room clears this pair: it takes an EVEN share
         // of the room with the gaps still to come, not all of it (red
         // team, 11 September: a starved tail stacked three names within
         // half a degree); the residual widen loop takes it from there.
-        fan.gaps[g] = Math.max(STEP_FLOOR, hi / (fan.gaps.length - g))
+        fan.gaps[g] = Math.max(STEP_FLOOR, room / (fan.gaps.length - g))
         return null
       }
-      for (let it = 0; it < 12; it++) {
-        const mid = (lo + hi) / 2
-        fan.gaps[g] = mid
-        if (pairClear(fan, g)) hi = mid
-        else lo = mid
+      if (lastBad != null) {
+        let lo = lastBad
+        let hi = firstGood
+        for (let it = 0; it < 6; it++) {
+          const mid = (lo + hi) / 2
+          fan.gaps[g] = mid
+          if (pairClear(fan, g)) hi = mid
+          else lo = mid
+        }
+        firstGood = hi
       }
-      fan.gaps[g] = hi
-      return hi
+      fan.gaps[g] = firstGood
+      return firstGood
     }
     /** One sweep of the fan, left to right, at the rows already assigned:
      *  every gap the smallest at which that sibling clears the parent and
@@ -930,6 +1110,17 @@ export function buildConstellationLayout({
       if (!fan.stagger) {
         assignRows(fan)
         sweep(fan)
+      } else if (staggerMemo.has(fan.p.id)) {
+        // DECIDED ONCE: the pattern this fan chose at the first rung of the
+        // ladder holds at every rung below it (the founder's stability law
+        // — a fan's rows are its own names' decision, never a size's: with
+        // the pattern re-chosen per rung, one person joining two
+        // generations below Arielle re-chose the film's rung and flipped
+        // her rows, 16 September 2026).
+        const rows = staggerMemo.get(fan.p.id)
+        for (const k of fan.kids) k.row = k.children.length ? 0 : (rows.get(k.id) ?? 0)
+        const span = sweep(fan)
+        if (span > FAN_MAX_SPAN) fan.gaps = fan.gaps.map((x) => (x * FAN_MAX_SPAN) / span)
       } else {
         let best = null
         for (const [first, mirrored] of [[0, false], [1, false], [0, true], [1, true]]) {
@@ -940,14 +1131,20 @@ export function buildConstellationLayout({
             span = FAN_MAX_SPAN
           }
           // The pattern that leaves the fewest of its own rules broken
-          // wins; among clean ones, the tightest.
+          // wins; among clean ones, the tightest — by a clear margin
+          // (PATTERN_MARGIN): the honest sweep of 16 September measures
+          // spans to a fraction of a degree, and a hair's difference
+          // flipped a fan's rows when a person joined two generations
+          // below it (the founder's stability law: a fan's rows are its
+          // own names' decision). Ties keep the first pattern in order.
           const broken = intraViolationCount(fan)
-          if (!best || broken < best.broken || (broken === best.broken && span < best.span - 1e-9)) {
+          if (!best || broken < best.broken || (broken === best.broken && span < best.span - PATTERN_MARGIN)) {
             best = { span, broken, rows: fan.kids.map((k) => k.row), gaps: [...fan.gaps] }
           }
         }
         fan.kids.forEach((k, i) => (k.row = best.rows[i]))
         fan.gaps = best.gaps
+        staggerMemo.set(fan.p.id, new Map(fan.kids.map((k) => [k.id, k.row])))
       }
       const span = spanOf(fan)
       if (span > FAN_MAX_SPAN) fan.gaps = fan.gaps.map((x) => (x * FAN_MAX_SPAN) / span)
@@ -961,11 +1158,7 @@ export function buildConstellationLayout({
      *  Returns the violation left, or null when clean. */
     const nameStep = (fan) => {
       placeFan(fan)
-      for (const k of fan.kids) {
-        k.side = 'out'
-        k.perpOffset = PERP_OFFSET
-        k.hang = 'out'
-      }
+      for (const k of fan.kids) resetSide(k, fan, incomingClear)
       fan.kids.forEach((k, i) => {
         // Against the parent and the nearest siblings on each side — the
         // only ones a sibling's name can reach.
@@ -982,23 +1175,24 @@ export function buildConstellationLayout({
      *  most EXTRA_MAX × d, the hard cap. Whatever is still crowded past
      *  that is left to the size ladder and, at its bottom, the safety net. */
     const fit = (fan) => {
-      fan.stagger = false
+      // A fan that staggered at an earlier rung starts staggered, in the
+      // pattern it chose then (see `spread`); every other fan tries one
+      // row first.
+      fan.stagger = staggerMemo.has(fan.p.id)
       fan.extra = 0
       assignRows(fan)
       const attempt = () => {
-        // Every attempt starts from the default side (the sweep measures
-        // outward names); the name step then moves what must move.
-        for (const k of fan.kids) {
-          k.side = 'out'
-          k.perpOffset = PERP_OFFSET
-          k.hang = 'out'
-        }
+        // Every attempt starts from the default side; the name step then
+        // moves what must move.
+        for (const k of fan.kids) resetSide(k, fan, incomingClear)
         return !spread(fan) || !nameStep(fan)
       }
       if (attempt()) return true
-      fan.stagger = true
-      assignRows(fan)
-      if (attempt()) return true
+      if (!fan.stagger) {
+        fan.stagger = true
+        assignRows(fan)
+        if (attempt()) return true
+      }
       // HOPELESS: a fan of more than HOPELESS_KIDS children cannot fit two
       // rows inside the cap at any size on the ladder (each adjacent pair
       // needs ~9° for its line to clear the neighbour's dot alone) — the
@@ -1141,6 +1335,8 @@ export function buildConstellationLayout({
      *  (a fan pushed one way this pass and the other way the next is as
      *  stuck as one pushed both ways at once). */
     const pushHistory = new Map()
+    /** First-ring sharers for whom the row lift has been tried (once per placement). */
+    const liftTried = new Set()
     let flipPasses = 0 // passes spent only moving names (bounded: two names can trade places forever)
     for (let pass = 0; pass < MAX_RELAX_PASSES && !clean; pass++) {
       const rectOf = new Map()
@@ -1158,6 +1354,18 @@ export function buildConstellationLayout({
       const widen = new Map() // fan -> a violating pair of its own siblings (null = only outward helps)
       const deferred = [] // sharer's-branch-vs-sibling violations, decided after the pass
       const stuck = new Set() // names on a line that no side of theirs clears
+      /** First-ring leaves whose re-row found nothing to change THIS pass
+       *  (nothing moves within a pass except by a flip, which restarts
+       *  it, so a second search would answer the same — red team,
+       *  16 September: the search is three rows × every side × everyone
+       *  placed, once per colliding pair otherwise). */
+      const rerowDone = new Set()
+      const tryRerow = (n) => {
+        if (rerowDone.has(n)) return false
+        const moved = rerow(n, placed, rect)
+        if (!moved) rerowDone.add(n)
+        return moved
+      }
       let flipped = false
       let violations = 0
       let pressure = 0 // the room every violation still asks for, summed
@@ -1225,7 +1433,36 @@ export function buildConstellationLayout({
       }
       for (const k of placed) {
         const fan = fanFor(k)
-        if (!fan) continue // first ring: rule 1 settled it
+        if (!fan) {
+          // First ring: rule 1 settled it — except a SHARER whose name no
+          // side of its own clears: a first-ring LEAF near it may lift a
+          // row to free it a side (the rows are the solver's to assign for
+          // every name on the ring; the leaf that blocks the sharer's
+          // free side need never collide with the sharer's present one —
+          // Charles on Circles, blocked by the second Evan's name).
+          if (k.children.length && !liftTried.has(k) && !findSide(k, placed, rect)) {
+            // Once per placement: the only later change to the ring is a
+            // leaf's re-row, and the fans' turns do not move the ring's
+            // rays or dots, so a lift that fails here almost always fails
+            // every pass — and the search is the costliest question in
+            // the relaxation (three rows × every side × everyone placed,
+            // per leaf).
+            liftTried.add(k)
+            let lifted = false
+            for (const leaf of ring1) {
+              if (leaf.children.length || Math.abs(leaf.px - k.px) > NEAR_REACH || Math.abs(leaf.py - k.py) > NEAR_REACH) continue
+              if (liftFor(k, leaf, placed, rect)) {
+                lifted = true
+                break
+              }
+            }
+            if (lifted) {
+              flipped = true
+              break
+            }
+          }
+          continue
+        }
         const kr = rect(k)
         const ks = seg(k)
         // Against the film node: its emblem and center labels — the name,
@@ -1279,7 +1516,10 @@ export function buildConstellationLayout({
         for (let j = i + 1; j < placed.length; j++) {
           const other = placed[j]
           const fb = fanFor(other)
-          if (!fa && !fb) continue // two first-ring people: rule 1's own check
+          // Two first-ring people: the ring's own assignment settled them,
+          // unless a fan's arrival has since moved a name — then the LEAF
+          // among them may still change row (below); two sharers never can.
+          if (!fa && !fb && k.children.length && other.children.length) continue
           const ob = box(other)
           if (kb.x1 < ob.x0 || ob.x1 < kb.x0 || kb.y1 < ob.y0 || ob.y1 < kb.y0) continue
           const o = rect(other)
@@ -1291,9 +1531,40 @@ export function buildConstellationLayout({
           const dotLineHit = lineTouchesDot(seg(other), kr.dot, k.id) || lineTouchesDot(seg(k), o.dot, other.id)
           const boxHit = violates(kr, o) || dotLineHit
           if (!boxHit && !lineHitA && !lineHitB) continue
+          if (!fa && !fb) {
+            // Both on the first ring: a leaf's row is the first move — its
+            // own, then a sharer's name to a side that clears, then a leaf
+            // lifted to free the sharer beside it a side; a pair no move
+            // parts is COUNTED (never declared clean — red team,
+            // 16 September) and left to the safety net (nothing here turns).
+            const leafA = !k.children.length
+            const leafB = !other.children.length
+            if ((leafA && tryRerow(k)) || (leafB && tryRerow(other))) {
+              flipped = true
+              break
+            }
+            if ((!leafA && chooseSide(k, placed, rect)) || (!leafB && chooseSide(other, placed, rect))) {
+              flipped = true
+              break
+            }
+            if ((!leafA && leafB && liftFor(k, other, placed, rect)) || (!leafB && leafA && liftFor(other, k, placed, rect))) {
+              flipped = true
+              break
+            }
+            violations += 1
+            continue
+          }
           /** The room this pair asks for: the boxes' penetration, or the
            *  clearance when only a line is on a name or a dot. */
           const pairNeed = Math.max(needOf(kr, o), lineHitA || lineHitB || dotLineHit ? clearance : 0)
+          // A first-ring LEAF in the pair moves ROW first (the founder's
+          // rows, 15 September 2026): the lowest row at which it clears
+          // everything placed — the cheapest move on the map, before a
+          // name moves or a fan turns.
+          if ((!fa && !k.children.length && tryRerow(k)) || (!fb && !other.children.length && tryRerow(other))) {
+            flipped = true
+            break
+          }
           // A name on a line it is not attached to MOVES first (out → in →
           // perpendicular) — siblings included; only if no side clears do
           // the fans spread or turn.
@@ -1446,6 +1717,16 @@ export function buildConstellationLayout({
       })
       if (hit) collidingCount += 1
     }
+    // A DOT never sits on a line: every dot against every line it is not
+    // attached to (counted once per dot). The plan's accounting was blind
+    // to this until 16 September 2026 — Krist's tail stood with its dots
+    // on each other while the ladder ranked the placement as "two names
+    // lost" and the renderer had nothing to hide.
+    let dotConflictCount = 0
+    for (const k of placed) {
+      const kd = dotRect(k.px, k.py)
+      if (placed.some((o) => o !== k && lineTouchesDot(segmentOf(o), kd, k.id))) dotConflictCount += 1
+    }
 
     /* ---- The canvas this placement needs: the drawing's own extent —
             every name's box and dot plus the film node — with room around
@@ -1479,7 +1760,7 @@ export function buildConstellationLayout({
     // the edge, centred when the canvas is larger than it needs to be.
     const cx = (width - (x1 - x0)) / 2 - x0
     const cy = (height - (y1 - y0)) / 2 - y0
-    return { width, height, cx, cy, r1, bestEffort, hopeless, hiddenCount, collidingCount, rectsOf, centerRects }
+    return { width, height, cx, cy, r1, bestEffort, hopeless, hiddenCount, collidingCount, dotConflictCount, rectsOf, centerRects }
   }
 
   /* ---- Plan for the reference view: the hard rule holds on SCREEN there ----
@@ -1524,7 +1805,7 @@ export function buildConstellationLayout({
       // red team, 10 September). The END STATE decides, not a flag raised
       // along the way: a fan that spent its ladder and was then cleared by
       // the relaxation is clean (11 September).
-      const clean = result.hiddenCount === 0 && result.collidingCount === 0
+      const clean = result.hiddenCount === 0 && result.collidingCount === 0 && result.dotConflictCount === 0
       const consistent = result.width <= assumed.width && result.height <= assumed.height
       if (consistent) {
         // The output canvas is the assumed one; the drawing is re-centred
@@ -1581,9 +1862,10 @@ export function buildConstellationLayout({
     }
     // No rung paints every name: the one that loses the FEWEST names —
     // hidden by the layout, or still colliding for the renderer to hide —
-    // wins (the names are the product), the larger size on a tie: the
-    // builder's reading of "shrink before hide", pending the founder's word.
-    const lost = (a) => a.result.hiddenCount + a.result.collidingCount
+    // or leaves the fewest dots on lines, wins (the names are the
+    // product), the larger size on a tie: the builder's reading of
+    // "shrink before hide", pending the founder's word.
+    const lost = (a) => a.result.hiddenCount + a.result.collidingCount + a.result.dotConflictCount
     if (!chosen || lost(attempt) < lost(chosen)) chosen = attempt
     // A fan no rung could fit: straight to the bottom rung (the safety
     // net hides least there), the rungs between skipped.
@@ -1671,8 +1953,8 @@ export function buildConstellationLayout({
       dir: isFilm ? null : n.dir,
       dist: isFilm ? null : n.dist,
       extra: isFilm ? null : n.extra,
-      /** The stagger row inside the fan: 0 = at the reach distance, 1 =
-       *  the far row (STAGGER_RATIO × reach). A sharer is always 0. */
+      /** The row: in a fan, the stagger row — 0 = at the reach distance, 1 =
+       *  the far row (STAGGER_RATIO × reach), a sharer always 0; on the FIRST RING, the index into FIRST_RING_ROWS (0 = the base radius; a sharer always 0). */
       row: isFilm ? null : n.row,
       subtreeSize: n.size,
       label: isFilm ? null : radialLabel(n.dir, x, y, n.side, n.perpOffset, n.hang),
@@ -1736,6 +2018,10 @@ export function buildConstellationLayout({
       /** Names still colliding at the reference view (the renderer's
        *  safety net hides them there): 0 on a settled plan. */
       colliding: result.collidingCount,
+      /** Dots sitting on a line they are not attached to (the founder's
+       *  law of 11 September): 0 on a settled plan; the renderer cannot
+       *  hide a dot, so a count here is a placement the founder sees. */
+      dotsOnLines: result.dotConflictCount,
       /** SHRINK BEFORE HIDE: the rung of the size ladder this film's names
        *  paint at on the reference view — the largest at which every name
        *  paints, or the bottom rung when none does. */

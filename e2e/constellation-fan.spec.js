@@ -31,7 +31,7 @@
  */
 import { test, expect, pushJsError } from './fixtures/test.js'
 import { LABEL_SIZE_LADDER, LINE_ALPHA, MIN_LABEL_ON_SCREEN_PX, PERSON_LABEL_SIZE, RECEDE_OPACITY, labelFontSize, mapScaleFor } from '../src/lib/constellationLabels.js'
-import { FAN_MAX_SPAN, REACH_BASE, REACH_K } from '../src/lib/constellationLayout.js'
+import { FAN_MAX_SPAN, FIRST_RING_ROWS, REACH_BASE, REACH_K } from '../src/lib/constellationLayout.js'
 
 const REF = 'wmtjgpxhjtbocsmutqqc'
 const OWNER_ID = '11111111-1111-4111-8111-111111111111'
@@ -340,10 +340,15 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     const angles = geom.persons
     expect(geom.rings).toBe(0) // the generation rings are dropped
 
-    // Rule 1: nine first-ring tickets, nine equal 40° slots, at one radius.
-    const ring1Angles = ring1Rows.map((r) => angles[r.id]).sort((a, b) => a.theta - b.theta)
-    const r1 = ring1Angles[0].r
-    for (const a of ring1Angles) expect(Math.abs(a.r - r1)).toBeLessThan(0.5)
+    // Rule 1: nine first-ring tickets, nine equal 40° slots. FIRST-RING
+    // PEOPLE NO LONGER SHARE ONE RADIUS (founder, 11/15 September 2026): a
+    // sharer sits on the base radius (118); a leaf on it or lifted to one
+    // of the rows (1.35 × / 1.7 × 118), the solver's choice.
+    const ring1Angles = ring1Rows.map((r) => ({ ...angles[r.id], sharer: ROWS.some((k) => k.parent_invite_id === r.id) })).sort((a, b) => a.theta - b.theta)
+    for (const a of ring1Angles) {
+      if (a.sharer) expect(Math.abs(a.r - 118)).toBeLessThan(0.5)
+      else expect(FIRST_RING_ROWS.some((m) => Math.abs(a.r - 118 * m) < 0.5), `first-ring leaf at r=${a.r}`).toBe(true)
+    }
     for (let i = 0; i < 9; i++) {
       const next = i === 8 ? ring1Angles[0].theta + TWO_PI : ring1Angles[i + 1].theta
       expect(next - ring1Angles[i].theta).toBeCloseTo(TWO_PI / 9, 3)
