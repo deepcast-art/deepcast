@@ -1,7 +1,7 @@
 import { writeFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { join, dirname } from 'path'
-import { buildTicketEmail, buildReminderEmail, returnUrl, wordmarkUrl, clockUrl } from './ticketEmail.js'
+import { buildTicketEmail, buildReminderEmail, returnUrl, wordmarkUrl, clockUrl, dividerUrl } from './ticketEmail.js'
 
 /**
  * `node server/preview-email.js ticket` / `… reminder` render the REAL
@@ -29,6 +29,7 @@ if (mode === 'ticket' || mode === 'reminder') {
     watchUrl: returnUrl('https://deepcast.art', 'a'.repeat(64)),
     wordmark: wordmarkUrl(assetBase),
     clock: clockUrl(assetBase),
+    dividerImg: dividerUrl(assetBase),
   }
   const message = mode === 'ticket' ? buildTicketEmail(sample) : buildReminderEmail(sample)
   const outPath = join(dirname(fileURLToPath(import.meta.url)), 'email-preview.html')
