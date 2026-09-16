@@ -281,13 +281,18 @@ export default function ConstellationMap({ layout }) {
         name: n.measureName ?? n.name,
         baseSize: PERSON_LABEL_SIZE,
         gold: n.id === layout.youId,
-        tier: threadSet.has(n.id) ? 1 : 2,
+        // THE VISIBILITY TIER (founder law, 16 September 2026): a sharer's
+        // name is never hidden while any leaf's name is painted. After the
+        // always-on labels (the filmmaker's two, YOU): the sharers (tier
+        // 1); then the leaves — the viewer's thread first (tier 2), then
+        // everyone else (tier 3).
+        tier: childrenById.has(n.id) ? 1 : threadSet.has(n.id) ? 2 : 3,
         dist: 0,
         layoutHidden: Boolean(n.hidden),
       })
     }
     return items
-  }, [layout, threadSet])
+  }, [layout, threadSet, childrenById])
 
   /** SHRINK BEFORE HIDE (founder, 11 September 2026) + the collision pass:
    *  at THIS view's scale, walk the size ladder from the top and keep the
@@ -631,6 +636,7 @@ export default function ConstellationMap({ layout }) {
         viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
         data-plan-settled={layout.plan?.settled ? 'true' : 'false'}
         data-plan-label-px={layout.plan?.labelPx}
+        data-plan-spread={layout.plan?.spread}
         data-label-px={labelPx}
         role="img"
         aria-label={

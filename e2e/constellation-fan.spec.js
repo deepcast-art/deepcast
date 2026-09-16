@@ -31,7 +31,7 @@
  */
 import { test, expect, pushJsError } from './fixtures/test.js'
 import { LABEL_SIZE_LADDER, LINE_ALPHA, MIN_LABEL_ON_SCREEN_PX, PERSON_LABEL_SIZE, RECEDE_OPACITY, labelFontSize, mapScaleFor } from '../src/lib/constellationLabels.js'
-import { FAN_MAX_SPAN, FIRST_RING_ROWS, REACH_BASE, REACH_K } from '../src/lib/constellationLayout.js'
+import { FAN_MAX_SPAN, FIELD_R0, GOLDEN_ANGLE, REACH_BASE, REACH_K } from '../src/lib/constellationLayout.js'
 
 const REF = 'wmtjgpxhjtbocsmutqqc'
 const OWNER_ID = '11111111-1111-4111-8111-111111111111'
@@ -340,18 +340,22 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     const angles = geom.persons
     expect(geom.rings).toBe(0) // the generation rings are dropped
 
-    // Rule 1: nine first-ring tickets, nine equal 40° slots. FIRST-RING
-    // PEOPLE NO LONGER SHARE ONE RADIUS (founder, 11/15 September 2026): a
-    // sharer sits on the base radius (118); a leaf on it or lifted to one
-    // of the rows (1.35 × / 1.7 × 118), the solver's choice.
-    const ring1Angles = ring1Rows.map((r) => ({ ...angles[r.id], sharer: ROWS.some((k) => k.parent_invite_id === r.id) })).sort((a, b) => a.theta - b.theta)
-    for (const a of ring1Angles) {
-      if (a.sharer) expect(Math.abs(a.r - 118)).toBeLessThan(0.5)
-      else expect(FIRST_RING_ROWS.some((m) => Math.abs(a.r - 118 * m) < 0.5), `first-ring leaf at r=${a.r}`).toBe(true)
-    }
-    for (let i = 0; i < 9; i++) {
-      const next = i === 8 ? ring1Angles[0].theta + TWO_PI : ring1Angles[i + 1].theta
-      expect(next - ring1Angles[i].theta).toBeCloseTo(TWO_PI / 9, 3)
+    // Rule 1: THE DIFFUSION FIELD (founder, 16 September 2026) — the nine
+    // direct recipients sit on the sunflower spiral: each at radius
+    // FIELD_R0 + c·√k and angle k × 137.508° for some integer k, k rising
+    // in ticket order (the spread c is the plan's, on the svg).
+    const spread = parseFloat(await dialog.locator('svg.dc-constellation').getAttribute('data-plan-spread'))
+    expect(spread).toBeGreaterThan(0)
+    const film = { x: 0, y: 0 } // readGeometry reports every dot relative to the film's centre
+    let lastK = -1
+    for (const r of ring1Rows) {
+      const a = angles[r.id]
+      const rr = Math.hypot(a.x - film.x, a.y - film.y)
+      const k = Math.round(((rr - FIELD_R0) / spread) ** 2)
+      expect(rr, `${r.recipient_name} on the spiral's radius`).toBeCloseTo(FIELD_R0 + spread * Math.sqrt(k), 2)
+      expect(Math.abs(angDiff(Math.atan2(a.y - film.y, a.x - film.x), k * GOLDEN_ANGLE)), `${r.recipient_name} at the spiral's angle`).toBeLessThan(1e-3)
+      expect(k, `${r.recipient_name}'s point comes after the ticket before`).toBeGreaterThan(lastK)
+      lastK = k
     }
 
     // Rule 2 (reach): Lena's ten sit BEYOND Lena — ahead of her limb
@@ -392,7 +396,10 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     // film → Priya → Lena → ten.
     // (force: the modal panel's rise animation and the dot's twinkle never
     // satisfy Playwright's stability wait; the pointer still moves there.)
-    await dialog.locator(`g[data-node="${LENA_ROW.id}"] > circle`).first().hover({ force: true })
+    // Under the field a neighbour's hit circle can sit over Lena's dot, so
+    // the pointer event is delivered to HER group directly (pointerover
+    // bubbles; React derives the enter from it).
+    await dialog.locator(`g[data-node="${LENA_ROW.id}"]`).dispatchEvent('pointerover', { pointerType: 'mouse', bubbles: true })
     await expect(dialog.locator('.lit-person')).toHaveCount(12)
     expect(jsErrors).toEqual([])
   })
@@ -536,6 +543,7 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
       expect(viewer.persons[r.id].thread, r.recipient_name).toBe(threadIds.has(r.id))
       expect(viewer.persons[r.id].lit, r.recipient_name).toBe(threadIds.has(r.id))
     }
+    await page.mouse.move(0, 0) // the pointer rested where the modal's button was; under the field a person may sit there now
     await expect(map.locator('g.lit-person')).toHaveCount(12)
     await expect(map.locator('line.lineage')).toHaveCount(12)
     await expect(map.locator('line.lit-edge')).toHaveCount(12)
@@ -700,12 +708,17 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     await expect(map.locator('line.lineage')).toHaveCount(12)
 
     const geom = await readGeometry(page, false)
-    const ring1 = ring1Rows.map((r) => geom.persons[r.id].theta).sort((a, b) => a - b)
-    for (let i = 0; i < 9; i++) {
-      const next = i === 8 ? ring1[0] + TWO_PI : ring1[i + 1]
-      expect(next - ring1[i]).toBeCloseTo(TWO_PI / 9, 3)
+    // THE DIFFUSION FIELD on the viewer's surface too: the nine direct
+    // recipients on the spiral, Noor (the first ticket) at its first point.
+    const spreadHere = parseFloat(await map.getAttribute('data-plan-spread'))
+    for (const r of ring1Rows) {
+      const a = geom.persons[r.id]
+      const rr = Math.hypot(a.x, a.y)
+      const k = Math.round(((rr - FIELD_R0) / spreadHere) ** 2)
+      expect(rr, `${r.recipient_name} on the spiral's radius`).toBeCloseTo(FIELD_R0 + spreadHere * Math.sqrt(k), 2)
+      expect(Math.abs(angDiff(Math.atan2(a.y, a.x), k * GOLDEN_ANGLE)), `${r.recipient_name} at the spiral's angle`).toBeLessThan(1e-3)
     }
-    expect(Math.abs(angDiff(geom.persons[NOOR.id].theta, -Math.PI / 2))).toBeLessThan(1e-6)
+    expect(Math.hypot(geom.persons[NOOR.id].x, geom.persons[NOOR.id].y)).toBeCloseTo(FIELD_R0, 2)
     // The viewer's own fan: ten invitees beyond YOU on her limb, within the cap.
     const you = geom.persons[LENA_ROW.id]
     const youDir = dirOf(geom.persons, LENA_ROW.id)

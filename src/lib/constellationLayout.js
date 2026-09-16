@@ -12,19 +12,19 @@
  *
  * THE RULES (binding, unit-tested):
  *
- *  1. THE FIRST RING IS v4's SLOTS: the filmmaker sits at the exact center
- *     (the emblem and its two labels unchanged); his own invitations are
- *     spaced EVENLY around the full circle in ticket order (first ticket at
- *     12 o'clock, clockwise; team-member nodes, which hold no ticket, sort
- *     first). FIRST-RING PEOPLE NO LONGER SHARE ONE RADIUS (founder,
- *     11 September 2026, confirmed 15 September): a first-ring person who
- *     shared with nobody may be LIFTED to 1.35 or 1.7 times the ring's
- *     radius (FIRST_RING_ROWS) — rows the solver assigns, in ticket order,
- *     each person the lowest row at which their name and dot clear
- *     everything already placed; sharers keep the base radius, so their
- *     branches never move; and the base radius NEVER grows to make room
- *     (the bump loop is gone). A leaf's row is a move the relaxation
- *     tries before any fan turns.
+ *  1. THE DIFFUSION FIELD (founder direction, 16 September 2026: "at any
+ *     count the graph must read as an even spreading-out from the
+ *     filmmaker, never a ring/cell"): the filmmaker sits at the exact
+ *     center (the emblem and its two labels unchanged); his direct
+ *     recipients sit on a SUNFLOWER SPIRAL in ticket order — person k at
+ *     radius FIELD_R0 + c·√k and angle k × 137.508° — so adding a person
+ *     never moves anyone placed before them. A field point within the
+ *     clearance of any existing dot, name box or line is SKIPPED and the
+ *     spiral continues (the scatter flows around the limbs); a sharer's
+ *     branch is placed the moment the sharer is. The spread c is derived
+ *     from the plan's label size, never tuned by hand. The first ring,
+ *     its rows and its growing radius (v4 → 11 September → 15 September)
+ *     are gone.
  *  2. REACH: every other person sits BEYOND the person who gave them the
  *     film, inside a fan centred on that parent's OUTWARD direction (from
  *     the centre through a first-ring parent; for a deeper parent, the
@@ -128,8 +128,6 @@ const BASE_W = 900
  *  — the "tiny bit longer" limbs of the 10 September amendment (the first
  *  ring's radius is v4's and REACH_K cannot lengthen it). */
 const BASE_H = 715
-/** The first ring's radius — v4's, unchanged (rule 1). */
-const R0 = 118
 const EDGE_PAD = 58
 /** Placement rounds for the reference-view plan before it falls back to
  *  the base canvas's boxes; a placement that lost names gets fewer. */
@@ -156,8 +154,6 @@ export const REACH_BASE = 30
 export const REACH_K = 31
 
 /* ---- The fan knobs (rule 3) ---- */
-/** Where the first ring starts: 12 o'clock, then clockwise in ticket order. */
-const RING1_BASE = -Math.PI / 2
 /** The widest a fan may open, end to end (140° — founder, 11 September
  *  2026; was ~120°). */
 export const FAN_MAX_SPAN = (7 * Math.PI) / 9
@@ -210,18 +206,38 @@ const LINE_DOT_GAP = 1
  *  a clear window narrower than this between two violating ranges is a
  *  knife edge the sweep does not stop in. */
 const GAP_SCAN = Math.PI / 90
-/** FIRST-RING PEOPLE NO LONGER SHARE ONE RADIUS (founder rule,
- *  11 September 2026, confirmed 15 September): a first-ring person who
- *  shared with nobody may sit at the ring's radius or lifted to one of
- *  these multiples of it — rows the solver assigns to keep every name
- *  painted and no dot within the clearance of a line (a first-ring LEAF's
- *  row is the cheapest move on the map: tried before any fan turns).
- *  Sharers keep the base radius, so their branches' geometry — the reach
- *  rule from wherever they sit — is untouched; the base radius itself
- *  NEVER grows to make room (v4's bump loop and the 11 September "grows
- *  with its count" radius are retired by this rule; what three rows cannot
- *  hold goes down the size ladder, then to the safety net). */
-export const FIRST_RING_ROWS = [1, 1.35, 1.7]
+/* ---- THE DIFFUSION FIELD (founder direction, 16 September 2026, after
+   the fifty renders): "at any count the graph must read as an even
+   spreading-out from the filmmaker, never a ring/cell." The filmmaker's
+   direct recipients no longer sit on a ring or its rows: person k (ticket
+   order, oldest first) sits on a sunflower spiral at radius FIELD_R0 +
+   c·√k and angle k × 137.508° (the golden angle), so adding a person
+   never moves anyone placed before them. Sharers sit on the same spiral
+   by their ticket order; their branches keep the reach rule and every fan
+   law, fanning outward from their spiral position. A field point that
+   would land within the clearance of any existing dot, name box or line
+   (a sharer's limb, a fan) is SKIPPED and the spiral continues — the
+   scatter flows around the limbs. ---- */
+/** The golden angle, in radians (137.508°). */
+export const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
+/** Where the field starts: just outside the emblem, so the first
+ *  recipients sit close to the filmmaker (the centre labels below the
+ *  emblem skip the points that would touch them). */
+export const FIELD_R0 = 52
+/** The spread c is DERIVED, never tuned by hand: the smallest at which
+ *  adjacent field points clear a name box at the plan's label size — a
+ *  sunflower spiral's nearest neighbours sit c·√π apart, so c = (box
+ *  height + clearance) / √π; SPREAD_OPTIONS × that are the founder's
+ *  render options (`spread` option; the render harness sets
+ *  globalThis.__dcConstellationSpread, a design-gate knob with no product
+ *  surface). */
+export const SPREAD_OPTIONS = [1, 1.25, 1.6]
+/** How many field points a person may skip looking for a STRICT point
+ *  (their ray from the filmmaker off every dot) before the founder's
+ *  point-only rule applies; and how many before the next point is taken
+ *  regardless (reported as best effort). */
+const FIELD_STRICT_SKIPS = 40
+const FIELD_MAX_SKIPS = 400
 /** The least-movement separation of fans (rule 3): passes of small equal
  *  turns, each fan about its own parent, until every rule holds — or until
  *  the count of violations has not improved for STALL_PASSES (a wedged
@@ -344,11 +360,19 @@ export function buildConstellationLayout({
   // — `plan.labelPx`. A caller may pin ONE size instead (the tests ask
   // "does this film settle at this size?"); production callers never do.
   labelFloorPx = null,
+  // THE DIFFUSION FIELD's spread, as a multiple of the derived c (1 = the
+  // derived spread; SPREAD_OPTIONS are the founder's render options).
+  // Production callers pass nothing; the render harness may set
+  // globalThis.__dcConstellationSpread for the design gate — no product
+  // surface reads or sets it.
+  spread = null,
 } = {}) {
   // Shared existence rule: no voided links ever; ghosts only when the film's
   // flag asks for them (inviteExistence.js).
   const invites = existingInvites(filmInvites, { includeGhosts })
   if (!invites.length) return null
+  const hookSpread = typeof globalThis !== 'undefined' ? globalThis.__dcConstellationSpread : undefined
+  const spreadMul = Number.isFinite(spread) && spread > 0 ? spread : Number.isFinite(hookSpread) && hookSpread > 0 ? hookSpread : 1
 
   const { parentByInviteId, memberNodes, isCreatorSender } = resolveInviteParents({
     filmInvites: invites,
@@ -555,7 +579,7 @@ export function buildConstellationLayout({
    * the placement needs. Called again while the plan (see below) looks for
    * a canvas it is consistent with.
    */
-  const runPlacement = (fontMap, clearance, scale, floorPx) => {
+  const runPlacement = (fontMap, clearance, scale, floorPx, spreadC) => {
     let bestEffort = false
     let hopeless = false // a fan no rung of the ladder could fit
     /** The name a node's box is measured with: its real name, or "YOU" if
@@ -658,25 +682,39 @@ export function buildConstellationLayout({
       n.theta = Math.atan2(n.py, n.px)
     }
 
-    /* ---- Rule 1: the first ring — v4's even slots at a FIXED base
-            radius; everyone starts on it, and a leaf may be LIFTED to a
-            higher row once the sides can be asked (`rerow`, below). ---- */
+    /* ---- Rule 1: THE DIFFUSION FIELD — the filmmaker's direct recipients
+            in ticket order on the sunflower spiral, each on the first
+            field point that clears everything placed before them (the
+            placement itself runs below, once the fan helpers exist, so a
+            sharer's branch is placed the moment the sharer is and later
+            points flow around it). ---- */
     const ring1 = root.children
-    const slot = ring1.length ? TWO_PI / ring1.length : 0
-    const r1 = R0
-    /** Put a first-ring person on row `row` of FIRST_RING_ROWS, on their slot. */
-    const ringPlace = (c, row) => {
-      c.row = row
-      c.dist = r1 * FIRST_RING_ROWS[row]
-      c.px = c.dist * Math.cos(c.dir)
-      c.py = c.dist * Math.sin(c.dir)
-      setPolar(c)
+    const placed = []
+    /** The derived spread (`spreadC`, from planAt): adjacent field points
+     *  c·√π apart clear a name box by the clearance — measured at the
+     *  rung's label size on the BASE canvas, fixed per rung: derived from
+     *  the round's own label size it fed the plan's canvas feedback (a
+     *  wider spread → a bigger canvas → bigger names in map units → a wider
+     *  spread) and ran away to a 10,000-unit canvas. */
+    /** Field point k: radius FIELD_R0 + c·√k, angle k × the golden angle. */
+    const fieldPoint = (k) => {
+      const r = FIELD_R0 + spreadC * Math.sqrt(k)
+      const a = k * GOLDEN_ANGLE
+      const x = r * Math.cos(a)
+      const y = r * Math.sin(a)
+      return { x, y, dir: Math.atan2(y, x), r }
     }
-    ring1.forEach((c, i) => {
-      c.dir = RING1_BASE + i * slot
-      ringPlace(c, 0)
-    })
-    const placed = [...ring1]
+    /** A name with no clear side is NOT an obstacle: it is hidden
+     *  provisionally (its box reads as nothing) so the field and later
+     *  fans flow past where it cannot paint; the final side pass gives it
+     *  one more chance before the safety net decides. (Oliver's sideless
+     *  provisional strip once lay across the filmmaker, and every line
+     *  from the centre then failed the field rule — 16 September.) */
+    const settleOrShelve = (n, others) => {
+      n.hidden = false
+      if (chooseSide(n, others) || findSide(n, others)) return
+      n.hidden = true
+    }
 
     /** Is this side of n's name clear of everything placed — the film
      *  node, every other name and dot, every line (others by the clearance,
@@ -743,110 +781,83 @@ export function buildConstellationLayout({
       n.hang = found.hang
       return true
     }
-    /** THE FIRST-RING ROWS (founder, 11/15 September 2026). Is first-ring
-     *  person c's DOT clean where it stands — off every line in `others`
-     *  it is not attached to, its own line off every other dot, and no
-     *  painted name in `others` across it? (Its NAME is findSide's
-     *  question.) */
-    const ringDotClear = (c, others, rectFor = rectsOf) => {
+    /** THE FIELD RULE: is candidate c (px, py, dir already set) clear of
+     *  everything placed — its dot off every existing line and out of
+     *  every name box and the film node's labels, its own line (from the
+     *  filmmaker) off every existing dot and name — and does its name have
+     *  a side? A point that fails is skipped; the spiral continues. */
+    /** The founder's rule as written tests the POINT: the dot off every
+     *  existing line, out of every name box and the film node's labels,
+     *  and its name with a side. `strict` adds the dot law for the new
+     *  RAY from the filmmaker — it may not cross an existing dot. In a
+     *  scatter every ray crosses the inner field: a ray's forbidden
+     *  corridor at radius 100 is ≈ 12° wide, so sixty-three rays cover
+     *  the circle twice over and no strict point exists past ~30 direct
+     *  recipients (testing rays against NAMES as well skipped six hundred
+     *  points per person past the first three — 16 September). A name the
+     *  ray crosses moves (the side pass) or yields by tier. */
+    const fieldClear = (c, strict) => {
       const cd = dotRect(c.px, c.py)
+      for (const cr of centerRects) if (rectsCollide(cd, cr, clearance)) return false
       const cs = segmentOf(c)
-      for (const o of others) {
-        if (o === c) continue
+      for (const o of placed) {
         if (lineTouchesDot(segmentOf(o), cd, c.id)) return false
+        const or = rectsOf(o)
+        if (strict && lineTouchesDot(cs, or.dot, o.id)) return false
         if (Math.abs(o.px - c.px) > NEAR_REACH || Math.abs(o.py - c.py) > NEAR_REACH) continue
-        const or = rectFor(o)
-        if (lineTouchesDot(cs, or.dot, o.id)) return false
         if (rectsCollide(or.label, cd, clearance)) return false
       }
-      return true
+      return Boolean(findSide(c, placed))
     }
-    /** Give a first-ring LEAF the lowest row of FIRST_RING_ROWS at which
-     *  its dot and its name (on some side) clear everything in `others`;
-     *  a sharer keeps the base radius (their branch hangs off it). Returns
-     *  true when the row or the side CHANGED to a clean one; false when
-     *  nothing changed — already clean where it stood, or no row is clean
-     *  (then it stays where it was, for the fans to turn or the safety
-     *  net). The cheapest move on the map, tried before any fan turns. */
-    const rerow = (c, others, rectFor = rectsOf) => {
-      if (c.children.length) return false
-      const was = { row: c.row, side: c.side, off: c.perpOffset, hang: c.hang }
-      const take = (row, found) => {
-        c.side = found.side
-        c.perpOffset = found.off
-        c.hang = found.hang
-        return row !== was.row || found.side !== was.side || found.off !== was.off || found.hang !== was.hang
+    let fieldNext = 0 // the next field index to try — monotone in ticket order
+    let raysAcrossDots = 0 // spokes placed without a strict point (the bent law, counted)
+    /** Put c on the first field point from `fieldNext` that clears — a
+     *  STRICT point (its ray off every dot) within FIELD_STRICT_SKIPS of
+     *  the start if one exists, else the first point that clears as the
+     *  founder wrote the rule (ray crossings counted in
+     *  `raysAcrossDots`), else past FIELD_MAX_SKIPS the next point
+     *  regardless (best effort). The index taken never goes backwards, so
+     *  nobody placed before c ever moves. */
+    const placeOnField = (c) => {
+      c.row = 0
+      c.extra = 0
+      const at = (k) => {
+        const s = fieldPoint(k)
+        c.px = s.x
+        c.py = s.y
+        c.dir = s.dir
+        c.dist = s.r
+        setPolar(c)
+        c.side = 'out'
+        c.perpOffset = PERP_OFFSET
+        c.hang = 'out'
       }
-      // The name OUTWARD at the lowest row that holds it first — every
-      // row before any perpendicular: a leaf's perpendicular name lies
-      // along the ring, across its neighbours' slots, and a leaf that took
-      // one at row 0 cost the next three their rows (the fifty simulation,
-      // 16 September). Only when no row holds the name outward do the
-      // other sides get their turn, row by row.
-      for (let row = 0; row < FIRST_RING_ROWS.length; row++) {
-        ringPlace(c, row)
-        if (ringDotClear(c, others, rectFor) && sideClear(c, 'out', others, PERP_OFFSET, 'out', rectFor)) return take(row, { side: 'out', off: PERP_OFFSET, hang: 'out' })
+      const take = (k) => {
+        settleOrShelve(c, placed)
+        c.fieldIndex = k
+        fieldNext = k + 1
+        placed.push(c)
       }
-      for (let row = 0; row < FIRST_RING_ROWS.length; row++) {
-        ringPlace(c, row)
-        if (!ringDotClear(c, others, rectFor)) continue
-        const found = findSide(c, others, rectFor)
-        if (found) return take(row, found)
+      const start = fieldNext
+      for (let k = start; k < start + FIELD_STRICT_SKIPS; k++) {
+        at(k)
+        if (fieldClear(c, true)) return take(k)
       }
-      ringPlace(c, was.row)
-      c.side = was.side
-      c.perpOffset = was.off
-      c.hang = was.hang
-      return false
-    }
-    /** A first-ring SHARER whose name has no clean side, blocked by a
-     *  first-ring LEAF's name or dot: the leaf lifts to a higher row when
-     *  it stays clean there and that frees the sharer a side (Charles on
-     *  Circles, whose right side Evan's outward name alone blocked). The
-     *  leaf's row is the solver's to assign — for every name on the ring,
-     *  not only its own. Returns true when both moved to clean places. */
-    const liftFor = (sharer, leaf, others, rectFor = rectsOf) => {
-      if (leaf.children.length || !sharer.children.length) return false
-      const fresh = (o) => (o === leaf ? rectsOf(o) : rectFor(o))
-      if (findSide(sharer, others, fresh)) return false // a side exists: chooseSide's job
-      const was = { row: leaf.row, side: leaf.side, off: leaf.perpOffset, hang: leaf.hang }
-      for (let row = was.row + 1; row < FIRST_RING_ROWS.length; row++) {
-        ringPlace(leaf, row)
-        if (!ringDotClear(leaf, others, fresh)) continue
-        const leafSide = findSide(leaf, others, fresh)
-        if (!leafSide) continue
-        leaf.side = leafSide.side
-        leaf.perpOffset = leafSide.off
-        leaf.hang = leafSide.hang
-        const found = findSide(sharer, others, fresh)
-        if (found) {
-          sharer.side = found.side
-          sharer.perpOffset = found.off
-          sharer.hang = found.hang
-          return true
+      for (let k = start; k < start + FIELD_MAX_SKIPS; k++) {
+        at(k)
+        if (fieldClear(c, false)) {
+          raysAcrossDots += 1
+          return take(k)
         }
       }
-      ringPlace(leaf, was.row)
-      leaf.side = was.side
-      leaf.perpOffset = was.off
-      leaf.hang = was.hang
-      return false
+      bestEffort = true
+      at(start + FIELD_MAX_SKIPS)
+      raysAcrossDots += 1
+      take(start + FIELD_MAX_SKIPS)
     }
     /** Every fan, all depths, parents before children; and each child's fan. */
     const fans = []
     const fanOf = new Map()
-    // The first ring's rows and names: the sharers first, on the base
-    // radius, each name settled against the whole ring (their fans
-    // re-check them once placed, when their own lines exist); then every
-    // leaf in ticket order takes the lowest row at which it clears the
-    // film node and everyone on the ring placed before it.
-    const ringSoFar = ring1.filter((c) => c.children.length)
-    for (const c of ringSoFar) chooseSide(c, ring1)
-    for (const c of ring1) {
-      if (c.children.length) continue
-      rerow(c, ringSoFar)
-      ringSoFar.push(c)
-    }
 
     /* ---- Rules 2 and 3: every deeper generation, parent by parent ---- */
     const spanOf = (fan) => fan.gaps.reduce((x, y) => x + y, 0)
@@ -1084,7 +1095,17 @@ export function buildConstellationLayout({
      *  caller). */
     const sweep = (fan) => {
       fan.gaps = fan.gaps.map(() => STEP_FLOOR)
-      for (let g = 0; g < fan.gaps.length; g++) smallestGap(fan, g)
+      let overflow = false
+      for (let g = 0; g < fan.gaps.length; g++) if (smallestGap(fan, g) == null) overflow = true
+      // A fan that cannot clear inside the cap spreads EVENLY at the cap
+      // (16 September 2026): the greedy sweep had given the early pairs
+      // what they asked and left the tail a degree or two each — dots on
+      // dots, a violation nothing downstream can hide (Rachael and Taylor
+      // 4 units apart under Krist once his limb pointed left and
+      // Alexander's inward strip lay across the fan). Spread evenly, the
+      // names that cannot fit are hidden by the renderer and the dots
+      // stay apart; the ladder and the outward step still follow.
+      if (overflow && fan.gaps.length) fan.gaps = fan.gaps.map(() => FAN_MAX_SPAN / fan.gaps.length)
       return spanOf(fan)
     }
     /** THE STAGGER'S PATTERNS: the leaves ALTERNATE between the near row
@@ -1266,16 +1287,14 @@ export function buildConstellationLayout({
      *  the parent's outward direction. */
     const turnLimit = (fan) => Math.max(0, Math.PI / 2 - halfOf(fan) - 1e-9)
 
-    // Each generation: fit every fan on its own (rule 2 + the fan's own
-    // clearance), then let the sharers among them turn their names inward
-    // before THEIR fans are fitted against those names.
-    let prev = ring1
-    for (let d = 2; d <= maxDepth; d++) {
-      const parents = prev
-        .filter((p) => p.children.length)
-        .sort((x, y) => normAngle(x.theta) - normAngle(y.theta) || String(x.id).localeCompare(String(y.id)))
-      if (!parents.length) break
-      const generation = parents.map((p) => ({
+    /** A sharer's whole branch, depth first: their fan fitted against
+     *  everything placed so far (rule 2 + the fan's own clearance), the
+     *  sharer's name turned inward before THEIR children's fans are fitted
+     *  against it, then each child who shared onward, in turn. Placed the
+     *  moment the sharer lands on the field, so later field points flow
+     *  around the limb. */
+    const placeBranch = (p) => {
+      const fan = {
         p,
         kids: p.children,
         turn: 0, // the least-movement separation (rule 3), about the parent
@@ -1287,36 +1306,43 @@ export function buildConstellationLayout({
         // pair at its side; one uniform step would set every gap by the
         // worst pair and push the whole fan outward).
         gaps: new Array(Math.max(p.children.length - 1, 0)).fill(STEP_FLOOR),
-      }))
-      for (const fan of generation) {
-        // The parent's name goes perpendicular to its limb (its own lines
-        // run along out and in). Which perpendicular — "the side away from
-        // the node's own fan" — is known only once the fan is placed, so:
-        // a provisional side, the fan fitted against it, then the side
-        // chosen from the placed children's lean, and the fan turned away
-        // from the name it settled on.
-        fan.p.side = sideOrder(fan.p)[0].side
-        fan.p.hang = sideOrder(fan.p)[0].hang
-        fit(fan)
-        placeFan(fan)
-        chooseSide(fan.p, [...placed, ...fan.kids])
-        turnFromName(fan)
-        if (Math.abs(fan.turn) > 1e-9) {
-          // The fan leaned away from its parent's name: its gaps and rows
-          // were found for the un-leaned fan (name boxes are axis-aligned,
-          // so a lean changes which neighbours a name runs toward) — found
-          // again at this lean, then the lean re-checked once.
-          spread(fan)
-          nameStep(fan)
-          turnFromName(fan)
-        }
-        placeFan(fan)
-        fans.push(fan)
-        for (const k of fan.kids) fanOf.set(k.id, fan)
       }
-      const kids = generation.flatMap((f) => f.kids)
-      placed.push(...kids)
-      prev = kids
+      // The parent's name goes perpendicular to its limb (its own lines
+      // run along out and in). Which perpendicular — "the side away from
+      // the node's own fan" — is known only once the fan is placed, so:
+      // a provisional side, the fan fitted against it, then the side
+      // chosen from the placed children's lean, and the fan turned away
+      // from the name it settled on.
+      fan.p.side = sideOrder(fan.p)[0].side
+      fan.p.hang = sideOrder(fan.p)[0].hang
+      fit(fan)
+      placeFan(fan)
+      chooseSide(fan.p, [...placed, ...fan.kids])
+      turnFromName(fan)
+      if (Math.abs(fan.turn) > 1e-9) {
+        // The fan leaned away from its parent's name: its gaps and rows
+        // were found for the un-leaned fan (name boxes are axis-aligned,
+        // so a lean changes which neighbours a name runs toward) — found
+        // again at this lean, then the lean re-checked once.
+        spread(fan)
+        nameStep(fan)
+        turnFromName(fan)
+      }
+      placeFan(fan)
+      fans.push(fan)
+      for (const k of fan.kids) fanOf.set(k.id, fan)
+      placed.push(...fan.kids)
+      // Names with no clear side are shelved (see settleOrShelve) so the
+      // field and the next fans flow past them.
+      settleOrShelve(fan.p, placed)
+      for (const k of fan.kids) settleOrShelve(k, placed)
+      for (const k of fan.kids) if (k.children.length) placeBranch(k)
+    }
+    // THE FIELD: every direct recipient in ticket order, each on the first
+    // clear field point; a sharer's branch follows them at once.
+    for (const c of ring1) {
+      placeOnField(c)
+      if (c.children.length) placeBranch(c)
     }
 
     /* ---- Rule 3 across fans: the least-movement separation, jointly ----
@@ -1335,8 +1361,6 @@ export function buildConstellationLayout({
      *  (a fan pushed one way this pass and the other way the next is as
      *  stuck as one pushed both ways at once). */
     const pushHistory = new Map()
-    /** First-ring sharers for whom the row lift has been tried (once per placement). */
-    const liftTried = new Set()
     let flipPasses = 0 // passes spent only moving names (bounded: two names can trade places forever)
     for (let pass = 0; pass < MAX_RELAX_PASSES && !clean; pass++) {
       const rectOf = new Map()
@@ -1354,18 +1378,6 @@ export function buildConstellationLayout({
       const widen = new Map() // fan -> a violating pair of its own siblings (null = only outward helps)
       const deferred = [] // sharer's-branch-vs-sibling violations, decided after the pass
       const stuck = new Set() // names on a line that no side of theirs clears
-      /** First-ring leaves whose re-row found nothing to change THIS pass
-       *  (nothing moves within a pass except by a flip, which restarts
-       *  it, so a second search would answer the same — red team,
-       *  16 September: the search is three rows × every side × everyone
-       *  placed, once per colliding pair otherwise). */
-      const rerowDone = new Set()
-      const tryRerow = (n) => {
-        if (rerowDone.has(n)) return false
-        const moved = rerow(n, placed, rect)
-        if (!moved) rerowDone.add(n)
-        return moved
-      }
       let flipped = false
       let violations = 0
       let pressure = 0 // the room every violation still asks for, summed
@@ -1433,36 +1445,7 @@ export function buildConstellationLayout({
       }
       for (const k of placed) {
         const fan = fanFor(k)
-        if (!fan) {
-          // First ring: rule 1 settled it — except a SHARER whose name no
-          // side of its own clears: a first-ring LEAF near it may lift a
-          // row to free it a side (the rows are the solver's to assign for
-          // every name on the ring; the leaf that blocks the sharer's
-          // free side need never collide with the sharer's present one —
-          // Charles on Circles, blocked by the second Evan's name).
-          if (k.children.length && !liftTried.has(k) && !findSide(k, placed, rect)) {
-            // Once per placement: the only later change to the ring is a
-            // leaf's re-row, and the fans' turns do not move the ring's
-            // rays or dots, so a lift that fails here almost always fails
-            // every pass — and the search is the costliest question in
-            // the relaxation (three rows × every side × everyone placed,
-            // per leaf).
-            liftTried.add(k)
-            let lifted = false
-            for (const leaf of ring1) {
-              if (leaf.children.length || Math.abs(leaf.px - k.px) > NEAR_REACH || Math.abs(leaf.py - k.py) > NEAR_REACH) continue
-              if (liftFor(k, leaf, placed, rect)) {
-                lifted = true
-                break
-              }
-            }
-            if (lifted) {
-              flipped = true
-              break
-            }
-          }
-          continue
-        }
+        if (!fan) continue // a field person: the field rule placed them; a name a fan pushed moves in the pair loop
         const kr = rect(k)
         const ks = seg(k)
         // Against the film node: its emblem and center labels — the name,
@@ -1516,10 +1499,6 @@ export function buildConstellationLayout({
         for (let j = i + 1; j < placed.length; j++) {
           const other = placed[j]
           const fb = fanFor(other)
-          // Two first-ring people: the ring's own assignment settled them,
-          // unless a fan's arrival has since moved a name — then the LEAF
-          // among them may still change row (below); two sharers never can.
-          if (!fa && !fb && k.children.length && other.children.length) continue
           const ob = box(other)
           if (kb.x1 < ob.x0 || ob.x1 < kb.x0 || kb.y1 < ob.y0 || ob.y1 < kb.y0) continue
           const o = rect(other)
@@ -1532,22 +1511,10 @@ export function buildConstellationLayout({
           const boxHit = violates(kr, o) || dotLineHit
           if (!boxHit && !lineHitA && !lineHitB) continue
           if (!fa && !fb) {
-            // Both on the first ring: a leaf's row is the first move — its
-            // own, then a sharer's name to a side that clears, then a leaf
-            // lifted to free the sharer beside it a side; a pair no move
-            // parts is COUNTED (never declared clean — red team,
-            // 16 September) and left to the safety net (nothing here turns).
-            const leafA = !k.children.length
-            const leafB = !other.children.length
-            if ((leafA && tryRerow(k)) || (leafB && tryRerow(other))) {
-              flipped = true
-              break
-            }
-            if ((!leafA && chooseSide(k, placed, rect)) || (!leafB && chooseSide(other, placed, rect))) {
-              flipped = true
-              break
-            }
-            if ((!leafA && leafB && liftFor(k, other, placed, rect)) || (!leafB && leafA && liftFor(other, k, placed, rect))) {
+            // Two field people: the field rule placed each clear of the
+            // other; a name a fan has since pushed onto the other moves
+            // (chooseSide) or is counted — never declared clean.
+            if (chooseSide(k, placed, rect) || chooseSide(other, placed, rect)) {
               flipped = true
               break
             }
@@ -1557,14 +1524,6 @@ export function buildConstellationLayout({
           /** The room this pair asks for: the boxes' penetration, or the
            *  clearance when only a line is on a name or a dot. */
           const pairNeed = Math.max(needOf(kr, o), lineHitA || lineHitB || dotLineHit ? clearance : 0)
-          // A first-ring LEAF in the pair moves ROW first (the founder's
-          // rows, 15 September 2026): the lowest row at which it clears
-          // everything placed — the cheapest move on the map, before a
-          // name moves or a fan turns.
-          if ((!fa && !k.children.length && tryRerow(k)) || (!fb && !other.children.length && tryRerow(other))) {
-            flipped = true
-            break
-          }
           // A name on a line it is not attached to MOVES first (out → in →
           // perpendicular) — siblings included; only if no side clears do
           // the fans spread or turn.
@@ -1693,7 +1652,10 @@ export function buildConstellationLayout({
     // Every name takes the FIRST side in its order that clears (the
     // preference, not merely a clear side — a fan that leaned during the
     // relaxation can have changed which side is away from it).
-    for (const k of placed) chooseSide(k, placed)
+    for (const k of placed) {
+      k.hidden = false // a shelved name gets its last chance here
+      chooseSide(k, placed)
+    }
     let hiddenCount = 0
     for (const k of placed) {
       const r = rectsOf(k)
@@ -1760,7 +1722,7 @@ export function buildConstellationLayout({
     // the edge, centred when the canvas is larger than it needs to be.
     const cx = (width - (x1 - x0)) / 2 - x0
     const cy = (height - (y1 - y0)) / 2 - y0
-    return { width, height, cx, cy, r1, bestEffort, hopeless, hiddenCount, collidingCount, dotConflictCount, rectsOf, centerRects }
+    return { width, height, cx, cy, spreadC, raysAcrossDots, bestEffort, hopeless, hiddenCount, collidingCount, dotConflictCount, rectsOf, centerRects }
   }
 
   /* ---- Plan for the reference view: the hard rule holds on SCREEN there ----
@@ -1791,12 +1753,17 @@ export function buildConstellationLayout({
   const planAt = (floorPx) => {
     let assumed = { width: BASE_W, height: BASE_H }
     let plan = planFor(BASE_W, BASE_H, floorPx)
+    // THE DIFFUSION FIELD's spread for this rung: the name box's height at
+    // the rung's size on the base canvas, plus the clearance, over √π
+    // (adjacent sunflower points sit c·√π apart) — times the option.
+    const baseBoxH = labelScreenRect({ x: 0, y: 0, anchor: 'start', name: 'A', baseSize: plan.fontMap }, DESIGN_VIEW).h
+    const spreadC = ((baseBoxH + plan.clearance) / Math.sqrt(Math.PI)) * spreadMul
     let result = null
     let settled = false
     let rounds = 0
     for (; rounds < MAX_PLAN_ROUNDS; rounds++) {
       plan = planFor(assumed.width, assumed.height, floorPx)
-      result = runPlacement(plan.fontMap, plan.clearance, plan.scale, floorPx)
+      result = runPlacement(plan.fontMap, plan.clearance, plan.scale, floorPx, spreadC)
       // A placement that could not satisfy the rules — a name hidden or
       // still colliding at the end — will not be helped by a larger canvas
       // (that only enlarges every name in map units against the fixed
@@ -1956,6 +1923,10 @@ export function buildConstellationLayout({
       /** The row: in a fan, the stagger row — 0 = at the reach distance, 1 =
        *  the far row (STAGGER_RATIO × reach), a sharer always 0; on the FIRST RING, the index into FIRST_RING_ROWS (0 = the base radius; a sharer always 0). */
       row: isFilm ? null : n.row,
+      /** THE DIFFUSION FIELD: for the filmmaker's direct recipients, the
+       *  index of the sunflower point they took (skips included) — never
+       *  changes for anyone once placed; null for everyone else. */
+      fieldIndex: isFilm || n.parentId !== ROOT_ID ? null : n.fieldIndex ?? null,
       subtreeSize: n.size,
       label: isFilm ? null : radialLabel(n.dir, x, y, n.side, n.perpOffset, n.hang),
       /** The name the layout MEASURED this node's box with — the real name,
@@ -2026,6 +1997,13 @@ export function buildConstellationLayout({
        *  paint at on the reference view — the largest at which every name
        *  paints, or the bottom rung when none does. */
       labelPx: plan.labelPx,
+      /** THE DIFFUSION FIELD's spread c in map units (derived from the
+       *  label size at this plan) and the multiple it was scaled by. */
+      spread: result.spreadC,
+      spreadMultiplier: spreadMul,
+      /** Direct recipients placed without a strict point — their spoke
+       *  crosses an inner dot (the bent law, see `placeOnField`). */
+      raysAcrossDots: result.raysAcrossDots,
     },
     /** THE PHONE CAMERA (founder 2026-09-09): the frames a viewer's phone
      *  may open on, in canvas coordinates — `full` = the whole thread
