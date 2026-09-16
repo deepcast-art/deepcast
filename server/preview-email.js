@@ -1,7 +1,7 @@
 import { writeFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { join, dirname } from 'path'
-import { buildTicketEmail, buildReminderEmail, ticketUrl } from './ticketEmail.js'
+import { buildTicketEmail, buildReminderEmail, returnUrl, wordmarkUrl } from './ticketEmail.js'
 
 /**
  * `node server/preview-email.js ticket` / `… reminder` render the REAL
@@ -13,17 +13,17 @@ import { buildTicketEmail, buildReminderEmail, ticketUrl } from './ticketEmail.j
 const mode = process.argv[2]
 if (mode === 'ticket' || mode === 'reminder') {
   const sample = {
-    filmTitle: 'Circles',
+    receiverName: 'Alex',
     sharerName: 'Ien Chi',
-    ticketNo: 41,
+    filmTitle: 'Circles',
+    posterUrl: 'https://image.mux.com/QDUEUyF7WDjjsOtMfeVfqh6M2NVM02arzLHK3IJnwYC00/thumbnail.png?time=5',
+    synopsis: 'What if the people who disagree with you most are the ones you need to hear?',
     durationSeconds: 1803.135633,
     filmmakerName: 'Ien Chi',
-    ticketUrl: ticketUrl('https://deepcast.art', 'ticket-abcde', 'alex@example.com'),
+    watchUrl: returnUrl('https://deepcast.art', 'a'.repeat(64)),
+    wordmark: wordmarkUrl('https://deepcast.art'),
   }
-  const message =
-    mode === 'ticket'
-      ? buildTicketEmail(sample)
-      : buildReminderEmail({ ...sample, firstName: 'Alex', daysAgo: 3 })
+  const message = mode === 'ticket' ? buildTicketEmail(sample) : buildReminderEmail(sample)
   const outPath = join(dirname(fileURLToPath(import.meta.url)), 'email-preview.html')
   writeFileSync(outPath, message.html, 'utf8')
   console.log(`Subject: ${message.subject}`)

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
@@ -300,6 +300,7 @@ function devPreviewChain(searchParams) {
 export default function ClaimLanding() {
   const { slug } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { session } = useAuth()
   const [searchParams] = useSearchParams()
   const [state, setState] = useState({ phase: 'loading', invite: null })
@@ -338,19 +339,27 @@ export default function ClaimLanding() {
           // dead-link state. The bounce never enters the claim-success
           // path, so revisits can never see the prologue.
           if (isClaimOwner(readClaimStash(), slug)) {
+            // THE RETURN LINK's arrival (founder decision 2026-09-16): /r/
+            // spent its token, signed this browser in and wrote the stash,
+            // then opened this page with `returnArrival` in the router
+            // state — the ONE other way into the prologue, so the three-line
+            // transition plays before the film. Router state only, never
+            // storage: a reload of this URL is an ordinary owner revisit.
+            if (location.state?.returnArrival && !isInviteWatched(data)) {
+              // Consume the marker in place: history.state survives a reload
+              // and a Back press, so it is cleared from the entry directly
+              // (a router navigation would re-run this effect and bounce to
+              // the film). A reload, or Back from the film, is then an
+              // ordinary owner revisit — the prologue plays exactly once.
+              try {
+                window.history.replaceState({ ...window.history.state, usr: null }, '')
+              } catch {
+                /* history unavailable — the marker simply stays for this entry */
+              }
+              setState({ phase: 'prologue', invite: data })
+              return
+            }
             navigate(isInviteWatched(data) ? '/dashboard' : `/watch/${slug}`, { replace: true })
-            return
-          }
-          // The ticket email's link (2026-09-15) carries the claimant's own
-          // email as `?email=`; on a fresh device — no stash — that link
-          // must still work in one click, so it goes to the sign-in page
-          // with the email prefilled and `/return` as the destination
-          // (Login sends every one-tap link to /return: the unwatched film's
-          // watch page). A claimed link WITHOUT the email stays the dead-link
-          // page, exactly as before.
-          const emailed = (searchParams.get('email') || '').trim()
-          if (emailed && !emailInputError(emailed)) {
-            navigate(`/login?email=${encodeURIComponent(emailed)}&next=${encodeURIComponent('/return')}`, { replace: true })
             return
           }
           setState({ phase: 'claimed', invite: data })
@@ -365,13 +374,14 @@ export default function ClaimLanding() {
     return () => {
       cancelled = true
     }
-  }, [slug, navigate, searchParams])
+  }, [slug, navigate, searchParams, location.state])
 
-  /** One claim for both actions (founder decision 2026-09-15): "Watch for
-   *  free" and "Watch later" send the SAME request — the server claims the
-   *  ticket and sends the ticket email either way. The only difference is
-   *  what happens next in this browser: the prologue and the film, or one
-   *  line and no navigation. */
+  /** One claim for both actions (founder decisions 2026-09-15/16): "Watch
+   *  for free" and "Watch later" make the SAME claim — the server claims the
+   *  ticket and sends the ticket email either way; the request differs only
+   *  in `intent`, which the server records as watch_later_at. The
+   *  difference in this browser: the prologue and the film, or one line and
+   *  no navigation. */
   const handleClaim = (e) => {
     e.preventDefault()
     return submitClaim('watch')
@@ -400,7 +410,10 @@ export default function ClaimLanding() {
         null,
         // Silent context capture (2026-07-31) — best-effort, never blocking:
         // readClaimContext cannot throw; missing pieces travel as nulls.
-        readClaimContext()
+        readClaimContext(),
+        // Which button (2026-09-16): the server stamps watch_later_at for
+        // 'later'; the claim itself is the same either way.
+        intent === 'later' ? 'later' : 'now'
       )
       if (result.sharerView) {
         setSharerView(true)
@@ -631,9 +644,9 @@ export default function ClaimLanding() {
               You already hold this film.
             </p>
           ) : watchLater ? (
-            /* "Watch later" (founder copy 2026-09-15): the form is gone, one line remains. */
+            /* "Watch later" (founder copy 2026-09-16): the form is gone, one line remains. */
             <p className="font-serif-v3 text-lg italic text-warm">
-              It’s in your inbox. Come back whenever you’re ready.
+              We’ve sent the film to your inbox. You can watch whenever you’re ready.
             </p>
           ) : sharerView ? (
             <p className="font-serif-v3 text-sm italic text-warm/60">

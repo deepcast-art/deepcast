@@ -8,10 +8,9 @@
  *    form with the founder's one line;
  *  - an empty or malformed email under "Watch later" shows the same inline
  *    message the button shows, and never calls the claim endpoint;
- *  - a CLAIMED link opened with the emailed `?email=` (a fresh device, no
- *    stash) goes to the sign-in page with the email prefilled and the
- *    founder's line; the same claimed link WITHOUT the email is the
- *    dead-link page it always was.
+ *  - the two actions differ in the request by ONE field, `intent` ('now' or
+ *    'later' — 2026-09-16), nothing else.
+ * The emailed return link (/r/{token}) is e2e/return-link.spec.js.
  */
 import { test, expect, pushJsError } from './fixtures/test.js'
 
@@ -97,7 +96,7 @@ test.describe('Watch later', () => {
     await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
     await page.getByPlaceholder('Your email').fill('alex@example.com')
     await page.getByRole('button', { name: 'Watch later' }).click()
-    await expect(page.getByText('It’s in your inbox. Come back whenever you’re ready.')).toBeVisible()
+    await expect(page.getByText('We’ve sent the film to your inbox. You can watch whenever you’re ready.')).toBeVisible()
     // The form is gone; nothing navigated; no prologue.
     await expect(page.getByPlaceholder('Your email')).toHaveCount(0)
     await expect(page.getByRole('button', { name: /Watch for free/i })).toHaveCount(0)
@@ -105,9 +104,10 @@ test.describe('Watch later', () => {
     await page.waitForTimeout(1500)
     await expect(page).toHaveURL(/\/alex-h4k2$/)
     expect(bodies).toHaveLength(1)
-    // Byte-identical to the button's request: slug + email + no name +
-    // the silent context; NO flag tells the server which action it was.
-    expect(Object.keys(bodies[0]).sort()).toEqual(['claimContext', 'email', 'fullName', 'slug'])
+    // The button's request plus ONE field: intent 'later' (2026-09-16) —
+    // slug + email + no name + the silent context are the same.
+    expect(Object.keys(bodies[0]).sort()).toEqual(['claimContext', 'email', 'fullName', 'intent', 'slug'])
+    expect(bodies[0].intent).toBe('later')
     expect(bodies[0].slug).toBe('alex-h4k2')
     expect(bodies[0].email).toBe('alex@example.com')
     expect(bodies[0].fullName).toBeNull()
@@ -118,7 +118,7 @@ test.describe('Watch later', () => {
     expect(jsErrors).toEqual([])
   })
 
-  test('the button sends the very same body (the two actions cannot drift)', async ({ page }) => {
+  test('the button sends the same body with intent "now" (the two actions cannot drift)', async ({ page }) => {
     await page.route('**/api/invites/link/**', (route) => route.fulfill({ json: LINK_CREATED }))
     const bodies = []
     await page.route('**/api/invites/claim', (route) => {
@@ -130,7 +130,8 @@ test.describe('Watch later', () => {
     await page.getByRole('button', { name: /Watch for free/i }).click()
     await expect(page.getByRole('button', { name: 'Continue to the film' })).toBeVisible({ timeout: 10000 })
     expect(bodies).toHaveLength(1)
-    expect(Object.keys(bodies[0]).sort()).toEqual(['claimContext', 'email', 'fullName', 'slug'])
+    expect(Object.keys(bodies[0]).sort()).toEqual(['claimContext', 'email', 'fullName', 'intent', 'slug'])
+    expect(bodies[0].intent).toBe('now')
     expect(jsErrors).toEqual([])
   })
 
@@ -159,51 +160,7 @@ test.describe('Watch later', () => {
     await page.getByPlaceholder('Your email').fill('returning@example.com')
     await page.getByRole('button', { name: 'Watch later' }).click()
     await expect(page.getByText('You already hold this film.')).toBeVisible()
-    await expect(page.getByText('It’s in your inbox. Come back whenever you’re ready.')).toHaveCount(0)
-    expect(jsErrors).toEqual([])
-  })
-})
-
-test.describe('the ticket email’s link on a fresh device', () => {
-  let jsErrors
-  test.beforeEach(async ({ page }) => {
-    jsErrors = []
-    page.on('pageerror', (err) => pushJsError(jsErrors, err))
-    await page.route('**/auth/v1/**', (route) => route.fulfill({ json: {} }))
-    await page.route('**/api/invites/link/**', (route) => route.fulfill({ json: LINK_CLAIMED }))
-  })
-
-  test('a claimed link with ?email= goes to sign-in, email prefilled, the founder’s line', async ({ page }) => {
-    await page.goto('/alex-h4k2?email=alex%2Bfilm%40example.com', { waitUntil: 'domcontentloaded' })
-    await page.waitForURL(/\/login\?/)
-    const url = new URL(page.url())
-    expect(url.searchParams.get('email')).toBe('alex+film@example.com')
-    expect(url.searchParams.get('next')).toBe('/return')
-    await expect(page.getByText('You already hold this film. We’ll send a one-tap link to sign you in.')).toBeVisible()
-    await expect(page.locator('input[type="email"]')).toHaveValue('alex+film@example.com')
-    // The dead-link page never showed.
-    await expect(page.getByText('This invitation has already been accepted.')).toHaveCount(0)
-    expect(jsErrors).toEqual([])
-  })
-
-  test('the same claimed link WITHOUT the email is the dead-link page, as before', async ({ page }) => {
-    await page.goto('/alex-h4k2', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByText('This invitation has already been accepted.')).toBeVisible()
-    await expect(page).toHaveURL(/\/alex-h4k2$/)
-    expect(jsErrors).toEqual([])
-  })
-
-  test('a junk ?email= never reaches the sign-in page', async ({ page }) => {
-    await page.goto('/alex-h4k2?email=not-an-email', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByText('This invitation has already been accepted.')).toBeVisible()
-    await expect(page).toHaveURL(/\/alex-h4k2\?email=not-an-email$/)
-    expect(jsErrors).toEqual([])
-  })
-
-  test('the ordinary sign-in page keeps its own line', async ({ page }) => {
-    await page.goto('/login', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByText('Enter your email and we’ll send a sign-in link.')).toBeVisible()
-    await expect(page.getByText('You already hold this film.')).toHaveCount(0)
+    await expect(page.getByText('We’ve sent the film to your inbox. You can watch whenever you’re ready.')).toHaveCount(0)
     expect(jsErrors).toEqual([])
   })
 })

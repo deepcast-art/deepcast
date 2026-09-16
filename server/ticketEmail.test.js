@@ -1,106 +1,98 @@
 import { describe, it, expect } from 'vitest'
-import { buildTicketEmail, buildReminderEmail, ticketUrl, runtimeMinutes, daysBetween, minutesInWords } from './ticketEmail.js'
+import { buildTicketEmail, buildReminderEmail, returnUrl, wordmarkUrl, runtimeMinutes, daysBetween } from './ticketEmail.js'
 
 const base = {
-  filmTitle: 'Circles',
+  receiverName: 'Alex',
   sharerName: 'Ien Chi',
-  ticketNo: 41,
+  filmTitle: 'Circles',
+  posterUrl: 'https://image.mux.com/QDUEUyF7/thumbnail.png?time=5',
+  synopsis: 'What if the people who disagree with you most are the ones you need to hear?',
   durationSeconds: 1803.135633,
   filmmakerName: 'Ien Chi',
-  ticketUrl: 'https://deepcast.art/ticket-abcde?email=alex%40example.com',
+  watchUrl: 'https://deepcast.art/r/abc123',
+  wordmark: 'https://deepcast.art/email/deepcast-wordmark@2x.png',
 }
 
 describe('buildTicketEmail', () => {
-  it('subject, preheader, both names, the ticket number and the link — html and text alike', () => {
+  it('subject with the receiver, the sentence, poster, synopsis, button, caption and the wordmark — html and text', () => {
     const m = buildTicketEmail(base)
-    expect(m.subject).toBe('Your ticket to Circles')
-    expect(m.preheader).toBe('Ticket No. 41 — free, and yours whenever you have thirty quiet minutes.')
+    expect(m.subject).toBe('Alex, Ien gifted you a film')
     for (const body of [m.html, m.text]) {
-      expect(body).toContain('You’ve been gifted a film.')
-      expect(body).toContain('Ien passed Circles to you.')
-      expect(body).toContain('Ticket No. 41')
-      expect(body).toContain('https://deepcast.art/ticket-abcde?email=alex%40example.com')
-      expect(body).toContain('No ads. No algorithms. Just humans.')
-      expect(body).toContain('Reply to this email to reach Ien.')
+      expect(body).toContain('Circles')
+      expect(body).toContain('What if the people who disagree with you most are the ones you need to hear?')
+      expect(body).toContain('Ien gifted you the film Circles. It’s yours to watch whenever you’d like.')
+      expect(body).toContain('https://deepcast.art/r/abc123')
+      expect(body).toContain('Watch for free')
     }
-    // Caption: title · runtime floored to minutes · filmmaker.
-    expect(m.text).toContain('Circles · 30 min · by Ien Chi')
-    expect(m.html).toContain('Circles &middot; 30 min &middot; by Ien Chi')
-    expect(m.html).toContain('Watch the film')
-    // Palette and layout: inline, tables, 480 wide, no auth token anywhere.
+    expect(m.html).toContain('src="https://image.mux.com/QDUEUyF7/thumbnail.png?time=5"')
+    expect(m.html).toContain('src="https://deepcast.art/email/deepcast-wordmark@2x.png"')
+    expect(m.html).toContain('width="120"')
+    expect(m.html).toContain('30 min &middot; by Ien Chi')
+    expect(m.text).toContain('30 min · by Ien Chi')
+    // Order: title → poster → synopsis → sentence → button → caption → wordmark.
+    // Measured from the body table: the hidden preheader above it repeats the sentence.
+    const bodyStart = m.html.indexOf('<table')
+    const i = (s) => m.html.indexOf(s, bodyStart)
+    expect(i('font-size:28px')).toBeLessThan(i('thumbnail.png'))
+    expect(i('thumbnail.png')).toBeLessThan(i('disagree with you'))
+    expect(i('disagree with you')).toBeLessThan(i('gifted you the film'))
+    expect(i('gifted you the film')).toBeLessThan(i('Watch for free'))
+    expect(i('Watch for free')).toBeLessThan(i('30 min'))
+    expect(i('30 min')).toBeLessThan(i('deepcast-wordmark'))
+    // No footer, no title in the caption, no auth token, Georgia title, palette.
+    expect(m.text).not.toMatch(/receiving this|unsubscribe|Reply to this email/i)
+    expect(m.html).not.toContain('Circles &middot; 30 min')
+    expect(m.html).not.toMatch(/magiclink|access_token/i)
+    expect(m.html).toContain('font-family:Georgia')
     expect(m.html).toContain('#080c18')
-    expect(m.html).toContain('#b1a180')
     expect(m.html).toContain('max-width:480px')
-    expect(m.html).not.toMatch(/token|access_token|magiclink/i)
   })
 
-  it('the quiet minutes are the film’s own — thirty for Circles, fourteen for a 880 s film, a moment when unknown', () => {
-    expect(buildTicketEmail(base).text).toContain('whenever you have thirty quiet minutes.')
-    expect(buildTicketEmail(base).preheader).toContain('thirty quiet minutes')
-    expect(buildTicketEmail({ ...base, durationSeconds: 880 }).text).toContain('whenever you have fourteen quiet minutes.')
-    expect(buildTicketEmail({ ...base, durationSeconds: 1932.6 }).text).toContain('thirty-two quiet minutes')
-    expect(buildTicketEmail({ ...base, durationSeconds: null }).text).toContain('whenever you have a quiet moment.')
-    expect(minutesInWords(90)).toBe('ninety')
-    expect(minutesInWords(45)).toBe('forty-five')
-    expect(minutesInWords(120)).toBe('120')
+  it('no receiver name: the subject drops it; an email-shaped name is never printed', () => {
+    expect(buildTicketEmail({ ...base, receiverName: null }).subject).toBe('Ien gifted you a film')
+    expect(buildTicketEmail({ ...base, receiverName: 'alex@example.com' }).subject).toBe('Ien gifted you a film')
+    expect(buildTicketEmail({ ...base, sharerName: 'priya@example.com' }).subject).toBe('Alex, Someone gifted you a film')
   })
 
-  it('only first names appear; an email-shaped sharer name never renders as a name', () => {
-    const m = buildTicketEmail({ ...base, sharerName: 'priya@example.com' })
-    expect(m.text).toContain('Someone passed Circles to you.')
-    expect(m.text).not.toContain('priya@example.com')
-  })
-
-  it('a row without a ticket number drops the number segments instead of printing null', () => {
-    const m = buildTicketEmail({ ...base, ticketNo: null })
-    expect(m.preheader).toBe('Free, and yours whenever you have thirty quiet minutes.')
-    expect(m.text).not.toContain('Ticket No.')
+  it('no synopsis, no poster, no filmmaker, no runtime: those pieces are omitted, nothing reads null', () => {
+    const m = buildTicketEmail({ ...base, synopsis: null, posterUrl: null, filmmakerName: null, durationSeconds: null })
+    expect(m.html).not.toContain('<img src="https://image')
+    expect(m.html).not.toContain('font-style:italic')
     expect(m.text).not.toContain('null')
-    expect(m.text).toContain('It’s yours now — free, with no ads')
-  })
-
-  it('escapes film titles in html and keeps them verbatim in text', () => {
-    const m = buildTicketEmail({ ...base, filmTitle: 'Tom & <Jerry>' })
-    expect(m.subject).toBe('Your ticket to Tom & <Jerry>')
-    expect(m.html).toContain('Tom &amp; &lt;Jerry&gt;')
-    expect(m.html).not.toContain('<Jerry>')
-    expect(m.text).toContain('Tom & <Jerry>')
-  })
-
-  it('no filmmaker name: the footer drops the reply line and the caption its "by"', () => {
-    const m = buildTicketEmail({ ...base, filmmakerName: null })
-    expect(m.text).toContain('You’re receiving this once because you accepted an invitation at deepcast.art.')
-    expect(m.text).not.toContain('Reply to this email')
-    expect(m.text).toContain('Circles · 30 min')
+    expect(m.text).not.toContain(' min')
     expect(m.text).not.toContain(' by ')
+  })
+
+  it('escapes html in the title and synopsis; text keeps them verbatim', () => {
+    const m = buildTicketEmail({ ...base, filmTitle: 'Tom & <Jerry>', synopsis: 'A "quote"' })
+    expect(m.html).toContain('Tom &amp; &lt;Jerry&gt;')
+    expect(m.html).toContain('A &quot;quote&quot;')
+    expect(m.text).toContain('Tom & <Jerry>')
   })
 })
 
 describe('buildReminderEmail', () => {
-  it('the founder copy with the first name, sharer, days and the link; and the only-reminder line', () => {
-    const m = buildReminderEmail({ ...base, firstName: 'Alex', daysAgo: 3 })
-    expect(m.subject).toBe('Circles is still waiting for you')
+  it('the founder copy with and without the receiver name; same layout', () => {
+    const m = buildReminderEmail(base)
+    expect(m.subject).toBe('Alex, watch the film Ien gifted you')
     for (const body of [m.html, m.text]) {
-      expect(body).toContain('Alex, you’re holding a ticket to Circles.')
-      expect(body).toContain('Ien gave it to you 3 days ago. There’s no rush and nothing counting — it’s just here, kept for you.')
-      expect(body).toContain('This is the only reminder we’ll send.')
-      expect(body).toContain('https://deepcast.art/ticket-abcde?email=alex%40example.com')
+      expect(body).toContain('Hey Alex, just a friendly reminder that Ien gifted the film Circles to you.')
+      expect(body).toContain('Watch for free')
+      expect(body).toContain('https://deepcast.art/r/abc123')
+      expect(body).toContain('30 min')
     }
-    expect(m.html).not.toContain('unsubscribe')
-  })
-
-  it('singular day, and a floor of one day', () => {
-    expect(buildReminderEmail({ ...base, firstName: 'Alex', daysAgo: 1 }).text).toContain('1 day ago')
-    expect(buildReminderEmail({ ...base, firstName: 'Alex', daysAgo: 0 }).text).toContain('1 day ago')
+    expect(m.html).toContain('deepcast-wordmark@2x.png')
+    const n = buildReminderEmail({ ...base, receiverName: '' })
+    expect(n.subject).toBe('Watch the film Ien gifted you')
+    expect(n.text).toContain('Just a friendly reminder that Ien gifted the film Circles to you.')
+    expect(n.text).not.toContain('Hey')
   })
 })
 
 describe('helpers', () => {
-  it('ticketUrl: the slug path, the email as a query string, no trailing slash doubling', () => {
-    expect(ticketUrl('https://deepcast.art/', 'ticket-abcde', 'a+b@example.com')).toBe(
-      'https://deepcast.art/ticket-abcde?email=a%2Bb%40example.com'
-    )
-    expect(ticketUrl('https://deepcast.art', 'ticket-abcde', null)).toBe('https://deepcast.art/ticket-abcde')
+  it('returnUrl and wordmarkUrl build from the base without doubling slashes', () => {
+    expect(returnUrl('https://deepcast.art/', 'abc')).toBe('https://deepcast.art/r/abc')
+    expect(wordmarkUrl('https://deepcast.art')).toBe('https://deepcast.art/email/deepcast-wordmark@2x.png')
   })
   it('runtimeMinutes floors like the watch page', () => {
     expect(runtimeMinutes(1803.13)).toBe(30)
@@ -108,9 +100,8 @@ describe('helpers', () => {
     expect(runtimeMinutes(null)).toBeNull()
   })
   it('daysBetween floors whole days and never goes negative', () => {
-    const now = new Date('2026-09-15T15:00:00Z')
-    expect(daysBetween('2026-09-12T14:00:00Z', now)).toBe(3)
-    expect(daysBetween('2026-09-12T16:00:00Z', now)).toBe(2)
-    expect(daysBetween('2026-09-16T16:00:00Z', now)).toBe(0)
+    const now = new Date('2026-09-16T15:00:00Z')
+    expect(daysBetween('2026-09-13T14:00:00Z', now)).toBe(3)
+    expect(daysBetween('2026-09-17T16:00:00Z', now)).toBe(0)
   })
 })
