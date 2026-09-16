@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildConstellationLayout, ROOT_ID, REACH_BASE, REACH_K, FAN_MAX_SPAN, EXTRA_MAX, GOLDEN_ANGLE, RIM_START } from './constellationLayout.js'
+import { buildConstellationLayout, ROOT_ID, REACH_BASE, REACH_K, FAN_MAX_SPAN, EXTRA_MAX, GOLDEN_ANGLE, RIM_START, FIELD_LINE_GAP } from './constellationLayout.js'
 import { LABEL_SIZE_LADDER, REFERENCE_VIEW, PERSON_LABEL_SIZE, dotRect, labelScreenRect, labelVisibility, mapScaleFor } from './constellationLabels.js'
 
 /**
@@ -134,10 +134,31 @@ function spacingOf(l) {
   const field = l.nodes.filter((n) => n.parentId === ROOT_ID && !n.rim).map((n) => ({ name: n.name, dx: n.x - film.x, dy: n.y - film.y }))
   const step = l.plan.fieldStep
   let nnMax = 0
+  let nnMin = Infinity
   for (const a of field) {
     let best = Infinity
     for (const b of field) if (b !== a) best = Math.min(best, Math.hypot(a.dx - b.dx, a.dy - b.dy))
-    if (field.length > 1) nnMax = Math.max(nnMax, best)
+    if (field.length > 1) {
+      nnMax = Math.max(nnMax, best)
+      nnMin = Math.min(nnMin, best)
+    }
+  }
+  // EVEN SPACING, the line law (founder, fifth pass): a field point closer
+  // than FIELD_LINE_GAP steps to a line it is not attached to is a violation.
+  const fieldNodes = l.nodes.filter((n) => n.parentId === ROOT_ID && !n.rim)
+  const dPS = (px, py, x1, y1, x2, y2) => { const dx = x2 - x1, dy = y2 - y1; const len2 = dx * dx + dy * dy || 1; const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / len2)); return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy)) }
+  let lineViolations = 0
+  let spokeViolations = 0
+  let lineMin = Infinity
+  const rimIds = new Set(l.nodes.filter((n) => n.rim).map((n) => n.id))
+  for (const p of fieldNodes) for (const e of l.edges) {
+    if (e.fromId === p.id || e.toId === p.id) continue
+    const d = dPS(p.x, p.y, e.x1, e.y1, e.x2, e.y2)
+    lineMin = Math.min(lineMin, d)
+    if (d < FIELD_LINE_GAP * step - 1e-6) {
+      lineViolations++
+      if (e.fromId === ROOT_ID && rimIds.has(e.toId)) spokeViolations++
+    }
   }
   const byAng = field.map((n) => ({ ...n, ang: Math.atan2(n.dy, n.dx), r: Math.hypot(n.dx, n.dy) })).sort((a, b) => a.ang - b.ang)
   let wedge = 0
@@ -155,7 +176,7 @@ function spacingOf(l) {
     const px = Math.hypot(e.x2 - e.x1, e.y2 - e.y1) * pxAt(l)
     if (px < shortest.px) shortest = { px, limb: `${byId.get(e.fromId).name} → ${byId.get(e.toId).name}` }
   }
-  return { wedgeOverStep: wedge / step, nnOverStep: nnMax / step, shortestLimbPx: shortest.px, shortestLimb: shortest.limb, floorPx: 3 * l.plan.labelPx }
+  return { wedgeOverStep: wedge / step, nnOverStep: nnMax / step, nnMinOverStep: nnMin / step, lineMinOverStep: lineMin / step, lineViolations, spokeViolations, shortestLimbPx: shortest.px, shortestLimb: shortest.limb, floorPx: 3 * l.plan.labelPx }
 }
 
 /** THE STRUCTURAL INVARIANTS every scenario must hold — the founder's laws
@@ -180,6 +201,12 @@ function assertLaws(l, rows = null) {
     expect(Math.abs(angDiff(Math.atan2(n.y - film.y, n.x - film.x), l.plan.fieldRotation + n.fieldIndex * GOLDEN_ANGLE))).toBeLessThan(1e-6)
     expect(['out', 'in'], `${n.name}'s name outward or inward`).toContain(n.labelSide)
   }
+  // THE RIM RULE, exact (fifth pass): one field step beyond the field's
+  // outermost POINT (a lifted point may pass the last index's radius).
+  const onField = first.filter((n) => !n.rim)
+  const outerK = Math.max(0, ...onField.map((n) => n.fieldIndex))
+  const outerR = Math.max(l.plan.fieldR0 + c * Math.sqrt(outerK), ...onField.map((n) => Math.hypot(n.x - film.x, n.y - film.y)))
+  expect(l.plan.rimRadius, 'the rim one step beyond the outermost field point').toBeCloseTo(outerR + l.plan.fieldStep, 6)
   sharers.forEach((n, i) => {
     expect(Math.hypot(n.x - film.x, n.y - film.y), `${n.name} at the rim radius`).toBeCloseTo(l.plan.rimRadius, 6)
     expect(Math.abs(angDiff(Math.atan2(n.y - film.y, n.x - film.x), RIM_START + (i * TWO_PI) / sharers.length)), `${n.name} at rim slot ${i}`).toBeLessThan(1e-6)
@@ -196,7 +223,7 @@ function assertLaws(l, rows = null) {
     // Beyond the parent, at the reach rule (or the far row's multiple), plus a CAPPED extra.
     expect((n.x - p.x) * Math.cos(p.dir) + (n.y - p.y) * Math.sin(p.dir), `${n.name} beyond ${p.name}`).toBeGreaterThanOrEqual(-1e-9)
     const siblings = childrenOf(l, p.id)
-    const fanReach = Math.min(...siblings.map((s) => l.plan.reachBase + REACH_K * Math.sqrt(s.subtreeSize)))
+    const fanReach = Math.min(...siblings.map((s) => l.plan.reachBase + l.plan.reachK * Math.sqrt(s.subtreeSize)))
     expect(n.extra, `${n.name}'s fan never balloons`).toBeLessThanOrEqual(EXTRA_MAX * fanReach + 1e-9)
     if (childrenOf(l, n.id).length) expect(n.row, `${n.name} (a sharer) in the near row`).toBe(0)
     // The fan's cap.
@@ -242,6 +269,31 @@ function paintedAtRest(l) {
  *  names' widths still leave 2–3-step gaps. Pinned; each pin fails when
  *  its scenario meets the yardstick. */
 const EVEN_FIELD_GAPS = new Set(['(i) Circles today', '(iii) +15 first ring (cast and crew)', '(ix) +50 first ring, none sharing', '(x) +50 first ring, ten of them share 3 each'])
+/** EVEN SPACING, both directions (founder, fifth pass): the smallest and
+ *  the largest nearest-neighbour distance among the field's points, as
+ *  multiples of the field's step, PINNED per scenario (measured 16
+ *  September; a field of one point has none). The pin fails when the
+ *  field changes, so a change is always a conscious re-pin. */
+const NN_PINNED = {
+  '(i) Circles today': [2.21, 2.81],
+  '(ii) +1 first ring': [1.88, 2.84],
+  '(iii) +15 first ring (cast and crew)': [0.85, 2.39],
+  '(iv) +15 first ring, four share 3 each': [0.86, 2.32],
+  '(v) Stacy +3': [2.2, 2.81],
+  "(vii) Krist's other nine +2 each": [2.02, 2.64],
+  '(viii) one leaf under each of ten people': [2.17, 4.38],
+  '(ix) +50 first ring, none sharing': [0.89, 3.71],
+  '(x) +50 first ring, ten of them share 3 each': [0.84, 3.77],
+  '(xi) +100 first ring, none sharing': [1.0, 2.73],
+}
+/** THE LINE LAW (founder, fifth pass): a field point closer than 0.8 step
+ *  to a line it is not attached to is a violation. Held by construction
+ *  against every sharer's SPOKE (asserted zero everywhere) and between
+ *  field dots; against the other leaves' RAYS it cannot hold past ~20
+ *  leaves — rays from one centre cannot all keep 0.8 step from each
+ *  other (see FIELD_LINE_GAP) — so the scenarios where rays break it are
+ *  pinned here, each pin failing when its scenario meets the law. */
+const LINE_LAW_GAPS = new Set(['(iii) +15 first ring (cast and crew)', '(iv) +15 first ring, four share 3 each', '(ix) +50 first ring, none sharing', '(x) +50 first ring, ten of them share 3 each', '(xi) +100 first ring, none sharing'])
 const KNOWN_GAPS = {
   settleAt95Clean: new Set([
     '(i) Circles today',
@@ -324,7 +376,7 @@ describe("the growth table — Circles today and tomorrow's screening (founder, 
         rim: +l.plan.rimRadius.toFixed(0),
         longestPx: +longestSegmentPx(l).toFixed(1),
         longestOverLeaf: +(longestSegmentPx(l) / leafReachPx(l)).toFixed(2),
-        ...(() => { const sp = spacingOf(l); return { wedgeOverStep: +sp.wedgeOverStep.toFixed(2), nnOverStep: +sp.nnOverStep.toFixed(2), shortestLimbPx: +sp.shortestLimbPx.toFixed(1), shortestLimb: sp.shortestLimb, floorPx: sp.floorPx } })(),
+        ...(() => { const sp = spacingOf(l); return { wedgeOverStep: +sp.wedgeOverStep.toFixed(2), nnOverStep: +sp.nnOverStep.toFixed(2), nnMinOverStep: +sp.nnMinOverStep.toFixed(2), lineMinOverStep: +sp.lineMinOverStep.toFixed(2), lineViolations: sp.lineViolations, spokeViolations: sp.spokeViolations, shortestLimbPx: +sp.shortestLimbPx.toFixed(1), shortestLimb: sp.shortestLimb, floorPx: sp.floorPx, opened: l.plan.spreadOpened, rimByFans: +l.plan.rimByFans.toFixed(0), rim: +l.plan.rimRadius.toFixed(0), reachScale: +l.plan.reachScale.toFixed(2) } })(),
         ienArielle: distPx(l, film, arielle)?.toFixed(1),
         arielleKrist: distPx(l, arielle, krist)?.toFixed(1),
       }
@@ -339,6 +391,16 @@ describe("the growth table — Circles today and tomorrow's screening (founder, 
       // step for the largest wedge and the largest nearest-neighbour
       // distance. Measured, and pinned where it cannot hold (see EVEN_FIELD_GAPS).
       const even = row.wedgeOverStep <= 1.5 && row.nnOverStep <= 1.5
+      // EVEN SPACING, both directions (fifth pass): the pinned min/max
+      // nearest-neighbour distance, the line law against the spokes
+      // (always), against every line (or pinned).
+      if (NN_PINNED[name]) {
+        expect(row.nnMinOverStep, `${name}: smallest nearest-neighbour distance (steps) — re-pin NN_PINNED on purpose`).toBeCloseTo(NN_PINNED[name][0], 1)
+        expect(row.nnOverStep, `${name}: largest nearest-neighbour distance (steps) — re-pin NN_PINNED on purpose`).toBeCloseTo(NN_PINNED[name][1], 1)
+      }
+      expect(row.spokeViolations, `${name}: a field point within ${FIELD_LINE_GAP} step of a sharer's spoke`).toBe(0)
+      if (LINE_LAW_GAPS.has(name)) expect(row.lineViolations, `${name} now meets the line law against every line — remove it from LINE_LAW_GAPS`).toBeGreaterThan(0)
+      else expect(row.lineViolations, `${name}: field points within ${FIELD_LINE_GAP} step of a line they are not attached to`).toBe(0)
       if (EVEN_FIELD_GAPS.has(name)) expect(even, `${name} now meets the even-field yardstick — remove it from EVEN_FIELD_GAPS`).toBe(false)
       else if (['(i) Circles today', '(iii) +15 first ring (cast and crew)', '(ix) +50 first ring, none sharing', '(x) +50 first ring, ten of them share 3 each'].includes(name)) expect(even, `${name}: largest wedge and nearest-neighbour gap within 1.5 field steps`).toBe(true)
       // THE FOUNDER'S TARGET OF 16 SEPTEMBER: every sharer painted at rest;
@@ -404,13 +466,42 @@ describe('THE FIELD IS STABLE (founder, 16 September 2026): adding one person, o
     const f = l.nodes.find((n) => n.kind === 'film')
     return new Map(childrenOf(l, ROOT_ID).map((n) => [n.id, { x: n.x - f.x, y: n.y - f.y, k: n.fieldIndex }]))
   }
-  it('one more direct recipient: everyone on the spiral keeps their exact point; the rim keeps its angles (its radius grows only if the newcomer takes an outer point — the rim is the field\'s edge by definition)', () => {
+  it('one more direct recipient on an OPENED field (Circles today): the spread narrows toward the width-aware spread and the spiral re-spaces — symmetry wins (fifth pass); the rim keeps its angles; the laws hold', { timeout: 30000 }, () => {
     seq = 0
     const rows = circlesNow()
     const base = build(rows)
     // The ladder is held at the base's rung: a rung change rescales the
     // whole field and is the size law's doing, not a move.
     const grown = build([...rows, inv('newcomer', CREATOR, null, { recipient_name: 'Newcomer' })], { labelFloorPx: base.plan.labelPx })
+    // SPARSE FIELD OPENS (fifth pass): an opened field's spread is the one
+    // at which its last point reaches the rim the fans imply, so it
+    // depends on how many points share the annulus — a newcomer narrows
+    // it and every point re-spaces (the founder's "symmetry wins" of the
+    // fourth pass, now for leaves on a sparse field too). The field is
+    // stable again once it is dense enough not to open (next test).
+    expect(base.plan.spreadOpened).toBe(true)
+    expect(grown.plan.spreadOpened).toBe(true)
+    expect(grown.plan.spread).toBeLessThanOrEqual(base.plan.spread + 1e-9)
+    const a = rel(base)
+    const b = rel(grown)
+    let moved = 0
+    for (const [id, p] of a) {
+      const q = b.get(id)
+      const n = base.nodes.find((m) => m.id === id)
+      if (n.rim) expect(Math.abs(angDiff(Math.atan2(q.y, q.x), Math.atan2(p.y, p.x))), `${n.name} keeps its rim angle`).toBeLessThan(1e-9)
+      else if (q.k !== p.k || Math.hypot(q.x - p.x, q.y - p.y) > 1e-6) moved += 1
+    }
+    console.log(`[field] +1 leaf on the opened field: spread ${base.plan.spread.toFixed(1)} → ${grown.plan.spread.toFixed(1)}; ${moved} of ${[...a.values()].filter((p) => p.k != null).length} leaf points re-spaced`)
+    assertLaws(grown)
+  })
+  it('one more direct recipient on a DENSE field (the fifty): the field does not open, everyone on the spiral keeps their exact point, and the rim keeps its angles — the field law of the third pass, intact where the opening is a no-op', { timeout: 120000 }, () => {
+    const rows = SCENARIOS['(ix) +50 first ring, none sharing']()
+    const base = build(rows, { labelFloorPx: 9.5 })
+    // The newcomer's ticket is the film's LAST (the cast's tickets are dated September).
+    const grown = build([...rows, inv('newcomer', CREATOR, null, { recipient_name: 'Newcomer', created_at: '2026-09-20T00:00:00.000Z' })], { labelFloorPx: 9.5 })
+    expect(base.plan.spreadOpened).toBe(false)
+    expect(grown.plan.spreadOpened).toBe(false)
+    expect(grown.plan.spread).toBeCloseTo(base.plan.spread, 9)
     const a = rel(base)
     const b = rel(grown)
     for (const [id, p] of a) {
@@ -501,7 +592,7 @@ describe('STABILITY (founder, 11 September 2026)', () => {
   // (16 September 2026: r0 and r3 closed — 13% and 19% — once a fan's
   // stagger pattern was decided once per build; the rest still move a
   // dot 36–70% because the ladder re-chooses the film's rung.)
-  const KNOWN_OVER_20 = new Set(['r2', 'r3', 'k-Stacy'])
+  const KNOWN_OVER_20 = new Set(['r2', 'r3', 'x-Zeke']) // fifth pass: Stacy's addition now moves nobody past 20%; Zeke's deepens Arielle's branch, so the rim the fans imply moves and the opened wheel re-spaces
   /** Additions after which another fan's rows change under the field
    *  (measured 16 September): Krist's fan is placed right after Arielle's
    *  and re-patterns when hers changes shape. Pinned; pruned when it stops. */
@@ -520,22 +611,23 @@ describe('STABILITY (founder, 11 September 2026)', () => {
       else expect(worst.frac, `worst move ≤ 20% of the dot's distance from the centre`).toBeLessThanOrEqual(0.2)
     })
   }
-  it('adding fifteen direct recipients moves none of the ten already on the field; the fans keep their row structure', { timeout: 60000 }, () => {
+  it('adding fifteen direct recipients to the OPENED field: the spiral re-spaces at a narrower spread (still opened), the rim keeps its angles, and the fans keep their row structure', { timeout: 60000 }, () => {
     const l = build(firstRing(circlesToday(), 15), { labelFloorPx: base.plan.labelPx })
     assertLaws(l)
     const ring1 = childrenOf(l, ROOT_ID)
     expect(ring1).toHaveLength(25)
-    // THE FIELD's stability: the ten already placed keep their exact points.
+    // SPARSE FIELD OPENS (fifth pass): both fields open; the fuller one at
+    // a narrower spread. The ten already placed re-space with it (the
+    // exact-point law holds where the field does not open — see THE
+    // FIELD IS STABLE); the rim keeps its angles.
+    expect(base.plan.spreadOpened).toBe(true)
+    expect(l.plan.spreadOpened).toBe(true)
+    expect(l.plan.spread).toBeLessThan(base.plan.spread)
     const f0 = base.nodes.find((n) => n.kind === 'film')
     const f1 = l.nodes.find((n) => n.kind === 'film')
     for (const n of childrenOf(base, ROOT_ID)) {
       const m = l.nodes.find((x) => x.id === n.id)
-      expect(m.fieldIndex, `${n.name} keeps point ${n.fieldIndex}`).toBe(n.fieldIndex)
       if (n.rim) expect(Math.abs(angDiff(Math.atan2(m.y - f1.y, m.x - f1.x), Math.atan2(n.y - f0.y, n.x - f0.x))), `${n.name} keeps its rim angle`).toBeLessThan(1e-9)
-      else {
-        expect(m.x - f1.x).toBeCloseTo(n.x - f0.x, 6)
-        expect(m.y - f1.y).toBeCloseTo(n.y - f0.y, 6)
-      }
     }
     const { changed } = compare(l, ROOT_ID)
     // The founder's law holds here since 16 September 2026: a fan's stagger

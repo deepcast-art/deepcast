@@ -214,10 +214,19 @@ export default function ConstellationMap({ layout }) {
       // No viewer looking (the creator's phone): the film and the whole
       // first ring, centred on the filmmaker, at the legible scale.
       const creatorFrame = lay.threadFrame ? null : lay.firstRingFrame
+      // The view box keeps the CANVAS's aspect ratio (see `zoom`), so a box
+      // of another shape letterboxes it and the scale the box actually
+      // paints at is the smaller of the two ratios. The frame is therefore
+      // fitted to the largest canvas-shaped rectangle inside the box — on
+      // a canvas twice as tall as the phone's box is (an opened wheel with
+      // a deep branch, fifth pass) framing by the box's own width painted
+      // the thread at a third of the plan's scale and hid half its names.
+      const fitW = Math.min(rect.width, (rect.height * cw) / ch)
+      const fitH = (fitW * ch) / cw
       const full = creatorFrame
-        ? frameViewBox(creatorFrame, rect.width, rect.height, minScale)
-        : frameViewBox(lay.threadFrame.full, rect.width, rect.height, minScale)
-      const firstGen = creatorFrame || full.fits ? full : frameViewBox(lay.threadFrame.firstGeneration, rect.width, rect.height, minScale)
+        ? frameViewBox(creatorFrame, fitW, fitH, minScale)
+        : frameViewBox(lay.threadFrame.full, fitW, fitH, minScale)
+      const firstGen = creatorFrame || full.fits ? full : frameViewBox(lay.threadFrame.firstGeneration, fitW, fitH, minScale)
       const chosen = firstGen
       const w = Math.min(Math.max(chosen.w, cw / MIN_ZOOM_DIV), cw)
       const h = w * (ch / cw)
@@ -511,6 +520,7 @@ export default function ConstellationMap({ layout }) {
         data-parent={n.parentId}
         data-claimed={n.claimed ? 'true' : 'false'}
         data-thread={onThread ? 'true' : 'false'}
+        data-layout-hidden={n.hidden ? 'true' : undefined}
         opacity={recede(n.id)}
         className={`${lit ? 'lit-person' : ''}${onThread ? ' lineage' : ''}`.trim() || undefined}
         style={{ cursor: 'pointer' }}

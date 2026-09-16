@@ -256,6 +256,29 @@ const FIELD_MAX_SKIPS = 400
 /** How many field steps a point blocked only by a spoke may lift outward
  *  along its own angle before the next point is tried. */
 const FIELD_LIFT_MAX = 2
+/** EVEN SPACING, both directions (founder, 16 September 2026, fifth
+ *  pass): a field point keeps this many field steps from every sharer's
+ *  spoke (a point nearer is lifted outward, where a radial line recedes,
+ *  or skipped) and from every other field point. The founder's law reads
+ *  "from any line it is not attached to": against the other leaves' rays
+ *  it is MEASURED and pinned per scenario, not built — rays from one
+ *  centre cannot all keep 0.8 step from each other past ~20 leaves (see
+ *  `fieldClear`). */
+export const FIELD_LINE_GAP = 0.8
+/** BREATHING ROOM (founder, fifth pass): the field starts this many
+ *  name-heights clear of the filmmaker's centre labels (was one). */
+export const FIELD_R0_HEIGHTS = 2
+/** How many placements the opened wheel's reach scale may take to settle
+ *  (see planAt). */
+const REACH_SCALE_PASSES = 8
+/** Distance from a point to a segment. */
+const pointSegmentDistance = (px, py, x1, y1, x2, y2) => {
+  const dx = x2 - x1
+  const dy = y2 - y1
+  const len2 = dx * dx + dy * dy || 1
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / len2))
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy))
+}
 /** The reference name whose painted width sets the field's spread with
  *  the box height — six letters of average glyph width (the mean of the
  *  Phoenix uppercase advances is ≈ 0.58 em; "MARCUS" measures 0.57 em a
@@ -527,7 +550,8 @@ export function buildConstellationLayout({
    *  when the canvas grows and names grow in map units, the reach grows
    *  with them and the limb keeps its proportion. Set per placement. */
   let reachBase = REACH_BASE
-  const reachOf = (n) => reachBase + REACH_K * Math.sqrt(n.size)
+  let reachK = REACH_K
+  const reachOf = (n) => reachBase + reachK * Math.sqrt(n.size)
   /** Each fan's stagger pattern (parent id → child id → row), decided at
    *  the FIRST rung of the ladder that staggered it and held at every rung
    *  below (the founder's stability law; see `spread`). Per build. */
@@ -610,6 +634,26 @@ export function buildConstellationLayout({
     const fieldStep = spreadC * Math.sqrt(Math.PI)
     // THE LIMB FLOOR: the reach base in this round's units.
     reachBase = REACH_BASE * (fontMap / field.fontMap)
+    reachK = REACH_K
+    // ...and, when the FIELD opened (SPARSE FIELD OPENS, fifth pass), the
+    // whole reach by ONE factor fixed per rung (`field.reachScale`, solved
+    // in planAt): the reach rule was calibrated in the pixels the
+    // reference view paints on the base canvas (30 + 31 × 4 = 154 units =
+    // 124px), and a canvas the opened field enlarged paints every unit
+    // smaller — with only the base scaled, Krist's ten sat 38px from him
+    // instead of 46px and lost four names to their own lines. Scaled
+    // together, the fans keep their pixels on the opened wheel. The
+    // factor is FIXED per rung, never the round's own label size: fed by
+    // the round, the fans grew the canvas that grew the fans, and a plan
+    // crept toward its canvas without ever settling (the base-geometry
+    // rule the field already follows). A canvas the FANS enlarged (the
+    // dense, deep trees) never scales them: the fifty with ten sharers
+    // reached a 3,500-unit canvas with its field crushed to an 82px disc
+    // — there the limb floor alone applies.
+    if (field.opened) {
+      reachBase = REACH_BASE * field.reachScale
+      reachK = REACH_K * field.reachScale
+    }
     let bestEffort = false
     let hopeless = false // a fan no rung of the ladder could fit
     /** The name a node's box is measured with: its real name, or "YOU" if
@@ -886,16 +930,31 @@ export function buildConstellationLayout({
       }
       return true
     }
+    /** EVEN SPACING: the room a field dot keeps from a line it is not
+     *  attached to — FIELD_LINE_GAP field steps. */
+    const lineRoom = FIELD_LINE_GAP * fieldStep
     const fieldClear = (c, strict, ignoreSpokes = false) => {
       const cd = dotRect(c.px, c.py)
       const gap = field.clearance
       for (const cr of field.center) if (rectsCollide(cd, cr, gap)) return false
-      // A dot never sits on a sharer's spoke (the rim's rays, known before
-      // the field is laid). `ignoreSpokes` asks whether the spokes ALONE
-      // block the point (then it is lifted outward rather than skipped).
-      if (!ignoreSpokes) for (const sg of rimSegs) if (sg.toId !== c.id && segHits(sg, cd, LINE_DOT_GAP * gap)) return false
+      // A dot keeps FIELD_LINE_GAP steps from every sharer's spoke (the
+      // rim's rays, known before the field is laid). `ignoreSpokes` asks
+      // whether the spokes ALONE block the point: a radial line recedes
+      // from a point lifted outward along its own angle, so such a point
+      // is lifted rather than skipped.
+      if (!ignoreSpokes) for (const sg of rimSegs) if (sg.toId !== c.id && pointSegmentDistance(c.px, c.py, sg.x1, sg.y1, sg.x2, sg.y2) < lineRoom) return false
       const cs = segmentOf(c)
       for (const o of placed) {
+        // EVEN SPACING between dots: a field point keeps FIELD_LINE_GAP
+        // steps from every placed field point (a lift once landed a point
+        // half a step from its neighbour on the fifty).
+        if (Math.hypot(o.px - c.px, o.py - c.py) < lineRoom) return false
+        // The leaves' own rays keep the founder's accepted rule (a dot
+        // never ON a line, LINE_DOT_GAP): held to FIELD_LINE_GAP steps in
+        // the strict pass, a field of twenty-two blew its outer index
+        // from 27 to 109 and painted worse — rays from one centre cannot
+        // all keep 0.8 step from each other past ~20 leaves. The law is
+        // measured over every line and pinned where it cannot hold.
         if (segHits(segmentOf(o), cd, LINE_DOT_GAP * gap)) return false
         const od = dotRect(o.px, o.py)
         if (strict && segHits(cs, od, LINE_DOT_GAP * gap)) return false
@@ -1512,7 +1571,12 @@ export function buildConstellationLayout({
     // Then the sharers take the field's outer edge (its outer radius + one
     // field step); their branches grow outward.
     const outerK = Math.max(0, ...ring1.filter((c) => !c.children.length).map((c) => c.fieldIndex))
-    const rimRadius = fieldR0 + spreadC * Math.sqrt(outerK) + spreadC * Math.sqrt(Math.PI)
+    // The field's outer edge is its outermost POINT — a point lifted two
+    // steps from a high index lands beyond the last index's radius (Evan
+    // on Circles today, 500 against 457; fifth pass) — so the rim is one
+    // step beyond that, never inside a leaf.
+    const outerR = Math.max(fieldR0 + spreadC * Math.sqrt(outerK), ...ring1.filter((c) => !c.children.length).map((c) => c.dist))
+    const rimRadius = outerR + spreadC * Math.sqrt(Math.PI)
     sharers.forEach((s, i) => {
       const a = rimAngleOf(i)
       s.px = rimRadius * Math.cos(a)
@@ -1917,7 +1981,7 @@ export function buildConstellationLayout({
     // ONE DIRECTION FOR NAMES: how many field names had to flip inward.
     let fieldFlips = 0
     for (const c of ring1) if (!c.children.length && !c.hidden && c.side === 'in') fieldFlips += 1
-    return { width, height, cx, cy, spreadC, fieldR0, fieldStep, fieldRotation, rimRadius, reachBase, fieldFlips, raysAcrossDots, bestEffort, hopeless, hiddenCount, collidingCount, dotConflictCount, rectsOf, centerRects }
+    return { width, height, cx, cy, spreadC, fieldR0, fieldStep, fieldRotation, rimRadius, outerK, reachBase, reachK, fieldFlips, raysAcrossDots, bestEffort, hopeless, hiddenCount, collidingCount, dotConflictCount, rectsOf, centerRects }
   }
 
   /* ---- Plan for the reference view: the hard rule holds on SCREEN there ----
@@ -1965,19 +2029,92 @@ export function buildConstellationLayout({
     // every point on the spiral.
     const refBoxW = labelTextWidth(REFERENCE_NAME, plan.fontMap, 2)
     const spreadC = ((baseBoxH + refBoxW) / 2 + plan.clearance) / Math.sqrt(Math.PI)
-    // Where the field starts (CENTRED, founder 16 September): one full
-    // name-height clear of the filmmaker's two centre labels, measured
-    // on the base canvas at this rung — never a fixed radius.
+    // Where the field starts (CENTRED, founder 16 September): FIELD_R0_HEIGHTS
+    // name-heights clear of the filmmaker's two centre labels (two since
+    // the fifth pass — "the field huddles the emblem"), measured on the
+    // base canvas at this rung — never a fixed radius.
     const baseCenter = [EMBLEM_RECT, ...centerLabelLayout(plan.scale, creatorLabel, floorPx).map((c) => c.rect)]
-    const fieldR0 = Math.max(...baseCenter.map((r) => Math.max(Math.abs(r.y + r.h), Math.abs(r.x + r.w), Math.abs(r.x), Math.abs(r.y)))) + plan.clearance + baseBoxH
+    const fieldR0 = Math.max(...baseCenter.map((r) => Math.max(Math.abs(r.y + r.h), Math.abs(r.x + r.w), Math.abs(r.x), Math.abs(r.y)))) + plan.clearance + FIELD_R0_HEIGHTS * baseBoxH
+    // THE RIM THE FANS IMPLY (SPARSE FIELD OPENS, founder, fifth pass):
+    // the sharers' rim sits no nearer the filmmaker than the longest
+    // branch it carries is long — the reach rule summed down the deepest
+    // chain under any sharer, in the base canvas's units (Circles today:
+    // Arielle → Krist → Alexander → his five, 321 units, against a rim
+    // the field alone put at 210 — the wheel was shorter than what hung
+    // from it, and its seven leaves huddled the emblem). A field whose
+    // outer radius falls short of it opens: c becomes the spread at
+    // which the field's LAST point reaches it (the sharers then sit one
+    // step beyond, the rim rule unchanged); a field already past it is
+    // untouched — on the dense trees a no-op.
+    const branchDepth = (n) => Math.max(0, ...n.children.map((k) => REACH_BASE + REACH_K * Math.sqrt(k.size) + branchDepth(k)))
+    const rimByFans = Math.max(0, ...root.children.filter((c) => c.children.length).map(branchDepth))
     // Everything the field measures with, fixed for this rung.
-    const field = { spreadC, r0: fieldR0, fontMap: plan.fontMap, clearance: plan.clearance, center: baseCenter }
+    const field = { spreadC, r0: fieldR0, fontMap: plan.fontMap, clearance: plan.clearance, center: baseCenter, opened: false, reachScale: 1 }
     let result = null
     let settled = false
     let rounds = 0
+    // The opening is decided once per rung from a placement at the base
+    // canvas: the field's outer index (skips included) says where its
+    // last point lands at the width-aware spread; if short of the fans'
+    // rim, the spread that puts it there — re-read once, since the spread
+    // changes which points skip (fewer, as a rule, at a wider one).
+    let probe = runPlacement(plan.fontMap, plan.clearance, plan.scale, floorPx, field)
+    let spreadOpened = false
+    let reachScalePasses = 0 // REACH_SCALE_PASSES when the solve hit its cap (reported)
+    const leaves = root.children.filter((c) => !c.children.length).length
+    if (leaves >= 2 && probe.outerK >= 1) {
+      const opening = (outerK) => (rimByFans - fieldR0) / Math.sqrt(outerK)
+      let cOpen = opening(probe.outerK)
+      if (cOpen > spreadC) {
+        field.spreadC = cOpen
+        field.opened = true
+        const again = runPlacement(plan.fontMap, plan.clearance, plan.scale, floorPx, field)
+        field.spreadC = Math.max(cOpen, opening(again.outerK))
+        spreadOpened = true
+        probe = null
+        // The reach scale of the opened wheel: the ratio of the label size
+        // the finished drawing's canvas paints to the base canvas's — the
+        // fixed point of "scale the fans by r, place, read the canvas, read
+        // the ratio r' it paints at". Each pass is a placement at the base
+        // plan; r' is close to linear in r (the canvas is the field's part
+        // plus the fans' part, the latter ∝ r), so after two plain passes
+        // the SECANT of the last two lands on the fixed point directly
+        // (plain iteration crept: 2.46 → 3.69 in eight passes on Circles
+        // today, 2.96 → 8.83 and still rising on Krist's nine sharing two
+        // each). Held within 1%, capped at REACH_SCALE_PASSES passes, then
+        // FIXED for every round.
+        const ratioAt = (r) => {
+          field.reachScale = r
+          const t = runPlacement(plan.fontMap, plan.clearance, plan.scale, floorPx, field)
+          return planFor(t.width, t.height, floorPx).fontMap / plan.fontMap
+        }
+        let r0 = 1
+        let f0 = ratioAt(r0)
+        let r1 = f0
+        let f1 = ratioAt(r1)
+        for (let pass = 2; pass < REACH_SCALE_PASSES && Math.abs(f1 - r1) > 0.01 * r1; pass++) {
+          const g = (f1 - f0) / (r1 - r0)
+          // A slope at or past 1 has no fixed point (a branch that, at its
+          // calibrated pixels, cannot fit the reference view beside any
+          // field): the plain step then, bounded by the pass cap.
+          const r2 = g > 0 && g < 0.95 ? (f1 - g * r1) / (1 - g) : f1
+          r0 = r1
+          f0 = f1
+          r1 = r2
+          f1 = ratioAt(r1)
+        }
+        field.reachScale = f1
+        reachScalePasses = Math.abs(f1 - r1) <= 0.01 * r1 ? 0 : REACH_SCALE_PASSES
+      }
+    }
     for (; rounds < MAX_PLAN_ROUNDS; rounds++) {
       plan = planFor(assumed.width, assumed.height, floorPx)
-      result = runPlacement(plan.fontMap, plan.clearance, plan.scale, floorPx, field)
+      result = probe ?? runPlacement(plan.fontMap, plan.clearance, plan.scale, floorPx, field)
+      probe = null
+      result.rimByFans = rimByFans
+      result.spreadOpened = spreadOpened
+      result.reachScale = field.reachScale
+      result.reachScaleCapped = reachScalePasses > 0
       // A placement that could not satisfy the rules — a name hidden or
       // still colliding at the end — will not be helped by a larger canvas
       // (that only enlarges every name in map units against the fixed
@@ -2081,7 +2218,14 @@ export function buildConstellationLayout({
       grow(dot)
     }
     const pad = plan.clearance
-    return { x: cx + x0 - pad, y: cy + y0 - pad, w: x1 - x0 + 2 * pad, h: y1 - y0 + 2 * pad }
+    // A frame never reaches outside the canvas: on a plan that did not
+    // settle, the boxes are measured a hair larger than the canvas was
+    // fitted for (a 0.2-unit sliver on a 5,600-unit canvas, fifth pass).
+    const fx0 = Math.max(0, cx + x0 - pad)
+    const fy0 = Math.max(0, cy + y0 - pad)
+    const fx1 = Math.min(width, cx + x1 + pad)
+    const fy1 = Math.min(height, cy + y1 + pad)
+    return { x: fx0, y: fy0, w: fx1 - fx0, h: fy1 - fy0 }
   }
   // THE CREATOR'S PHONE (founder, 9 September 2026 evening; kept from v5):
   // the film node and the whole first ring with their planned name boxes —
@@ -2230,9 +2374,22 @@ export function buildConstellationLayout({
        *  sharers' spokes fall between its points; 0 without sharers. */
       fieldRotation: result.fieldRotation,
       rimRadius: result.rimRadius,
+      /** SPARSE FIELD OPENS: the rim the fans imply (the longest branch
+       *  under any sharer, base units) and whether the spread was opened
+       *  to reach it; the field's outer index (skips included). */
+      rimByFans: result.rimByFans,
+      spreadOpened: result.spreadOpened,
+      /** The factor the whole reach rule is scaled by on an opened wheel
+       *  (1 when the field did not open). */
+      reachScale: result.reachScale,
+      /** True when the reach scale's solve stopped at its pass cap short
+       *  of 1% (a branch too deep for the reference view at its pixels). */
+      reachScaleCapped: result.reachScaleCapped,
+      outerK: result.outerK,
       /** THE LIMB FLOOR: the reach rule's base in this plan's map units
        *  (REACH_BASE scaled with the round's label size). */
       reachBase: result.reachBase,
+      reachK: result.reachK,
       /** ONE DIRECTION FOR NAMES: field names that flipped inward. */
       fieldFlips: result.fieldFlips,
       /** Direct recipients placed without a strict point — their spoke

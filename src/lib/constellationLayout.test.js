@@ -151,7 +151,12 @@ const assertField = (layout, rows = null) => {
   // evenly round the compass from 12 o'clock in ticket order.
   expect(first.filter((n) => n.rim).map((n) => n.id).sort()).toEqual(sharers.map((n) => n.id).sort())
   const outerK = Math.max(0, ...first.filter((n) => !n.rim).map((n) => n.fieldIndex))
-  expect(layout.plan.rimRadius).toBeCloseTo(r0 + c * Math.sqrt(outerK) + c * Math.sqrt(Math.PI), 6)
+  // THE RIM RULE, exact (fifth pass): one field step beyond the field's
+  // outermost POINT — the last index's radius, or a lifted point beyond it.
+  const onField = first.filter((n) => !n.rim)
+  const outerR = Math.max(r0 + c * Math.sqrt(outerK), ...onField.map((n) => Math.hypot(n.x - film.x, n.y - film.y)))
+  expect(layout.plan.rimRadius).toBeCloseTo(outerR + c * Math.sqrt(Math.PI), 6)
+  for (const n of onField) expect(Math.hypot(n.x - film.x, n.y - film.y), `${n.name} inside the rim`).toBeLessThanOrEqual(layout.plan.rimRadius - c * Math.sqrt(Math.PI) + 1e-6)
   for (const n of sharers) expect(n.fieldIndex, `${n.name} (a sharer) takes no spiral point`).toBeNull()
   const onRim = sharers.slice().sort((a, b) => a.rimIndex - b.rimIndex)
   onRim.forEach((n, i) => {
@@ -183,10 +188,10 @@ const assertReach = (layout) => {
     // never anything else. A sharer is always in the near row.
     expect([0, 1]).toContain(n.row)
     if (childrenOf(layout, n.id).length) expect(n.row, `${n.name} shared onward: near row`).toBe(0)
-    expect(n.dist - n.extra, `${n.name}'s distance from ${p.name}`).toBeCloseTo((layout.plan.reachBase + REACH_K * Math.sqrt(n.subtreeSize)) * (n.row ? STAGGER_RATIO : 1), 9)
+    expect(n.dist - n.extra, `${n.name}'s distance from ${p.name}`).toBeCloseTo((layout.plan.reachBase + layout.plan.reachK * Math.sqrt(n.subtreeSize)) * (n.row ? STAGGER_RATIO : 1), 9)
     expect(Math.hypot(n.x - p.x, n.y - p.y), `${n.name} sits at its distance`).toBeCloseTo(n.dist, 6)
     const siblings = childrenOf(layout, p.id)
-    const fanReach = Math.min(...siblings.map((s) => layout.plan.reachBase + REACH_K * Math.sqrt(s.subtreeSize)))
+    const fanReach = Math.min(...siblings.map((s) => layout.plan.reachBase + layout.plan.reachK * Math.sqrt(s.subtreeSize)))
     expect(n.extra, `${n.name}'s fan never balloons`).toBeLessThanOrEqual(EXTRA_MAX * fanReach + 1e-9)
     for (const s of siblings) expect(s.extra, `${s.name} shares ${p.name}'s fan move`).toBe(n.extra)
     // BEYOND the parent: ahead of the parent's own outward direction —
@@ -357,8 +362,8 @@ describe('buildConstellationLayout', () => {
     expect(byId.get('mid').dist).toBeLessThan(byId.get('big').dist)
     // The rule itself, to the unit: BASE + K√size, plus the fan's move.
     assertReach(layout)
-    expect(byId.get('big').dist - byId.get('big').extra).toBeCloseTo(layout.plan.reachBase + REACH_K * 3, 9)
-    expect(byId.get('leaf').dist - byId.get('leaf').extra).toBeCloseTo(layout.plan.reachBase + REACH_K, 9)
+    expect(byId.get('big').dist - byId.get('big').extra).toBeCloseTo(layout.plan.reachBase + layout.plan.reachK * 3, 9)
+    expect(byId.get('leaf').dist - byId.get('leaf').extra).toBeCloseTo(layout.plan.reachBase + layout.plan.reachK, 9)
     expect(layout.plan.reachBase).toBeGreaterThanOrEqual(REACH_BASE - 1e-9) // THE LIMB FLOOR: never under the design base
     // The direct recipients are NOT under the reach rule: 'p' holds a
     // 13-person subtree and 'q' one; both sit on the field by ticket order.
@@ -431,7 +436,7 @@ describe('buildConstellationLayout', () => {
     expect(new Set(leaves.map((k) => k.row))).toEqual(new Set([0, 1]))
     expect(kids.find((k) => k.id === 'k7').row).toBe(0)
     // The HARD CAP on the outward move: never past half the leaf reach.
-    const leafReach = layout.plan.reachBase + REACH_K
+    const leafReach = layout.plan.reachBase + layout.plan.reachK
     for (const k of kids) expect(k.extra).toBeLessThanOrEqual(EXTRA_MAX * leafReach + 1e-9)
     for (const k of kids) expect(k.extra).toBe(kids[0].extra)
     // The sharer among them still sits further out than a near-row leaf
@@ -454,7 +459,7 @@ describe('buildConstellationLayout', () => {
     const layout = buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR, labelFloorPx: 9 })
     const kids = childrenOf(layout, 'r1')
     expect(kids[59].dir - kids[0].dir).toBeLessThanOrEqual(FAN_MAX_SPAN + 1e-9)
-    for (const k of kids) expect(k.extra).toBeLessThanOrEqual(EXTRA_MAX * (layout.plan.reachBase + REACH_K) + 1e-9)
+    for (const k of kids) expect(k.extra).toBeLessThanOrEqual(EXTRA_MAX * (layout.plan.reachBase + layout.plan.reachK) + 1e-9)
     expect(layout.plan.settled).toBe(false) // the safety net's case, reported
     assertReach(layout)
     assertOnCanvas(layout)
@@ -493,7 +498,7 @@ describe('buildConstellationLayout', () => {
     expect(angDiff(byId.get('lone').dir, byId.get('r3').dir)).toBeCloseTo(0, 9)
     // Nobody stepped to a "next level": every distance is the rule plus
     // (at most) that fan's own cap move.
-    for (const k of childrenOf(layout, 'r0')) expect(k.dist - k.extra).toBeCloseTo(layout.plan.reachBase + REACH_K, 9)
+    for (const k of childrenOf(layout, 'r0')) expect(k.dist - k.extra).toBeCloseTo(layout.plan.reachBase + layout.plan.reachK, 9)
   })
 
   it('THE HARD RULE holds on every settled layout at the production floor: names 6px apart, no name across a dot, no name on a line it is not attached to — the fixture and the Circles-shaped tree', () => {
@@ -565,7 +570,7 @@ describe('buildConstellationLayout', () => {
     expect(big).toHaveLength(60)
     expect(big[59].dir - big[0].dir).toBeLessThanOrEqual(FAN_MAX_SPAN + 1e-9)
     // A FAN NEVER BALLOONS: even sixty names move at most half a leaf reach out.
-    expect(big[0].extra).toBeLessThanOrEqual(EXTRA_MAX * (layout.plan.reachBase + REACH_K) + 1e-9)
+    expect(big[0].extra).toBeLessThanOrEqual(EXTRA_MAX * (layout.plan.reachBase + layout.plan.reachK) + 1e-9)
     for (const n of layout.nodes) expect(Number.isFinite(n.x) && Number.isFinite(n.y)).toBe(true)
     expect(layout.width).toBeLessThan(8000)
     expect(typeof layout.plan.settled).toBe('boolean')
