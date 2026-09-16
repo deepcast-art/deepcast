@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { returnLinkDecision, isWellFormedReturnToken, mayMintSession } from './returnLinkRules.js'
+import { returnLinkDecision, isWellFormedReturnToken, mayMintSession, RETURN_TOKEN_DAYS } from './returnLinkRules.js'
 
 const NOW = new Date('2026-09-16T12:00:00Z')
 const row = (over = {}) => ({
@@ -28,6 +28,12 @@ describe('returnLinkDecision', () => {
   it('expired past the date, ok on the date', () => {
     expect(returnLinkDecision({ invite: row({ return_token_expires_at: '2026-09-16T11:59:59Z' }), now: NOW })).toEqual({ status: 'expired' })
     expect(returnLinkDecision({ invite: row({ return_token_expires_at: '2026-09-16T12:00:00Z' }), now: NOW }).status).toBe('ok')
+  })
+})
+
+describe('the token life', () => {
+  it('is 180 days (founder decision 2026-09-16)', () => {
+    expect(RETURN_TOKEN_DAYS).toBe(180)
   })
 })
 

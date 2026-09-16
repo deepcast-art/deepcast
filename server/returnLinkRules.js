@@ -6,12 +6,13 @@
  *   unknown — no row, a void row, or a row nobody claimed (a token can only
  *             ever open the ticket that was actually claimed);
  *   spent   — used already (the sign-in page, prefilled with the email);
- *   expired — past its 30 days;
+ *   expired — past its RETURN_TOKEN_DAYS (180) days;
  *   ok      — may be spent now.
  * Order matters: spent is answered before expired, so a used-then-aged link
  * still prefills the email.
  */
-export const RETURN_TOKEN_DAYS = 30
+/** 180 days (founder decision 2026-09-16, follow-up 3; was 30). */
+export const RETURN_TOKEN_DAYS = 180
 export const RETURN_TOKEN_SHAPE = /^[0-9a-f]{64}$/
 
 export function isWellFormedReturnToken(token) {

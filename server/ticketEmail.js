@@ -8,8 +8,9 @@
  * THE TICKET EMAIL mirrors the landing page's anatomy on a plain #080c18
  * ground (no background image), a 480px table, everything centred:
  *   a. `BY PRIVATE INVITATION ONLY · TICKET NO. {n}` — 11px tracked caps, #9a9890
- *   b. `{Receiver}, {Sharer} has gifted you a film.` — Georgia italic 30px
- *   c. `It’s yours to watch whenever you’d like.` — Georgia 17px
+ *   b. `{Receiver}, {Sharer} gifted you a film. Watch any time, no expiration.`
+ *      — ONE paragraph, Georgia italic 30px (24px at ≤480px via the media
+ *      query; side padding 20px there)
  *   d. the landing's divider: hairline — ✳ — hairline, accent at 50%
  *   e. `{FilmTitle}` — Georgia italic 28px
  *   f. the watch-page poster, full width, 16:9, a link to /r/{token}
@@ -17,10 +18,10 @@
  *      (films.transmission_hook) — Georgia italic 17px
  *   h. the clock icon + `{RuntimeMinutes} MINUTES` — tracked caps, accent
  *   i. `Watch for free` → /r/{token}
- *   j. the wordmark, and beneath it `Private. Trusted. Human.` — the
+ *   j. the wordmark, and beneath it `Deep stories for deep souls.` — the
  *      shared footer of EVERY Deepcast email built here
  * THE REMINDER opens with `Hey {Receiver}, just a friendly reminder that
- * {Sharer} gifted you a film.` (Georgia 20px) then d–j exactly as above.
+ * {Sharer} gifted you a film.` in the same font and size, then d–j.
  * Every colour inline; a plain-text twin with the same words; the link is
  * the person's /r/{token} return link — never an auth token.
  *
@@ -39,7 +40,7 @@ const SERIF = "Georgia, 'Times New Roman', serif"
 const SANS = "system-ui, -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif"
 export const WORDMARK_PATH = '/email/deepcast-wordmark@2x.png'
 export const CLOCK_PATH = '/email/clock@2x.png'
-export const TAGLINE = 'Private. Trusted. Human.'
+export const TAGLINE = 'Deep stories for deep souls.'
 
 export function escapeHtml(s) {
   if (s == null || s === '') return ''
@@ -137,11 +138,12 @@ function filmRows({ filmTitle, posterUrl, synopsis, minutes, watchUrl, wordmark,
 
 function shell({ subject, preheader, rows }) {
   return `<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(subject)}</title></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(subject)}</title>
+<style>@media only screen and (max-width:480px){ .dc-headline{font-size:24px !important;} .dc-pad{padding-left:20px !important;padding-right:20px !important;} }</style></head>
 <body style="margin:0;padding:0;background-color:${BG};">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:${BG};font-size:1px;line-height:1px;">${escapeHtml(preheader)}</div>
 <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="background-color:${BG};">
-<tr><td align="center" style="padding:40px 16px;">
+<tr><td align="center" class="dc-pad" style="padding:40px 16px;">
 <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="max-width:480px;background-color:${BG};text-align:center;">
 ${rows}
 </table>
@@ -178,8 +180,9 @@ export function buildTicketEmail({ receiverName, sharerName, ticketNo, filmTitle
   const subject = receiver ? `${receiver}, ${sharer} gifted you a film` : `${sharer} gifted you a film`
   const hasNo = Number.isFinite(Number(ticketNo)) && Number(ticketNo) > 0
   const stamp = hasNo ? `BY PRIVATE INVITATION ONLY · TICKET NO. ${ticketNo}` : 'BY PRIVATE INVITATION ONLY'
-  const headline = receiver ? `${receiver}, ${sharer} has gifted you a film.` : `${sharer} has gifted you a film.`
-  const yours = 'It’s yours to watch whenever you’d like.'
+  const headline = receiver
+    ? `${receiver}, ${sharer} gifted you a film. Watch any time, no expiration.`
+    : `${sharer} gifted you a film. Watch any time, no expiration.`
   const minutes = runtimeMinutes(durationSeconds)
   const rows = [
     // The ticket segment never breaks mid-phrase on a narrow client.
@@ -187,11 +190,10 @@ export function buildTicketEmail({ receiverName, sharerName, ticketNo, filmTitle
       `<p style="margin:0;${caps(`color:${MUTED};`)}">BY PRIVATE INVITATION ONLY${hasNo ? ` &middot; <span style="white-space:nowrap;">TICKET&nbsp;NO.&nbsp;${escapeHtml(String(ticketNo))}</span>` : ''}</p>`,
       '0 0 20px 0'
     ),
-    row(`<p style="margin:0;font-family:${SERIF};font-style:italic;font-size:30px;line-height:1.2;color:${TEXT};">${escapeHtml(headline)}</p>`, '0 0 16px 0'),
-    row(`<p style="margin:0;font-family:${SERIF};font-size:17px;line-height:1.5;color:${TEXT};">${escapeHtml(yours)}</p>`, '0 0 28px 0'),
+    row(`<p class="dc-headline" style="margin:0;font-family:${SERIF};font-style:italic;font-size:30px;line-height:1.2;color:${TEXT};">${escapeHtml(headline)}</p>`, '0 0 28px 0'),
     filmRows({ filmTitle, posterUrl, synopsis, minutes, watchUrl, wordmark, clock }),
   ].join('\n')
-  const text = [stamp, '', headline, yours, '', ...filmText({ filmTitle, synopsis, minutes, watchUrl })].join('\n')
+  const text = [stamp, '', headline, '', ...filmText({ filmTitle, synopsis, minutes, watchUrl })].join('\n')
   return { subject, preheader: headline, html: shell({ subject, preheader: headline, rows }), text }
 }
 
@@ -210,7 +212,7 @@ export function buildReminderEmail({ receiverName, sharerName, filmTitle, poster
     : `Just a friendly reminder that ${sharer} gifted you a film.`
   const minutes = runtimeMinutes(durationSeconds)
   const rows = [
-    row(`<p style="margin:0;font-family:${SERIF};font-size:20px;line-height:1.4;color:${TEXT};">${escapeHtml(opener)}</p>`, '0 0 28px 0'),
+    row(`<p class="dc-headline" style="margin:0;font-family:${SERIF};font-style:italic;font-size:30px;line-height:1.2;color:${TEXT};">${escapeHtml(opener)}</p>`, '0 0 28px 0'),
     filmRows({ filmTitle, posterUrl, synopsis, minutes, watchUrl, wordmark, clock }),
   ].join('\n')
   const text = [opener, '', ...filmText({ filmTitle, synopsis, minutes, watchUrl })].join('\n')

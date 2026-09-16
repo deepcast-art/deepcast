@@ -3830,7 +3830,7 @@ async function filmmakerContact(creatorId) {
 /* ============ THE RETURN LINK (founder decision 2026-09-16) ============
  * A 32-byte random token, minted at claim (and re-minted for each reminder),
  * whose sha256 is the only thing stored (invites.return_token_hash, with
- * _expires_at = +30 days and _used_at). The plaintext rides in the email as
+ * _expires_at = +RETURN_TOKEN_DAYS (180) and _used_at). The plaintext rides in the email as
  * /r/{token}. The PAGE at /r/ spends it by POSTing here after it runs — the
  * bare GET is a static page, so a link scanner's prefetch never burns it.
  * Spent once (a conditional update); then the sign-in page. */

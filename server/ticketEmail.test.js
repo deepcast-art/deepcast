@@ -25,39 +25,43 @@ describe('buildTicketEmail — the landing page’s anatomy', () => {
     expect(m.html).toContain('TICKET&nbsp;NO.&nbsp;41') // unbreakable on a narrow client
     for (const body of [m.html, m.text]) {
       expect(body).toContain('BY PRIVATE INVITATION ONLY')
-      expect(body).toContain('Alex, Ien has gifted you a film.')
-      expect(body).toContain('It’s yours to watch whenever you’d like.')
+      expect(body).toContain('Alex, Ien gifted you a film. Watch any time, no expiration.')
+      expect(body).not.toContain('yours to watch whenever')
       expect(body).toContain('Circles')
       expect(body).toContain('Five young believers gather at a table outside the church')
       expect(body).toContain('30 MINUTES')
       expect(body).toContain('Watch for free')
       expect(body).toContain('https://deepcast.art/r/abc123')
-      expect(body).toContain('Private. Trusted. Human.')
+      expect(body).toContain('Deep stories for deep souls.')
       expect(body).not.toMatch(/ by /)
     }
     // The order, measured from the body table (the preheader repeats the headline above it).
     const from = m.html.indexOf('<table')
     const i = (s) => m.html.indexOf(s, from)
-    const order = ['BY PRIVATE INVITATION ONLY', 'TICKET&nbsp;NO.&nbsp;41', 'has gifted you a film.', 'yours to watch', '&#10035;', 'font-size:28px', 'thumbnail.png', 'Five young believers', 'clock@2x.png', '30 MINUTES', 'Watch for free', 'deepcast-wordmark', 'Private. Trusted. Human.']
+    const order = ['BY PRIVATE INVITATION ONLY', 'TICKET&nbsp;NO.&nbsp;41', 'gifted you a film. Watch any time', '&#10035;', 'font-size:28px', 'thumbnail.png', 'Five young believers', 'clock@2x.png', '30 MINUTES', 'Watch for free', 'deepcast-wordmark', 'Deep stories for deep souls.']
     for (let k = 1; k < order.length; k++) expect(i(order[k - 1])).toBeLessThan(i(order[k]))
     // The poster is a link to the return URL; the clock precedes the minutes.
     expect(m.html).toMatch(/<a href="https:\/\/deepcast\.art\/r\/abc123"[^>]*><img src="https:\/\/image\.mux\.com/)
     // Styles: eyebrow 11px tracked caps muted; headline Georgia italic 30; title italic 28; synopsis italic 17; minutes in accent.
     expect(m.html).toContain('font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:#9a9890')
+    expect(m.html).toContain('class="dc-headline" style="margin:0;font-family:Georgia')
     expect(m.html).toContain('font-style:italic;font-size:30px')
+    // Mobile: the headline drops to 24px and the side padding to 20px at ≤480px.
+    expect(m.html).toContain('@media only screen and (max-width:480px){ .dc-headline{font-size:24px !important;} .dc-pad{padding-left:20px !important;padding-right:20px !important;} }')
+    expect(m.html).toContain('class="dc-pad"')
     expect(m.html).toContain('font-style:italic;font-size:28px')
     expect(m.html).toContain('font-style:italic;font-size:17px')
     expect(m.html).toContain('color:#b1a180;">30 MINUTES')
     expect(m.html).toContain('#080c18')
     expect(m.html).toContain('max-width:480px')
     expect(m.html).not.toMatch(/magiclink|access_token/i)
-    expect(TAGLINE).toBe('Private. Trusted. Human.')
+    expect(TAGLINE).toBe('Deep stories for deep souls.')
   })
 
   it('no receiver name: the subject and headline drop it; an email-shaped name never prints', () => {
     const m = buildTicketEmail({ ...base, receiverName: null })
     expect(m.subject).toBe('Ien gifted you a film')
-    expect(m.text).toContain('Ien has gifted you a film.')
+    expect(m.text).toContain('Ien gifted you a film. Watch any time, no expiration.')
     expect(buildTicketEmail({ ...base, receiverName: 'alex@example.com' }).subject).toBe('Ien gifted you a film')
     expect(buildTicketEmail({ ...base, sharerName: 'priya@example.com' }).subject).toBe('Alex, Someone gifted you a film')
   })
@@ -92,15 +96,16 @@ describe('buildReminderEmail — the opener, then d–j', () => {
       expect(body).toContain('30 MINUTES')
       expect(body).toContain('Watch for free')
       expect(body).toContain('https://deepcast.art/r/abc123')
-      expect(body).toContain('Private. Trusted. Human.')
+      expect(body).toContain('Deep stories for deep souls.')
       expect(body).not.toContain('BY PRIVATE INVITATION')
-      expect(body).not.toContain('yours to watch')
+      expect(body).not.toContain('no expiration')
     }
     const from = m.html.indexOf('<table')
     const i = (s) => m.html.indexOf(s, from)
     expect(i('friendly reminder')).toBeLessThan(i('&#10035;'))
     expect(i('&#10035;')).toBeLessThan(i('font-size:28px'))
-    expect(m.html).toContain('font-size:20px')
+    // The opener in the ticket headline's own font and size.
+    expect(m.html).toMatch(/class="dc-headline" style="margin:0;font-family:Georgia[^>]*font-style:italic;font-size:30px[^>]*>Hey Alex, just a friendly reminder/)
     const n = buildReminderEmail({ ...base, receiverName: '' })
     expect(n.subject).toBe('Watch the film Ien gifted you')
     expect(n.text).toContain('Just a friendly reminder that Ien gifted you a film.')
