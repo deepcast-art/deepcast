@@ -5,8 +5,8 @@ import {
   REACH_BASE,
   REACH_K,
   FAN_MAX_SPAN,
-  FIELD_R0,
   GOLDEN_ANGLE,
+  RIM_START,
   STAGGER_RATIO,
   EXTRA_MAX,
   LABEL_SIDES,
@@ -134,14 +134,28 @@ const assertOnCanvas = (layout) => {
 const assertField = (layout, rows = null) => {
   const film = layout.nodes.find((n) => n.kind === 'film')
   const c = layout.plan.spread
+  const r0 = layout.plan.fieldR0
   expect(c).toBeGreaterThan(0)
+  expect(r0).toBeGreaterThan(EMBLEM_R)
   const first = layout.nodes.filter((n) => n.parentId === ROOT_ID)
+  const sharers = first.filter((n) => layout.nodes.some((m) => m.parentId === n.id))
   for (const n of first) {
     expect(Number.isInteger(n.fieldIndex) && n.fieldIndex >= 0, `${n.name} holds a field index`).toBe(true)
-    expect(Math.hypot(n.x - film.x, n.y - film.y), `${n.name}'s radius`).toBeCloseTo(FIELD_R0 + c * Math.sqrt(n.fieldIndex), 6)
-    expect(Math.abs(angDiff(Math.atan2(n.y - film.y, n.x - film.x), n.fieldIndex * GOLDEN_ANGLE)), `${n.name}'s angle`).toBeLessThan(1e-6)
     expect(n.dist).toBeCloseTo(n.r, 6)
+    if (n.rim) continue
+    expect(Math.hypot(n.x - film.x, n.y - film.y), `${n.name}'s radius`).toBeCloseTo(r0 + c * Math.sqrt(n.fieldIndex), 6)
+    expect(Math.abs(angDiff(Math.atan2(n.y - film.y, n.x - film.x), n.fieldIndex * GOLDEN_ANGLE)), `${n.name}'s angle`).toBeLessThan(1e-6)
   }
+  // THE RIM RULE: exactly the sharers sit on the rim — at the rim radius,
+  // evenly round the compass from 12 o'clock in ticket order.
+  expect(first.filter((n) => n.rim).map((n) => n.id).sort()).toEqual(sharers.map((n) => n.id).sort())
+  const outerK = Math.max(0, ...first.map((n) => n.fieldIndex))
+  expect(layout.plan.rimRadius).toBeCloseTo(r0 + c * Math.sqrt(outerK) + c * Math.sqrt(Math.PI), 6)
+  const onRim = sharers.slice().sort((a, b) => a.fieldIndex - b.fieldIndex)
+  onRim.forEach((n, i) => {
+    expect(Math.hypot(n.x - film.x, n.y - film.y), `${n.name} on the rim`).toBeCloseTo(layout.plan.rimRadius, 6)
+    expect(Math.abs(angDiff(Math.atan2(n.y - film.y, n.x - film.x), RIM_START + (i * 2 * Math.PI) / onRim.length)), `${n.name} at rim slot ${i}`).toBeLessThan(1e-6)
+  })
   for (const n of layout.nodes) if (n.parentId !== ROOT_ID) expect(n.fieldIndex).toBeNull()
   if (rows) {
     const byId = byIdOf(layout)
@@ -150,6 +164,8 @@ const assertField = (layout, rows = null) => {
   }
   // No two first-degree dots within the clearance of each other.
   for (let i = 0; i < first.length; i++) for (let j = i + 1; j < first.length; j++) expect(Math.hypot(first[i].x - first[j].x, first[i].y - first[j].y)).toBeGreaterThan(layout.plan.clearance)
+  // ONE DIRECTION FOR NAMES: a field name is outward or (flipped) inward, never perpendicular.
+  for (const n of first) if (!n.rim && !n.hidden) expect(['out', 'in'], `${n.name}'s side`).toContain(n.labelSide)
 }
 /** THE REACH RULE, asked of every person beyond the first ring. */
 const assertReach = (layout) => {
@@ -269,9 +285,14 @@ describe('buildConstellationLayout', () => {
     assertField(layout, fixtureRows())
     const a = layout.nodes.find((n) => n.id === 'a')
     const w1 = layout.nodes.find((n) => n.id === 'w1')
-    expect(a.fieldIndex).toBe(0) // the first ticket takes the first point
-    expect(a.r).toBeCloseTo(FIELD_R0, 6)
+    // 'a' and 'w1' both shared onward: they RESERVE the spiral's first
+    // points (a's is point 0) and sit on the rim, opposite each other.
+    expect(a.fieldIndex).toBe(0)
+    expect(a.rim).toBe(true)
+    expect(w1.rim).toBe(true)
     expect(w1.fieldIndex).toBeGreaterThan(a.fieldIndex)
+    expect(Math.abs(angDiff(a.theta, w1.theta))).toBeCloseTo(Math.PI, 9)
+    expect(a.r).toBeCloseTo(layout.plan.rimRadius, 6)
 
     // Nine creator-sent tickets, one with a large branch: indices rise in
     // ticket order; the branch is placed the moment its sharer is, so the
@@ -364,21 +385,20 @@ describe('buildConstellationLayout', () => {
   it('rule 3: within a fan, siblings spread only as far as the clearance requires — a fan at the top of the ring (names side by side) is wider than the same fan at the side (names stacked)', () => {
     seq = 0
     const rows = [inv('r0', CREATOR), inv('r1', CREATOR), inv('r2', CREATOR), inv('r3', CREATOR)]
-    // Under the field r2 (point 2, 275° — nearly straight up) is the top
-    // fan and r0 (point 0, 0° — straight right) the side fan.
-    for (let i = 0; i < 3; i++) rows.push(inv(`t${i}`, 'user-r2', 'r2', { recipient_name: 'Christina' }))
-    for (let i = 0; i < 3; i++) rows.push(inv(`s${i}`, 'user-r0', 'r0', { recipient_name: 'Christina' }))
+    // Four sharers on the rim, 90° apart from 12 o'clock: r0 at the top
+    // (names side by side) and r1 at the right (names stacked).
+    for (const p of ['r0', 'r1', 'r2', 'r3']) for (let i = 0; i < 3; i++) rows.push(inv(`${p}k${i}`, `user-${p}`, p, { recipient_name: 'Christina' }))
     const layout = buildConstellationLayout({ filmInvites: rows, creatorId: CREATOR })
-    const top = childrenOf(layout, 'r2')
-    const side = childrenOf(layout, 'r0')
+    const top = childrenOf(layout, 'r0')
+    const side = childrenOf(layout, 'r1')
     const spanTop = top[2].dir - top[0].dir
     const spanSide = side[2].dir - side[0].dir
     expect(spanTop).toBeGreaterThan(spanSide)
     expect(spanTop).toBeLessThanOrEqual(FAN_MAX_SPAN + 1e-9)
     // …and the fans are centred on their parents' outward directions (no
     // neighbour collided, so nothing turned).
-    expect(angDiff((top[0].dir + top[2].dir) / 2, layout.nodes.find((n) => n.id === 'r2').dir)).toBeCloseTo(0, 9)
-    expect(angDiff((side[0].dir + side[2].dir) / 2, layout.nodes.find((n) => n.id === 'r0').dir)).toBeCloseTo(0, 9)
+    expect(angDiff((top[0].dir + top[2].dir) / 2, layout.nodes.find((n) => n.id === 'r0').dir)).toBeCloseTo(0, 9)
+    expect(angDiff((side[0].dir + side[2].dir) / 2, layout.nodes.find((n) => n.id === 'r1').dir)).toBeCloseTo(0, 9)
     if (layout.plan.settled) expect(assertClearance(layout)).toBeGreaterThanOrEqual(LABEL_CLEARANCE - 1e-9)
   })
 
@@ -688,21 +708,21 @@ describe('buildConstellationLayout', () => {
     expect(names.some((n) => n === 'ghost' || n === 'pat' || n === 'deepcast')).toBe(false)
   })
 
-  it('the canvas is FITTED to the drawing (a lopsided limb does not mirror empty space about the filmmaker), never smaller than the base canvas, and everything lies inside it', () => {
+  it('the canvas is CENTRED on the filmmaker with equal margins (founder, 16 September 2026), never smaller than the base canvas, and everything lies inside it', () => {
     const circles = buildConstellationLayout({ filmInvites: circlesRows(), creatorId: CREATOR, creatorName: 'Ien' })
     assertOnCanvas(circles)
-    // A lopsided drawing: the filmmaker is NOT at the canvas's middle on
-    // at least one axis (the canvas is fitted, never mirrored about him).
-    expect(Math.abs(circles.cx - circles.width / 2) + Math.abs(circles.cy - circles.height / 2)).toBeGreaterThan(1)
+    // CENTRED (founder, 16 September 2026): the filmmaker sits at the
+    // canvas's exact middle on both axes, equal margins either side.
+    expect(circles.cx).toBeCloseTo(circles.width / 2, 9)
+    expect(circles.cy).toBeCloseTo(circles.height / 2, 9)
     expect(circles.width).toBeGreaterThanOrEqual(900)
     expect(circles.height).toBeGreaterThanOrEqual(715)
     // A small drawing is centred inside the base canvas (900×715 — the
     // reference view's proportion, so the first ring paints at 95px).
     const small = buildConstellationLayout({ filmInvites: [inv('a', CREATOR), inv('b', CREATOR)], creatorId: CREATOR })
     expect([small.width, small.height]).toEqual([900, 715])
-    // …with the DRAWING centred (the filmmaker sits where its balance puts him).
-    expect(small.cx).toBeGreaterThan(300)
-    expect(small.cx).toBeLessThan(600)
+    expect(small.cx).toBeCloseTo(450, 6)
+    expect(small.cy).toBeCloseTo(357.5, 6)
   })
 
   it('show_ghosts flag ON: ghosts join every count and render indistinguishably from real nodes', () => {
@@ -807,12 +827,10 @@ function goldenRows() {
   ]
 }
 
-describe('the viewer’s layout matches the recorded golden shape (re-recorded 2026-09-10 for the reach rule)', () => {
-  // PENDING (16 September 2026): the golden snapshot is re-recorded only
-  // after the founder approves the constellation-fifty renders (the sweep
-  // fix moves every fan a little; the shape it guards is otherwise
-  // unchanged). Skipped, not deleted — un-skip and re-record on approval.
-  it.skip('matches the recorded golden output exactly — and carries no rings, no sector, no kind-specific or gold/dim edge fields', () => {
+describe('the viewer’s layout matches the recorded golden shape (re-recorded 2026-09-16 for the diffusion field and the rim)', () => {
+  // RE-RECORDED 16 September 2026 (third pass) for the diffusion field,
+  // the rim rule and the centred canvas.
+  it('matches the recorded golden output exactly — and carries no rings, no sector, no kind-specific or gold/dim edge fields', () => {
     const opts = { filmInvites: goldenRows(), creatorId: CREATOR, creatorName: 'Ien', viewerInviteId: 'b' }
     expect(JSON.parse(JSON.stringify(buildConstellationLayout(opts)))).toEqual(golden)
     for (const n of golden.nodes) {
@@ -824,7 +842,7 @@ describe('the viewer’s layout matches the recorded golden shape (re-recorded 2
     expect(golden.threadIds.sort()).toEqual(['a', 'b', 'c1', 'c2', 'c3', 'c4', 'd1', 'd2', ROOT_ID].sort())
   })
 
-  it.skip('the creator modal’s layout (no viewer) is the golden geometry with the viewer removed: same positions, labels and edges', () => {
+  it('the creator modal’s layout (no viewer) is the golden geometry with the viewer removed: same positions, labels and edges', () => {
     const modal = buildConstellationLayout({ filmInvites: goldenRows(), creatorId: CREATOR, creatorName: 'Ien' })
     for (const n of modal.nodes) {
       const twin = golden.nodes.find((m) => m.id === n.id)
@@ -860,7 +878,7 @@ describe('the label side — LINES CONNECT DOT TO DOT, names move (founder, 10 S
     expect(assertClearance(layout)).toBeGreaterThanOrEqual(LABEL_CLEARANCE - 1e-9)
     assertLinesWhole(layout)
     const byId = byIdOf(layout)
-    expect(byId.get('lone').labelSide).toBe('out')
+    expect(LABEL_SIDES).toContain(byId.get('lone').labelSide) // a fan leaf: out first, in, then perpendicular when the fan's lines demand it
     expect(['left', 'right']).toContain(byId.get('r1').labelSide)
     expect(['left', 'right']).toContain(byId.get('k-Ben').labelSide)
     for (const n of persons(layout)) {
@@ -1048,9 +1066,15 @@ describe('name size — SHRINK BEFORE HIDE (founder, 11 September 2026): the pla
       }
     } else {
       // No rung settled clean: the rung that loses the fewest names holds
-      // (the builder's reading, pending the founder's word).
-      const lost = (l) => l.plan.hidden + l.plan.colliding
-      for (const px of LABEL_SIZE_LADDER) expect(lost(at(px)), `${px}px loses fewer names than the chosen ${layout.plan.labelPx}px`).toBeGreaterThanOrEqual(lost(layout))
+      // (the builder's reading, pending the founder's word). The ladder's
+      // own attempts share one build — a fan's stagger pattern is decided
+      // once per build and carried down the rungs — so a FRESH build at a
+      // rung is not the ladder's attempt at it; what can be asserted from
+      // outside is that no rung above the chosen one settles clean.
+      for (const px of LABEL_SIZE_LADDER.filter((p) => p > layout.plan.labelPx)) {
+        const above = at(px)
+        expect(above.plan.settled && above.plan.hidden === 0, `${px}px would have settled clean`).toBe(false)
+      }
     }
   })
 })

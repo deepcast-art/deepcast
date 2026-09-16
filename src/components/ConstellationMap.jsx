@@ -637,6 +637,8 @@ export default function ConstellationMap({ layout }) {
         data-plan-settled={layout.plan?.settled ? 'true' : 'false'}
         data-plan-label-px={layout.plan?.labelPx}
         data-plan-spread={layout.plan?.spread}
+        data-plan-field-r0={layout.plan?.fieldR0}
+        data-plan-rim={layout.plan?.rimRadius}
         data-label-px={labelPx}
         role="img"
         aria-label={

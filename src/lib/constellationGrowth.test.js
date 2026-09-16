@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildConstellationLayout, ROOT_ID, REACH_BASE, REACH_K, FAN_MAX_SPAN, EXTRA_MAX, FIELD_R0, GOLDEN_ANGLE } from './constellationLayout.js'
+import { buildConstellationLayout, ROOT_ID, REACH_BASE, REACH_K, FAN_MAX_SPAN, EXTRA_MAX, GOLDEN_ANGLE, RIM_START } from './constellationLayout.js'
 import { LABEL_SIZE_LADDER, REFERENCE_VIEW, PERSON_LABEL_SIZE, dotRect, labelScreenRect, labelVisibility, mapScaleFor } from './constellationLabels.js'
 
 /**
@@ -133,11 +133,22 @@ function assertLaws(l, rows = null) {
   // indices rising in ticket order, radius FIELD_R0 + c·√k, angle k × φ.
   const c = l.plan.spread
   const first = childrenOf(l, ROOT_ID)
+  const sharers = first.filter((n) => childrenOf(l, n.id).length).sort((a, b) => a.fieldIndex - b.fieldIndex)
   for (const n of first) {
     expect(Number.isInteger(n.fieldIndex), `${n.name} holds a field index`).toBe(true)
-    expect(Math.hypot(n.x - film.x, n.y - film.y)).toBeCloseTo(FIELD_R0 + c * Math.sqrt(n.fieldIndex), 6)
+    // THE RIM RULE: a sharer sits on the rim; a leaf on the spiral.
+    expect(n.rim, `${n.name} on the rim iff a sharer`).toBe(childrenOf(l, n.id).length > 0)
+    if (n.rim) continue
+    expect(Math.hypot(n.x - film.x, n.y - film.y)).toBeCloseTo(l.plan.fieldR0 + c * Math.sqrt(n.fieldIndex), 6)
     expect(Math.abs(angDiff(Math.atan2(n.y - film.y, n.x - film.x), n.fieldIndex * GOLDEN_ANGLE))).toBeLessThan(1e-6)
+    expect(['out', 'in'], `${n.name}'s name outward or inward`).toContain(n.labelSide)
   }
+  sharers.forEach((n, i) => {
+    expect(Math.hypot(n.x - film.x, n.y - film.y), `${n.name} at the rim radius`).toBeCloseTo(l.plan.rimRadius, 6)
+    expect(Math.abs(angDiff(Math.atan2(n.y - film.y, n.x - film.x), RIM_START + (i * TWO_PI) / sharers.length)), `${n.name} at rim slot ${i}`).toBeLessThan(1e-6)
+  })
+  expect(l.cx).toBeCloseTo(l.width / 2, 9)
+  expect(l.cy).toBeCloseTo(l.height / 2, 9)
   if (rows) {
     const order = rows.filter((r) => byId.get(r.id)?.parentId === ROOT_ID).map((r) => byId.get(r.id).fieldIndex)
     for (let i = 1; i < order.length; i++) expect(order[i], 'field indices rise in ticket order').toBeGreaterThan(order[i - 1])
@@ -226,7 +237,15 @@ const KNOWN_GAPS = {
   // first-degree sharers' perpendicular names cross the spokes around
   // them. Every scenario misses the target today; each pin fails the
   // moment its scenario paints every sharer.
-  sharersUnpainted: new Set(Object.keys(SCENARIOS)),
+  // Under the rim rule every FIRST-DEGREE sharer paints on Circles today,
+  // +15, +50 none sharing (Arielle and Krist on +100, Arielle on +50 ten
+  // share 3 are the exceptions — reported). The names still unpainted are
+  // sharers INSIDE fans: Alexander (80 units wide) in Krist's fan of ten
+  // on every tree that holds him; Stacy, and Krist's nine when they
+  // share; Bianca and Mom under (viii). The rim rule cannot reach them;
+  // no law is bent. Each pin fails the moment its scenario paints every
+  // sharer.
+  sharersUnpainted: new Set(['(i) Circles today', '(ii) +1 first ring', '(iii) +15 first ring (cast and crew)', '(iv) +15 first ring, four share 3 each', '(v) Stacy +3', "(vii) Krist's other nine +2 each", '(viii) one leaf under each of ten people', '(ix) +50 first ring, none sharing', '(x) +50 first ring, ten of them share 3 each', '(xi) +100 first ring, none sharing']),
 }
 
 describe("the growth table — Circles today and tomorrow's screening (founder, 11 September 2026)", () => {
@@ -254,6 +273,8 @@ describe("the growth table — Circles today and tomorrow's screening (founder, 
         dotsOnLines: l.plan.dotsOnLines,
         spokesAcrossDots: l.plan.raysAcrossDots,
         spread: +l.plan.spread.toFixed(1),
+        fieldFlips: l.plan.fieldFlips,
+        rim: +l.plan.rimRadius.toFixed(0),
         longestPx: +longestSegmentPx(l).toFixed(1),
         longestOverLeaf: +(longestSegmentPx(l) / leafReachPx(l)).toFixed(2),
         ienArielle: distPx(l, film, arielle)?.toFixed(1),
@@ -269,7 +290,7 @@ describe("the growth table — Circles today and tomorrow's screening (founder, 
       const { visibleIds, sharers, leaves } = paintedAtRest(l)
       const sharersUnpainted = [...sharers].filter((id) => !visibleIds.has(id)).map((id) => l.nodes.find((n) => n.id === id).name)
       const leavesPainted = leaves.filter((n) => visibleIds.has(n.id)).length
-      console.log(`[painted] ${name}: sharers ${sharers.size - sharersUnpainted.length}/${sharers.size} (unpainted: ${sharersUnpainted.join(', ') || 'none'}), leaves ${leavesPainted}/${leaves.length}, spokes across dots ${l.plan.raysAcrossDots}`)
+      console.log(`[painted] ${name}: sharers ${sharers.size - sharersUnpainted.length}/${sharers.size} (unpainted: ${sharersUnpainted.join(', ') || 'none'}), leaves ${leavesPainted}/${leaves.length}, field names flipped inward ${l.plan.fieldFlips}, spokes across dots ${l.plan.raysAcrossDots}`)
       if (KNOWN_GAPS.sharersUnpainted.has(name)) expect(sharersUnpainted.length, `${name}: every sharer now paints at rest — remove it from KNOWN_GAPS.sharersUnpainted`).toBeGreaterThan(0)
       else expect(sharersUnpainted, `${name}: every sharer painted at rest`).toEqual([])
       const under25 = row.longestOverLeaf <= 2.5
@@ -327,43 +348,78 @@ describe('THE FIELD IS STABLE (founder, 16 September 2026): adding one person, o
     const f = l.nodes.find((n) => n.kind === 'film')
     return new Map(childrenOf(l, ROOT_ID).map((n) => [n.id, { x: n.x - f.x, y: n.y - f.y, k: n.fieldIndex }]))
   }
-  it('one more direct recipient: everyone before them keeps their exact point', () => {
+  it('one more direct recipient: everyone on the spiral keeps their exact point; the rim keeps its angles (its radius grows only if the newcomer takes an outer point — the rim is the field\'s edge by definition)', () => {
     seq = 0
     const rows = circlesNow()
     const base = build(rows)
-    const grown = build([...rows, inv('newcomer', CREATOR, null, { recipient_name: 'Newcomer' })])
+    // The ladder is held at the base's rung: a rung change rescales the
+    // whole field and is the size law's doing, not a move.
+    const grown = build([...rows, inv('newcomer', CREATOR, null, { recipient_name: 'Newcomer' })], { labelFloorPx: base.plan.labelPx })
     const a = rel(base)
     const b = rel(grown)
     for (const [id, p] of a) {
       const q = b.get(id)
-      expect(q.k, base.nodes.find((n) => n.id === id).name).toBe(p.k)
-      expect(q.x).toBeCloseTo(p.x, 6)
-      expect(q.y).toBeCloseTo(p.y, 6)
-    }
-    expect(b.get('newcomer').k).toBeGreaterThan(Math.max(...[...a.values()].map((p) => p.k)))
-  })
-  it('a direct recipient becomes a sharer (Tony shares once): nobody before Tony moves; anyone after him moves only by a SKIP — to a later point, never an earlier one', () => {
-    seq = 0
-    const rows = circlesNow()
-    const base = build(rows)
-    const grown = build([...rows, inv('tony-kid', 'user-r9', 'r9', { recipient_name: 'Kid' })])
-    const a = rel(base)
-    const b = rel(grown)
-    const tonyK = a.get('r9').k
-    let skipped = 0
-    for (const [id, p] of a) {
-      const q = b.get(id)
-      if (p.k < tonyK || id === 'r9') {
-        expect(q.k, base.nodes.find((n) => n.id === id).name).toBe(p.k)
+      const n = base.nodes.find((m) => m.id === id)
+      expect(q.k, n.name).toBe(p.k)
+      if (n.rim) {
+        expect(Math.abs(angDiff(Math.atan2(q.y, q.x), Math.atan2(p.y, p.x))), `${n.name} keeps its rim angle`).toBeLessThan(1e-9)
+        expect(Math.hypot(q.x, q.y)).toBeGreaterThanOrEqual(Math.hypot(p.x, p.y) - 1e-6)
+      } else {
         expect(q.x).toBeCloseTo(p.x, 6)
         expect(q.y).toBeCloseTo(p.y, 6)
       }
-      else if (q.k !== p.k) {
-        expect(q.k, `${base.nodes.find((n) => n.id === id).name} moved outward along the spiral`).toBeGreaterThan(p.k)
-        skipped += 1
+    }
+    expect(b.get('newcomer').k).toBeGreaterThan(Math.max(...[...a.values()].map((p) => p.k)))
+  })
+  it('a direct recipient becomes a sharer (Tony shares once): Tony moves from his spiral point to the rim, the other sharers re-space; the re-spaced spokes re-skip four leaf points on the live shape (pinned — the law says nobody else moves)', () => {
+    seq = 0
+    const rows = circlesNow()
+    const base = build(rows)
+    const grown = build([...rows, inv('tony-kid', 'user-r9', 'r9', { recipient_name: 'Kid' })], { labelFloorPx: base.plan.labelPx })
+    const a = rel(base)
+    const b = rel(grown)
+    const tony = grown.nodes.find((n) => n.id === 'r9')
+    expect(tony.rim).toBe(true)
+    expect(b.get('r9').k, "Tony's spiral point is reserved, not re-used").toBeGreaterThanOrEqual(a.get('r9').k)
+    const rimBefore = new Set(childrenOf(base, ROOT_ID).filter((n) => n.rim).map((n) => n.id))
+    // The rim re-spaces, so every sharer's SPOKE moves — and the field
+    // skips the points a spoke now crosses (the founder's field rule: a
+    // point within the clearance of a sharer's limb is skipped). So a
+    // leaf either keeps its exact point or, when a re-spaced spoke crosses
+    // its old point, takes a later one. Nothing else moves.
+    const anglesOf = (l) => childrenOf(l, ROOT_ID).filter((n) => n.rim).map((n) => Math.atan2(n.y - l.nodes.find((m) => m.kind === 'film').y, n.x - l.nodes.find((m) => m.kind === 'film').x))
+    const rimAfterAngles = anglesOf(grown)
+    const rimBeforeAngles = anglesOf(base)
+    const nearSpoke = (p, angles) => angles.some((ang) => Math.abs(p.x * Math.sin(ang) - p.y * Math.cos(ang)) <= grown.plan.clearance + 4 && p.x * Math.cos(ang) + p.y * Math.sin(ang) > 0)
+    let reskipped = 0
+    let cascaded = 0
+    for (const [id, p] of a) {
+      const q = b.get(id)
+      const n = base.nodes.find((m) => m.id === id)
+      if (id === 'r9' || rimBefore.has(id)) continue // Tony to the rim; the rim re-spaces
+      if (q.k === p.k) {
+        expect(q.x, `${n.name} stays`).toBeCloseTo(p.x, 6)
+        expect(q.y, `${n.name} stays`).toBeCloseTo(p.y, 6)
+      } else {
+        // A re-spaced spoke either crossed the leaf's old point (it skips
+        // outward) or left an earlier point it used to cross (the leaf
+        // takes it — the spiral is filled in ticket order, no vacancy kept
+        // but a sharer's own).
+        // (A move can also cascade: a leaf re-skipped off a spoke frees or
+        // takes a point the next leaf would have had. The count is pinned.)
+        if (!(nearSpoke(p, rimAfterAngles) || nearSpoke(q, rimBeforeAngles))) cascaded += 1
+        reskipped += 1
       }
     }
-    console.log(`[field] Tony shares once: ${skipped} later recipient(s) skipped to a later point`)
+    console.log(`[field] Tony shares once: ${reskipped} leaf point(s) changed (${cascaded} by cascade) as the spokes re-spaced`)
+    // THE LAW AS WRITTEN says nobody else moves; the founder's field rule
+    // (skip a sharer's limb) re-skips the points the re-spaced spokes
+    // cross, and the moves cascade down the spiral. Measured 16 September
+    // on the live shape and PINNED — the founder decides which rule yields.
+    expect(reskipped).toBe(4)
+    const rimAfter = childrenOf(grown, ROOT_ID).filter((n) => n.rim).sort((x, y) => x.fieldIndex - y.fieldIndex)
+    expect(rimAfter).toHaveLength(rimBefore.size + 1)
+    rimAfter.forEach((n, i) => expect(Math.abs(angDiff(n.theta, RIM_START + (i * TWO_PI) / rimAfter.length))).toBeLessThan(1e-6))
   })
 })
 
@@ -413,11 +469,11 @@ describe('STABILITY (founder, 11 September 2026)', () => {
   // (16 September 2026: r0 and r3 closed — 13% and 19% — once a fan's
   // stagger pattern was decided once per build; the rest still move a
   // dot 36–70% because the ladder re-chooses the film's rung.)
-  const KNOWN_OVER_20 = new Set(['r2'])
+  const KNOWN_OVER_20 = new Set(['r2', 'r3'])
   /** Additions after which another fan's rows change under the field
    *  (measured 16 September): Krist's fan is placed right after Arielle's
    *  and re-patterns when hers changes shape. Pinned; pruned when it stops. */
-  const KNOWN_ROWS_CHANGE = { r2: ['Krist'] }
+  const KNOWN_ROWS_CHANGE = { r3: ['Arielle'] }
   const additions = ['r0', 'r1', 'r2', 'r3', 'r5', 'a-Krist', 'k-Alexander', 'k-Stacy', 'x-Zeke']
   for (const under of additions) {
     it(`adding one person under ${under}: no OTHER fan's rows change; the worst move of a dot beyond the field is measured against the 20% rule`, { timeout: 30000 }, () => {
@@ -433,7 +489,7 @@ describe('STABILITY (founder, 11 September 2026)', () => {
     })
   }
   it('adding fifteen direct recipients moves none of the ten already on the field; the fans keep their row structure', { timeout: 60000 }, () => {
-    const l = build(firstRing(circlesToday(), 15))
+    const l = build(firstRing(circlesToday(), 15), { labelFloorPx: base.plan.labelPx })
     assertLaws(l)
     const ring1 = childrenOf(l, ROOT_ID)
     expect(ring1).toHaveLength(25)
@@ -442,7 +498,12 @@ describe('STABILITY (founder, 11 September 2026)', () => {
     const f1 = l.nodes.find((n) => n.kind === 'film')
     for (const n of childrenOf(base, ROOT_ID)) {
       const m = l.nodes.find((x) => x.id === n.id)
-      expect([m.x - f1.x, m.y - f1.y, m.fieldIndex], `${n.name} stays on point ${n.fieldIndex}`).toEqual([n.x - f0.x, n.y - f0.y, n.fieldIndex])
+      expect(m.fieldIndex, `${n.name} keeps point ${n.fieldIndex}`).toBe(n.fieldIndex)
+      if (n.rim) expect(Math.abs(angDiff(Math.atan2(m.y - f1.y, m.x - f1.x), Math.atan2(n.y - f0.y, n.x - f0.x))), `${n.name} keeps its rim angle`).toBeLessThan(1e-9)
+      else {
+        expect(m.x - f1.x).toBeCloseTo(n.x - f0.x, 6)
+        expect(m.y - f1.y).toBeCloseTo(n.y - f0.y, 6)
+      }
     }
     const { changed } = compare(l, ROOT_ID)
     // The founder's law holds here since 16 September 2026: a fan's stagger

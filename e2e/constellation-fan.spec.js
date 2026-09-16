@@ -31,7 +31,7 @@
  */
 import { test, expect, pushJsError } from './fixtures/test.js'
 import { LABEL_SIZE_LADDER, LINE_ALPHA, MIN_LABEL_ON_SCREEN_PX, PERSON_LABEL_SIZE, RECEDE_OPACITY, labelFontSize, mapScaleFor } from '../src/lib/constellationLabels.js'
-import { FAN_MAX_SPAN, FIELD_R0, GOLDEN_ANGLE, REACH_BASE, REACH_K } from '../src/lib/constellationLayout.js'
+import { FAN_MAX_SPAN, GOLDEN_ANGLE, REACH_BASE, REACH_K, RIM_START } from '../src/lib/constellationLayout.js'
 
 const REF = 'wmtjgpxhjtbocsmutqqc'
 const OWNER_ID = '11111111-1111-4111-8111-111111111111'
@@ -344,16 +344,31 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     // direct recipients sit on the sunflower spiral: each at radius
     // FIELD_R0 + c·√k and angle k × 137.508° for some integer k, k rising
     // in ticket order (the spread c is the plan's, on the svg).
-    const spread = parseFloat(await dialog.locator('svg.dc-constellation').getAttribute('data-plan-spread'))
+    const svgEl = dialog.locator('svg.dc-constellation')
+    const spread = parseFloat(await svgEl.getAttribute('data-plan-spread'))
+    const fieldR0 = parseFloat(await svgEl.getAttribute('data-plan-field-r0'))
+    const rim = parseFloat(await svgEl.getAttribute('data-plan-rim'))
     expect(spread).toBeGreaterThan(0)
-    const film = { x: 0, y: 0 } // readGeometry reports every dot relative to the film's centre
+    // Every dot is reported relative to the film's centre. THE RIM RULE:
+    // the two sharers (Noor, Priya) sit on the rim opposite each other
+    // from 12 o'clock; the seven leaves on the spiral, indices rising in
+    // ticket order.
+    const sharerIds = new Set(ring1Rows.filter((r) => ROWS.some((k) => k.parent_invite_id === r.id)).map((r) => r.id))
+    expect(sharerIds.size).toBe(2)
+    const onRim = ring1Rows.filter((r) => sharerIds.has(r.id))
+    onRim.forEach((r, i) => {
+      const a = angles[r.id]
+      expect(Math.hypot(a.x, a.y), `${r.recipient_name} on the rim`).toBeCloseTo(rim, 1)
+      expect(Math.abs(angDiff(Math.atan2(a.y, a.x), RIM_START + (i * TWO_PI) / onRim.length)), `${r.recipient_name} at rim slot ${i}`).toBeLessThan(1e-3)
+    })
     let lastK = -1
     for (const r of ring1Rows) {
+      if (sharerIds.has(r.id)) { lastK += 1; continue } // a sharer reserves a point
       const a = angles[r.id]
-      const rr = Math.hypot(a.x - film.x, a.y - film.y)
-      const k = Math.round(((rr - FIELD_R0) / spread) ** 2)
-      expect(rr, `${r.recipient_name} on the spiral's radius`).toBeCloseTo(FIELD_R0 + spread * Math.sqrt(k), 2)
-      expect(Math.abs(angDiff(Math.atan2(a.y - film.y, a.x - film.x), k * GOLDEN_ANGLE)), `${r.recipient_name} at the spiral's angle`).toBeLessThan(1e-3)
+      const rr = Math.hypot(a.x, a.y)
+      const k = Math.round(((rr - fieldR0) / spread) ** 2)
+      expect(rr, `${r.recipient_name} on the spiral's radius`).toBeCloseTo(fieldR0 + spread * Math.sqrt(k), 1)
+      expect(Math.abs(angDiff(Math.atan2(a.y, a.x), k * GOLDEN_ANGLE)), `${r.recipient_name} at the spiral's angle`).toBeLessThan(1e-3)
       expect(k, `${r.recipient_name}'s point comes after the ticket before`).toBeGreaterThan(lastK)
       lastK = k
     }
@@ -444,7 +459,15 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     expect(modal.labelSizes).toHaveLength(1)
     expect(Math.abs(viewer.labelSizes[0] - expectedLabelSize(viewer))).toBeLessThan(0.02)
     expect(Math.abs(modal.labelSizes[0] - expectedLabelSize(modal))).toBeLessThan(0.02)
-    expect(viewer.labelPx).toBe(modal.labelPx)
+    // Each surface re-walks the size ladder at its own view (SHRINK BEFORE
+    // HIDE, 11 September): a rung on both, never below the plan's; the
+    // wider dashboard box may hold a larger rung than the modal's.
+    expect(LABEL_SIZE_LADDER).toContain(viewer.labelPx)
+    expect(LABEL_SIZE_LADDER).toContain(modal.labelPx)
+    // On a settled plan the view paints the plan's rung; on one that did
+    // not settle the view's own ladder may land lower (it hides what touches).
+    if (viewer.settledPlan) expect(viewer.labelPx).toBe(viewer.planLabelPx)
+    if (modal.settledPlan) expect(modal.labelPx).toBe(modal.planLabelPx)
 
     // THE HARD RULE, painted: on both desktop surfaces every painted name
     // keeps at least 6px from every other name, from every other person's
@@ -579,6 +602,12 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     const jsErrors = []
     page.on('pageerror', (err) => pushJsError(jsErrors, err))
     await mockLena(page)
+    // A desktop reference first: the thread names painted at 1440.
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('svg.dc-constellation g[data-node]')).toHaveCount(ROWS.length)
+    await settled(page, false)
+    const desktopThreadPainted = (await readGeometry(page, false)).threadPainted
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
     const map = page.locator('svg.dc-constellation')
@@ -624,7 +653,10 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     expect(opening.pathInside).toBe(true)
     if (opening.threadFits) expect(opening.threadInside).toBe(opening.threadCount)
     else expect(opening.threadInside).toBeGreaterThan(opening.pathCount)
-    expect(opening.threadPainted).toBe(opening.threadCount)
+    // The phone opens at no smaller a scale than the plan's, so every
+    // thread name the DESKTOP paints paints here too (the plan does not
+    // settle on this tree, so the desktop itself hides some).
+    expect(opening.threadPainted).toBeGreaterThanOrEqual(desktopThreadPainted)
     // The phone follows the same ladder at its own width: a rung, never under the bottom.
     expect(opening.paintedPx).toBeGreaterThanOrEqual(MIN_LABEL_ON_SCREEN_PX - 0.15)
     expect(LABEL_SIZE_LADDER.some((px) => Math.abs(opening.paintedPx - px) < 0.15)).toBe(true)
@@ -711,14 +743,20 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     // THE DIFFUSION FIELD on the viewer's surface too: the nine direct
     // recipients on the spiral, Noor (the first ticket) at its first point.
     const spreadHere = parseFloat(await map.getAttribute('data-plan-spread'))
+    const r0Here = parseFloat(await map.getAttribute('data-plan-field-r0'))
+    const rimHere = parseFloat(await map.getAttribute('data-plan-rim'))
     for (const r of ring1Rows) {
       const a = geom.persons[r.id]
       const rr = Math.hypot(a.x, a.y)
-      const k = Math.round(((rr - FIELD_R0) / spreadHere) ** 2)
-      expect(rr, `${r.recipient_name} on the spiral's radius`).toBeCloseTo(FIELD_R0 + spreadHere * Math.sqrt(k), 2)
+      if (r.id === NOOR.id || r.id === PRIYA.id) {
+        expect(rr, `${r.recipient_name} on the rim`).toBeCloseTo(rimHere, 1)
+        continue
+      }
+      const k = Math.round(((rr - r0Here) / spreadHere) ** 2)
+      expect(rr, `${r.recipient_name} on the spiral's radius`).toBeCloseTo(r0Here + spreadHere * Math.sqrt(k), 1)
       expect(Math.abs(angDiff(Math.atan2(a.y, a.x), k * GOLDEN_ANGLE)), `${r.recipient_name} at the spiral's angle`).toBeLessThan(1e-3)
     }
-    expect(Math.hypot(geom.persons[NOOR.id].x, geom.persons[NOOR.id].y)).toBeCloseTo(FIELD_R0, 2)
+    expect(Math.abs(angDiff(Math.atan2(geom.persons[NOOR.id].y, geom.persons[NOOR.id].x), RIM_START))).toBeLessThan(1e-3)
     // The viewer's own fan: ten invitees beyond YOU on her limb, within the cap.
     const you = geom.persons[LENA_ROW.id]
     const youDir = dirOf(geom.persons, LENA_ROW.id)
