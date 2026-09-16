@@ -32,13 +32,13 @@ describe('buildTicketEmail — the landing page’s anatomy', () => {
       expect(body).toContain('30 MINUTES')
       expect(body).toContain('Watch for free')
       expect(body).toContain('https://deepcast.art/r/abc123')
-      expect(body).toContain('Deep stories for deep souls.')
+      expect(body).toContain('From broadcasting to deepcasting.')
       expect(body).not.toMatch(/ by /)
     }
     // The order, measured from the body table (the preheader repeats the headline above it).
     const from = m.html.indexOf('<table')
     const i = (s) => m.html.indexOf(s, from)
-    const order = ['BY PRIVATE INVITATION ONLY', 'TICKET&nbsp;NO.&nbsp;41', 'gifted you a film. Watch any time', '&#10035;', 'font-size:28px', 'thumbnail.png', 'Five young believers', 'clock@2x.png', '30 MINUTES', 'Watch for free', 'deepcast-wordmark', 'Deep stories for deep souls.']
+    const order = ['BY PRIVATE INVITATION ONLY', 'TICKET&nbsp;NO.&nbsp;41', 'gifted you a film. Watch any time', '&#10035;', 'font-size:28px', 'thumbnail.png', 'Five young believers', 'clock@2x.png', '30 MINUTES', 'Watch for free', 'deepcast-wordmark', 'From broadcasting to deepcasting.']
     for (let k = 1; k < order.length; k++) expect(i(order[k - 1])).toBeLessThan(i(order[k]))
     // The poster is a link to the return URL; the clock precedes the minutes.
     expect(m.html).toMatch(/<a href="https:\/\/deepcast\.art\/r\/abc123"[^>]*><img src="https:\/\/image\.mux\.com/)
@@ -55,7 +55,7 @@ describe('buildTicketEmail — the landing page’s anatomy', () => {
     expect(m.html).toContain('#080c18')
     expect(m.html).toContain('max-width:480px')
     expect(m.html).not.toMatch(/magiclink|access_token/i)
-    expect(TAGLINE).toBe('Deep stories for deep souls.')
+    expect(TAGLINE).toBe('From broadcasting to deepcasting.')
   })
 
   it('no receiver name: the subject and headline drop it; an email-shaped name never prints', () => {
@@ -96,12 +96,16 @@ describe('buildReminderEmail — the opener, then d–j', () => {
       expect(body).toContain('30 MINUTES')
       expect(body).toContain('Watch for free')
       expect(body).toContain('https://deepcast.art/r/abc123')
-      expect(body).toContain('Deep stories for deep souls.')
-      expect(body).not.toContain('BY PRIVATE INVITATION')
+      expect(body).toContain('From broadcasting to deepcasting.')
+      expect(body).toContain('BY PRIVATE INVITATION ONLY')
       expect(body).not.toContain('no expiration')
     }
+    // The same eyebrow as the ticket email, unbreakable, at the very top.
+    expect(m.text).toContain('TICKET NO. 41')
+    expect(m.html).toContain('TICKET&nbsp;NO.&nbsp;41')
     const from = m.html.indexOf('<table')
     const i = (s) => m.html.indexOf(s, from)
+    expect(i('BY PRIVATE INVITATION ONLY')).toBeLessThan(i('friendly reminder'))
     expect(i('friendly reminder')).toBeLessThan(i('&#10035;'))
     expect(i('&#10035;')).toBeLessThan(i('font-size:28px'))
     // The opener in the ticket headline's own font and size.

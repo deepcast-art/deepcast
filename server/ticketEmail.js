@@ -18,10 +18,11 @@
  *      (films.transmission_hook) — Georgia italic 17px
  *   h. the clock icon + `{RuntimeMinutes} MINUTES` — tracked caps, accent
  *   i. `Watch for free` → /r/{token}
- *   j. the wordmark, and beneath it `Deep stories for deep souls.` — the
- *      shared footer of EVERY Deepcast email built here
- * THE REMINDER opens with `Hey {Receiver}, just a friendly reminder that
- * {Sharer} gifted you a film.` in the same font and size, then d–j.
+ *   j. the wordmark, and beneath it `From broadcasting to deepcasting.` —
+ *      the shared footer of EVERY Deepcast email built here
+ * THE REMINDER carries the same eyebrow (a), then `Hey {Receiver}, just a
+ * friendly reminder that {Sharer} gifted you a film.` in the same font and
+ * size, then d–j.
  * Every colour inline; a plain-text twin with the same words; the link is
  * the person's /r/{token} return link — never an auth token.
  *
@@ -40,7 +41,7 @@ const SERIF = "Georgia, 'Times New Roman', serif"
 const SANS = "system-ui, -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif"
 export const WORDMARK_PATH = '/email/deepcast-wordmark@2x.png'
 export const CLOCK_PATH = '/email/clock@2x.png'
-export const TAGLINE = 'Deep stories for deep souls.'
+export const TAGLINE = 'From broadcasting to deepcasting.'
 
 export function escapeHtml(s) {
   if (s == null || s === '') return ''
@@ -105,6 +106,20 @@ function button(href, label) {
       <a href="${escapeHtml(href)}" style="display:inline-block;padding:16px 32px;${caps(`letter-spacing:3px;color:${ACCENT};text-decoration:none;`)}">${escapeHtml(label)}</a>
     </td></tr>
   </table>`
+}
+
+/** a. The eyebrow — `BY PRIVATE INVITATION ONLY · TICKET NO. {n}`; the
+ *  ticket segment never breaks mid-phrase on a narrow client; the number
+ *  segment drops when the row has none. Shared by both emails. */
+function eyebrow(ticketNo) {
+  const hasNo = Number.isFinite(Number(ticketNo)) && Number(ticketNo) > 0
+  return {
+    text: hasNo ? `BY PRIVATE INVITATION ONLY · TICKET NO. ${ticketNo}` : 'BY PRIVATE INVITATION ONLY',
+    row: row(
+      `<p style="margin:0;${caps(`color:${MUTED};`)}">BY PRIVATE INVITATION ONLY${hasNo ? ` &middot; <span style="white-space:nowrap;">TICKET&nbsp;NO.&nbsp;${escapeHtml(String(ticketNo))}</span>` : ''}</p>`,
+      '0 0 20px 0'
+    ),
+  }
 }
 
 /** d–j: the film block every email shares, then the footer. */
@@ -178,22 +193,17 @@ export function buildTicketEmail({ receiverName, sharerName, ticketNo, filmTitle
   const receiver = firstOrNull(receiverName)
   const sharer = safeFirstName(sharerName)
   const subject = receiver ? `${receiver}, ${sharer} gifted you a film` : `${sharer} gifted you a film`
-  const hasNo = Number.isFinite(Number(ticketNo)) && Number(ticketNo) > 0
-  const stamp = hasNo ? `BY PRIVATE INVITATION ONLY · TICKET NO. ${ticketNo}` : 'BY PRIVATE INVITATION ONLY'
+  const stamp = eyebrow(ticketNo)
   const headline = receiver
     ? `${receiver}, ${sharer} gifted you a film. Watch any time, no expiration.`
     : `${sharer} gifted you a film. Watch any time, no expiration.`
   const minutes = runtimeMinutes(durationSeconds)
   const rows = [
-    // The ticket segment never breaks mid-phrase on a narrow client.
-    row(
-      `<p style="margin:0;${caps(`color:${MUTED};`)}">BY PRIVATE INVITATION ONLY${hasNo ? ` &middot; <span style="white-space:nowrap;">TICKET&nbsp;NO.&nbsp;${escapeHtml(String(ticketNo))}</span>` : ''}</p>`,
-      '0 0 20px 0'
-    ),
+    stamp.row,
     row(`<p class="dc-headline" style="margin:0;font-family:${SERIF};font-style:italic;font-size:30px;line-height:1.2;color:${TEXT};">${escapeHtml(headline)}</p>`, '0 0 28px 0'),
     filmRows({ filmTitle, posterUrl, synopsis, minutes, watchUrl, wordmark, clock }),
   ].join('\n')
-  const text = [stamp, '', headline, '', ...filmText({ filmTitle, synopsis, minutes, watchUrl })].join('\n')
+  const text = [stamp.text, '', headline, '', ...filmText({ filmTitle, synopsis, minutes, watchUrl })].join('\n')
   return { subject, preheader: headline, html: shell({ subject, preheader: headline, rows }), text }
 }
 
@@ -203,7 +213,7 @@ export function buildTicketEmail({ receiverName, sharerName, ticketNo, filmTitle
  * Subject `{Receiver}, watch the film {Sharer} gifted you` (no name →
  * `Watch the film {Sharer} gifted you`).
  */
-export function buildReminderEmail({ receiverName, sharerName, filmTitle, posterUrl, synopsis, durationSeconds, watchUrl, wordmark, clock }) {
+export function buildReminderEmail({ receiverName, sharerName, ticketNo, filmTitle, posterUrl, synopsis, durationSeconds, watchUrl, wordmark, clock }) {
   const receiver = firstOrNull(receiverName)
   const sharer = safeFirstName(sharerName)
   const subject = receiver ? `${receiver}, watch the film ${sharer} gifted you` : `Watch the film ${sharer} gifted you`
@@ -211,10 +221,12 @@ export function buildReminderEmail({ receiverName, sharerName, filmTitle, poster
     ? `Hey ${receiver}, just a friendly reminder that ${sharer} gifted you a film.`
     : `Just a friendly reminder that ${sharer} gifted you a film.`
   const minutes = runtimeMinutes(durationSeconds)
+  const stamp = eyebrow(ticketNo)
   const rows = [
+    stamp.row,
     row(`<p class="dc-headline" style="margin:0;font-family:${SERIF};font-style:italic;font-size:30px;line-height:1.2;color:${TEXT};">${escapeHtml(opener)}</p>`, '0 0 28px 0'),
     filmRows({ filmTitle, posterUrl, synopsis, minutes, watchUrl, wordmark, clock }),
   ].join('\n')
-  const text = [opener, '', ...filmText({ filmTitle, synopsis, minutes, watchUrl })].join('\n')
+  const text = [stamp.text, '', opener, '', ...filmText({ filmTitle, synopsis, minutes, watchUrl })].join('\n')
   return { subject, preheader: opener, html: shell({ subject, preheader: opener, rows }), text }
 }

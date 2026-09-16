@@ -4067,6 +4067,7 @@ async function runReminderSweep({ send }) {
         const message = buildReminderEmail({
           receiverName: r.recipient_name,
           sharerName: r.sender_name,
+          ticketNo: r.ticket_no,
           filmTitle: r.films?.title || 'a film',
           posterUrl: r.films?.mux_playback_id ? filmPosterUrl(r.films.mux_playback_id) : null,
           synopsis: r.films?.transmission_hook || null,
