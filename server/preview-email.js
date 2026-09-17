@@ -35,6 +35,8 @@ if (mode === 'ticket' || mode === 'reminder' || mode === 'pass-it-on') {
       const i = process.argv.indexOf('--hands')
       return chainHands(i < 0 ? ['Ien Chi'] : process.argv[i + 1].split(',').map((s) => s.trim()).filter(Boolean))
     })(),
+    // The sharer named in the email is derived by the builder from `hands`
+    // (the last hand); `sharerName` above is only the lineage-less fallback.
     nodes: nodeUrls(assetBase),
     wordmark: wordmarkUrl(assetBase),
     clock: clockUrl(assetBase),

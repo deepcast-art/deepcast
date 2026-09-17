@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildTicketEmail, buildReminderEmail, buildPassItOnEmail, passItOnUrl, pathRows, pathText, returnUrl, wordmarkUrl, clockUrl, dividerUrl, runtimeMinutes, daysBetween, TAGLINE } from './ticketEmail.js'
+import { buildTicketEmail, buildReminderEmail, buildPassItOnEmail, passItOnUrl, pathRows, pathText, sharerFirstName, returnUrl, wordmarkUrl, clockUrl, dividerUrl, runtimeMinutes, daysBetween, TAGLINE } from './ticketEmail.js'
 import { HOW_FILMS_TRAVEL_LINES, HOW_FILMS_TRAVEL_EMAIL } from '../src/content/howFilmsTravel.js'
 
 /** The fixture mirrors the REAL Circles row (read-only, 2026-09-16): the
@@ -176,17 +176,47 @@ describe('buildPassItOnEmail — founder copy 17 September (third pass), the inb
     expect(noName.html).not.toContain('Hey ')
     expect(buildPassItOnEmail({ ...sample, receiverName: 'alex@example.com' }).subject).toBe('Circles is waiting for you to pass it on')
   })
-  it('the "You experienced…" line names the direct sharer through the one display rule — never an email, "someone" without a name', () => {
-    const m = buildPassItOnEmail(sample)
-    expect(m.html).toContain(EXPERIENCED)
-    expect(m.text).toContain(EXPERIENCED)
-    expect(buildPassItOnEmail({ ...sample, sharerName: 'Maya Ortiz' }).text).toContain('because Maya thought specifically of you')
-    expect(buildPassItOnEmail({ ...sample, sharerName: 'maya@example.com' }).text).toContain('because someone thought specifically of you')
-    expect(buildPassItOnEmail({ ...sample, sharerName: null }).text).toContain('because someone thought specifically of you')
-    expect(buildPassItOnEmail({ ...sample, sharerName: 'maya@example.com' }).html).not.toContain('maya@example.com')
+  it('the "You experienced…" line names the LAST hand of the same chain the path draws — the direct sharer, not the filmmaker', () => {
+    const direct = buildPassItOnEmail(sample) // hands ['Ien']: gifted directly by the filmmaker
+    expect(direct.text).toContain(EXPERIENCED)
+    expect(direct.html).toContain('because Ien thought specifically of you. Who needs it&nbsp;next?')
+    const viaSharer = buildPassItOnEmail({ ...sample, hands: ['Ien', 'Maya'], sharerName: 'Ien Chi' })
+    expect(viaSharer.text).toContain('because Maya thought specifically of you. Who needs it next?')
+    expect(viaSharer.text).not.toContain('because Ien thought')
+    expect(buildPassItOnEmail({ ...sample, hands: ['Ien', '3', 'Maya'] }).text).toContain('because Maya thought')
+    // sender_name stands in only without a usable lineage, through the one display rule; then "someone".
+    expect(sharerFirstName({ hands: ['Ien', 'Maya'], sharerName: 'Zed' })).toBe('Maya')
+    expect(sharerFirstName({ hands: [], sharerName: 'Maya Ortiz' })).toBe('Maya')
+    expect(sharerFirstName({ hands: ['The filmmaker'], sharerName: 'Ien Chi' })).toBe('Ien')
+    expect(sharerFirstName({ hands: [], sharerName: 'maya@example.com' })).toBe('someone')
+    expect(sharerFirstName({ hands: null, sharerName: null })).toBe('someone')
+    expect(buildPassItOnEmail({ ...sample, hands: [], sharerName: 'maya@example.com' }).html).not.toContain('maya@example.com')
     // The invitations count is gone from the email entirely.
-    expect(m.html).not.toMatch(/invitations? to/)
-    expect(m.text).not.toMatch(/invitations? to/)
+    expect(direct.html).not.toMatch(/invitations? to/)
+    expect(direct.text).not.toMatch(/invitations? to/)
+  })
+  it('the spacing rhythm (designer’s spec): explicit paddings and spacer rows on this email only; the shared shell and the other two emails are untouched', () => {
+    const m = buildPassItOnEmail(sample)
+    const withPath = buildPassItOnEmail({ ...sample, hands: ['Ien', 'Maya'] })
+    expect(m.html).toContain('padding:40px 24px 48px 24px') // the shared shell, unchanged
+    expect(m.html).toContain('height:32px;line-height:32px') // + 32 → 72 at the top
+    expect(m.html).toContain('height:16px;line-height:16px') // + 16 → 64 at the bottom
+    expect(m.html).toMatch(/BY PRIVATE INVITATION ONLY[\s\S]*?<\/td><\/tr>/)
+    expect(m.html).toContain('line-height:1.45') // the opener
+    expect(m.html).toMatch(/padding:0 0 32px 0;">\s*<p[^>]*line-height:1.45/) // opener → Films line, no path
+    expect(withPath.html).toMatch(/padding:0 0 40px 0;">\s*<p[^>]*line-height:1.45/) // opener → path
+    expect(withPath.html).toMatch(/padding:0 0 32px 0;">\s*<table[^>]*data-path/) // path → Films line
+    expect(m.html).toMatch(/padding:0 0 40px 0;">\s*<p[^>]*line-height:1.6;[^>]*>Films on Deepcast/)
+    expect(m.html).toMatch(/padding:0 0 24px 0;">\s*<p[^>]*font-size:24px/) // title → poster
+    expect(m.html).toMatch(/padding:0 0 40px 0;">\s*<a href/) // poster → experienced
+    expect(m.html).toMatch(/padding:0 0 32px 0;">\s*<p[^>]*line-height:1.55;[^>]*>You experienced/)
+    expect(m.html).toMatch(/padding:0 0 72px 0;">\s*<table[^>]*>\s*<tr><td style="border:1px solid/) // button → wordmark
+    // The ticket and reminder emails keep their approved values.
+    const t = buildTicketEmail(base)
+    expect(t.html).not.toContain('height:32px;line-height:32px')
+    expect(t.html).toMatch(/BY PRIVATE INVITATION ONLY[\s\S]*?<\/p><\/td><\/tr>/)
+    expect(t.html).toContain("padding:0 0 16px 0;\"><p style=\"margin:0;font-family:system-ui") // eyebrow 16px, as before
+    expect(t.html).toContain('line-height:1.35')
   })
   it('the order: eyebrow · opener · (path) · Films line · divider · title · poster · experienced · button · footer', () => {
     const m = buildPassItOnEmail(sample)
