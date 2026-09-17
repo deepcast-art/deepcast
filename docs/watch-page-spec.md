@@ -121,6 +121,8 @@ Three centered columns, each: a small gold mark (accent, opacity 0.45, in a fixe
 **Link icons (FOUNDER ADDITION, 9 September 2026):** two inline-SVG icon links — Instagram, and a globe for the website — 16px, hairline stroke 1.2, currentColor muted, warm on hover, `target="_blank"` with `rel="noopener noreferrer"`, on their own row ABOVE the eyebrow's caps line, 14px above it, horizontally centred over the word `Filmmaker` (absolute, so the eyebrow's baseline on the photo's edge never moves). `src/components/FilmmakerLinks.jsx`; URLs per film in `src/content/filmStory.js` (`links`; a film without them renders no icons). The same two icons sit beside the founder's name on the About page. No third-party widget, no tracking.
 `Filmmaker · {filmmaker_name} · {filmmaker_location}` eyebrow (11px caps, 0.32em, **muted**; **header restructure 2026-07-25** — was `From the filmmaker · {location}`, and the name moved up from the retired sign-off; each `· phrase` is one unbreakable NBSP-bound unit so narrow screens break only at the `·` boundaries) with a **3.5rem circular photo frame** to its left (`.story-byline`: flex, `align-items: flex-end`, 1rem gap; eyebrow gets `padding-bottom: 0.3125rem` optical lift so the caps sit on the circle's base). The circle is 1px hairline border + `--tint-track` fill — swap in the filmmaker's `<img>` (`{filmmaker_photo}`), keep the frame. Then: serif-italic epigraph (`clamp(1.25rem, 2vw, 1.4375rem)`, warm@0.9), body paragraphs in **Phoenix Light 300, 1.0625rem, line-height 1.85, warm@0.82, max-width 62ch, left-aligned** (the ONE place Light is correct). **The sign-off (`— {filmmaker_name}, director`) is CUT (2026-07-25)** — the section ends with the body text. Story copy is per-film.
 
+**The expand control (FOUNDER DIRECTION, 16 September 2026; desktop ≥900px only):** the story shows the epigraph and the first two paragraphs, then ONE control that reveals the rest and disappears — no re-collapse, no fade mask, no gradient. The rest of the paragraphs stay in the DOM (`#story-rest`, `min-[900px]:hidden` until pressed; focus moves to it on reveal); below 900px nothing hides and the control never renders. The control sits in the next paragraph's slot (`margin-top: 1.375rem`): a 2rem hairline leader (`h-px`, warm at 25%, warm at 50% on hover) then the label in the page's in-place-action style — Phoenix 400, 11px caps, 0.24em, muted, warm on hover — `aria-expanded="false"`, `aria-controls="story-rest"`. Absent when a story has two paragraphs or fewer. Rule and label in `src/lib/storyExpand.js` (`STORY_PARAGRAPHS_SHOWN`, `STORY_EXPAND_LABEL`, `splitStoryBody`, unit-tested); e2e `e2e/story-expand.spec.js`. Three renders went to the founder's design gate (hairline leader — shipped; caps + chevron; serif italic over a full-width rule) as `screenshots.local/viewer-polish/a3-*`. Label `Read the rest` — **PENDING** the founder's stamp.
+
 ### 3e. Comments — "Join the conversation" (FOUNDER ADDITION, 9 September 2026)
 
 `src/components/WatchComments.jsx`, mounted by `ClaimWatch.jsx` inside the main column after the story section and before the footer — **never above the player, never on the landing page.** Rules server-side in `server/commentRules.js` (unit-tested); routes `GET`/`POST /api/films/:filmId/comments` and the owner-only `POST /api/admin/comments/remove`; table `comments` (migration `20260910_comments.sql`, service-role-only: RLS on, zero policies, anon/authenticated grants revoked).
@@ -282,7 +284,7 @@ The founder liked the graph on pure ink (`#080c18`, the `ink` / `bg-page` token)
 
 ## 6. Responsive spec
 
-**< 900px** (single column — natural DOM order, no CSS reordering): masthead → player → rail → creed → story → footer.
+**< 900px** (single column — natural DOM order, no CSS reordering): masthead → player → rail → creed → story (in full — the expand control is desktop-only, §3d) → footer.
 - Shell `max-width: 44rem`.
 - Breathing (mobile has no fold to win): masthead `padding-top: 1.75rem`, conditions `margin-top: 0.625rem`, grid `margin-top: 2rem`.
 - **Player full-bleed**: `width: 100vw; margin-inline: calc(50% - 50vw)`. ⚠ This REQUIRES `overflow-x: hidden` on body (already present) — the pair travels together or the page scrolls sideways on scrollbar-gutter browsers.
@@ -316,6 +318,7 @@ The founder liked the graph on pure ink (`#080c18`, the `ink` / `bg-page` token)
 | Creed 3: `Share intentionally. Each ticket admits one person only.` | FOUNDER (second sentence revised 2026-07-25) |
 | `Filmmaker · {filmmaker_name} · {filmmaker_location}` | FOUNDER (2026-07-25, replacing `From the filmmaker · {location}`; the sign-off `— {name}, director` is cut) |
 | Story epigraph/body | per-film placeholder |
+| Story expand control: `Read the rest` (desktop only; gone once pressed) | builder's default — **PENDING** (2026-09-16, §3d) |
 | Modal eyebrow: `Pass it on` | FOUNDER (2026-07-25; "Make an impact." cut) |
 | `{n} invitations left.` | FOUNDER (2026-09-09 — the invitation/ticket split; was `{n} tickets left.`, the founder-directed whittle) |
 | Charge: `Who needs to see this? Not anyone — the one it will matter to.` | FOUNDER (`needs` in accent) |

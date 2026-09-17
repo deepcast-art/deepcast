@@ -24,6 +24,7 @@ import {
   chainForkFlags,
 } from '../lib/handsChain'
 import { filmStory, filmPosterUrl } from '../content/filmStory'
+import { STORY_EXPAND_LABEL, splitStoryBody } from '../lib/storyExpand'
 import { revealSentence } from '../lib/revealSentence'
 import { NO_TICKETS_MESSAGE } from '../lib/ticketRules'
 import FilmmakerLinks from '../components/FilmmakerLinks'
@@ -741,6 +742,12 @@ export default function ClaimWatch() {
    *  who exits fullscreen and keeps watching inline is never re-forced. */
   const fsAttempted = useRef(false)
   const [rotateHint, setRotateHint] = useState(false)
+  /* The story's expand control (founder direction 2026-09-16): on desktop
+     the story shows the epigraph and the first two paragraphs, then one
+     control that reveals the rest and disappears — no re-collapse, no fade
+     mask. Phones keep the full story (the hiding is a ≥900px class). */
+  const [storyExpanded, setStoryExpanded] = useState(false)
+  const storyRestRef = useRef(null)
 
   /** The hint retires itself: after a few seconds, or as soon as the phone
    *  is actually rotated (legacy gotcha: some browsers fire only resize,
@@ -1065,6 +1072,7 @@ export default function ClaimWatch() {
   /* ── Per-film story + poster (founder amendments C/D) — one module,
      src/content/filmStory.js. No entry → no story section, nothing invented. ── */
   const story = filmStory(link?.muxPlaybackId)
+  const storyBody = splitStoryBody(story?.body)
 
   return (
     <div className={`relative min-h-dvh bg-bg-page text-warm${arrivalFade ? ' dc-watch-arrival' : ''}`}>
@@ -1386,7 +1394,7 @@ export default function ClaimWatch() {
             </p>
 
             <div className="mt-7 max-w-[62ch]">
-              {story.body.map((paragraph, i) => (
+              {storyBody.shown.map((paragraph, i) => (
                 <p
                   key={i}
                   className={`${i > 0 ? 'mt-[1.375rem] ' : ''}font-sans font-light text-[1.0625rem] leading-[1.85] text-warm/80`}
@@ -1394,6 +1402,57 @@ export default function ClaimWatch() {
                   {paragraph}
                 </p>
               ))}
+              {storyBody.rest.length > 0 && (
+                <>
+                  {/* The rest: always in the DOM (phones read it in full),
+                      hidden on desktop until the control is pressed. */}
+                  <div
+                    id="story-rest"
+                    ref={storyRestRef}
+                    tabIndex={-1}
+                    data-story-rest={storyExpanded ? 'expanded' : 'collapsed'}
+                    className={`focus:outline-none${storyExpanded ? '' : ' min-[900px]:hidden'}`}
+                  >
+                    {storyBody.rest.map((paragraph, i) => (
+                      <p
+                        key={storyBody.shown.length + i}
+                        className="mt-[1.375rem] font-sans font-light text-[1.0625rem] leading-[1.85] text-warm/80"
+                      >
+                        {paragraph}
+                      </p>
+                    ))}
+                  </div>
+                  {!storyExpanded && (
+                    /* The control — bare tracked caps (the page's in-place
+                       action style) behind a short hairline leader, sitting
+                       in the next paragraph's slot; desktop only. Gone once
+                       pressed. Label PENDING the founder's stamp. */
+                    <button
+                      type="button"
+                      aria-expanded={false}
+                      aria-controls="story-rest"
+                      data-story-expand
+                      onClick={() => {
+                        setStoryExpanded(true)
+                        requestAnimationFrame(() => storyRestRef.current?.focus({ preventScroll: true }))
+                      }}
+                      className="group mt-[1.375rem] hidden cursor-pointer touch-manipulation items-center gap-4 min-[900px]:inline-flex focus-visible:outline-none"
+                    >
+                      <span
+                        aria-hidden
+                        data-story-leader
+                        className="h-px w-8 bg-warm/25 transition-colors duration-300 group-hover:bg-warm/50 group-focus-visible:bg-warm/50"
+                      />
+                      <span
+                        data-story-label
+                        className="font-sans font-normal text-[11px] uppercase tracking-[0.24em] text-muted transition-colors duration-300 group-hover:text-warm group-focus-visible:text-warm"
+                      >
+                        {STORY_EXPAND_LABEL}
+                      </span>
+                    </button>
+                  )}
+                </>
+              )}
             </div>
 
             {/* The sign-off was CUT 2026-07-25 (founder): the name lives in
