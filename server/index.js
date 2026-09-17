@@ -4340,7 +4340,7 @@ async function runPassItOnSweep({ send }) {
   }
   const results = []
   for (const entry of selected) {
-    const { row, holder, invitationsLeft, hands } = entry
+    const { row, holder, hands } = entry
     const result = await sendReminderRow(row, 'pass_it_on', {
       stampIfUnstamped: async (r) => {
         const { data, error } = await supabase
@@ -4360,10 +4360,12 @@ async function runPassItOnSweep({ send }) {
           // A claimed ticket's person is their account's current name (the
           // canonical-name rule); the typed name only if the account has none.
           receiverName: holder?.name || r.recipient_name,
+          // The direct sharer as stored on the row (the filmmaker's own name
+          // when he gifted it directly); first-named by the builder.
+          sharerName: r.sender_name,
           ticketNo: r.ticket_no,
           filmTitle: r.films?.title || 'this film',
           posterUrl: r.films?.mux_playback_id ? filmPosterUrl(r.films.mux_playback_id) : null,
-          invitationsLeft,
           passUrl: token ? passItOnUrl(baseUrl, token) : `${trimmed}/watch/${encodeURIComponent(r.link_slug)}?pass=1`,
           wordmark: wordmarkUrl(baseUrl),
           dividerImg: dividerUrl(baseUrl),

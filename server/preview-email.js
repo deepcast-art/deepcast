@@ -29,12 +29,6 @@ if (mode === 'ticket' || mode === 'reminder' || mode === 'pass-it-on') {
     durationSeconds: 1803.135633,
     watchUrl: returnUrl('https://deepcast.art', 'a'.repeat(64)),
     passUrl: passItOnUrl('https://deepcast.art', 'a'.repeat(64)),
-    // `--left <n>` for the pass-it-on sample (default 5; `inf` = unlimited).
-    invitationsLeft: (() => {
-      const i = process.argv.indexOf('--left')
-      if (i < 0) return 5
-      return process.argv[i + 1] === 'inf' ? Infinity : Number(process.argv[i + 1])
-    })(),
     // `--hands "Ien Chi,Maya Ortiz"` for the pass-it-on path (origin first;
     // default: gifted directly by the filmmaker — no path shown).
     hands: (() => {

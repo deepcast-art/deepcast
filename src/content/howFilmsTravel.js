@@ -21,15 +21,18 @@ export const HOW_FILMS_TRAVEL = Object.freeze({
 })
 
 /**
- * THE EMAIL VARIANT (founder copy, 17 September 2026, verbatim) — beside
- * the page's lines, deliberately different: "here" has no meaning in an
- * inbox, so the email names the place ("on Deepcast") and calls the film
- * "this story"; the email shows ONE line beneath the poster (the page keeps
+ * THE EMAIL VARIANT (founder copy, 17 September 2026, third pass, verbatim)
+ * — beside the page's lines, deliberately different: "here" has no meaning
+ * in an inbox, so the email names the place ("on Deepcast") and calls the
+ * film "this story"; the email shows ONE how-it-works line (the page keeps
  * all three). The page's lines above stay byte-identical.
  */
 export const HOW_FILMS_TRAVEL_EMAIL = Object.freeze({
   spread: 'Films on Deepcast spread by private invite and real humans only. No algorithms.',
-  reach: 'this story won’t reach anyone new unless you pass it on',
+  /** The opener's reminder clause: "Just a friendly reminder that {reminder}." */
+  reminder: 'if you don’t pass this story on, its journey will end with you',
+  /** Beneath the poster: "{Sharer}" is the direct sharer's first name. */
+  experienced: (sharer) => `You experienced this film because ${sharer} thought specifically of you. Who needs it next?`,
 })
 
 /** The three lines in the page's order, whole. */
