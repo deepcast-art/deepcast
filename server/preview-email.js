@@ -1,7 +1,7 @@
 import { writeFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { join, dirname } from 'path'
-import { buildTicketEmail, buildReminderEmail, returnUrl, wordmarkUrl, clockUrl, dividerUrl } from './ticketEmail.js'
+import { buildTicketEmail, buildReminderEmail, buildPassItOnEmail, returnUrl, passItOnUrl, wordmarkUrl, clockUrl, dividerUrl } from './ticketEmail.js'
 
 /**
  * `node server/preview-email.js ticket` / `… reminder` render the REAL
@@ -11,7 +11,7 @@ import { buildTicketEmail, buildReminderEmail, returnUrl, wordmarkUrl, clockUrl,
  * CLAUDE.md).
  */
 const mode = process.argv[2]
-if (mode === 'ticket' || mode === 'reminder') {
+if (mode === 'ticket' || mode === 'reminder' || mode === 'pass-it-on') {
   // The sample mirrors the REAL Circles row (title, synopsis =
   // films.transmission_hook, runtime, poster — read-only, 2026-09-16); the
   // names are fictional. `--base <url>` points the image assets elsewhere
@@ -27,11 +27,18 @@ if (mode === 'ticket' || mode === 'reminder') {
     synopsis: 'Five young believers gather at a table outside the church — beyond pulpit, doctrine, and dogma — for one unguarded conversation about Christ, God, and life itself.',
     durationSeconds: 1803.135633,
     watchUrl: returnUrl('https://deepcast.art', 'a'.repeat(64)),
+    passUrl: passItOnUrl('https://deepcast.art', 'a'.repeat(64)),
+    // `--left <n>` for the pass-it-on sample (default 5; `inf` = unlimited).
+    invitationsLeft: (() => {
+      const i = process.argv.indexOf('--left')
+      if (i < 0) return 5
+      return process.argv[i + 1] === 'inf' ? Infinity : Number(process.argv[i + 1])
+    })(),
     wordmark: wordmarkUrl(assetBase),
     clock: clockUrl(assetBase),
     dividerImg: dividerUrl(assetBase),
   }
-  const message = mode === 'ticket' ? buildTicketEmail(sample) : buildReminderEmail(sample)
+  const message = mode === 'ticket' ? buildTicketEmail(sample) : mode === 'reminder' ? buildReminderEmail(sample) : buildPassItOnEmail(sample)
   const outPath = join(dirname(fileURLToPath(import.meta.url)), 'email-preview.html')
   writeFileSync(outPath, message.html, 'utf8')
   console.log(`Subject: ${message.subject}`)

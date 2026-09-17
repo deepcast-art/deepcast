@@ -1,0 +1,98 @@
+/**
+ * The pass-it-on sweep's READ side — shared by the hourly tick, the owner's
+ * dry-run route and the read-only CLI (server/pass-it-on-dry-run.js), so
+ * there is ONE loader and one evaluation for "who would be emailed".
+ * Rules: server/passItOnRules.js. Writes (stamp, mint, send) stay in
+ * server/index.js beside the reminders' send loop.
+ */
+import { WATCHED_STATUSES } from '../src/lib/filmStats.js'
+import { evaluatePassItOnRows, PASS_IT_ON_MAX_PER_RUN, PASS_IT_ON_AFTER_DAYS } from './passItOnRules.js'
+import { maskEmail } from './reminderRules.js'
+import { daysBetween } from './ticketEmail.js'
+import { isEmailEventsMissing } from './emailEvents.js'
+
+const BASE_COLUMNS = 'id, film_id, link_slug, status, claimed_email, claimed_by, recipient_email, recipient_name, claimed_at, reminder1_sent_at, reminder2_sent_at, ticket_no'
+const NEW_COLUMNS = 'watched_at, pass_it_on_sent_at'
+const FILM_COLUMNS = 'films(id, title, creator_id, mux_playback_id, show_ghosts)'
+
+/** The select list — with the 20260917 columns, or without them before the
+ *  migration (both then read as null: nothing has been sent, so every
+ *  watched row's anchor is its claim or its last reminder). */
+export function candidateColumns({ migrated = true } = {}) {
+  return migrated ? `${BASE_COLUMNS}, ${NEW_COLUMNS}, ${FILM_COLUMNS}` : `${BASE_COLUMNS}, ${FILM_COLUMNS}`
+}
+
+/**
+ * Load and evaluate every watched, claimed, accounted row. Returns
+ * { evaluated, selected, migrated } — `selected` is the capped, ordered
+ * due list; `evaluated` carries every reason. Throws on a database error
+ * other than the missing-column window.
+ */
+export async function loadPassItOnCandidates(supabase, now = new Date()) {
+  let migrated = true
+  let query = () => {
+    let q = supabase
+      .from('invites')
+      .select(candidateColumns({ migrated }))
+      .in('status', WATCHED_STATUSES)
+      .not('claimed_email', 'is', null)
+      .not('claimed_by', 'is', null)
+      .order('claimed_at', { ascending: true })
+      .limit(PASS_IT_ON_MAX_PER_RUN * 80)
+    if (migrated) q = q.is('pass_it_on_sent_at', null)
+    return q
+  }
+  let { data: rows, error } = await query()
+  if (error && isEmailEventsMissing(error)) {
+    migrated = false
+    ;({ data: rows, error } = await query())
+  }
+  if (error) throw error
+  const list = rows || []
+  const filmIds = [...new Set(list.map((r) => r.film_id))]
+  const holderIds = [...new Set(list.map((r) => r.claimed_by).filter(Boolean))]
+  const [holdersRes, walletsRes, invitesRes] = await Promise.all([
+    holderIds.length ? supabase.from('users').select('id, role, team_creator_id, name').in('id', holderIds) : { data: [] },
+    holderIds.length ? supabase.from('film_tickets').select('user_id, film_id, balance, unlimited').in('user_id', holderIds) : { data: [] },
+    filmIds.length ? supabase.from('invites').select('id, film_id, status, parent_invite_id, sender_id').in('film_id', filmIds).limit(10000) : { data: [] },
+  ])
+  for (const r of [holdersRes, walletsRes, invitesRes]) if (r.error) throw r.error
+  const filmsById = {}
+  for (const r of list) if (r.films) filmsById[r.film_id] = r.films
+  const holdersById = Object.fromEntries((holdersRes.data || []).map((u) => [u.id, u]))
+  const walletsByKey = Object.fromEntries((walletsRes.data || []).map((w) => [`${w.user_id}:${w.film_id}`, w]))
+  const invitesByFilm = {}
+  for (const inv of invitesRes.data || []) (invitesByFilm[inv.film_id] ||= []).push(inv)
+  const evaluated = evaluatePassItOnRows(list, { now, filmsById, holdersById, walletsByKey, invitesByFilm })
+  const selected = evaluated
+    .filter((x) => x.reason === null)
+    .sort((a, b) => a.anchor - b.anchor)
+    .slice(0, PASS_IT_ON_MAX_PER_RUN)
+  return { evaluated, selected, migrated }
+}
+
+/** The MASKED preview of one evaluated entry — what a route or a log may show. */
+export function previewEntry(entry, now = new Date()) {
+  const { row, invitationsLeft, anchor, reason } = entry
+  return {
+    inviteId: row.id,
+    filmId: row.film_id,
+    filmTitle: row.films?.title || null,
+    ticketNo: row.ticket_no,
+    to: maskEmail(row.claimed_email),
+    status: row.status,
+    invitationsLeft: invitationsLeft === Infinity ? 'unlimited' : invitationsLeft,
+    anchor: anchor == null ? null : new Date(anchor).toISOString(),
+    daysSince: anchor == null ? null : daysBetween(new Date(anchor).toISOString(), now),
+    ...(reason ? { excluded: reason } : {}),
+  }
+}
+
+/** Exclusion reasons tallied — the dry run's "why not the others". */
+export function tallyReasons(evaluated) {
+  const tally = {}
+  for (const e of evaluated) if (e.reason) tally[e.reason] = (tally[e.reason] || 0) + 1
+  return tally
+}
+
+export { PASS_IT_ON_AFTER_DAYS, PASS_IT_ON_MAX_PER_RUN }

@@ -24,7 +24,7 @@ export function markWatchedDecision({ invite, callerId = null, now = new Date() 
     return { ok: true, already: true, status: invite.status }
   }
   if (invite.status !== 'claimed') {
-    return { ok: false, status: 409, error: `A ${invite.status || 'blank'} ticket cannot be marked watched` }
+    return { ok: false, status: 409, error: 'This ticket cannot be marked watched' }
   }
   const at = now instanceof Date ? now : new Date(now)
   return { ok: true, already: false, update: { status: 'watched', watched_at: at.toISOString() } }

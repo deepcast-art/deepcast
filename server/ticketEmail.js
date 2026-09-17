@@ -31,6 +31,7 @@
  * Palette: background #080c18 · text #dddddd · accent #b1a180 · muted #9a9890.
  */
 import { safeFirstName } from '../src/lib/displayName.js'
+import { HOW_FILMS_TRAVEL } from '../src/content/howFilmsTravel.js'
 
 const BG = '#080c18'
 const TEXT = '#dddddd'
@@ -73,6 +74,12 @@ const trimBase = (baseUrl) => String(baseUrl || '').replace(/\/$/, '')
  *  reminder) minted; only its hash is stored. */
 export function returnUrl(baseUrl, token) {
   return `${trimBase(baseUrl)}/r/${encodeURIComponent(token)}`
+}
+
+/** The pass-it-on email's link: the return link plus `?pass=1`, which the
+ *  arrival forwards to the watch page so the pass-it-on modal opens. */
+export function passItOnUrl(baseUrl, token) {
+  return `${returnUrl(baseUrl, token)}?pass=1`
 }
 
 /** The email assets' absolute URLs on the public site. */
@@ -245,5 +252,81 @@ export function buildReminderEmail({ receiverName, sharerName, ticketNo, filmTit
     filmRows({ filmTitle, posterUrl, synopsis, minutes, watchUrl, wordmark, clock, dividerImg }),
   ].join('\n')
   const text = [stamp.text, '', opener, '', ...filmText({ filmTitle, synopsis, minutes, watchUrl })].join('\n')
+  return { subject, preheader: opener, html: shell({ subject, preheader: opener, rows }), text }
+}
+
+/** "You have 3 invitations to give." — singular for 1; null when unlimited
+ *  (Infinity) or unknown, so the line is simply omitted. */
+export function invitationsLine(n) {
+  if (!Number.isFinite(n) || n < 1) return null
+  return n === 1 ? 'You have 1 invitation to give.' : `You have ${n} invitations to give.`
+}
+
+/**
+ * The "pass it on" email (founder decisions 16–17 September 2026) — to a
+ * person who watched and never shared, once, three days after the last
+ * touch. Subject `{Receiver}, {FilmTitle} is waiting for you to pass it on`
+ * (no name → `{FilmTitle} is waiting for you to pass it on`). The 16 Sep
+ * skeleton: the eyebrow (a), then `Hey {Receiver}, just a friendly reminder
+ * that this film won’t reach anyone new, unless you pass it on.` (the watch
+ * page's own second line, HOW_FILMS_TRAVEL — never paraphrased), the
+ * divider, the title, the poster (a link), then the page's other two lines,
+ * quiet, as the explanation of how it works, then `You have {n} invitations
+ * to give.` (omitted when unlimited), the button `Pass it on` → the return
+ * link with ?pass=1, the wordmark and the tagline.
+ */
+export function buildPassItOnEmail({ receiverName, ticketNo, filmTitle, posterUrl, invitationsLeft, passUrl, wordmark, dividerImg }) {
+  const receiver = firstOrNull(receiverName)
+  const subject = receiver ? `${receiver}, ${filmTitle} is waiting for you to pass it on` : `${filmTitle} is waiting for you to pass it on`
+  const reach = HOW_FILMS_TRAVEL.reach.text
+  const reachLower = reach.charAt(0).toLowerCase() + reach.slice(1)
+  const opener = receiver ? `Hey ${receiver}, just a friendly reminder that ${reachLower}` : `Just a friendly reminder that ${reachLower}`
+  const stamp = eyebrow(ticketNo)
+  const invitations = invitationsLine(invitationsLeft)
+  const quiet = (text, pad) =>
+    row(`<p style="margin:0;font-family:${SERIF};font-style:italic;font-size:16px;line-height:1.55;color:${MUTED};">${escapeHtml(text)}</p>`, pad)
+  const rows = [
+    stamp.row,
+    headlineRow(opener),
+    row(divider(dividerImg), '0 0 28px 0'),
+    row(`<p style="margin:0;font-family:${SERIF};font-style:italic;font-size:24px;line-height:1.25;color:${TEXT};">${escapeHtml(filmTitle)}</p>`, '0 0 16px 0'),
+    posterUrl
+      ? row(
+          `<a href="${escapeHtml(passUrl)}" style="display:block;text-decoration:none;"><img src="${escapeHtml(posterUrl)}" width="432" alt="${escapeHtml(filmTitle)}" style="display:block;width:100%;max-width:432px;height:auto;aspect-ratio:16/9;object-fit:cover;border:0;" /></a>`,
+          '0 0 20px 0'
+        )
+      : '',
+    quiet(HOW_FILMS_TRAVEL.spread.text, '0 0 12px 0'),
+    quiet(HOW_FILMS_TRAVEL.share.text, invitations ? '0 0 20px 0' : '0 0 28px 0'),
+    invitations
+      ? row(`<p style="margin:0;font-family:${SERIF};font-style:italic;font-size:16px;line-height:1.55;color:${TEXT};">${escapeHtml(invitations)}</p>`, '0 0 28px 0')
+      : '',
+    row(button(passUrl, 'Pass it on'), '0 0 48px 0'),
+    row(`<img src="${escapeHtml(wordmark)}" width="120" height="29" alt="deepcast" style="display:block;width:120px;height:auto;border:0;" />`, '0 0 10px 0'),
+    row(`<p style="margin:0;${caps(10, 0.22, `color:${MUTED};`)}">${escapeHtml(TAGLINE)}</p>`, '0'),
+  ]
+    .filter(Boolean)
+    .join('\n')
+  const text = [
+    stamp.text,
+    '',
+    opener,
+    '',
+    '✳',
+    '',
+    filmTitle,
+    '',
+    HOW_FILMS_TRAVEL.spread.text,
+    HOW_FILMS_TRAVEL.share.text,
+    invitations ? '' : null,
+    invitations,
+    '',
+    `Pass it on: ${passUrl}`,
+    '',
+    'deepcast',
+    TAGLINE,
+  ]
+    .filter((l) => l !== null)
+    .join('\n')
   return { subject, preheader: opener, html: shell({ subject, preheader: opener, rows }), text }
 }

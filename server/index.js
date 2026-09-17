@@ -57,7 +57,7 @@ import {
   COMMENT_UNAVAILABLE_MESSAGE,
 } from './commentRules.js'
 import { safeFirstName } from '../src/lib/displayName.js'
-import { buildTicketEmail, buildReminderEmail, returnUrl, wordmarkUrl, clockUrl, dividerUrl, daysBetween } from './ticketEmail.js'
+import { buildTicketEmail, buildReminderEmail, buildPassItOnEmail, returnUrl, passItOnUrl, wordmarkUrl, clockUrl, dividerUrl, daysBetween } from './ticketEmail.js'
 import {
   selectReminderRows,
   isDryRun,
@@ -73,6 +73,8 @@ import { returnLinkDecision, isWellFormedReturnToken, mayMintSession, RETURN_TOK
 import { emailEventRow, isEmailEventsMissing } from './emailEvents.js'
 import { markWatchedDecision } from './markWatchedRules.js'
 import { computeEmailStats } from '../src/lib/emailStats.js'
+import { passItOnLive } from './passItOnRules.js'
+import { loadPassItOnCandidates, previewEntry as passItOnPreview, tallyReasons as tallyPassItOnReasons } from './passItOnSweep.js'
 
 const app = express()
 app.use(cors())
@@ -4337,9 +4339,108 @@ async function reminderSweepTick() {
     reminderSweepInFlight = false
   }
 }
+/* ============ THE PASS-IT-ON EMAIL — the same hourly tick ============
+ * (founder decisions 2026-09-16/17 — a deliberate reversal of "never an
+ * unrequested email", recorded in docs/ledger/emails.md; rules in
+ * server/passItOnRules.js, the loader in server/passItOnSweep.js). Once per
+ * invite, ever: the row is STAMPED FIRST (pass_it_on_sent_at, conditional),
+ * then sent through the one dispatcher; a rejected send clears the stamp and
+ * restores the previous return token. SENDS only when PASS_IT_ON_LIVE ===
+ * '1'; otherwise logs the masked would-send list. */
+let passItOnSweepInFlight = false
+
+async function runPassItOnSweep({ send }) {
+  const now = new Date()
+  const baseUrl = resolveBaseUrl(APP_URL, null)
+  const { evaluated, selected, migrated } = await loadPassItOnCandidates(supabase, now)
+  const rows = selected.map((e) => passItOnPreview(e, now))
+  const excluded = tallyPassItOnReasons(evaluated)
+  const base = { live: false, baseUrl, migrated, count: rows.length, rows, excluded, sent: [], failed: [], skipped: [] }
+  if (!send) return base
+  if (!migrated) return { ...base, error: 'the 20260917 migration has not been applied; nothing sent' }
+  if (/localhost|127\.0\.0\.1/i.test(baseUrl)) {
+    console.warn('[pass-it-on] APP_URL is not the public site — nothing sent')
+    return { ...base, error: 'APP_URL is not set' }
+  }
+  const results = []
+  for (const entry of selected) {
+    const { row, holder, invitationsLeft } = entry
+    const result = await sendReminderRow(row, 'pass_it_on', {
+      stampIfUnstamped: async (r) => {
+        const { data, error } = await supabase
+          .from('invites')
+          .update({ pass_it_on_sent_at: new Date().toISOString() })
+          .eq('id', r.id)
+          .is('pass_it_on_sent_at', null)
+          .select('id')
+        if (error) throw error
+        return (data || []).length
+      },
+      send: async (r) => {
+        const previous = await readReturnTokenState(r.id)
+        const [filmmaker, token] = await Promise.all([filmmakerContact(r.films?.creator_id), mintReturnToken(r.id)])
+        const trimmed = String(baseUrl || '').replace(/\/$/, '')
+        const message = buildPassItOnEmail({
+          // A claimed ticket's person is their account's current name (the
+          // canonical-name rule); the typed name only if the account has none.
+          receiverName: holder?.name || r.recipient_name,
+          ticketNo: r.ticket_no,
+          filmTitle: r.films?.title || 'this film',
+          posterUrl: r.films?.mux_playback_id ? filmPosterUrl(r.films.mux_playback_id) : null,
+          invitationsLeft,
+          passUrl: token ? passItOnUrl(baseUrl, token) : `${trimmed}/watch/${encodeURIComponent(r.link_slug)}?pass=1`,
+          wordmark: wordmarkUrl(baseUrl),
+          dividerImg: dividerUrl(baseUrl),
+        })
+        try {
+          await deliverEmail(
+            withReplyTo({ to: r.claimed_email, subject: message.subject, html: message.html, text: message.text }, filmmaker.email),
+            { event: { inviteId: r.id, kind: 'pass_it_on', returnTokenHash: token ? hashReturnToken(token) : null } }
+          )
+        } catch (e) {
+          if (token) await restoreReturnTokenState(r.id, previous)
+          throw e
+        }
+        console.log('[pass-it-on] sent — invite:', r.id, 'to:', maskEmail(r.claimed_email))
+      },
+      clearStamp: async (r) => {
+        const { error } = await supabase.from('invites').update({ pass_it_on_sent_at: null }).eq('id', r.id)
+        if (error) throw error
+      },
+      log: (...args) => console.warn('[pass-it-on]', ...args),
+    })
+    results.push({ ...result, to: maskEmail(row.claimed_email) })
+  }
+  return {
+    ...base,
+    live: true,
+    sent: results.filter((x) => x.outcome === 'sent'),
+    failed: results.filter((x) => x.outcome === 'failed'),
+    skipped: results.filter((x) => x.outcome === 'skipped'),
+  }
+}
+
+async function passItOnSweepTick() {
+  if (passItOnSweepInFlight) return
+  passItOnSweepInFlight = true
+  try {
+    const live = passItOnLive()
+    const result = await runPassItOnSweep({ send: live })
+    if (live) {
+      console.log(`[pass-it-on] sweep — sent ${result.sent.length}, failed ${result.failed.length}, skipped ${result.skipped.length}${result.error ? ` — ${result.error}` : ''}`)
+    } else {
+      console.log(`[pass-it-on] sweep (PASS_IT_ON_LIVE is not 1 — nothing sent) — ${result.count} row(s) due:`, result.rows.map((r) => r.to).join(', ') || '(none)')
+    }
+  } catch (e) {
+    console.warn('[pass-it-on] sweep failed (next hour retries):', e?.message || e)
+  } finally {
+    passItOnSweepInFlight = false
+  }
+}
+
 const reminderFirstTimer = setTimeout(() => {
-  reminderSweepTick()
-  setInterval(reminderSweepTick, REMINDER_SWEEP_MS).unref()
+  reminderSweepTick().then(passItOnSweepTick)
+  setInterval(() => reminderSweepTick().then(passItOnSweepTick), REMINDER_SWEEP_MS).unref()
 }, REMINDER_FIRST_SWEEP_MS)
 reminderFirstTimer.unref()
 
@@ -4373,6 +4474,36 @@ app.post('/api/admin/reminders/run', async (req, res) => {
     }
     console.error('[reminders] run failed:', err)
     return res.status(500).json({ error: 'Reminder run failed' })
+  }
+})
+
+/**
+ * POST /api/admin/pass-it-on/run — the owner's window on the pass-it-on
+ * sweep (the ADMIN_USER_ID pin, verified session). Default (`?dry=1`): the
+ * would-send list, addresses masked, plus every exclusion reason tallied.
+ * `?dry=0`: run a sweep now — it still sends only when PASS_IT_ON_LIVE === '1'.
+ */
+app.post('/api/admin/pass-it-on/run', async (req, res) => {
+  try {
+    const caller = await requireAdminCaller(req, res)
+    if (!caller) return
+    const dry = isDryRun(req.query)
+    if (dry) {
+      const result = await runPassItOnSweep({ send: false })
+      return res.json({ dry: true, passItOnLive: passItOnLive(), ...result })
+    }
+    if (passItOnSweepInFlight) return res.status(409).json({ error: 'a sweep is already in flight' })
+    passItOnSweepInFlight = true
+    try {
+      const live = passItOnLive()
+      const result = await runPassItOnSweep({ send: live })
+      return res.json({ dry: false, passItOnLive: live, ...result })
+    } finally {
+      passItOnSweepInFlight = false
+    }
+  } catch (err) {
+    console.error('[pass-it-on] run failed:', err)
+    return res.status(500).json({ error: 'Pass-it-on run failed' })
   }
 })
 

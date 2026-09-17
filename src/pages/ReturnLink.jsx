@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import { saveClaimStash } from '../lib/claimStash'
@@ -27,6 +27,12 @@ const OTP_EXCHANGE_TIMEOUT_MS = 8000
 export default function ReturnLink() {
   const { token } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  /** The pass-it-on email's link is /r/{token}?pass=1 (2026-09-17): its
+   *  reader has already watched, so the arrival skips the landing (which
+   *  would bounce a watched owner to the dashboard) and opens the watch page
+   *  with the pass-it-on modal. */
+  const passItOn = Boolean(searchParams.get('pass'))
   const started = useRef(false)
 
   // Runs ONCE per mount, guarded by a ref: the token must be POSTed exactly
@@ -56,6 +62,10 @@ export default function ReturnLink() {
           }
         }
         saveClaimStash({ slug: result.slug, inviteId: result.inviteId, filmId: result.filmId, claimedEmail: result.email })
+        if (passItOn) {
+          navigate(`/watch/${encodeURIComponent(result.slug)}?pass=1`, { replace: true })
+          return
+        }
         navigate(`/${encodeURIComponent(result.slug)}`, { replace: true, state: { returnArrival: true } })
         return
       }
@@ -65,7 +75,7 @@ export default function ReturnLink() {
       }
       navigate(`/login?next=${encodeURIComponent('/return')}`, { replace: true })
     })()
-  }, [token, navigate])
+  }, [token, navigate, passItOn])
 
   return (
     <div className="min-h-dvh flex items-center justify-center bg-bg-page">

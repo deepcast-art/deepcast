@@ -37,5 +37,8 @@ export function emailEventRow(event, { now = new Date() } = {}) {
  *  yet — the routes keep working, they just record nothing. */
 export function isEmailEventsMissing(error) {
   const msg = String(error?.message || error || '')
-  return /email_events|watched_at|pass_it_on_sent_at/.test(msg)
+  if (!/email_events|watched_at|pass_it_on_sent_at/.test(msg)) return false
+  // PostgREST / Postgres wording for an absent relation or column — a
+  // permission or connection error naming the table is NOT "not migrated".
+  return /does not exist|schema cache|could not find/i.test(msg)
 }

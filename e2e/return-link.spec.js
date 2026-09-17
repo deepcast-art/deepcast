@@ -114,6 +114,30 @@ test.describe('/r/{token}', () => {
     expect(jsErrors).toEqual([])
   })
 
+  test('the pass-it-on email’s link (?pass=1): the token is spent, the watch page opens with the pass-it-on modal, closing clears the param', async ({ page }) => {
+    const bodies = []
+    await page.route('**/api/invites/return', (route) => {
+      bodies.push(route.request().postDataJSON())
+      return route.fulfill({ json: { status: 'ok', slug: 'alex-h4k2', inviteId: 'inv-you', filmId: 'film-1', email: 'alex@example.com', sessionTokenHash: null } })
+    })
+    await page.goto(`/r/${TOKEN}?pass=1`, { waitUntil: 'domcontentloaded' })
+    // No landing, no prologue: the reader has already watched — straight to
+    // the watch page, the modal open by itself.
+    await expect(page).toHaveURL(/\/watch\/alex-h4k2\?pass=1$/, { timeout: 15000 })
+    const modal = page.locator('#passiton-modal')
+    await expect(modal).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('Alex, Ien saw this and thought of you.')).toHaveCount(0)
+    expect(bodies).toEqual([{ token: TOKEN }])
+    // Closing clears the param; a reload is an ordinary visit — no modal.
+    await modal.getByRole('button', { name: 'Close' }).click()
+    await expect(modal).toHaveCount(0)
+    await expect(page).toHaveURL(/\/watch\/alex-h4k2$/)
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('button', { name: 'Pass it on' })).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('#passiton-modal')).toHaveCount(0)
+    expect(jsErrors).toEqual([])
+  })
+
   test('a reload mid-prologue does not replay it — the marker lives in the history entry once', async ({ page }) => {
     await page.route('**/api/invites/return', (route) =>
       route.fulfill({ json: { status: 'ok', slug: 'alex-h4k2', inviteId: 'inv-you', filmId: 'film-1', email: 'alex@example.com', sessionTokenHash: null } })
