@@ -13,8 +13,12 @@ import {
   visibleComments,
   isMissingTableError,
   resolveCommentAuthorFacts,
+  ownCommentDecision,
+  isMissingColumnError,
   COMMENT_CLAIM_COLUMNS,
   CLAIM_COLUMNS_THE_DECISION_READS,
+  COMMENT_ROW_COLUMNS,
+  COMMENT_ROW_COLUMNS_LEGACY,
 } from './commentRules.js'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -304,5 +308,47 @@ describe('resolveCommentAuthorFacts — the number beside every comment', () => 
     expect(block.match(/\.select\(COMMENT_CLAIM_COLUMNS\)/g)).toHaveLength(2)
     expect(block).not.toMatch(/\.select\('[^']*claimed_by[^']*'\)/)
     expect(block).toContain('resolveCommentAuthorFacts(')
+  })
+})
+
+describe('ownCommentDecision — a claimant edits and removes their OWN comments (founder, 2026-09-16)', () => {
+  const row = (over = {}) => ({ id: 'c1', film_id: 'film-1', user_id: 'user-1', deleted_at: null, ...over })
+
+  it('admits the author of a live comment on this film', () => {
+    expect(ownCommentDecision({ callerId: 'user-1', comment: row(), filmId: 'film-1' })).toEqual({ ok: true })
+  })
+
+  it('refuses without a verified caller (401)', () => {
+    expect(ownCommentDecision({ callerId: '', comment: row(), filmId: 'film-1' })).toMatchObject({ ok: false, status: 401 })
+  })
+
+  it('refuses anyone but the author (403) — the founder included; his path is the admin route', () => {
+    expect(ownCommentDecision({ callerId: 'user-2', comment: row(), filmId: 'film-1' })).toMatchObject({ ok: false, status: 403 })
+    expect(ownCommentDecision({ callerId: 'creator-1', comment: row(), filmId: 'film-1' })).toMatchObject({ ok: false, status: 403 })
+  })
+
+  it('a missing, removed, or other-film comment is "no longer here" (404) — even for its author', () => {
+    expect(ownCommentDecision({ callerId: 'user-1', comment: null, filmId: 'film-1' })).toMatchObject({ ok: false, status: 404 })
+    expect(ownCommentDecision({ callerId: 'user-1', comment: row({ deleted_at: '2026-09-16T00:00:00Z' }), filmId: 'film-1' })).toMatchObject({ ok: false, status: 404 })
+    expect(ownCommentDecision({ callerId: 'user-1', comment: row({ film_id: 'film-2' }), filmId: 'film-1' })).toMatchObject({ ok: false, status: 404 })
+  })
+
+  it('never trusts a client-shaped id: only user_id on the row decides', () => {
+    expect(ownCommentDecision({ callerId: 'user-1', comment: row({ user_id: null, author: 'user-1' }), filmId: 'film-1' })).toMatchObject({ ok: false, status: 403 })
+  })
+})
+
+describe('the edited_at migration window', () => {
+  it('the full row list adds only edited_at to the legacy list', () => {
+    expect(COMMENT_ROW_COLUMNS).toBe(`${COMMENT_ROW_COLUMNS_LEGACY}, edited_at`)
+  })
+
+  it('isMissingColumnError recognises Postgres and PostgREST forms, and nothing else', () => {
+    expect(isMissingColumnError({ code: '42703' })).toBe(true)
+    expect(isMissingColumnError({ code: 'PGRST204', message: "Could not find the 'edited_at' column of 'comments' in the schema cache" })).toBe(true)
+    expect(isMissingColumnError({ message: 'column comments.edited_at does not exist' })).toBe(true)
+    expect(isMissingColumnError({ code: '42P01', message: 'relation "public.comments" does not exist' })).toBe(false)
+    expect(isMissingColumnError({ code: '23514', message: 'check constraint' })).toBe(false)
+    expect(isMissingColumnError(null)).toBe(false)
   })
 })

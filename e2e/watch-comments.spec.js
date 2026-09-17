@@ -10,7 +10,12 @@
  *  - a visitor without a claim on this film sees NO section (the server's
  *    403), and a stash-only signed-out viewer never even asks;
  *  - the founder removes a comment and it vanishes, its reply with it;
- *  - the filmmaker's own watch page renders the section (creator access).
+ *  - the filmmaker's own watch page renders the section (creator access);
+ *  - OWN COMMENTS (founder decision 2026-09-16): the author sees "Edit"
+ *    and "Remove" on their own comments and neither on anyone else's; an
+ *    edit persists (the author-only edit route, "· edited" on the name
+ *    line); the author's Remove hides the comment; the founder still
+ *    removes anything.
  */
 import { test, expect, pushJsError } from './fixtures/test.js'
 
@@ -148,6 +153,28 @@ function mockCommentsApi(page, { viewer, initial = [], readStatus = 200 }) {
     return live.filter((c) => !c.parentId || tops.has(c.parentId))
   }
   const routes = [
+    page.route(`**/api/films/${FILM_ID}/comments/*/edit`, (route) => {
+      const req = route.request()
+      const id = req.url().match(/comments\/([^/]+)\/edit/)[1]
+      const body = req.postDataJSON()
+      calls.push({ method: 'EDIT', id, authorization: req.headers()['authorization'] || null, body })
+      const target = comments.find((c) => c.id === id && !c.deleted)
+      if (!target) return route.fulfill({ status: 404, json: { error: 'That comment is no longer here' } })
+      if (!target.own) return route.fulfill({ status: 403, json: { error: 'Only the person who wrote a comment can change it' } })
+      target.body = body.body
+      target.editedAt = new Date().toISOString()
+      return route.fulfill({ json: { comment: target } })
+    }),
+    page.route(`**/api/films/${FILM_ID}/comments/*/remove`, (route) => {
+      const req = route.request()
+      const id = req.url().match(/comments\/([^/]+)\/remove/)[1]
+      calls.push({ method: 'OWN_REMOVE', id, authorization: req.headers()['authorization'] || null, body: req.postDataJSON?.() ?? null })
+      const target = comments.find((c) => c.id === id && !c.deleted)
+      if (!target) return route.fulfill({ status: 404, json: { error: 'That comment is no longer here' } })
+      if (!target.own) return route.fulfill({ status: 403, json: { error: 'Only the person who wrote a comment can change it' } })
+      target.deleted = true
+      return route.fulfill({ json: { removed: true, changed: 1 } })
+    }),
     page.route(`**/api/films/${FILM_ID}/comments`, (route) => {
       const req = route.request()
       calls.push({ method: req.method(), authorization: req.headers()['authorization'] || null, body: req.postDataJSON?.() ?? null })
@@ -161,6 +188,8 @@ function mockCommentsApi(page, { viewer, initial = [], readStatus = 200 }) {
         parentId: body.parentCommentId || null,
         body: body.body,
         createdAt: new Date().toISOString(),
+        editedAt: null,
+        own: true,
         author: { firstName: viewer.firstName, ticketNo: viewer.ticketNo, isCreator: viewer.isCreator },
       }
       comments.push(row)
@@ -427,5 +456,146 @@ test.describe('comments — "Join the conversation" on the watch page', () => {
     })
     expect(afterStory).toBe(true)
     expect(jsErrors).toEqual([])
+  })
+
+  test('own comments (founder, 2026-09-16): the author sees Edit and Remove on theirs only; an edit persists with "· edited"; Remove hides it', async ({ page }) => {
+    const jsErrors = []
+    page.on('pageerror', (err) => pushJsError(jsErrors, err))
+    await mockMedia(page)
+    await mockClaimant(page)
+    const api = mockCommentsApi(page, {
+      viewer: VIEWER_SOFIA,
+      initial: [
+        ...SEED,
+        {
+          id: 'c2',
+          parentId: null,
+          body: 'I keep thinking about the last scene.',
+          createdAt: minutesAgo(30),
+          editedAt: null,
+          own: true,
+          author: { firstName: 'Sofia', ticketNo: 41, isCreator: false },
+        },
+        {
+          id: 'c3',
+          parentId: 'c1',
+          body: 'Same.',
+          createdAt: minutesAgo(10),
+          editedAt: null,
+          own: true,
+          author: { firstName: 'Sofia', ticketNo: 41, isCreator: false },
+        },
+      ],
+    })
+    await api.ready
+
+    await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
+    const section = page.getByRole('region', { name: 'Join the conversation' })
+    await expect(section.locator('article')).toHaveCount(3)
+
+    // Marcus's comment: Reply only — no Edit, no Remove for a claimant who did not write it.
+    const marcus = section.locator('article[data-comment-id="c1"]')
+    await expect(marcus.getByRole('button', { name: 'Reply' })).toBeVisible()
+    await expect(marcus.getByRole('button', { name: 'Edit' })).toHaveCount(0)
+    await expect(marcus.getByRole('button', { name: 'Remove' })).toHaveCount(0)
+    // Sofia's own top-level comment and her own reply: Edit and Remove beside Reply (replies have no Reply).
+    const own = section.locator('article[data-comment-id="c2"]')
+    await expect(own.getByRole('button', { name: 'Reply' })).toBeVisible()
+    await expect(own.getByRole('button', { name: 'Edit' })).toBeVisible()
+    await expect(own.getByRole('button', { name: 'Remove' })).toBeVisible()
+    const ownReply = section.locator('article[data-comment-id="c3"]')
+    await expect(ownReply.getByRole('button', { name: 'Edit' })).toBeVisible()
+    await expect(ownReply.getByRole('button', { name: 'Remove' })).toBeVisible()
+    await expect(own).not.toContainText('edited')
+
+    // Edit: the body swaps for the prefilled composer with Save / Cancel.
+    await own.getByRole('button', { name: 'Edit' }).click()
+    const field = own.getByLabel('Edit your comment')
+    await expect(field).toBeVisible()
+    await expect(field).toHaveValue('I keep thinking about the last scene.')
+    await expect(field).toBeFocused()
+    await expect(own.getByRole('button', { name: 'Save' })).toBeVisible()
+    await expect(own.getByRole('button', { name: 'Cancel' })).toBeVisible()
+    await expect(own.getByRole('button', { name: 'Edit' })).toHaveCount(0)
+    // The top composer is untouched; no identity line inside the edit composer.
+    await expect(section.getByPlaceholder('Write a comment')).toHaveCount(2)
+    await expect(own.getByText('You’ll appear as')).toHaveCount(0)
+    // Cancel restores the body, nothing sent.
+    await own.getByRole('button', { name: 'Cancel' }).click()
+    await expect(own).toContainText('I keep thinking about the last scene.')
+    await expect(own.getByRole('button', { name: 'Edit' })).toBeVisible()
+    expect(api.calls.filter((c) => c.method === 'EDIT')).toHaveLength(0)
+
+    // Save: the author-only route with the verified session and only the body; the list refreshes with "· edited".
+    await own.getByRole('button', { name: 'Edit' }).click()
+    await own.getByLabel('Edit your comment').fill('I keep thinking about the last scene — and the silence after it.')
+    await own.getByRole('button', { name: 'Save' }).click()
+    await expect(own).toContainText('I keep thinking about the last scene — and the silence after it.')
+    await expect(own).toContainText('· edited')
+    await expect(own.getByRole('button', { name: 'Save' })).toHaveCount(0)
+    const edit = api.calls.find((c) => c.method === 'EDIT')
+    expect(edit).toMatchObject({ id: 'c2', authorization: 'Bearer fake-jwt', body: { body: 'I keep thinking about the last scene — and the silence after it.' } })
+    // Marcus's line never gains the marker.
+    await expect(marcus).not.toContainText('edited')
+
+    // An empty save never leaves the browser.
+    await own.getByRole('button', { name: 'Edit' }).click()
+    await own.getByLabel('Edit your comment').fill('   ')
+    await own.getByRole('button', { name: 'Save' }).click()
+    await expect(own.getByText('Write something first.')).toBeVisible()
+    expect(api.calls.filter((c) => c.method === 'EDIT')).toHaveLength(1)
+    await own.getByRole('button', { name: 'Cancel' }).click()
+
+    // Remove: two clicks exactly like the founder's, on the author's route; the comment vanishes.
+    await ownReply.getByRole('button', { name: 'Remove' }).click()
+    await expect(ownReply.getByRole('button', { name: 'Confirm remove' })).toBeVisible()
+    await section.getByRole('heading', { name: 'Join the conversation' }).click()
+    await expect(ownReply.getByRole('button', { name: 'Remove' })).toBeVisible()
+    expect(api.calls.filter((c) => c.method === 'OWN_REMOVE')).toHaveLength(0)
+    await ownReply.getByRole('button', { name: 'Remove' }).click()
+    await ownReply.getByRole('button', { name: 'Confirm remove' }).click()
+    await expect(section.locator('article[data-comment-id="c3"]')).toHaveCount(0)
+    await expect(section.locator('article')).toHaveCount(2)
+    const removal = api.calls.find((c) => c.method === 'OWN_REMOVE')
+    expect(removal).toMatchObject({ id: 'c3', authorization: 'Bearer fake-jwt' })
+    // The founder's admin route was never touched by a claimant.
+    expect(api.calls.filter((c) => c.method === 'REMOVE')).toHaveLength(0)
+    expect(jsErrors).toEqual([])
+  })
+
+  test('the founder still removes anyone’s comment (admin route) and edits only his own', async ({ page }) => {
+    await mockMedia(page)
+    await mockCreatorSession(page)
+    await page.route(`**/api/films/${FILM_ID}/watch`, (route) => route.fulfill({ json: FILM_WATCH }))
+    const api = mockCommentsApi(page, {
+      viewer: VIEWER_FOUNDER,
+      initial: [
+        ...SEED,
+        {
+          id: 'c2',
+          parentId: null,
+          body: 'Thank you all for watching.',
+          createdAt: minutesAgo(3),
+          editedAt: minutesAgo(1),
+          own: true,
+          author: { firstName: 'Ien', ticketNo: 1, isCreator: true },
+        },
+      ],
+    })
+    await api.ready
+    await page.goto(`/watch/film/${FILM_ID}`, { waitUntil: 'domcontentloaded' })
+    const section = page.getByRole('region', { name: 'Join the conversation' })
+    await expect(section.locator('article')).toHaveCount(2)
+    const marcus = section.locator('article[data-comment-id="c1"]')
+    const own = section.locator('article[data-comment-id="c2"]')
+    await expect(marcus.getByRole('button', { name: 'Remove' })).toBeVisible()
+    await expect(marcus.getByRole('button', { name: 'Edit' })).toHaveCount(0)
+    await expect(own.getByRole('button', { name: 'Edit' })).toBeVisible()
+    await expect(own.getByRole('button', { name: 'Remove' })).toBeVisible()
+    await expect(own).toContainText('· edited')
+    await marcus.getByRole('button', { name: 'Remove' }).click()
+    await marcus.getByRole('button', { name: 'Confirm remove' }).click()
+    await expect(section.locator('article[data-comment-id="c1"]')).toHaveCount(0)
+    expect(api.calls.find((c) => c.method === 'REMOVE')).toMatchObject({ body: { commentId: 'c1' } })
   })
 })

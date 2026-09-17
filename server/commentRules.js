@@ -20,8 +20,16 @@
  *  - SOFT DELETE: a comment with deleted_at disappears for everyone, and
  *    its replies with it — decided at read time (visibleComments), so a
  *    stray reply row can never resurface a removed thread.
+ *  - OWN COMMENTS (founder decision 2026-09-16): any claimant may edit
+ *    and remove their OWN comments — author-only, decided on the verified
+ *    caller's id against the row's user_id (never an id from the client);
+ *    the founder keeps Remove on everything through the admin route. An
+ *    edit obeys the same body rules and the same rate window as posting;
+ *    removal is the existing soft delete with deleted_by = the author.
  *  - DEPLOY SAFETY: when the table does not exist yet, the read route
  *    returns an empty list and the post route a quiet 503 — never a crash.
+ *    When the edited_at column does not exist yet (the migration window),
+ *    reads and edits retry without it (isMissingColumnError).
  *  - THE NUMBER ON EVERY COMMENT (2026-09-16, the live bug): the ticket
  *    number beside a commenter's name is resolved from that person's claim
  *    on THIS film — and the decision filters claims by film_id, so the
@@ -101,6 +109,30 @@ export function commentAccessDecision({ callerId, film, claimedInvites = [] }) {
 }
 
 /**
+ * The comment row columns the routes select — with edited_at (2026-09-16),
+ * and the list to fall back to while that column does not exist yet.
+ */
+export const COMMENT_ROW_COLUMNS = 'id, film_id, user_id, parent_comment_id, body, created_at, deleted_at, edited_at'
+export const COMMENT_ROW_COLUMNS_LEGACY = 'id, film_id, user_id, parent_comment_id, body, created_at, deleted_at'
+
+/**
+ * May this verified caller edit or remove THIS comment? Author-only: the
+ * row's user_id must equal the verified caller's id, the row must belong
+ * to the film in the URL, and it must not already be removed. The founder's
+ * moderation is a separate, admin-pinned path — this rule never widens it.
+ */
+export function ownCommentDecision({ callerId, comment, filmId }) {
+  const caller = str(callerId)
+  if (!caller) return { ok: false, status: 401, error: 'Not authenticated' }
+  const gone = { ok: false, status: 404, error: 'That comment is no longer here' }
+  if (!comment || str(comment.film_id) !== str(filmId) || comment.deleted_at) return gone
+  if (str(comment.user_id) !== caller) {
+    return { ok: false, status: 403, error: 'Only the person who wrote a comment can change it' }
+  }
+  return { ok: true }
+}
+
+/**
  * Display facts for a set of commenters, resolved at read time: first name
  * through the one display rule (safeFirstName — never an email), the
  * ticket number from that person's claim on THIS film (the creator's is
@@ -177,6 +209,15 @@ export function visibleComments(rows = []) {
       const t = str(a.created_at).localeCompare(str(b.created_at))
       return t !== 0 ? t : str(a.id).localeCompare(str(b.id))
     })
+}
+
+/** Is this PostgREST/Postgres error "that column does not exist" (the
+ *  edited_at migration window)? */
+export function isMissingColumnError(error) {
+  if (!error) return false
+  const code = str(error.code)
+  if (code === '42703' || code === 'PGRST204') return true
+  return /could not find the .* column|column .* does not exist/i.test(str(error.message))
 }
 
 /** Is this PostgREST/Postgres error "the comments table does not exist"? */

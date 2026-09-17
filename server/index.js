@@ -48,8 +48,12 @@ import {
   resolveThreadParent,
   visibleComments,
   isMissingTableError,
+  isMissingColumnError,
+  ownCommentDecision,
   resolveCommentAuthorFacts,
   COMMENT_CLAIM_COLUMNS,
+  COMMENT_ROW_COLUMNS,
+  COMMENT_ROW_COLUMNS_LEGACY,
   COMMENT_UNAVAILABLE_MESSAGE,
 } from './commentRules.js'
 import { safeFirstName } from '../src/lib/displayName.js'
@@ -1428,11 +1432,25 @@ async function resolveCommentAuthors(film, userIds) {
   return resolveCommentAuthorFacts({ film, userIds: ids, users: users || [], claims: claims || [] })
 }
 
-const serializeComment = (row, author) => ({
+/**
+ * Run a comments query that names the row columns, once with edited_at and
+ * — while that column does not exist yet (the 2026-09-16 migration window)
+ * — again without it. `run(columns)` returns the PostgREST result.
+ */
+async function withCommentColumns(run) {
+  const first = await run(COMMENT_ROW_COLUMNS)
+  if (first.error && isMissingColumnError(first.error)) return run(COMMENT_ROW_COLUMNS_LEGACY)
+  return first
+}
+
+/** `own`: the row is the verified caller's (a boolean — no id leaves). */
+const serializeComment = (row, author, callerId = null) => ({
   id: row.id,
   parentId: row.parent_comment_id || null,
   body: row.body,
   createdAt: row.created_at,
+  editedAt: row.edited_at || null,
+  own: Boolean(callerId) && String(row.user_id || '') === String(callerId),
   author: author || { firstName: safeFirstName(null), ticketNo: null, isCreator: false },
 })
 
@@ -1447,11 +1465,9 @@ app.get('/api/films/:filmId/comments', async (req, res) => {
     if (!ctx) return
     const { authUser, film, access } = ctx
 
-    const { data: rows, error } = await supabase
-      .from('comments')
-      .select('id, film_id, user_id, parent_comment_id, body, created_at, deleted_at')
-      .eq('film_id', film.id)
-      .order('created_at', { ascending: true })
+    const { data: rows, error } = await withCommentColumns((columns) =>
+      supabase.from('comments').select(columns).eq('film_id', film.id).order('created_at', { ascending: true })
+    )
     if (error && !isMissingTableError(error)) throw error
     const visible = visibleComments(error ? [] : rows || [])
 
@@ -1462,7 +1478,7 @@ app.get('/api/films/:filmId/comments', async (req, res) => {
     ])
 
     return res.json({
-      comments: visible.map((r) => serializeComment(r, authors.get(String(r.user_id)))),
+      comments: visible.map((r) => serializeComment(r, authors.get(String(r.user_id)), authUser.id)),
       viewer: {
         firstName: safeFirstName(viewerProfile?.data?.name),
         ticketNo: access.ticketNo,
@@ -1533,20 +1549,134 @@ app.post('/api/films/:filmId/comments', async (req, res) => {
     const rate = rateLimitDecision(recentCount)
     if (!rate.ok) return res.status(rate.status).json({ error: rate.error })
 
-    const { data: inserted, error: insertErr } = await supabase
-      .from('comments')
-      .insert({ film_id: film.id, user_id: authUser.id, parent_comment_id: parentId, body })
-      .select('id, film_id, user_id, parent_comment_id, body, created_at, deleted_at')
-      .single()
+    const { data: inserted, error: insertErr } = await withCommentColumns((columns) =>
+      supabase
+        .from('comments')
+        .insert({ film_id: film.id, user_id: authUser.id, parent_comment_id: parentId, body })
+        .select(columns)
+        .single()
+    )
     if (insertErr && isMissingTableError(insertErr)) {
       return res.status(503).json({ error: COMMENT_UNAVAILABLE_MESSAGE })
     }
     if (insertErr) throw insertErr
 
     const authors = await resolveCommentAuthors(film, [authUser.id])
-    return res.json({ comment: serializeComment(inserted, authors.get(String(authUser.id))) })
+    return res.json({ comment: serializeComment(inserted, authors.get(String(authUser.id)), authUser.id) })
   } catch (err) {
     console.error('comments post error:', err)
+    return res.status(500).json({ error: COMMENT_UNAVAILABLE_MESSAGE })
+  }
+})
+
+/** Load one comment row for an own-comment action; answers 503 on a
+ *  missing table and returns undefined, else the row (or null). */
+async function loadOwnCommentTarget(req, res) {
+  const commentId = String(req.params.id || '').trim()
+  if (!commentId) {
+    res.status(400).json({ error: 'A comment id is required' })
+    return undefined
+  }
+  const { data: comment, error } = await supabase
+    .from('comments')
+    .select('id, film_id, user_id, deleted_at')
+    .eq('id', commentId)
+    .maybeSingle()
+  if (error && isMissingTableError(error)) {
+    res.status(503).json({ error: COMMENT_UNAVAILABLE_MESSAGE })
+    return undefined
+  }
+  if (error) throw error
+  return comment || null
+}
+
+/**
+ * POST /api/films/:filmId/comments/:id/edit — {body}. The AUTHOR only
+ * (founder decision 2026-09-16): the verified token's user must equal the
+ * row's user_id — never an id from the client. Same body rules and the
+ * same rate window as posting; stamps edited_at (retrying without the
+ * column while the migration has not run).
+ */
+app.post('/api/films/:filmId/comments/:id/edit', async (req, res) => {
+  try {
+    const ctx = await requireCommentAccess(req, res)
+    if (!ctx) return
+    const { authUser, film } = ctx
+
+    const body = normalizeCommentBody(req.body?.body)
+    const bodyError = commentBodyError(body)
+    if (bodyError) return res.status(400).json({ error: bodyError })
+
+    const comment = await loadOwnCommentTarget(req, res)
+    if (comment === undefined) return
+    const own = ownCommentDecision({ callerId: authUser.id, comment, filmId: film.id })
+    if (!own.ok) return res.status(own.status).json({ error: own.error })
+
+    const { count: recentCount, error: countErr } = await supabase
+      .from('comments')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', authUser.id)
+      .gte('created_at', rateLimitWindowStart())
+    if (countErr) throw countErr
+    const rate = rateLimitDecision(recentCount)
+    if (!rate.ok) return res.status(rate.status).json({ error: rate.error })
+
+    // The update is pinned to the verified author AND the film a second
+    // time in the query itself, so no race can edit another person's row.
+    const patch = (columns) =>
+      columns === COMMENT_ROW_COLUMNS ? { body, edited_at: new Date().toISOString() } : { body }
+    const { data: updated, error: updateErr } = await withCommentColumns((columns) =>
+      supabase
+        .from('comments')
+        .update(patch(columns))
+        .eq('id', comment.id)
+        .eq('user_id', authUser.id)
+        .eq('film_id', film.id)
+        .is('deleted_at', null)
+        .select(columns)
+        .maybeSingle()
+    )
+    if (updateErr) throw updateErr
+    if (!updated) return res.status(404).json({ error: 'That comment is no longer here' })
+
+    const authors = await resolveCommentAuthors(film, [authUser.id])
+    return res.json({ comment: serializeComment(updated, authors.get(String(authUser.id)), authUser.id) })
+  } catch (err) {
+    console.error('comments edit error:', err)
+    return res.status(500).json({ error: COMMENT_UNAVAILABLE_MESSAGE })
+  }
+})
+
+/**
+ * POST /api/films/:filmId/comments/:id/remove — the AUTHOR only (founder
+ * decision 2026-09-16). The existing soft delete: deleted_at + deleted_by =
+ * the author; the read route then hides the comment and its replies for
+ * everyone. Idempotent through the rule: an already-removed comment
+ * answers 404 ("no longer here"), never a second stamp.
+ */
+app.post('/api/films/:filmId/comments/:id/remove', async (req, res) => {
+  try {
+    const ctx = await requireCommentAccess(req, res)
+    if (!ctx) return
+    const { authUser, film } = ctx
+
+    const comment = await loadOwnCommentTarget(req, res)
+    if (comment === undefined) return
+    const own = ownCommentDecision({ callerId: authUser.id, comment, filmId: film.id })
+    if (!own.ok) return res.status(own.status).json({ error: own.error })
+
+    const { data: rows, error } = await supabase
+      .from('comments')
+      .update({ deleted_at: new Date().toISOString(), deleted_by: authUser.id })
+      .eq('id', comment.id)
+      .eq('user_id', authUser.id)
+      .eq('film_id', film.id)
+      .is('deleted_at', null)
+      .select('id')
+    if (error) throw error
+    return res.json({ removed: true, changed: (rows || []).length })
+  } catch (err) {
+    console.error('comments remove error:', err)
     return res.status(500).json({ error: COMMENT_UNAVAILABLE_MESSAGE })
   }
 })
