@@ -1,7 +1,8 @@
 import { writeFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { join, dirname } from 'path'
-import { buildTicketEmail, buildReminderEmail, buildPassItOnEmail, returnUrl, passItOnUrl, wordmarkUrl, clockUrl, dividerUrl } from './ticketEmail.js'
+import { buildTicketEmail, buildReminderEmail, buildPassItOnEmail, returnUrl, passItOnUrl, wordmarkUrl, clockUrl, dividerUrl, nodeUrls } from './ticketEmail.js'
+import { chainHands } from '../src/lib/handsChain.js'
 
 /**
  * `node server/preview-email.js ticket` / `… reminder` render the REAL
@@ -34,6 +35,13 @@ if (mode === 'ticket' || mode === 'reminder' || mode === 'pass-it-on') {
       if (i < 0) return 5
       return process.argv[i + 1] === 'inf' ? Infinity : Number(process.argv[i + 1])
     })(),
+    // `--hands "Ien Chi,Maya Ortiz"` for the pass-it-on path (origin first;
+    // default: gifted directly by the filmmaker — no path shown).
+    hands: (() => {
+      const i = process.argv.indexOf('--hands')
+      return chainHands(i < 0 ? ['Ien Chi'] : process.argv[i + 1].split(',').map((s) => s.trim()).filter(Boolean))
+    })(),
+    nodes: nodeUrls(assetBase),
     wordmark: wordmarkUrl(assetBase),
     clock: clockUrl(assetBase),
     dividerImg: dividerUrl(assetBase),

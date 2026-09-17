@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { buildTicketEmail, buildReminderEmail, buildPassItOnEmail, invitationsLine, passItOnUrl, returnUrl, wordmarkUrl, clockUrl, dividerUrl, runtimeMinutes, daysBetween, TAGLINE } from './ticketEmail.js'
-import { HOW_FILMS_TRAVEL_LINES } from '../src/content/howFilmsTravel.js'
+import { buildTicketEmail, buildReminderEmail, buildPassItOnEmail, invitationsLine, passItOnUrl, pathRows, pathText, returnUrl, wordmarkUrl, clockUrl, dividerUrl, runtimeMinutes, daysBetween, TAGLINE } from './ticketEmail.js'
+import { HOW_FILMS_TRAVEL_LINES, HOW_FILMS_TRAVEL_EMAIL } from '../src/content/howFilmsTravel.js'
 
 /** The fixture mirrors the REAL Circles row (read-only, 2026-09-16): the
  *  film's title, its synopsis line (films.transmission_hook — the same field
@@ -146,7 +146,8 @@ describe('helpers', () => {
   })
 })
 
-describe('buildPassItOnEmail — the watch page’s own words, never paraphrased (founder, 17 September 2026)', () => {
+describe('buildPassItOnEmail — founder copy 17 September (second pass), the inbox variant of the page’s words', () => {
+  const nodes = { hand: 'https://deepcast.art/email/node-hand@2x.png', you: 'https://deepcast.art/email/node-you@2x.png', next: 'https://deepcast.art/email/node-next@2x.png' }
   const sample = {
     receiverName: 'Alex Rivera',
     ticketNo: 41,
@@ -156,61 +157,83 @@ describe('buildPassItOnEmail — the watch page’s own words, never paraphrased
     passUrl: 'https://deepcast.art/r/abc123?pass=1',
     wordmark: base.wordmark,
     dividerImg: base.dividerImg,
+    // `hands` are DISPLAY-READY first names — chainHands' output, as the sweep passes them.
+    hands: ['Ien'],
+    nodes,
   }
-  it('the founder’s subject and opener, verbatim; the two other lines beneath the poster; the count; the button', () => {
+  const OPENER = 'Hey Alex, thanks for watching. Just a friendly reminder that this story won’t reach anyone new unless you pass it on.'
+  const ONE_LINE = 'Films on Deepcast spread by private invite and real humans only. No algorithms.'
+  it('the subject, the opener (both variants), the preheader', () => {
     const m = buildPassItOnEmail(sample)
     expect(m.subject).toBe('Alex, Circles is waiting for you to pass it on')
-    expect(m.preheader).toBe('Hey Alex, just a friendly reminder that this film won’t reach anyone new, unless you pass it on.')
+    expect(m.preheader).toBe(OPENER)
+    expect(m.html).toContain(OPENER)
+    expect(m.text).toContain(OPENER)
+    const noName = buildPassItOnEmail({ ...sample, receiverName: null })
+    expect(noName.subject).toBe('Circles is waiting for you to pass it on')
+    expect(noName.preheader).toBe('Thanks for watching. Just a friendly reminder that this story won’t reach anyone new unless you pass it on.')
+    expect(noName.html).not.toContain('Hey ')
+    // An email address is never a name.
+    expect(buildPassItOnEmail({ ...sample, receiverName: 'alex@example.com' }).subject).toBe('Circles is waiting for you to pass it on')
+  })
+  it('ONE line beneath the poster — the inbox variant; the page’s "here" line and the ticket line are absent', () => {
+    const m = buildPassItOnEmail(sample)
     for (const body of [m.html, m.text]) {
-      expect(body).toContain('BY PRIVATE INVITATION ONLY')
-      expect(body).toContain('Hey Alex, just a friendly reminder that this film won’t reach anyone new, unless you pass it on.')
-      expect(body).toContain('Films here spread by private invite and real humans only. No algorithms.')
-      expect(body).toContain('Share intentionally. Each ticket admits one person only.')
-      expect(body).toContain('You have 3 invitations to give.')
-      expect(body).toContain('Pass it on')
+      expect(body).toContain(ONE_LINE)
+      expect(body).not.toContain('Films here spread')
+      expect(body).not.toContain('Share intentionally')
+      expect(body).not.toContain('Watch for free')
       expect(body).toContain('https://deepcast.art/r/abc123?pass=1')
       expect(body).toContain(TAGLINE)
-      expect(body).not.toContain('Watch for free')
     }
-    // Order in the html: eyebrow → opener → title → poster → the two lines → count → button → wordmark.
-    // (measured inside the table — the preheader repeats the opener first)
     const bodyStart = m.html.indexOf('<table')
     const i = (s) => m.html.indexOf(s, bodyStart)
-    expect(i('BY PRIVATE INVITATION ONLY')).toBeLessThan(i('Hey Alex'))
-    expect(i('Hey Alex')).toBeLessThan(i('thumbnail.png'))
     expect(i('thumbnail.png')).toBeLessThan(i('No algorithms.'))
-    expect(i('No algorithms.')).toBeLessThan(i('Share intentionally.'))
-    expect(i('Share intentionally.')).toBeLessThan(i('You have 3 invitations'))
-    expect(i('You have 3 invitations')).toBeLessThan(i('>Pass it on<'))
-    expect(i('>Pass it on<')).toBeLessThan(i('deepcast-wordmark'))
-    // The poster links to the same place as the button.
-    expect(m.html).toContain(`<a href="https://deepcast.art/r/abc123?pass=1" style="display:block;text-decoration:none;"><img src="${base.posterUrl}"`)
+    expect(i('No algorithms.')).toBeLessThan(i('You have 3 free invitations'))
+    expect(i('You have 3 free invitations')).toBeLessThan(i('>Pass it on<'))
+    expect(HOW_FILMS_TRAVEL_LINES).toContain('Films here spread by private invite and real humans only. No algorithms.') // the page’s line, untouched
+    expect(HOW_FILMS_TRAVEL_EMAIL.spread).toBe(ONE_LINE)
   })
-  it('the lines are the watch page’s own module, not a copy', () => {
-    const m = buildPassItOnEmail(sample)
-    for (const line of HOW_FILMS_TRAVEL_LINES) if (!line.startsWith('This film')) expect(m.text).toContain(line)
-  })
-  it('no name → the founder’s no-name subject and opener', () => {
-    const m = buildPassItOnEmail({ ...sample, receiverName: null })
-    expect(m.subject).toBe('Circles is waiting for you to pass it on')
-    expect(m.preheader).toBe('Just a friendly reminder that this film won’t reach anyone new, unless you pass it on.')
-    expect(m.html).not.toContain('Hey ')
-  })
-  it('an email address is never rendered as a name', () => {
-    const m = buildPassItOnEmail({ ...sample, receiverName: 'alex@example.com' })
-    expect(m.subject).toBe('Circles is waiting for you to pass it on')
-    expect(m.html).not.toContain('alex@example.com')
-  })
-  it('singular for one invitation; the line is omitted when unlimited or unknown', () => {
-    expect(invitationsLine(1)).toBe('You have 1 invitation to give.')
-    expect(invitationsLine(5)).toBe('You have 5 invitations to give.')
+  it('the gift line: plural, singular, omitted when unlimited or unknown', () => {
+    expect(invitationsLine(3)).toBe('You have 3 free invitations to gift.')
+    expect(invitationsLine(1)).toBe('You have 1 free invitation to gift.')
     expect(invitationsLine(Infinity)).toBeNull()
     expect(invitationsLine(0)).toBeNull()
     expect(invitationsLine(null)).toBeNull()
-    const m = buildPassItOnEmail({ ...sample, invitationsLeft: Infinity })
-    expect(m.html).not.toContain('invitation')
-    expect(m.text).not.toContain('invitation')
-    expect(buildPassItOnEmail({ ...sample, invitationsLeft: 1 }).text).toContain('You have 1 invitation to give.')
+    expect(buildPassItOnEmail({ ...sample, invitationsLeft: 1 }).text).toContain('You have 1 free invitation to gift.')
+    const unlimited = buildPassItOnEmail({ ...sample, invitationsLeft: Infinity })
+    expect(unlimited.html).not.toContain('invitation')
+    expect(unlimited.text).not.toContain('invitation')
+  })
+  it('the path is shown at three or more people (two hands before YOU) — the rail’s own nodes — and absent below', () => {
+    const direct = buildPassItOnEmail(sample) // gifted by the filmmaker: [Ien] → you → ? = two people
+    expect(direct.html).not.toContain('node-you@2x.png')
+    expect(direct.html).not.toContain('>YOU<')
+    expect(direct.text).not.toContain('How this reached you')
+    expect(pathRows({ hands: ['Ien'], nodes })).toBe('')
+    expect(pathText(['Ien'])).toBeNull()
+
+    const viaSharer = buildPassItOnEmail({ ...sample, hands: ['Ien', 'Maya'] })
+    const bodyStart = viaSharer.html.indexOf('<table')
+    const i = (s) => viaSharer.html.indexOf(s, bodyStart)
+    for (const s of ['>IEN<', '>(FILMMAKER)<', '>MAYA<', '>YOU<', '>?<', 'node-hand@2x.png', 'node-you@2x.png', 'node-next@2x.png']) expect(viaSharer.html).toContain(s)
+    // Between the opener and the divider.
+    expect(i(OPENER)).toBeLessThan(i('>IEN<'))
+    expect(i('>?<')).toBeLessThan(i('divider@2x.png'))
+    // The run after YOU is the dashed one; the walked runs are solid hairlines.
+    expect(viaSharer.html).toContain('border-top:1px dashed')
+    expect(viaSharer.html).toContain('background-color:#5d574c')
+    // Gold for YOU and "?" only; names in the one grey.
+    expect(viaSharer.html).toMatch(/color:#dddddd;[^>]*>YOU</)
+    expect(viaSharer.html).toMatch(/color:#b1a180;[^>]*>\?</)
+    expect(viaSharer.html).toMatch(/color:#9a9890;[^>]*>MAYA</)
+    expect(viaSharer.text).toContain('How this reached you: IEN (filmmaker) → MAYA → you → ?')
+    // The collapse rule is the rail’s, not a second one: more than three hands → first, "{n} OTHERS", last.
+    const long = buildPassItOnEmail({ ...sample, hands: ['Ien', 'A', 'C', 'E', 'Maya'] })
+    expect(long.html).toContain('>3 OTHERS<')
+    expect(long.text).toContain('IEN (filmmaker) → 3 OTHERS → MAYA → you → ?')
+    // The email never draws an onward seat: the last seat is always "?".
+    expect(viaSharer.html).not.toContain('PEOPLE')
   })
   it('the link carries ?pass=1 so the arrival opens the pass-it-on modal', () => {
     expect(passItOnUrl('https://deepcast.art/', 'ab')).toBe('https://deepcast.art/r/ab?pass=1')

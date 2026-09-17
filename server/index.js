@@ -8,7 +8,7 @@ import crypto from 'crypto'
 import { buildGraphLayout } from '../src/lib/graphLayout.js'
 import { createEmailDispatcher } from './emailDelivery.js'
 import { isInviteUsable } from './inviteValidation.js'
-import { CREATOR_SHARE_BLOCK_REASON, isShareToFilmCreator, isSenderFilmCreator } from './shareRules.js'
+import { CREATOR_SHARE_BLOCK_REASON, isShareToFilmCreator } from './shareRules.js'
 import { adminAuthDecision, ticketControlTargetDecision } from './adminAuth.js'
 import {
   deletePersonTargetDecision,
@@ -37,6 +37,7 @@ import { firstNameInputError, fullNameInputError, splitFullName, FULL_NAME_MESSA
 import { sanitizeClaimContext } from '../src/lib/claimContext.js'
 import { VOID_INVITE_STATUS } from '../src/lib/inviteExistence.js'
 import { buildLineageForks } from '../src/lib/lineageForks.js'
+import { buildLineage } from './lineage.js'
 import { buildFilmWatchFields, filmWatchDecision, buildOnward } from './watchPayload.js'
 import { refundOnVoidDecision } from './voidRules.js'
 import {
@@ -57,7 +58,7 @@ import {
   COMMENT_UNAVAILABLE_MESSAGE,
 } from './commentRules.js'
 import { safeFirstName } from '../src/lib/displayName.js'
-import { buildTicketEmail, buildReminderEmail, buildPassItOnEmail, returnUrl, passItOnUrl, wordmarkUrl, clockUrl, dividerUrl, daysBetween } from './ticketEmail.js'
+import { buildTicketEmail, buildReminderEmail, buildPassItOnEmail, returnUrl, passItOnUrl, wordmarkUrl, clockUrl, dividerUrl, nodeUrls, daysBetween } from './ticketEmail.js'
 import {
   selectReminderRows,
   isDryRun,
@@ -1209,38 +1210,16 @@ app.get('/api/invites/link/:slug', async (req, res) => {
       return t < myCreatedAt || (t === myCreatedAt && r.id <= invite.id)
     }).length || 1
 
-    // Lineage: walk parent_invite_id from this invite up to the root. The
-    // chain ends at a creator-sent or parentless invite (canonical model:
-    // the filmmaker IS the root). Cycle-guarded; names resolve client-side
-    // to first-name-only by the thread renderer.
-    const byId = new Map(rows.map((r) => [r.id, r]))
+    // Lineage: ONE shared walk (server/lineage.js, 2026-09-17) — the same
+    // code the pass-it-on email's path reads. Names resolve client-side to
+    // first-name-only by the thread renderer.
     const creatorId = invite.films?.creator_id || null
-    const isCreatorSent = (row) => creatorId && row.sender_id != null && uuidStringEq(row.sender_id, creatorId)
-    const ancestors = [] // nearest (direct sharer's invite) → rootmost
-    const seen = new Set([invite.id])
-    let cur = invite
-    while (cur.parent_invite_id && byId.has(cur.parent_invite_id) && ancestors.length < 100) {
-      const parent = byId.get(cur.parent_invite_id)
-      if (seen.has(parent.id)) break
-      seen.add(parent.id)
-      ancestors.push(parent)
-      if (isCreatorSent(parent)) break
-      cur = parent
-    }
-    const creatorName =
-      (creatorUser?.name || '').trim() ||
-      (rows.find((r) => isCreatorSent(r) && (r.sender_name || '').trim())?.sender_name || '').trim() ||
-      (isCreatorSent(invite) ? (invite.sender_name || '').trim() : '') ||
-      'The filmmaker'
-    // Origin → direct sharer. For a creator-sent invite there are no
-    // ancestors and the chain is just [creator] — the depth-1 case.
-    const lineageNames = [
-      creatorName,
-      ...ancestors
-        .slice()
-        .reverse()
-        .map((r) => r.recipient_name || r.recipient_email || 'Someone'),
-    ]
+    const { ancestors, lineageNames, senderIsCreator, isCreatorSent } = buildLineage({
+      invite,
+      rows,
+      creatorId,
+      creatorUserName: creatorUser?.name || null,
+    })
 
     // Per-film ghost visibility, threaded once for both new watch-rail
     // fields (claims count + lineage forks).
@@ -1273,10 +1252,7 @@ app.get('/api/invites/link/:slug', async (req, res) => {
       // true only when the direct sharer's ACCOUNT is the film's creator.
       // The frontend collapses a two-entry chain on this flag alone — never
       // on name comparison.
-      senderIsCreator: isSenderFilmCreator({
-        senderId: invite.sender_id,
-        filmCreatorId: creatorId,
-      }),
+      senderIsCreator,
       lineageForks,
       // Watch-page needs on revisit (playback is public-policy; invites are
       // world-readable under RLS, so none of this is a new exposure class).
@@ -4364,7 +4340,7 @@ async function runPassItOnSweep({ send }) {
   }
   const results = []
   for (const entry of selected) {
-    const { row, holder, invitationsLeft } = entry
+    const { row, holder, invitationsLeft, hands } = entry
     const result = await sendReminderRow(row, 'pass_it_on', {
       stampIfUnstamped: async (r) => {
         const { data, error } = await supabase
@@ -4391,6 +4367,8 @@ async function runPassItOnSweep({ send }) {
           passUrl: token ? passItOnUrl(baseUrl, token) : `${trimmed}/watch/${encodeURIComponent(r.link_slug)}?pass=1`,
           wordmark: wordmarkUrl(baseUrl),
           dividerImg: dividerUrl(baseUrl),
+          hands,
+          nodes: nodeUrls(baseUrl),
         })
         try {
           await deliverEmail(

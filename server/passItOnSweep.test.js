@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { candidateColumns, previewEntry, tallyReasons, loadPassItOnCandidates, missingOptionalColumn, OPTIONAL_COLUMNS } from './passItOnSweep.js'
+import { candidateColumns, previewEntry, tallyReasons, loadPassItOnCandidates, missingOptionalColumn, OPTIONAL_COLUMNS, pathHands } from './passItOnSweep.js'
 
 describe('candidateColumns — the pre-migration window', () => {
   it('drops the 20260917 columns when the migration is missing, keeps everything else', () => {
@@ -12,6 +12,22 @@ describe('candidateColumns — the pre-migration window', () => {
     expect(OPTIONAL_COLUMNS).toContain('pass_it_on_skipped_at')
     expect(missingOptionalColumn({ message: 'column invites.pass_it_on_skipped_at does not exist' })).toBe('pass_it_on_skipped_at')
     expect(missingOptionalColumn({ message: 'connection reset' })).toBeNull()
+  })
+})
+
+describe('pathHands — the email’s path is the link payload’s lineage, first-named by the rail’s rule', () => {
+  const CREATOR = 'c1'
+  const film = [
+    { id: 'root', film_id: 'f1', parent_invite_id: null, sender_id: CREATOR, sender_name: 'Ien Chi', recipient_name: 'Maya Ortiz' },
+    { id: 'leaf', film_id: 'f1', parent_invite_id: 'root', sender_id: 'u-maya', sender_name: 'Maya Ortiz', recipient_name: 'Alex Rivera' },
+  ]
+  it('through a sharer: two hands → the path shows; gifted by the filmmaker: one hand → no path', () => {
+    const leaf = { ...film[1], films: { creator_id: CREATOR } }
+    expect(pathHands(leaf, film, { c1: 'Ien Chi' })).toEqual(['Ien', 'Maya'])
+    const root = { ...film[0], films: { creator_id: CREATOR } }
+    expect(pathHands(root, film, { c1: 'Ien Chi' })).toEqual(['Ien'])
+    expect(previewEntry({ row: leaf, hands: ['Ien', 'Maya'], invitationsLeft: 5, anchor: null, reason: null }).path).toBe('How this reached you: IEN (filmmaker) → MAYA → you → ?')
+    expect(previewEntry({ row: root, hands: ['Ien'], invitationsLeft: 5, anchor: null, reason: null }).path).toBeNull()
   })
 })
 

@@ -31,7 +31,8 @@
  * Palette: background #080c18 · text #dddddd · accent #b1a180 · muted #9a9890.
  */
 import { safeFirstName } from '../src/lib/displayName.js'
-import { HOW_FILMS_TRAVEL } from '../src/content/howFilmsTravel.js'
+import { HOW_FILMS_TRAVEL_EMAIL } from '../src/content/howFilmsTravel.js'
+import { railPathNodes, railPathDescription } from '../src/lib/railPath.js'
 
 const BG = '#080c18'
 const TEXT = '#dddddd'
@@ -46,6 +47,9 @@ export const WORDMARK_PATH = '/email/deepcast-wordmark@2x.png'
 export const CLOCK_PATH = '/email/clock@2x.png'
 export const TAGLINE = 'Private. Trusted. Human.'
 export const DIVIDER_PATH = '/email/divider@2x.png'
+/** The path's node glyphs (images — no SVG in mail): a hand's dot, YOU's
+ *  dot, the hollow next slot. */
+export const NODE_PATHS = Object.freeze({ hand: '/email/node-hand@2x.png', you: '/email/node-you@2x.png', next: '/email/node-next@2x.png' })
 
 export function escapeHtml(s) {
   if (s == null || s === '') return ''
@@ -80,6 +84,11 @@ export function returnUrl(baseUrl, token) {
  *  arrival forwards to the watch page so the pass-it-on modal opens. */
 export function passItOnUrl(baseUrl, token) {
   return `${returnUrl(baseUrl, token)}?pass=1`
+}
+
+/** The path's three node images, absolute. */
+export function nodeUrls(baseUrl) {
+  return { hand: `${trimBase(baseUrl)}${NODE_PATHS.hand}`, you: `${trimBase(baseUrl)}${NODE_PATHS.you}`, next: `${trimBase(baseUrl)}${NODE_PATHS.next}` }
 }
 
 /** The email assets' absolute URLs on the public site. */
@@ -255,11 +264,72 @@ export function buildReminderEmail({ receiverName, sharerName, ticketNo, filmTit
   return { subject, preheader: opener, html: shell({ subject, preheader: opener, rows }), text }
 }
 
-/** "You have 3 invitations to give." — singular for 1; null when unlimited
- *  (Infinity) or unknown, so the line is simply omitted. */
+/** "You have 3 free invitations to gift." — singular for 1; null when
+ *  unlimited (Infinity) or unknown, so the line is simply omitted. */
 export function invitationsLine(n) {
   if (!Number.isFinite(n) || n < 1) return null
-  return n === 1 ? 'You have 1 invitation to give.' : `You have ${n} invitations to give.`
+  return n === 1 ? 'You have 1 free invitation to gift.' : `You have ${n} free invitations to gift.`
+}
+
+/** The path is shown only when it holds three or more people counting the
+ *  recipient: two or more hands before "you". */
+export const PATH_MIN_HANDS = 2
+
+/**
+ * The recipient's path, exactly as the watch page's rail draws it beneath
+ * "Pass it on" — the SAME nodes (src/lib/railPath.js over chainHands; the
+ * recipient has never shared, so the last seat is always "?"), built for
+ * mail: one fixed-layout table, one equal column per node; in each column a
+ * three-cell strip — half-run, the node image, half-run — so the runs meet
+ * between the dots; labels beneath, centred, tracked caps, nowrap. Gold for
+ * YOU and "?" only (the marks); every name one grey; the walked runs a
+ * solid hairline, the run after YOU dashed. No SVG, no webfont.
+ */
+export function pathRows({ hands, nodes: nodeImgs }) {
+  const nodes = railPathNodes(hands, [])
+  if ((hands || []).length < PATH_MIN_HANDS || nodes.length === 0) return ''
+  const n = nodes.length
+  const youIndex = nodes.findIndex((x) => x.type === 'you')
+  const pct = `${Math.floor(10000 / n) / 100}%`
+  const run = (kind) =>
+    kind === 'none'
+      ? '<td style="vertical-align:middle;"></td>'
+      : kind === 'dashed'
+        ? `<td style="vertical-align:middle;"><div style="height:0;line-height:0;font-size:0;border-top:1px dashed ${HAIRLINE};"></div></td>`
+        : `<td style="vertical-align:middle;"><div style="height:1px;line-height:1px;font-size:1px;background-color:${HAIRLINE};">&nbsp;</div></td>`
+  const glyph = (node) => {
+    const src = node.type === 'you' ? nodeImgs.you : node.type === 'next' ? nodeImgs.next : nodeImgs.hand
+    const px = node.type === 'hand' || node.type === 'collapsed' ? 6 : 8
+    return `<td width="${px + 4}" align="center" style="padding:0 2px;vertical-align:middle;"><img src="${escapeHtml(src)}" width="${px}" height="${px}" alt="" style="display:block;width:${px}px;height:${px}px;border:0;" /></td>`
+  }
+  const label = (node) => {
+    const color = node.type === 'you' ? TEXT : node.type === 'next' ? ACCENT : MUTED
+    const size = node.type === 'next' ? 11 : 9
+    return `<p style="margin:0;white-space:nowrap;${caps(size, 0.14, `color:${color};line-height:1.2;`)}">${escapeHtml(node.label)}</p>`
+  }
+  const cols = nodes
+    .map((node, i) => {
+      const left = i === 0 ? 'none' : i > youIndex ? 'dashed' : 'solid'
+      const right = i === n - 1 ? 'none' : i >= youIndex ? 'dashed' : 'solid'
+      const caption = node.caption
+        ? `<p style="margin:3px 0 0 0;white-space:nowrap;${caps(7, 0.12, `color:${MUTED};line-height:1.2;`)}">${escapeHtml(node.caption)}</p>`
+        : ''
+      return `<td width="${pct}" style="vertical-align:top;padding:0;">
+        <table cellpadding="0" cellspacing="0" border="0" role="presentation" width="100%"><tr>${run(left)}${glyph(node)}${run(right)}</tr></table>
+        <div style="padding-top:10px;text-align:center;">${label(node)}${caption}</div>
+      </td>`
+    })
+    .join('')
+  return row(
+    `<table cellpadding="0" cellspacing="0" border="0" role="presentation" width="100%" style="table-layout:fixed;max-width:352px;margin:0 auto;"><tr>${cols}</tr></table>`,
+    '0 0 28px 0'
+  )
+}
+
+/** The plain-text twin of the path — the rail's accessible sentence. */
+export function pathText(hands) {
+  if ((hands || []).length < PATH_MIN_HANDS) return null
+  return railPathDescription(railPathNodes(hands, []))
 }
 
 /**
@@ -267,27 +337,32 @@ export function invitationsLine(n) {
  * person who watched and never shared, once, three days after the last
  * touch. Subject `{Receiver}, {FilmTitle} is waiting for you to pass it on`
  * (no name → `{FilmTitle} is waiting for you to pass it on`). The 16 Sep
- * skeleton: the eyebrow (a), then `Hey {Receiver}, just a friendly reminder
- * that this film won’t reach anyone new, unless you pass it on.` (the watch
- * page's own second line, HOW_FILMS_TRAVEL — never paraphrased), the
- * divider, the title, the poster (a link), then the page's other two lines,
- * quiet, as the explanation of how it works, then `You have {n} invitations
- * to give.` (omitted when unlimited), the button `Pass it on` → the return
- * link with ?pass=1, the wordmark and the tagline.
+ * skeleton (amended 17 September, second pass): the eyebrow (a), then `Hey
+ * {Receiver}, thanks for watching. Just a friendly reminder that this story
+ * won’t reach anyone new unless you pass it on.` (HOW_FILMS_TRAVEL_EMAIL —
+ * the inbox variant, never paraphrased), then — only when the path holds
+ * three or more people — the recipient's path exactly as the rail draws it
+ * (pathRows), the divider, the title, the poster (a link), ONE quiet line
+ * `Films on Deepcast spread by private invite and real humans only. No
+ * algorithms.`, then `You have {n} free invitations to gift.` (omitted when
+ * unlimited), the button `Pass it on` → the return link with ?pass=1, the
+ * wordmark and the tagline.
  */
-export function buildPassItOnEmail({ receiverName, ticketNo, filmTitle, posterUrl, invitationsLeft, passUrl, wordmark, dividerImg }) {
+export function buildPassItOnEmail({ receiverName, ticketNo, filmTitle, posterUrl, invitationsLeft, passUrl, wordmark, dividerImg, hands = [], nodes = null }) {
   const receiver = firstOrNull(receiverName)
   const subject = receiver ? `${receiver}, ${filmTitle} is waiting for you to pass it on` : `${filmTitle} is waiting for you to pass it on`
-  const reach = HOW_FILMS_TRAVEL.reach.text
-  const reachLower = reach.charAt(0).toLowerCase() + reach.slice(1)
-  const opener = receiver ? `Hey ${receiver}, just a friendly reminder that ${reachLower}` : `Just a friendly reminder that ${reachLower}`
+  const reminder = `Just a friendly reminder that ${HOW_FILMS_TRAVEL_EMAIL.reach}.`
+  const opener = receiver ? `Hey ${receiver}, thanks for watching. ${reminder}` : `Thanks for watching. ${reminder}`
   const stamp = eyebrow(ticketNo)
   const invitations = invitationsLine(invitationsLeft)
   const quiet = (text, pad) =>
     row(`<p style="margin:0;font-family:${SERIF};font-style:italic;font-size:16px;line-height:1.55;color:${MUTED};">${escapeHtml(text)}</p>`, pad)
+  const path = nodes ? pathRows({ hands, nodes }) : ''
+  const pathLine = pathText(hands)
   const rows = [
     stamp.row,
     headlineRow(opener),
+    path,
     row(divider(dividerImg), '0 0 28px 0'),
     row(`<p style="margin:0;font-family:${SERIF};font-style:italic;font-size:24px;line-height:1.25;color:${TEXT};">${escapeHtml(filmTitle)}</p>`, '0 0 16px 0'),
     posterUrl
@@ -296,8 +371,7 @@ export function buildPassItOnEmail({ receiverName, ticketNo, filmTitle, posterUr
           '0 0 20px 0'
         )
       : '',
-    quiet(HOW_FILMS_TRAVEL.spread.text, '0 0 12px 0'),
-    quiet(HOW_FILMS_TRAVEL.share.text, invitations ? '0 0 20px 0' : '0 0 28px 0'),
+    quiet(HOW_FILMS_TRAVEL_EMAIL.spread, invitations ? '0 0 20px 0' : '0 0 28px 0'),
     invitations
       ? row(`<p style="margin:0;font-family:${SERIF};font-style:italic;font-size:16px;line-height:1.55;color:${TEXT};">${escapeHtml(invitations)}</p>`, '0 0 28px 0')
       : '',
@@ -311,13 +385,14 @@ export function buildPassItOnEmail({ receiverName, ticketNo, filmTitle, posterUr
     stamp.text,
     '',
     opener,
+    pathLine ? '' : null,
+    pathLine,
     '',
     '✳',
     '',
     filmTitle,
     '',
-    HOW_FILMS_TRAVEL.spread.text,
-    HOW_FILMS_TRAVEL.share.text,
+    HOW_FILMS_TRAVEL_EMAIL.spread,
     invitations ? '' : null,
     invitations,
     '',

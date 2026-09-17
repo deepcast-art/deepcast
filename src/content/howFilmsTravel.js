@@ -20,5 +20,17 @@ export const HOW_FILMS_TRAVEL = Object.freeze({
   share: Object.freeze({ text: 'Share intentionally. Each ticket admits one person only.' }),
 })
 
+/**
+ * THE EMAIL VARIANT (founder copy, 17 September 2026, verbatim) — beside
+ * the page's lines, deliberately different: "here" has no meaning in an
+ * inbox, so the email names the place ("on Deepcast") and calls the film
+ * "this story"; the email shows ONE line beneath the poster (the page keeps
+ * all three). The page's lines above stay byte-identical.
+ */
+export const HOW_FILMS_TRAVEL_EMAIL = Object.freeze({
+  spread: 'Films on Deepcast spread by private invite and real humans only. No algorithms.',
+  reach: 'this story won’t reach anyone new unless you pass it on',
+})
+
 /** The three lines in the page's order, whole. */
 export const HOW_FILMS_TRAVEL_LINES = Object.freeze([HOW_FILMS_TRAVEL.spread.text, HOW_FILMS_TRAVEL.reach.text, HOW_FILMS_TRAVEL.share.text])

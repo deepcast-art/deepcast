@@ -10,8 +10,11 @@ import { evaluatePassItOnRows, PASS_IT_ON_MAX_PER_RUN, PASS_IT_ON_AFTER_DAYS } f
 import { maskEmail } from './reminderRules.js'
 import { daysBetween } from './ticketEmail.js'
 import { isEmailEventsMissing } from './emailEvents.js'
+import { buildLineage } from './lineage.js'
+import { chainHands } from '../src/lib/handsChain.js'
+import { railPathNodes, railPathDescription } from '../src/lib/railPath.js'
 
-const BASE_COLUMNS = 'id, film_id, link_slug, status, claimed_email, claimed_by, recipient_email, recipient_name, claimed_at, reminder1_sent_at, reminder2_sent_at, ticket_no'
+const BASE_COLUMNS = 'id, film_id, link_slug, status, claimed_email, claimed_by, recipient_email, recipient_name, sender_id, sender_name, parent_invite_id, created_at, claimed_at, reminder1_sent_at, reminder2_sent_at, ticket_no'
 /** The 20260917 columns, each tolerated individually when absent. */
 export const OPTIONAL_COLUMNS = Object.freeze(['watched_at', 'pass_it_on_sent_at', 'pass_it_on_skipped_at'])
 const FILM_COLUMNS = 'films(id, title, creator_id, mux_playback_id, show_ghosts)'
@@ -65,24 +68,47 @@ export async function loadPassItOnCandidates(supabase, now = new Date()) {
   const list = rows || []
   const filmIds = [...new Set(list.map((r) => r.film_id))]
   const holderIds = [...new Set(list.map((r) => r.claimed_by).filter(Boolean))]
-  const [holdersRes, walletsRes, invitesRes] = await Promise.all([
+  const creatorIds = [...new Set(list.map((r) => r.films?.creator_id).filter(Boolean))]
+  const [holdersRes, walletsRes, invitesRes, creatorsRes] = await Promise.all([
     holderIds.length ? supabase.from('users').select('id, role, team_creator_id, name').in('id', holderIds) : { data: [] },
     holderIds.length ? supabase.from('film_tickets').select('user_id, film_id, balance, unlimited').in('user_id', holderIds) : { data: [] },
-    filmIds.length ? supabase.from('invites').select('id, film_id, status, parent_invite_id, sender_id').in('film_id', filmIds).limit(10000) : { data: [] },
+    // The film's rows: the same columns the link payload's lineage walk reads
+    // (server/lineage.js) plus the onward check's.
+    filmIds.length
+      ? supabase.from('invites').select('id, film_id, status, parent_invite_id, sender_id, sender_name, recipient_name, recipient_email, created_at').in('film_id', filmIds).limit(10000)
+      : { data: [] },
+    creatorIds.length ? supabase.from('users').select('id, name').in('id', creatorIds) : { data: [] },
   ])
-  for (const r of [holdersRes, walletsRes, invitesRes]) if (r.error) throw r.error
+  for (const r of [holdersRes, walletsRes, invitesRes, creatorsRes]) if (r.error) throw r.error
   const filmsById = {}
   for (const r of list) if (r.films) filmsById[r.film_id] = r.films
+  const creatorNameById = Object.fromEntries((creatorsRes.data || []).map((u) => [u.id, u.name || null]))
   const holdersById = Object.fromEntries((holdersRes.data || []).map((u) => [u.id, u]))
   const walletsByKey = Object.fromEntries((walletsRes.data || []).map((w) => [`${w.user_id}:${w.film_id}`, w]))
   const invitesByFilm = {}
   for (const inv of invitesRes.data || []) (invitesByFilm[inv.film_id] ||= []).push(inv)
-  const evaluated = evaluatePassItOnRows(list, { now, filmsById, holdersById, walletsByKey, invitesByFilm })
+  const evaluated = evaluatePassItOnRows(list, { now, filmsById, holdersById, walletsByKey, invitesByFilm }).map((entry) => ({
+    ...entry,
+    hands: pathHands(entry.row, invitesByFilm[entry.row.film_id] || [], creatorNameById),
+  }))
   const selected = evaluated
     .filter((x) => x.reason === null)
     .sort((a, b) => a.anchor - b.anchor)
     .slice(0, PASS_IT_ON_MAX_PER_RUN)
   return { evaluated, selected, migrated, missingColumns: OPTIONAL_COLUMNS.filter((c) => !optional.includes(c)) }
+}
+
+/** The email's path: the SAME lineage the link payload serves (server/
+ *  lineage.js), first-named by the SAME rule the rail reads (chainHands). */
+export function pathHands(row, filmInvites, creatorNameById = {}) {
+  const creatorId = row.films?.creator_id || null
+  const { lineageNames, senderIsCreator } = buildLineage({
+    invite: row,
+    rows: filmInvites,
+    creatorId,
+    creatorUserName: creatorId ? creatorNameById[creatorId] || null : null,
+  })
+  return chainHands(lineageNames, { senderIsCreator })
 }
 
 /** The MASKED preview of one evaluated entry — what a route or a log may show. */
@@ -98,6 +124,8 @@ export function previewEntry(entry, now = new Date()) {
     invitationsLeft: invitationsLeft === Infinity ? 'unlimited' : invitationsLeft,
     anchor: anchor == null ? null : new Date(anchor).toISOString(),
     daysSince: anchor == null ? null : daysBetween(new Date(anchor).toISOString(), now),
+    // The path the email would show (first names only), or null below three people.
+    path: entry.hands && entry.hands.length >= 2 ? railPathDescription(railPathNodes(entry.hands, [])) : null,
     ...(reason ? { excluded: reason } : {}),
   }
 }
