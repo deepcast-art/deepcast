@@ -18,8 +18,8 @@ if (!supabaseUrl || !supabaseKey) {
 }
 const supabase = createClient(supabaseUrl, supabaseKey)
 const now = new Date()
-const { evaluated, selected, migrated } = await loadPassItOnCandidates(supabase, now)
-console.log(`pass-it-on dry run — ${now.toISOString()} — migration ${migrated ? 'applied' : 'NOT applied (watched_at / pass_it_on_sent_at read as null)'}`)
+const { evaluated, selected, migrated, missingColumns } = await loadPassItOnCandidates(supabase, now)
+console.log(`pass-it-on dry run — ${now.toISOString()} — migration ${migrated ? 'applied' : 'NOT applied'}${missingColumns.length ? ` (missing columns read as null: ${missingColumns.join(', ')})` : ''}`)
 console.log(`watched rows with an email and an account: ${evaluated.length}; would email: ${selected.length}`)
 console.log('')
 console.log('WOULD EMAIL (oldest first):')

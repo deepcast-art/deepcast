@@ -393,8 +393,8 @@ async function sendInviteEmailResend(payload) {
   if (error) {
     const msg = formatResendError(error)
     const to = Array.isArray(payload?.to)
-      ? payload.to.join(', ')
-      : String(payload?.to || '')
+      ? payload.to.map(maskEmail).join(', ')
+      : maskEmail(String(payload?.to || ''))
     console.error('Resend API error:', msg, 'to:', to, error)
     const e = new Error(msg)
     e.resendError = error
@@ -402,8 +402,8 @@ async function sendInviteEmailResend(payload) {
   }
   if (data?.id) {
     const to = Array.isArray(payload?.to)
-      ? payload.to.join(', ')
-      : String(payload?.to || '')
+      ? payload.to.map(maskEmail).join(', ')
+      : maskEmail(String(payload?.to || ''))
     console.log('[email] Resend accepted — id:', data.id, 'to:', to)
   }
   return data
@@ -440,7 +440,7 @@ const deliverEmail = createEmailDispatcher({
   sendFn: sendInviteEmailResend,
   recordEvent: recordEmailEvent,
   onRetry: (err, attempt, payload) => {
-    const to = Array.isArray(payload?.to) ? payload.to.join(', ') : String(payload?.to || '')
+    const to = Array.isArray(payload?.to) ? payload.to.map(maskEmail).join(', ') : maskEmail(String(payload?.to || ''))
     console.warn(`[email] attempt ${attempt} failed (will retry) — to: ${to} — ${err?.message || err}`)
   },
 })
@@ -732,7 +732,7 @@ app.post('/api/invites/send', async (req, res) => {
     const ctx = encryptInviteCtx(senderFirst, recipientFirstName || '')
     const inviteUrl = ctx ? `${baseUrl}/i/${token}?ctx=${ctx}` : `${baseUrl}/i/${token}`
 
-    console.log(`Invite created: token=${token}, recipient=${recipientEmailNorm}, inviteUrl=${inviteUrl}`)
+    console.log(`Invite created: token=${token}, recipient=${maskEmail(recipientEmailNorm)}`)
 
     // Count was fetched before insert; +1 accounts for the invite just created
     const inviteOrdinal = preInsertCount != null ? preInsertCount + 1 : null
@@ -775,7 +775,7 @@ app.post('/api/invites/send', async (req, res) => {
     } catch (emailErr) {
       console.error(
         `[invite/send] email failed after retries — rolling back invite\n` +
-        `  token: ${token}\n  to: ${recipientEmailNorm}\n  error: ${emailErr?.message || emailErr}`
+        `  token: ${token}\n  to: ${maskEmail(recipientEmailNorm)}\n  error: ${emailErr?.message || emailErr}`
       )
       // Undo everything this request created so a retry starts clean.
       const { error: deleteErr } = await supabase.from('invites').delete().eq('token', token)
@@ -4298,7 +4298,7 @@ async function runReminderSweep({ send }) {
           if (token) await restoreReturnTokenState(r.id, previous)
           throw e
         }
-        console.log(`[reminders] sent reminder ${which} — invite:`, r.id, 'to:', r.claimed_email)
+        console.log(`[reminders] sent reminder ${which} — invite:`, r.id, 'to:', maskEmail(r.claimed_email))
       },
       clearStamp: async (r) => {
         const { error } = await supabase.from('invites').update({ [column]: null }).eq('id', r.id)

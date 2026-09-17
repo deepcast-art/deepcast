@@ -32,6 +32,7 @@ describe('isEmailEventsMissing — the pre-migration window', () => {
     expect(isEmailEventsMissing(new Error('relation "public.email_events" does not exist'))).toBe(true)
     expect(isEmailEventsMissing({ message: 'column invites.watched_at does not exist' })).toBe(true)
     expect(isEmailEventsMissing({ message: 'column "pass_it_on_sent_at" of relation "invites" does not exist' })).toBe(true)
+    expect(isEmailEventsMissing({ message: 'column invites.pass_it_on_skipped_at does not exist' })).toBe(true)
     expect(isEmailEventsMissing({ message: "Could not find the table 'public.email_events' in the schema cache" })).toBe(true)
     expect(isEmailEventsMissing(new Error('connection reset'))).toBe(false)
     expect(isEmailEventsMissing(new Error('permission denied for table email_events'))).toBe(false)

@@ -12,6 +12,8 @@
  *   - watched (WATCHED_STATUSES), with a claimed email AND an account
  *     (claimed_by — the sharing surface needs one);
  *   - are not void, not a seeded ghost, not on a film that shows ghosts;
+ *   - are not SKIPPED by the founder (pass_it_on_skipped_at, set by SQL —
+ *     a durable per-invite skip, founder amendment 17 September 2026);
  *   - are not the film's creator, nor a role-unlimited team member;
  *   - still hold at least one invitation on this film (or unlimited);
  *   - hold NO non-void onward invite on this film — by parent_invite_id AND
@@ -69,6 +71,7 @@ export function passItOnExclusionReason(row, { now = new Date(), film = {}, hold
   if (!row) return 'no row'
   if (row.status === VOID_INVITE_STATUS) return 'void'
   if (!WATCHED_STATUSES.includes(row.status)) return `status is ${row.status || 'empty'}`
+  if (row.pass_it_on_skipped_at) return 'skipped by the founder'
   const email = typeof row.claimed_email === 'string' ? row.claimed_email.trim() : ''
   if (!email) return 'no claimed email'
   if (GHOST_EMAIL_PATTERN.test(email)) return 'ghost email'

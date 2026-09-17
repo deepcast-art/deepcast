@@ -12,14 +12,22 @@ import { daysBetween } from './ticketEmail.js'
 import { isEmailEventsMissing } from './emailEvents.js'
 
 const BASE_COLUMNS = 'id, film_id, link_slug, status, claimed_email, claimed_by, recipient_email, recipient_name, claimed_at, reminder1_sent_at, reminder2_sent_at, ticket_no'
-const NEW_COLUMNS = 'watched_at, pass_it_on_sent_at'
+/** The 20260917 columns, each tolerated individually when absent. */
+export const OPTIONAL_COLUMNS = Object.freeze(['watched_at', 'pass_it_on_sent_at', 'pass_it_on_skipped_at'])
 const FILM_COLUMNS = 'films(id, title, creator_id, mux_playback_id, show_ghosts)'
 
-/** The select list — with the 20260917 columns, or without them before the
- *  migration (both then read as null: nothing has been sent, so every
- *  watched row's anchor is its claim or its last reminder). */
-export function candidateColumns({ migrated = true } = {}) {
-  return migrated ? `${BASE_COLUMNS}, ${NEW_COLUMNS}, ${FILM_COLUMNS}` : `${BASE_COLUMNS}, ${FILM_COLUMNS}`
+/** The select list — with the 20260917 columns present (`optional`), or
+ *  without the ones the database does not have yet (they then read as
+ *  null: nothing has been sent or skipped, so every watched row's anchor is
+ *  its claim or its last reminder). */
+export function candidateColumns({ migrated = true, optional = migrated ? OPTIONAL_COLUMNS : [] } = {}) {
+  return [BASE_COLUMNS, ...optional, FILM_COLUMNS].join(', ')
+}
+
+/** Which optional column a missing-column error names, or null. */
+export function missingOptionalColumn(error) {
+  const msg = String(error?.message || error || '')
+  return OPTIONAL_COLUMNS.find((c) => msg.includes(c)) || null
 }
 
 /**
@@ -29,25 +37,31 @@ export function candidateColumns({ migrated = true } = {}) {
  * other than the missing-column window.
  */
 export async function loadPassItOnCandidates(supabase, now = new Date()) {
-  let migrated = true
-  let query = () => {
+  let optional = [...OPTIONAL_COLUMNS]
+  const query = () => {
     let q = supabase
       .from('invites')
-      .select(candidateColumns({ migrated }))
+      .select(candidateColumns({ optional }))
       .in('status', WATCHED_STATUSES)
       .not('claimed_email', 'is', null)
       .not('claimed_by', 'is', null)
       .order('claimed_at', { ascending: true })
       .limit(PASS_IT_ON_MAX_PER_RUN * 80)
-    if (migrated) q = q.is('pass_it_on_sent_at', null)
+    if (optional.includes('pass_it_on_sent_at')) q = q.is('pass_it_on_sent_at', null)
     return q
   }
   let { data: rows, error } = await query()
-  if (error && isEmailEventsMissing(error)) {
-    migrated = false
+  // A column the database does not have yet is dropped and the read retried
+  // (one column per pass; a message naming none drops them all).
+  for (let attempt = 0; error && isEmailEventsMissing(error) && optional.length > 0 && attempt < OPTIONAL_COLUMNS.length; attempt++) {
+    const named = missingOptionalColumn(error)
+    optional = named ? optional.filter((c) => c !== named) : []
     ;({ data: rows, error } = await query())
   }
   if (error) throw error
+  // "Migrated" for SENDING means the stamp column exists — never a send
+  // without the once-ever stamp.
+  const migrated = optional.includes('pass_it_on_sent_at')
   const list = rows || []
   const filmIds = [...new Set(list.map((r) => r.film_id))]
   const holderIds = [...new Set(list.map((r) => r.claimed_by).filter(Boolean))]
@@ -68,7 +82,7 @@ export async function loadPassItOnCandidates(supabase, now = new Date()) {
     .filter((x) => x.reason === null)
     .sort((a, b) => a.anchor - b.anchor)
     .slice(0, PASS_IT_ON_MAX_PER_RUN)
-  return { evaluated, selected, migrated }
+  return { evaluated, selected, migrated, missingColumns: OPTIONAL_COLUMNS.filter((c) => !optional.includes(c)) }
 }
 
 /** The MASKED preview of one evaluated entry — what a route or a log may show. */

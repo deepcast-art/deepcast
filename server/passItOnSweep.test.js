@@ -1,12 +1,17 @@
 import { describe, it, expect } from 'vitest'
-import { candidateColumns, previewEntry, tallyReasons, loadPassItOnCandidates } from './passItOnSweep.js'
+import { candidateColumns, previewEntry, tallyReasons, loadPassItOnCandidates, missingOptionalColumn, OPTIONAL_COLUMNS } from './passItOnSweep.js'
 
 describe('candidateColumns — the pre-migration window', () => {
-  it('drops the two 20260917 columns when the migration is missing, keeps everything else', () => {
-    expect(candidateColumns({ migrated: true })).toContain('watched_at, pass_it_on_sent_at')
+  it('drops the 20260917 columns when the migration is missing, keeps everything else', () => {
+    expect(candidateColumns({ migrated: true })).toContain('watched_at, pass_it_on_sent_at, pass_it_on_skipped_at')
     expect(candidateColumns({ migrated: false })).not.toContain('watched_at')
     expect(candidateColumns({ migrated: false })).toContain('reminder2_sent_at')
     expect(candidateColumns({ migrated: false })).toContain('films(')
+    // Each column is tolerated on its own.
+    expect(candidateColumns({ optional: ['watched_at', 'pass_it_on_sent_at'] })).not.toContain('pass_it_on_skipped_at')
+    expect(OPTIONAL_COLUMNS).toContain('pass_it_on_skipped_at')
+    expect(missingOptionalColumn({ message: 'column invites.pass_it_on_skipped_at does not exist' })).toBe('pass_it_on_skipped_at')
+    expect(missingOptionalColumn({ message: 'connection reset' })).toBeNull()
   })
 })
 
@@ -31,11 +36,15 @@ describe('previewEntry / tallyReasons — masked, explained', () => {
 
 /** A tiny fake of the PostgREST builder: records the select list and answers
  *  with a missing-column error for the migrated shape when told to. */
-function fakeSupabase({ migrated, rows }) {
+function fakeSupabase({ migrated, rows, missing = [] }) {
   const calls = []
   const answer = (table, select) => {
     if (table === 'invites' && /pass_it_on_sent_at/.test(select) && !migrated) {
       return { data: null, error: { message: 'column invites.pass_it_on_sent_at does not exist' } }
+    }
+    const absent = missing.find((c) => select.includes(c))
+    if (table === 'invites' && absent) {
+      return { data: null, error: { message: `column invites.${absent} does not exist` } }
     }
     if (table === 'invites' && /films\(/.test(select)) return { data: rows, error: null }
     return { data: [], error: null }
@@ -76,6 +85,25 @@ describe('loadPassItOnCandidates — one loader, before and after the migration'
     // The holder is unknown to this fake, so the row is explained, not selected.
     expect(r.evaluated[0].reason).toBe('holder account not found')
     expect(r.selected).toEqual([])
+  })
+  it('only the skip column missing: that one column is dropped, the stamp filter stays, sending is still allowed', async () => {
+    const sb = fakeSupabase({ migrated: true, rows, missing: ['pass_it_on_skipped_at'] })
+    const r = await loadPassItOnCandidates(sb, NOW)
+    expect(r.migrated).toBe(true)
+    expect(r.missingColumns).toEqual(['pass_it_on_skipped_at'])
+    const candidateCalls = sb.calls.filter((c) => c.table === 'invites' && /films\(/.test(c.select))
+    expect(candidateCalls).toHaveLength(2)
+    expect(candidateCalls[1].select).not.toContain('pass_it_on_skipped_at')
+    expect(candidateCalls[1].select).toContain('pass_it_on_sent_at')
+    expect(candidateCalls[1].is).toContainEqual(['pass_it_on_sent_at', null])
+  })
+  it('a skipped row is listed under excluded with the founder’s reason', async () => {
+    const skipped = { ...rows[0], id: 'i2', claimed_by: 'u2', pass_it_on_skipped_at: '2026-09-17T09:00:00Z' }
+    const sb = fakeSupabase({ migrated: true, rows: [skipped] })
+    const r = await loadPassItOnCandidates(sb, NOW)
+    expect(r.evaluated[0].reason).toBe('skipped by the founder')
+    expect(previewEntry(r.evaluated[0], NOW).excluded).toBe('skipped by the founder')
+    expect(tallyReasons(r.evaluated)).toEqual({ 'skipped by the founder': 1 })
   })
   it('reads the migrated shape once when it exists', async () => {
     const sb = fakeSupabase({ migrated: true, rows })

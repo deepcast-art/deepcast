@@ -63,6 +63,13 @@ describe('passItOnExclusionReason — who gets the one pass-it-on email', () => 
   it('once per invite, ever', () => {
     expect(passItOnExclusionReason(row({ pass_it_on_sent_at: '2026-09-18T00:00:00Z' }), ctx())).toBe('already sent')
   })
+  it('a row the founder skipped (pass_it_on_skipped_at, set by SQL) is excluded — durably, whatever else is true', () => {
+    expect(passItOnExclusionReason(row({ pass_it_on_skipped_at: '2026-09-17T09:00:00Z' }), ctx())).toBe('skipped by the founder')
+    expect(isPassItOnCandidate(row({ pass_it_on_skipped_at: '2026-09-17T09:00:00Z' }), ctx({ wallet: { balance: 0, unlimited: true } }))).toBe(false)
+    // The column missing (pre-migration: undefined) or null → behaves as before.
+    expect(passItOnExclusionReason(row({ pass_it_on_skipped_at: undefined }), ctx())).toBeNull()
+    expect(passItOnExclusionReason(row({ pass_it_on_skipped_at: null }), ctx())).toBeNull()
+  })
   it('needs at least one invitation left on THIS film — a missing wallet is the virtual 5, a flagged wallet is unlimited', () => {
     expect(passItOnExclusionReason(row(), ctx({ wallet: { balance: 0, unlimited: false } }))).toBe('no invitations left')
     expect(passItOnExclusionReason(row(), ctx({ wallet: { balance: 1, unlimited: false } }))).toBeNull()

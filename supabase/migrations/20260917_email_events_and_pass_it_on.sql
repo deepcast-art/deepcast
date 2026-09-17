@@ -17,6 +17,9 @@ revoke all on table public.email_events from anon;
 revoke all on table public.email_events from authenticated;
 
 -- watched_at: the server's clock when the watch crossed 70%; pass_it_on_sent_at:
--- stamped BEFORE the one pass-it-on email is sent, so it is sent at most once.
+-- stamped BEFORE the one pass-it-on email is sent, so it is sent at most once;
+-- pass_it_on_skipped_at: set by the founder (SQL, Tier 3) on a row that must
+-- never receive the pass-it-on email — a durable per-invite skip, no UI.
 alter table invites add column if not exists watched_at timestamptz;
 alter table invites add column if not exists pass_it_on_sent_at timestamptz;
+alter table invites add column if not exists pass_it_on_skipped_at timestamptz;
