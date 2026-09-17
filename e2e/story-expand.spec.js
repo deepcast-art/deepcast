@@ -1,9 +1,12 @@
 /**
- * The story's expand control (founder direction 2026-09-16): on desktop
- * (≥900px) the filmmaker's story shows the epigraph and the first two
- * paragraphs, then ONE control — "Read the rest" — that reveals the rest
- * and disappears (no re-collapse, no fade mask). Phones keep the full
- * story. Rendered on the filmmaker's own watch page with Circles' real
+ * The story's expand control (founder direction 2026-09-16; design-gate
+ * decision 2026-09-17): on desktop (≥900px) the filmmaker's story shows
+ * the epigraph and the FIRST paragraph — fading out toward its end (a mask,
+ * no painted colour) — then ONE control — "Read the rest" + chevron — that
+ * reveals the rest and disappears (no re-collapse; no fade once expanded).
+ * The hidden paragraphs are display:none while collapsed (out of the
+ * accessibility tree and the tab order). Phones keep the full story with
+ * no fade. Rendered on the filmmaker's own watch page with Circles' real
  * story entry (four paragraphs); all API traffic mocked.
  */
 import { test, expect, pushJsError } from './fixtures/test.js'
@@ -69,20 +72,39 @@ test.describe('the story’s expand control', () => {
     const control = story.getByRole('button', { name: STORY_EXPAND_LABEL })
     await expect(control).toBeVisible()
     await expect(control).toHaveAttribute('aria-expanded', 'false')
-    // No fade mask: nothing on the story paints a gradient over the text.
+    await expect(control.locator('svg')).toHaveCount(1) // the chevron
+    // The hidden paragraphs are out of the accessibility tree while collapsed (display:none).
+    const hiddenState = await story.evaluate((el) => {
+      const rest = el.querySelector('#story-rest')
+      return { display: getComputedStyle(rest).display, focusable: rest.querySelectorAll('a, button, [tabindex]').length }
+    })
+    expect(hiddenState).toEqual({ display: 'none', focusable: 0 })
+    // The fade (founder, 2026-09-17): the LAST visible paragraph carries a
+    // gradient MASK — alpha only, nothing painted — and nothing else does.
     const masks = await story.evaluate((el) =>
-      [...el.querySelectorAll('*')].filter((n) => /gradient/.test(getComputedStyle(n).backgroundImage) || /gradient/.test(getComputedStyle(n).maskImage)).length
+      [...el.querySelectorAll('*')].map((n) => {
+        const cs = getComputedStyle(n)
+        const mask = cs.maskImage || cs.webkitMaskImage || ''
+        return { fade: n.getAttribute('data-story-fade'), mask: /gradient/.test(mask), painted: /gradient/.test(cs.backgroundImage) }
+      }).filter((r) => r.mask || r.painted)
     )
-    expect(masks).toBe(0)
+    expect(masks).toEqual([{ fade: 'true', mask: true, painted: false }])
+    await expect(story.locator('p[data-story-fade]')).toHaveText(STORY.body[0])
 
     await control.click()
     await expect(visibleParagraphs(story)).toHaveCount(STORY.body.length)
     await expect(story.getByText(STORY.body[STORY.body.length - 1])).toBeVisible()
     await expect(control).toHaveCount(0) // no re-collapse
+    // Expanded: no fade anywhere.
+    await expect(story.locator('[data-story-fade]')).toHaveCount(0)
+    const masksAfter = await story.evaluate((el) =>
+      [...el.querySelectorAll('*')].filter((n) => /gradient/.test(getComputedStyle(n).maskImage || getComputedStyle(n).webkitMaskImage || '')).length
+    )
+    expect(masksAfter).toBe(0)
     expect(jsErrors).toEqual([])
   })
 
-  test('phone: the full story, no control', async ({ page }) => {
+  test('phone: the full story, no control, no fade', async ({ page }) => {
     await mockFilmMode(page)
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto(`/watch/film/${FILM_ID}`, { waitUntil: 'domcontentloaded' })
@@ -90,5 +112,9 @@ test.describe('the story’s expand control', () => {
     await expect(story.getByText(STORY.epigraph)).toBeVisible()
     await expect(visibleParagraphs(story)).toHaveCount(STORY.body.length)
     await expect(story.getByRole('button', { name: STORY_EXPAND_LABEL })).toBeHidden()
+    const masks = await story.evaluate((el) =>
+      [...el.querySelectorAll('*')].filter((n) => /gradient/.test(getComputedStyle(n).maskImage || getComputedStyle(n).webkitMaskImage || '')).length
+    )
+    expect(masks).toBe(0)
   })
 })
