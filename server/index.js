@@ -48,6 +48,8 @@ import {
   resolveThreadParent,
   visibleComments,
   isMissingTableError,
+  resolveCommentAuthorFacts,
+  COMMENT_CLAIM_COLUMNS,
   COMMENT_UNAVAILABLE_MESSAGE,
 } from './commentRules.js'
 import { safeFirstName } from '../src/lib/displayName.js'
@@ -1375,7 +1377,7 @@ async function requireCommentAccess(req, res) {
     supabase.from('films').select('id, creator_id, creator_ticket_no, mux_playback_id').eq('id', filmId).maybeSingle(),
     supabase
       .from('invites')
-      .select('id, film_id, claimed_by, status, ticket_no, claimed_at, created_at')
+      .select(COMMENT_CLAIM_COLUMNS)
       .eq('film_id', filmId)
       .eq('claimed_by', authUser.id),
   ])
@@ -1404,11 +1406,13 @@ async function callerCanModerateComments(authUserId) {
 }
 
 /**
- * Resolve display facts for a set of commenters AT READ TIME — first name
- * through the one display rule (safeFirstName: never an email), the ticket
- * number from that person's claim on THIS film (the creator's is
- * films.creator_ticket_no). Nothing else about a person leaves the server;
- * no second copy of any name is stored.
+ * Resolve display facts for a set of commenters AT READ TIME — the queries
+ * live here, the decision is resolveCommentAuthorFacts in commentRules.js
+ * (pure, unit-tested against rows shaped like this select). The claims
+ * select MUST be COMMENT_CLAIM_COLUMNS: the decision filters by film_id,
+ * and a select without it lost every claimant's number (the 2026-09-16
+ * live bug). Nothing else about a person leaves the server; no second copy
+ * of any name is stored.
  */
 async function resolveCommentAuthors(film, userIds) {
   const ids = [...new Set(userIds.map((v) => String(v || '')).filter(Boolean))]
@@ -1417,27 +1421,11 @@ async function resolveCommentAuthors(film, userIds) {
     supabase.from('users').select('id, name').in('id', ids),
     supabase
       .from('invites')
-      .select('claimed_by, status, ticket_no, claimed_at, created_at')
+      .select(COMMENT_CLAIM_COLUMNS)
       .eq('film_id', film.id)
       .in('claimed_by', ids),
   ])
-  const nameById = new Map((users || []).map((u) => [String(u.id), u.name]))
-  const claimsById = new Map()
-  for (const c of claims || []) {
-    const key = String(c.claimed_by)
-    if (!claimsById.has(key)) claimsById.set(key, [])
-    claimsById.get(key).push(c)
-  }
-  const authors = new Map()
-  for (const id of ids) {
-    const access = commentAccessDecision({ callerId: id, film, claimedInvites: claimsById.get(id) || [] })
-    authors.set(id, {
-      firstName: safeFirstName(nameById.get(id)),
-      ticketNo: access.ok ? access.ticketNo : null,
-      isCreator: access.ok && access.role === 'creator',
-    })
-  }
-  return authors
+  return resolveCommentAuthorFacts({ film, userIds: ids, users: users || [], claims: claims || [] })
 }
 
 const serializeComment = (row, author) => ({

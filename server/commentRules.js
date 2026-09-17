@@ -22,8 +22,18 @@
  *    stray reply row can never resurface a removed thread.
  *  - DEPLOY SAFETY: when the table does not exist yet, the read route
  *    returns an empty list and the post route a quiet 503 — never a crash.
+ *  - THE NUMBER ON EVERY COMMENT (2026-09-16, the live bug): the ticket
+ *    number beside a commenter's name is resolved from that person's claim
+ *    on THIS film — and the decision filters claims by film_id, so the
+ *    invite rows fed to it MUST carry film_id. Both routes select the ONE
+ *    column list below (COMMENT_CLAIM_COLUMNS); the author resolution is
+ *    the pure resolveCommentAuthorFacts, tested against rows shaped exactly
+ *    like that select. Before this, the read route's select dropped
+ *    film_id, every author's claims were filtered out, and nobody but the
+ *    filmmaker showed a number.
  */
 import { isVoidInvite } from '../src/lib/inviteExistence.js'
+import { safeFirstName } from '../src/lib/displayName.js'
 import {
   COMMENT_MAX_LENGTH,
   COMMENT_EMPTY_MESSAGE,
@@ -54,6 +64,17 @@ export const COMMENT_RATE_LIMIT_MESSAGE =
 const str = (v) => String(v ?? '').trim()
 
 /**
+ * The invite columns every comment route selects when it loads a person's
+ * claims on a film — the ONE list, because commentAccessDecision reads
+ * film_id, claimed_by, status, ticket_no, claimed_at and created_at from
+ * those rows. A select that drops one of them silently loses the number.
+ */
+export const COMMENT_CLAIM_COLUMNS = 'id, film_id, claimed_by, status, ticket_no, claimed_at, created_at'
+
+/** The columns commentAccessDecision reads from a claim row. */
+export const CLAIM_COLUMNS_THE_DECISION_READS = ['film_id', 'claimed_by', 'status', 'ticket_no', 'claimed_at', 'created_at']
+
+/**
  * May this verified caller read and write comments on this film?
  * `claimedInvites` = the caller's invite rows on this film (claimed_by =
  * caller, film_id = film.id), any status — the void rule is applied here.
@@ -77,6 +98,37 @@ export function commentAccessDecision({ callerId, film, claimedInvites = [] }) {
     .slice()
     .sort((a, b) => str(a.claimed_at || a.created_at).localeCompare(str(b.claimed_at || b.created_at)))[0]
   return { ok: true, role: 'claimant', ticketNo: oldest.ticket_no ?? null }
+}
+
+/**
+ * Display facts for a set of commenters, resolved at read time: first name
+ * through the one display rule (safeFirstName — never an email), the
+ * ticket number from that person's claim on THIS film (the creator's is
+ * films.creator_ticket_no). `users` = rows {id, name}; `claims` = invite
+ * rows selected with COMMENT_CLAIM_COLUMNS for these people on this film.
+ * Returns a Map of user id → { firstName, ticketNo, isCreator }. Nothing
+ * else about a person is produced here.
+ */
+export function resolveCommentAuthorFacts({ film, userIds = [], users = [], claims = [] }) {
+  const ids = [...new Set((Array.isArray(userIds) ? userIds : []).map((v) => str(v)).filter(Boolean))]
+  const nameById = new Map((Array.isArray(users) ? users : []).filter(Boolean).map((u) => [str(u.id), u.name]))
+  const claimsById = new Map()
+  for (const c of Array.isArray(claims) ? claims : []) {
+    if (!c) continue
+    const key = str(c.claimed_by)
+    if (!claimsById.has(key)) claimsById.set(key, [])
+    claimsById.get(key).push(c)
+  }
+  const authors = new Map()
+  for (const id of ids) {
+    const access = commentAccessDecision({ callerId: id, film, claimedInvites: claimsById.get(id) || [] })
+    authors.set(id, {
+      firstName: safeFirstName(nameById.get(id)),
+      ticketNo: access.ok ? access.ticketNo : null,
+      isCreator: access.ok && access.role === 'creator',
+    })
+  }
+  return authors
 }
 
 /** The start of the rate-limit window as an ISO timestamp. */

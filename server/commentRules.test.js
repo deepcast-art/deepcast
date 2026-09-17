@@ -12,7 +12,13 @@ import {
   resolveThreadParent,
   visibleComments,
   isMissingTableError,
+  resolveCommentAuthorFacts,
+  COMMENT_CLAIM_COLUMNS,
+  CLAIM_COLUMNS_THE_DECISION_READS,
 } from './commentRules.js'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
 
 const FILM = { id: 'film-1', creator_id: 'creator-1', creator_ticket_no: 1 }
 const claim = (over = {}) => ({
@@ -203,5 +209,100 @@ describe('isMissingTableError — deploy safety before the migration runs', () =
   it('does not swallow other errors', () => {
     expect(isMissingTableError({ code: '23514', message: 'check constraint violated' })).toBe(false)
     expect(isMissingTableError(null)).toBe(false)
+  })
+})
+
+/**
+ * The live bug of 2026-09-16: the read route selected the claims WITHOUT
+ * film_id, commentAccessDecision filtered every claim out, and no comment
+ * but the filmmaker's showed a number. These tests pin the fix at the rule
+ * level — the one column list, the pure resolution fed rows shaped exactly
+ * like that select, and the routes' selects reading the constant.
+ */
+describe('resolveCommentAuthorFacts — the number beside every comment', () => {
+  /** A row shaped EXACTLY like `select(COMMENT_CLAIM_COLUMNS)` returns. */
+  const selectedRow = (over = {}) => {
+    const full = claim({ created_at: '2026-08-30T10:00:00Z', ...over })
+    return Object.fromEntries(COMMENT_CLAIM_COLUMNS.split(',').map((c) => c.trim()).map((c) => [c, full[c] ?? null]))
+  }
+
+  it('the shared column list carries every column the decision reads', () => {
+    const selected = COMMENT_CLAIM_COLUMNS.split(',').map((c) => c.trim())
+    for (const col of CLAIM_COLUMNS_THE_DECISION_READS) expect(selected).toContain(col)
+    expect(selected).toContain('film_id') // the column the read route had dropped
+  })
+
+  it('a claimant of this film gets their ticket number from a select-shaped row', () => {
+    const authors = resolveCommentAuthorFacts({
+      film: FILM,
+      userIds: ['user-1'],
+      users: [{ id: 'user-1', name: 'Sofia Ruiz' }],
+      claims: [selectedRow()],
+    })
+    expect(authors.get('user-1')).toEqual({ firstName: 'Sofia', ticketNo: 41, isCreator: false })
+  })
+
+  it('a row WITHOUT film_id (the old select) loses the number — the shape the bug had', () => {
+    const { film_id: _dropped, ...withoutFilm } = selectedRow()
+    const authors = resolveCommentAuthorFacts({
+      film: FILM,
+      userIds: ['user-1'],
+      users: [{ id: 'user-1', name: 'Sofia' }],
+      claims: [withoutFilm],
+    })
+    expect(authors.get('user-1').ticketNo).toBeNull()
+  })
+
+  it('the creator carries films.creator_ticket_no; a person with no claim on this film carries null; a name is never an email', () => {
+    const authors = resolveCommentAuthorFacts({
+      film: FILM,
+      userIds: ['creator-1', 'user-2', 'user-3'],
+      users: [
+        { id: 'creator-1', name: 'Ien Chi' },
+        { id: 'user-2', name: 'ghost@example.invalid' },
+        { id: 'user-3', name: 'Krist' },
+      ],
+      claims: [selectedRow({ claimed_by: 'user-3', ticket_no: 13, film_id: 'film-2' })],
+    })
+    expect(authors.get('creator-1')).toEqual({ firstName: 'Ien', ticketNo: 1, isCreator: true })
+    expect(authors.get('user-2').ticketNo).toBeNull()
+    expect(authors.get('user-2').firstName).not.toContain('@')
+    expect(authors.get('user-3')).toEqual({ firstName: 'Krist', ticketNo: null, isCreator: false })
+  })
+
+  it('several claims resolve per person: the oldest surviving one on this film, voids ignored', () => {
+    const authors = resolveCommentAuthorFacts({
+      film: FILM,
+      userIds: ['user-1', 'user-9'],
+      users: [{ id: 'user-1', name: 'Sofia' }, { id: 'user-9', name: 'Marcus' }],
+      claims: [
+        selectedRow({ id: 'a', ticket_no: 41, claimed_at: '2026-09-02T00:00:00Z' }),
+        selectedRow({ id: 'b', ticket_no: 39, claimed_at: '2026-09-01T00:00:00Z' }),
+        selectedRow({ id: 'c', ticket_no: 5, status: 'void', claimed_at: '2026-08-01T00:00:00Z' }),
+        selectedRow({ id: 'd', claimed_by: 'user-9', ticket_no: 9 }),
+      ],
+    })
+    expect(authors.get('user-1').ticketNo).toBe(39)
+    expect(authors.get('user-9').ticketNo).toBe(9)
+  })
+
+  it('tolerates junk input and duplicates', () => {
+    expect(resolveCommentAuthorFacts({ film: FILM, userIds: ['u', 'u', '', null], users: null, claims: null }).size).toBe(1)
+    expect(resolveCommentAuthorFacts({ film: FILM }).size).toBe(0)
+  })
+
+  it('BOTH comment routes select claims through COMMENT_CLAIM_COLUMNS — no inline column list can drop film_id again', () => {
+    const here = path.dirname(fileURLToPath(import.meta.url))
+    const src = readFileSync(path.join(here, 'index.js'), 'utf8')
+    const start = src.indexOf('COMMENTS on the watch page')
+    const end = src.indexOf('Claim a link invite', start)
+    expect(start).toBeGreaterThan(0)
+    expect(end).toBeGreaterThan(start)
+    const block = src.slice(start, end)
+    // requireCommentAccess (the caller's own number) + resolveCommentAuthors (everyone's).
+    expect(block.match(/\.from\('invites'\)/g)).toHaveLength(2)
+    expect(block.match(/\.select\(COMMENT_CLAIM_COLUMNS\)/g)).toHaveLength(2)
+    expect(block).not.toMatch(/\.select\('[^']*claimed_by[^']*'\)/)
+    expect(block).toContain('resolveCommentAuthorFacts(')
   })
 })
