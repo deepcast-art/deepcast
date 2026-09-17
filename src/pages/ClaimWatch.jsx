@@ -16,6 +16,7 @@ import {
   crossedTiers,
   tierFillPercent,
   formatTierNumber,
+  giftedCountLabel,
 } from '../lib/viewerTiers'
 import {
   chainHands,
@@ -1054,6 +1055,7 @@ export default function ClaimWatch() {
   const sharesCount = Number.isFinite(link?.filmSharesCount) ? link.filmSharesCount : 0
   const goal = nextTier(sharesCount)
   const crossed = crossedTiers(sharesCount)
+  const countLabel = giftedCountLabel(sharesCount, goal)
 
   /* ── The rule line's chain depth (spec §3b.6) — from the same lineage the
      landing thread reads, id-verified collapse included. ── */
@@ -1177,10 +1179,10 @@ export default function ClaimWatch() {
                 Desktop only; mobile keeps natural block flow. */}
             <div className="mx-auto mt-9 w-full max-w-[26rem] text-left min-[900px]:mx-0 min-[900px]:mt-0 min-[900px]:flex min-[900px]:h-full min-[900px]:max-w-none min-[900px]:flex-col min-[900px]:justify-center min-[900px]:pb-10">
               {/* The record: bar → count → goal label. Squared ends, solid
-                  accent fill, progress toward the NEXT tier only. */}
-              <section
-                aria-label={`${formatTierNumber(sharesCount)} tickets shared of ${formatTierNumber(goal)} goal`}
-              >
+                  accent fill, progress toward the NEXT tier only. The words
+                  are the founder's (2026-09-16): "people have been gifted
+                  this film of {goal} goal" — one rule, giftedCountLabel. */}
+              <section aria-label={countLabel.aria}>
                 <div aria-hidden className="h-[2px] w-full bg-tint-track">
                   <div
                     className="h-full bg-accent"
@@ -1197,7 +1199,7 @@ export default function ClaimWatch() {
                   aria-hidden
                   className="mt-[0.625rem] font-sans font-normal text-[0.8125rem] uppercase leading-[1.6] tracking-[0.18em] text-warm/80"
                 >
-                  Tickets shared of {formatTierNumber(goal)} goal
+                  {countLabel.visible}
                 </p>
               </section>
 
