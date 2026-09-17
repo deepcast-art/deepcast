@@ -70,6 +70,9 @@ import {
 } from './reminderRules.js'
 import { filmPosterUrl } from '../src/content/filmStory.js'
 import { returnLinkDecision, isWellFormedReturnToken, mayMintSession, RETURN_TOKEN_DAYS } from './returnLinkRules.js'
+import { emailEventRow, isEmailEventsMissing } from './emailEvents.js'
+import { markWatchedDecision } from './markWatchedRules.js'
+import { computeEmailStats } from '../src/lib/emailStats.js'
 
 const app = express()
 app.use(cors())
@@ -411,8 +414,29 @@ async function sendInviteEmailResend(payload) {
  * the email was not sent and the caller must report that honestly (never
  * answer success to the client before this resolves).
  */
+/**
+ * Attribution (2026-09-17, server/emailEvents.js): ONE append-only
+ * email_events row per ACCEPTED automated email to an invite — written by
+ * the dispatcher after acceptance, never before. A missing table (the
+ * 20260917 migration not applied yet) or a malformed event is logged and
+ * dropped; it never fails a send that already happened.
+ */
+async function recordEmailEvent(event) {
+  const { row, reason } = emailEventRow(event)
+  if (!row) {
+    console.warn('[email-events] not recorded:', reason)
+    return
+  }
+  const { error } = await supabase.from('email_events').insert(row)
+  if (error) {
+    if (isEmailEventsMissing(error)) console.warn('[email-events] not recorded (apply the 20260917 migration):', error.message)
+    else console.warn('[email-events] not recorded:', error.message)
+  }
+}
+
 const deliverEmail = createEmailDispatcher({
   sendFn: sendInviteEmailResend,
+  recordEvent: recordEmailEvent,
   onRetry: (err, attempt, payload) => {
     const to = Array.isArray(payload?.to) ? payload.to.join(', ') : String(payload?.to || '')
     console.warn(`[email] attempt ${attempt} failed (will retry) — to: ${to} — ${err?.message || err}`)
@@ -655,7 +679,7 @@ app.post('/api/invites/send', async (req, res) => {
     // a numbering failure never blocks the send (ticket_no stays NULL).
     const ticketNo = await nextTicketNo(supabase, filmId)
 
-    const { error: inviteError } = await supabase
+    const { data: insertedInvite, error: inviteError } = await supabase
       .from('invites')
       .insert({
         film_id: filmId,
@@ -674,6 +698,8 @@ app.post('/api/invites/send', async (req, res) => {
         // works against a database where the migration hasn't landed yet.
         ...(ticketNo != null ? { ticket_no: ticketNo } : {}),
       })
+      .select('id')
+      .maybeSingle()
 
     if (inviteError) {
       if (walletSpent && senderId) {
@@ -742,7 +768,7 @@ app.post('/api/invites/send', async (req, res) => {
     )
 
     try {
-      const accepted = await deliverEmail(emailPayload)
+      const accepted = await deliverEmail(emailPayload, { event: { inviteId: insertedInvite?.id, kind: 'invite_letter' } })
       res.json({ success: true, token, emailId: accepted?.id || null })
     } catch (emailErr) {
       console.error(
@@ -2142,7 +2168,8 @@ app.post('/api/invites/resend-last', async (req, res) => {
             displaySenderEmail
           ),
           inviteUrl
-        )
+        ),
+        { event: { inviteId: invite.id, kind: 'invite_letter' } }
       )
     } catch (emailErr) {
       const message = emailErr?.message || 'Email send failed'
@@ -2290,7 +2317,8 @@ app.post('/api/invites/resend', async (req, res) => {
             displaySenderEmail
           ),
           inviteUrl
-        )
+        ),
+        { event: { inviteId: invite.id, kind: 'invite_letter' } }
       )
     } catch (emailErr) {
       const message = emailErr?.message || 'Email send failed'
@@ -3978,6 +4006,18 @@ async function mintReturnToken(inviteId) {
   return token
 }
 
+/** Attribution: the email whose /r/ link was just spent has ARRIVED —
+ *  stamp its own email_events row (found by the token's hash), once. A
+ *  missing table (pre-migration) records nothing and says nothing. */
+async function stampEmailArrival(hash) {
+  const { error } = await supabase
+    .from('email_events')
+    .update({ arrived_at: new Date().toISOString() })
+    .eq('return_token_hash', hash)
+    .is('arrived_at', null)
+  if (error && !isEmailEventsMissing(error)) console.warn('[email-events] arrival not stamped:', error.message)
+}
+
 /** The stored token state of a row, so a failed reminder send can put the
  *  previous (still-live) link back (red-team, 2026-09-16). */
 async function readReturnTokenState(inviteId) {
@@ -4047,6 +4087,7 @@ app.post('/api/invites/return', async (req, res) => {
       .is('return_token_used_at', null)
       .select('id')
     if (!spent?.length) return res.json({ status: 'spent', email: invite.claimed_email })
+    await stampEmailArrival(hash)
     let sessionTokenHash = null
     // An accountless claim (account creation failed at claim time) never
     // mints a session: generateLink for an email with no auth user could
@@ -4078,6 +4119,55 @@ app.post('/api/invites/return', async (req, res) => {
   }
 })
 
+const INVITE_ID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * POST /api/invites/mark-watched { inviteId } — the watch crossed 70%
+ * (2026-09-17; replaces the page's anon status write, which stays only as
+ * the page's fallback). The decision is server/markWatchedRules.js: only a
+ * 'claimed' row moves to 'watched'; an already-watched row answers 200 and
+ * is left untouched; anything else is refused. A claim that holds an
+ * account needs that account's verified session; an accountless claim
+ * (claimed_by null) needs none. watched_at is the SERVER's clock; before
+ * the 20260917 migration the status still flips, unstamped.
+ */
+app.post('/api/invites/mark-watched', async (req, res) => {
+  const inviteId = typeof req.body?.inviteId === 'string' ? req.body.inviteId.trim() : ''
+  if (!INVITE_ID_SHAPE.test(inviteId)) return res.status(404).json({ error: 'Unknown invite' })
+  try {
+    let callerId = null
+    const jwt = (req.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
+    if (jwt) {
+      const { data: userData, error: userErr } = await supabase.auth.getUser(jwt)
+      if (userErr || !userData?.user?.id) return res.status(401).json({ error: 'Invalid session' })
+      callerId = userData.user.id
+    }
+    const { data: invite, error } = await supabase
+      .from('invites')
+      .select('id, status, claimed_by')
+      .eq('id', inviteId)
+      .maybeSingle()
+    if (error) throw error
+    const decision = markWatchedDecision({ invite, callerId })
+    if (!decision.ok) return res.status(decision.status).json({ error: decision.error })
+    if (decision.already) return res.json({ status: decision.status, already: true })
+    // Conditional on the status the decision saw: two tabs racing, one wins.
+    const apply = (update) =>
+      supabase.from('invites').update(update).eq('id', inviteId).eq('status', 'claimed').select('id')
+    let { data: rows, error: updErr } = await apply(decision.update)
+    if (updErr && isEmailEventsMissing(updErr)) {
+      console.warn('[mark-watched] watched_at not stored (apply the 20260917 migration):', updErr.message)
+      ;({ data: rows, error: updErr } = await apply({ status: decision.update.status }))
+    }
+    if (updErr) throw updErr
+    if (!rows?.length) return res.json({ status: 'watched', already: true })
+    return res.json({ status: 'watched', watchedAt: decision.update.watched_at })
+  } catch (err) {
+    console.error('[mark-watched] failed:', err)
+    return res.status(500).json({ error: 'Could not mark watched' })
+  }
+})
+
 /**
  * The ticket email, sent once after a claim commits (server/ticketEmail.js
  * builds it; deliverEmail is the ONE dispatch path). Mints the return token
@@ -4103,7 +4193,8 @@ async function sendTicketEmailAfterClaim({ invite, slug, emailNorm, recipientNam
     dividerImg: dividerUrl(baseUrl),
   })
   const accepted = await deliverEmail(
-    withReplyTo({ to: emailNorm, subject: message.subject, html: message.html, text: message.text }, filmmaker.email)
+    withReplyTo({ to: emailNorm, subject: message.subject, html: message.html, text: message.text }, filmmaker.email),
+    { event: { inviteId: invite.id, kind: 'ticket', returnTokenHash: token ? hashReturnToken(token) : null } }
   )
   console.log('[ticket-email] Resend accepted — id:', accepted?.id || '?', 'invite:', invite.id)
   return accepted
@@ -4198,7 +4289,8 @@ async function runReminderSweep({ send }) {
         })
         try {
           await deliverEmail(
-            withReplyTo({ to: r.claimed_email, subject: message.subject, html: message.html, text: message.text }, filmmaker.email)
+            withReplyTo({ to: r.claimed_email, subject: message.subject, html: message.html, text: message.text }, filmmaker.email),
+            { event: { inviteId: r.id, kind: which === 1 ? 'reminder1' : 'reminder2', returnTokenHash: token ? hashReturnToken(token) : null } }
           )
         } catch (e) {
           if (token) await restoreReturnTokenState(r.id, previous)
@@ -4281,6 +4373,49 @@ app.post('/api/admin/reminders/run', async (req, res) => {
     }
     console.error('[reminders] run failed:', err)
     return res.status(500).json({ error: 'Reminder run failed' })
+  }
+})
+
+/**
+ * GET /api/admin/email-stats — email attribution for the owner (the
+ * ADMIN_USER_ID pin, verified session; fails closed). Per film: the table
+ * src/lib/emailStats.js computes — kind · sent · arrived by this email ·
+ * watched after arriving · shared after — plus `since`, the first event.
+ * 503 with a plain message until the 20260917 migration is applied.
+ */
+app.get('/api/admin/email-stats', async (req, res) => {
+  try {
+    const caller = await requireAdminCaller(req, res)
+    if (!caller) return
+    const { data: events, error: evErr } = await supabase
+      .from('email_events')
+      .select('invite_id, kind, sent_at, arrived_at')
+      .order('sent_at', { ascending: true })
+      .limit(20000)
+    if (evErr) throw evErr
+    const { data: invites, error: invErr } = await supabase
+      .from('invites')
+      .select('id, film_id, status, claimed_by, watched_at, parent_invite_id, sender_id, created_at')
+      .limit(20000)
+    if (invErr) throw invErr
+    const byFilm = {}
+    const filmOfInvite = new Map((invites || []).map((i) => [String(i.id), String(i.film_id)]))
+    for (const ev of events || []) {
+      const filmId = filmOfInvite.get(String(ev.invite_id))
+      if (!filmId) continue
+      ;(byFilm[filmId] ||= []).push(ev)
+    }
+    const films = {}
+    for (const [filmId, evs] of Object.entries(byFilm)) {
+      films[filmId] = computeEmailStats(evs, (invites || []).filter((i) => String(i.film_id) === filmId))
+    }
+    return res.json({ films })
+  } catch (err) {
+    if (isEmailEventsMissing(err)) {
+      return res.status(503).json({ error: 'the 20260917 migration has not been applied; nothing counted yet' })
+    }
+    console.error('[email-stats] failed:', err)
+    return res.status(500).json({ error: 'Email stats failed' })
   }
 })
 

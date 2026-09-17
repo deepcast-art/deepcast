@@ -80,3 +80,28 @@ describe('createEmailDispatcher', () => {
     expect(onRetry.mock.calls[0][1]).toBe(1)
   })
 })
+
+describe('createEmailDispatcher — attribution events (2026-09-17)', () => {
+  it('records the event once, after acceptance, and never on a failed send', async () => {
+    const recorded = []
+    const sendFn = vi.fn(async (payload) => {
+      if (payload.to === 'down@example.com') throw new Error('rejected')
+      return { id: `ok-${payload.to}` }
+    })
+    const dispatch = createEmailDispatcher({ sendFn, recordEvent: async (event, accepted) => recorded.push({ event, id: accepted.id }), maxAttempts: 1, ...FAST })
+    const ok = await dispatch({ to: 'up@example.com' }, { event: { inviteId: 'i1', kind: 'ticket' } })
+    expect(ok.id).toBe('ok-up@example.com')
+    await expect(dispatch({ to: 'down@example.com' }, { event: { inviteId: 'i2', kind: 'ticket' } })).rejects.toThrow('rejected')
+    expect(recorded).toEqual([{ event: { inviteId: 'i1', kind: 'ticket' }, id: 'ok-up@example.com' }])
+  })
+  it('a send with no event records nothing; a recorder that throws never fails the send', async () => {
+    const recordEvent = vi.fn(async () => {
+      throw new Error('table missing')
+    })
+    const dispatch = createEmailDispatcher({ sendFn: async () => ({ id: 'x' }), recordEvent, ...FAST })
+    await expect(dispatch({ to: 'a@example.com' })).resolves.toEqual({ id: 'x' })
+    expect(recordEvent).not.toHaveBeenCalled()
+    await expect(dispatch({ to: 'b@example.com' }, { event: { inviteId: 'i', kind: 'ticket' } })).resolves.toEqual({ id: 'x' })
+    expect(recordEvent).toHaveBeenCalledTimes(1)
+  })
+})

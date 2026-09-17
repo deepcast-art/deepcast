@@ -968,7 +968,16 @@ export default function ClaimWatch() {
     const pct = d > 0 ? (t / d) * 100 : 0
     if (pct >= 70) {
       hasMarkedWatched.current = true
-      await supabase.from('invites').update({ status: 'watched' }).eq('id', ownInviteId)
+      // The server stamps watched_at by its own clock (2026-09-17) and only
+      // moves a 'claimed' row; the old anon write stays as the fallback when
+      // the route cannot be reached.
+      try {
+        const { data: { session } = {} } = await supabase.auth.getSession()
+        await api.markWatched(ownInviteId, session?.access_token || null)
+      } catch (e) {
+        console.warn('[watch] mark-watched route failed (falling back to the direct write):', e?.message || e)
+        await supabase.from('invites').update({ status: 'watched' }).eq('id', ownInviteId)
+      }
     }
   }
 

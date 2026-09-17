@@ -205,6 +205,23 @@ export const api = {
       body: JSON.stringify({ slug, email, fullName, claimContext, intent }),
     }),
 
+  /** The watch crossed 70% (2026-09-17): the server flips a 'claimed' row to
+   *  'watched' and stamps watched_at by its clock. The session token, when
+   *  one exists, proves the claimant's own account. */
+  markWatched: (inviteId, accessToken = null) =>
+    request('/invites/mark-watched', {
+      method: 'POST',
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      body: JSON.stringify({ inviteId }),
+    }),
+
+  /** Owner-only (ADMIN_USER_ID): email attribution per film — kind · sent ·
+   *  arrived by this email · watched after arriving · shared after. */
+  adminEmailStats: (accessToken) =>
+    request('/admin/email-stats', {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    }),
+
   /** Spend an emailed return link (/r/{token}) — POSTed by the page's code
    *  after it runs, never on the bare GET (2026-09-16). */
   returnLink: (token) =>
