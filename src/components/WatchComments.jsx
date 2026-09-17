@@ -357,7 +357,10 @@ export default function WatchComments({ filmId, filmmakerPhotoUrl = null }) {
       else await api.adminRemoveComment(comment.id, token)
       await refresh()
     } catch {
-      /* the list simply keeps the comment; the person can retry */
+      // A refusal (e.g. already removed in another tab → 404) still re-reads
+      // the list, so the screen never keeps a comment the server no longer
+      // shows (red-team finding, 2026-09-16); otherwise the person can retry.
+      await refresh().catch(() => {})
     }
   }
 

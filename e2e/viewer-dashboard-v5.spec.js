@@ -666,15 +666,18 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     await expect(page.getByText('A Sacred Pause')).toBeVisible({ timeout: 15000 })
     const aside = page.locator('aside')
     const slot = aside.locator('p[data-remaining="unlimited"]')
-    await expect(slot).toHaveText('∞')
-    await expect(slot).toHaveAttribute('aria-label', 'Unlimited')
-    await expect(aside.getByText('Unlimited', { exact: true })).toHaveCount(0) // never the word in the slot
+    // The glyph is decorative; the word exists for screen readers only (sr-only) — never as visible text.
+    await expect(slot.locator('span[aria-hidden]')).toHaveText('∞')
+    await expect(slot.locator('span.sr-only')).toHaveText('Unlimited')
+    const unlimitedWords = aside.getByText('Unlimited', { exact: true })
+    await expect(unlimitedWords).toHaveCount(1)
+    await expect(unlimitedWords).toHaveClass(/sr-only/)
     await expect(aside.getByText('Invitations remaining')).toBeVisible()
     // The glyph rides inside the numeral's own line box: the two stat rows keep the same rhythm as a finite dashboard.
     const geom = await page.evaluate(() => {
       const rows = [...document.querySelectorAll('aside .flex.items-baseline')].slice(0, 2)
       const [a, b] = rows.map((r) => r.querySelector('p').getBoundingClientRect())
-      const glyph = rows[0].querySelector('p span')
+      const glyph = rows[0].querySelector('p span[aria-hidden]')
       return { boxA: a.height, boxB: b.height, rowGap: b.top - a.top, glyphFont: getComputedStyle(glyph).fontSize, glyphLine: getComputedStyle(glyph).lineHeight }
     })
     expect(geom.boxA).toBe(geom.boxB)

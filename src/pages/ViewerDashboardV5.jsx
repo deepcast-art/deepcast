@@ -181,7 +181,14 @@ export default function ViewerDashboardV5({
      identity line is unchanged. */
   const remainingUnlimited = ticketsRemaining === Infinity
   const remainingDisplay = remainingUnlimited ? (
-    <span className="relative top-[0.06em] inline-block font-display text-[2.125rem] font-light leading-[0]">∞</span>
+    <>
+      {/* The word for screen readers only (red-team finding, 2026-09-16:
+          aria-label is not permitted on a paragraph); the glyph is decorative. */}
+      <span className="sr-only">Unlimited</span>
+      <span aria-hidden className="relative top-[0.06em] inline-block font-display text-[2.125rem] font-light leading-[0]">
+        ∞
+      </span>
+    </>
   ) : (
     ticketsRemaining ?? '—'
   )
@@ -299,7 +306,6 @@ export default function ViewerDashboardV5({
             <div className="flex items-baseline gap-3">
               <p
                 data-remaining={remainingUnlimited ? 'unlimited' : 'count'}
-                aria-label={remainingUnlimited ? 'Unlimited' : undefined}
                 className="min-w-5 font-sans text-2xl font-light leading-none text-gold-soft"
               >
                 {remainingDisplay}
