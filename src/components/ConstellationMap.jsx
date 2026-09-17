@@ -88,7 +88,18 @@ import {
   labelVisibility,
   mapScaleFor,
   pickLabelSize,
+  rectsCollide,
+  segmentTouchesRect,
 } from '../lib/constellationLabels'
+import { PERP_OFFSET, radialLabel } from '../lib/constellationLayout'
+
+/** ZOOM REVEALS EVERYTHING (founder law, 16 September 2026): from this
+ *  zoom on (against the whole-graph view) a name the plan could not clear
+ *  on its planned side may take another — inward, then perpendicular — if
+ *  that side clears here (the founder's amendment: the perpendicular is
+ *  allowed at ≥ 2×). The renderer's per-view choice; the layout's own
+ *  side stays the plan, and no dot ever moves. */
+const RETRY_SIDES_FROM_ZOOM = 2
 
 const MIN_ZOOM_DIV = 4 // deepest zoom-in shows 1/4 of the canvas
 /** How far (as a fraction of the current view) the map may be dragged past
@@ -214,10 +225,19 @@ export default function ConstellationMap({ layout }) {
       // No viewer looking (the creator's phone): the film and the whole
       // first ring, centred on the filmmaker, at the legible scale.
       const creatorFrame = lay.threadFrame ? null : lay.firstRingFrame
+      // The view box keeps the CANVAS's aspect ratio (see `zoom`), so a box
+      // of another shape letterboxes it and the scale the box actually
+      // paints at is the smaller of the two ratios. The frame is therefore
+      // fitted to the largest canvas-shaped rectangle inside the box — on
+      // a canvas taller than the phone's box is (a deep branch) framing by
+      // the box's own width painted the thread at a fraction of the plan's
+      // scale and hid half its names.
+      const fitW = Math.min(rect.width, (rect.height * cw) / ch)
+      const fitH = (fitW * ch) / cw
       const full = creatorFrame
-        ? frameViewBox(creatorFrame, rect.width, rect.height, minScale)
-        : frameViewBox(lay.threadFrame.full, rect.width, rect.height, minScale)
-      const firstGen = creatorFrame || full.fits ? full : frameViewBox(lay.threadFrame.firstGeneration, rect.width, rect.height, minScale)
+        ? frameViewBox(creatorFrame, fitW, fitH, minScale)
+        : frameViewBox(lay.threadFrame.full, fitW, fitH, minScale)
+      const firstGen = creatorFrame || full.fits ? full : frameViewBox(lay.threadFrame.firstGeneration, fitW, fitH, minScale)
       const chosen = firstGen
       const w = Math.min(Math.max(chosen.w, cw / MIN_ZOOM_DIV), cw)
       const h = w * (ch / cw)
@@ -281,13 +301,18 @@ export default function ConstellationMap({ layout }) {
         name: n.measureName ?? n.name,
         baseSize: PERSON_LABEL_SIZE,
         gold: n.id === layout.youId,
-        tier: threadSet.has(n.id) ? 1 : 2,
+        // THE VISIBILITY TIER (founder law, 16 September 2026): a sharer's
+        // name is never hidden while any leaf's name is painted. After the
+        // always-on labels (the filmmaker's two, YOU): the sharers (tier
+        // 1); then the leaves — the viewer's thread first (tier 2), then
+        // everyone else (tier 3).
+        tier: childrenById.has(n.id) ? 1 : threadSet.has(n.id) ? 2 : 3,
         dist: 0,
         layoutHidden: Boolean(n.hidden),
       })
     }
     return items
-  }, [layout, threadSet])
+  }, [layout, threadSet, childrenById])
 
   /** SHRINK BEFORE HIDE (founder, 11 September 2026) + the collision pass:
    *  at THIS view's scale, walk the size ladder from the top and keep the
@@ -297,10 +322,10 @@ export default function ConstellationMap({ layout }) {
    *  unattached line. The measurement is translation-invariant (every
    *  rect shifts alike when the map pans), so it is taken at the origin
    *  and recomputed only when the scale changes. */
-  const { visibleIds, goldOverlaps, labelPx } = useMemo(() => {
+  const { visibleIds, goldOverlaps, labelPx, labelAt } = useMemo(() => {
     const fallbackPx = layout?.plan?.labelPx ?? MIN_LABEL_ON_SCREEN_PX
     if (!layout || !personItems.length || !mapScale) {
-      return { visibleIds: new Set(personItems.map((it) => it.id)), goldOverlaps: [], labelPx: fallbackPx }
+      return { visibleIds: new Set(personItems.map((it) => it.id)), goldOverlaps: [], labelPx: fallbackPx, labelAt: new Map() }
     }
     const scale = mapScale
     const film = layout.nodes.find((n) => n.kind === 'film')
@@ -333,8 +358,55 @@ export default function ConstellationMap({ layout }) {
       }
       return { ...labelVisibility(items, undefined, obstacles, lines), required: [...required, ...items.filter((it) => it.gold).map((it) => it.id)] }
     })
-    return { visibleIds: picked.visibleIds, goldOverlaps: picked.goldOverlaps, labelPx: picked.px }
-  }, [layout, personItems, mapScale, segments])
+    // The zoomed retry: at RETRY_SIDES_FROM_ZOOM× and beyond, every name
+    // still hidden tries the other sides of its dot in turn — inward, then
+    // the two perpendiculars — and paints on the first that clears every
+    // painted name, every other dot and every line it is not attached to
+    // at this view. The layout's own side stays the plan; this is the
+    // renderer's, per view, so zooming reveals a name whose planned side
+    // a neighbour's line runs along.
+    const zoomFactor = layout.width && rendered.w ? scale / mapScaleFor(rendered.w, rendered.h, layout.width, layout.height) : 1
+    const labelAt = new Map()
+    if (zoomFactor >= RETRY_SIDES_FROM_ZOOM - 1e-9) {
+      const view = { vbX: 0, vbY: 0, scale, minPx: picked.px }
+      const painted = personItems.filter((it) => picked.visibleIds.has(it.id)).map((it) => ({ id: it.id, rect: labelScreenRect(it, view) }))
+      // The filmmaker's two centre labels (at the rung the ladder chose)
+      // and the emblem: a retried name may cross neither — the layout's
+      // own side choice checks both (red team, 17 September).
+      if (film) {
+        for (const c of centerLabelLayout(scale, layout.creatorLabel, picked.px)) {
+          const item = { id: `${film.id}::${c.key}`, x: film.x, y: film.y + c.y, anchor: 'middle', name: c.name, baseSize: c.key === 'creator' ? 11 : 7.5, letterSpacing: c.letterSpacing }
+          painted.push({ id: item.id, rect: labelScreenRect(item, view) })
+        }
+        const [ex, ey] = toScreen(film.x - EMBLEM_R, film.y - EMBLEM_R)
+        painted.push({ id: film.id, rect: { x: ex, y: ey, w: 2 * EMBLEM_R * scale, h: 2 * EMBLEM_R * scale } })
+      }
+      const byId = new Map(layout.nodes.map((n) => [n.id, n]))
+      // Candidates in the visibility pass's own order — tier, then
+      // distance, then id — so a leaf never takes the room a sharer's
+      // retry needed (the visibility tier holds on the retry too).
+      const candidates = personItems
+        .filter((it) => !picked.visibleIds.has(it.id))
+        .sort((a, b) => (a.tier ?? 2) - (b.tier ?? 2) || a.dist - b.dist || String(a.id).localeCompare(String(b.id)))
+      for (const it of candidates) {
+        const n = byId.get(it.id)
+        if (!n) continue
+        for (const [side, hang] of [['in', 'out'], ['left', 'out'], ['right', 'out'], ['left', 'in'], ['right', 'in']]) {
+          const l = radialLabel(n.dir, n.x, n.y, side, PERP_OFFSET, hang)
+          const rect = labelScreenRect({ ...it, x: l.x, y: l.y, anchor: l.anchor }, view)
+          if (painted.some((q) => rectsCollide(rect, q.rect, LABEL_GAP_PX))) continue
+          if (obstacles.some((o) => o.id !== it.id && rectsCollide(rect, o.rect, LABEL_GAP_PX))) continue
+          if (lines.some((ln) => ln.fromId !== it.id && ln.toId !== it.id && segmentTouchesRect(ln.x1, ln.y1, ln.x2, ln.y2, rect, LABEL_GAP_PX))) continue
+          if (lines.some((ln) => (ln.fromId === it.id || ln.toId === it.id) && segmentTouchesRect(ln.x1, ln.y1, ln.x2, ln.y2, rect, 0))) continue
+          picked.visibleIds.add(it.id)
+          painted.push({ id: it.id, rect })
+          labelAt.set(it.id, { x: l.x, y: l.y, anchor: l.anchor, side })
+          break
+        }
+      }
+    }
+    return { visibleIds: picked.visibleIds, goldOverlaps: picked.goldOverlaps, labelPx: picked.px, labelAt }
+  }, [layout, personItems, mapScale, segments, rendered.w, rendered.h])
 
   /** The filmmaker's center labels for this scale (shared geometry), on
    *  the rung the ladder chose. */
@@ -506,6 +578,7 @@ export default function ConstellationMap({ layout }) {
         data-parent={n.parentId}
         data-claimed={n.claimed ? 'true' : 'false'}
         data-thread={onThread ? 'true' : 'false'}
+        data-layout-hidden={n.hidden ? 'true' : undefined}
         opacity={recede(n.id)}
         className={`${lit ? 'lit-person' : ''}${onThread ? ' lineage' : ''}`.trim() || undefined}
         style={{ cursor: 'pointer' }}
@@ -528,9 +601,10 @@ export default function ConstellationMap({ layout }) {
         {n.label && (visibleIds.has(n.id) || explored) && (
           <text
             key={`label-${n.id}`}
-            x={n.label.x}
-            y={n.label.y}
-            textAnchor={n.label.anchor}
+            x={(labelAt.get(n.id) ?? n.label).x}
+            y={(labelAt.get(n.id) ?? n.label).y}
+            textAnchor={(labelAt.get(n.id) ?? n.label).anchor}
+            data-side={labelAt.get(n.id)?.side}
             fontSize={fontSize}
             letterSpacing="2"
             className={onThread ? 'web-label lineage' : 'web-label dim-label'}
@@ -631,6 +705,9 @@ export default function ConstellationMap({ layout }) {
         viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
         data-plan-settled={layout.plan?.settled ? 'true' : 'false'}
         data-plan-label-px={layout.plan?.labelPx}
+        data-plan-spread={layout.plan?.spread}
+        data-plan-field-r0={layout.plan?.fieldR0}
+        data-plan-rim={layout.plan?.rimRadius}
         data-label-px={labelPx}
         role="img"
         aria-label={

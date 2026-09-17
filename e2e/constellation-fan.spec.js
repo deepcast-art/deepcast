@@ -30,8 +30,8 @@
  * same harness as creator-dashboard.spec.js and viewer-dashboard-v5.spec.js.
  */
 import { test, expect, pushJsError } from './fixtures/test.js'
-import { LABEL_SIZE_LADDER, LINE_ALPHA, MIN_LABEL_ON_SCREEN_PX, PERSON_LABEL_SIZE, RECEDE_OPACITY, labelFontSize, mapScaleFor } from '../src/lib/constellationLabels.js'
-import { FAN_MAX_SPAN, REACH_BASE, REACH_K } from '../src/lib/constellationLayout.js'
+import { LABEL_SIZE_LADDER, LINE_ALPHA, MIN_LABEL_ON_SCREEN_PX, PERSON_LABEL_SIZE, PHONE_MAX_WIDTH_PX, RECEDE_OPACITY, labelFontSize, mapScaleFor } from '../src/lib/constellationLabels.js'
+import { FAN_MAX_SPAN, GOLDEN_ANGLE, REACH_BASE, REACH_K, RIM_START, buildConstellationLayout } from '../src/lib/constellationLayout.js'
 
 const REF = 'wmtjgpxhjtbocsmutqqc'
 const OWNER_ID = '11111111-1111-4111-8111-111111111111'
@@ -120,8 +120,21 @@ OTIS_ROW.claimed_by = OTIS_ID
 const OTIS_KIDS = [row('k-Juno', OTIS_ID, 'Otis', 'Juno', OTIS_ROW.id)]
 ROWS.push(...OTIS_KIDS)
 const OTIS = { id: OTIS_ID, email: 'otis@example.dev', name: 'Otis', role: 'viewer', invite_allocation: 5, unlimited_shares: false, team_creator_id: null }
+const PRIYA_PROFILE = { id: PRIYA_ID, email: 'priya@example.dev', name: 'Priya', role: 'viewer', invite_allocation: 5, unlimited_shares: false, team_creator_id: null }
 
-async function mockCreator(page) {
+/* THE FIFTY WITH TEN SHARERS (the founder's two laws of 16 September 2026
+   are proven on this tree): the Circles-shaped rows plus fifty more
+   first-ring tickets, ten of which shared three times — the growth test's
+   scenario (x) on the fictional cast. 110 rows. Priya (a first-ring sharer
+   with a deep branch) stands for Arielle, Lena (a sharer of ten inside that
+   branch) for Krist. */
+const CAST50 = ['Ava', 'Ben', 'Cleo', 'Dev', 'Esme', 'Finn', 'Gia', 'Hugo', 'Isla', 'Jude', 'Kai', 'Luca', 'Milo', 'Nia', 'Otto', 'Pia', 'Quinn', 'Rosa', 'Sven', 'Tess', 'Uma', 'Vera', 'Wes', 'Xena', 'Yara', 'Zane', 'Amir', 'Bex', 'Cy', 'Dara', 'Eli', 'Fay', 'Gus', 'Hana', 'Ivo', 'Jo', 'Kip', 'Liv', 'Max', 'Nell', 'Omar', 'Poppy', 'Ray', 'Sol', 'Tia', 'Ulla', 'Vic', 'Wanda', 'Yosef', 'Zara']
+const ROWS_FIFTY = [...ROWS]
+const castRows = CAST50.map((name, i) => row(`cast-${i}`, OWNER_ID, 'Ien', name, null))
+ROWS_FIFTY.push(...castRows)
+for (const i of [0, 5, 10, 15, 20, 25, 30, 35, 40, 45]) for (const name of ['Rob', 'Kim', 'Lee']) ROWS_FIFTY.push(row(`cast-${i}-${name}`, `cast-user-${i}`, CAST50[i], name, castRows[i].id))
+
+async function mockCreator(page, rows = ROWS) {
   await page.addInitScript(([k, s]) => window.localStorage.setItem(k, JSON.stringify(s)), [`sb-${REF}-auth-token`, sessionFor(OWNER_ID, OWNER.email)])
   await page.route('**image.mux.com/**', (r) => r.fulfill({ contentType: 'image/png', body: TINY_PNG }))
   await page.route('**/auth/v1/user**', (r) => r.fulfill({ json: sessionFor(OWNER_ID, OWNER.email).user }))
@@ -131,14 +144,14 @@ async function mockCreator(page) {
   })
   await page.route('**/rest/v1/team_invites**', (r) => r.fulfill({ json: [], headers: RANGE }))
   await page.route('**/rest/v1/films**', (r) => r.fulfill({ json: [FILM], headers: RANGE }))
-  await page.route('**/rest/v1/invites**', (r) => r.fulfill({ json: ROWS, headers: rangeFor(ROWS) }))
+  await page.route('**/rest/v1/invites**', (r) => r.fulfill({ json: rows, headers: rangeFor(rows) }))
   await page.route('**/api/admin/ticket-controls/status', (r) => r.fulfill({ status: 403, json: { error: 'Not allowed' } }))
 }
 
 /** A signed-in viewer: `profile` (id/email/name), `received` = their claimed
  *  row, `sent` = the rows they created (the dashboard locates YOU by the
  *  common parent of the viewer's sent tickets). */
-async function mockViewer(page, profile, received, sent) {
+async function mockViewer(page, profile, received, sent, rows = ROWS) {
   await page.addInitScript(([k, s]) => window.localStorage.setItem(k, JSON.stringify(s)), [`sb-${REF}-auth-token`, sessionFor(profile.id, profile.email)])
   await page.route('**image.mux.com/**', (r) => r.fulfill({ contentType: 'image/png', body: TINY_PNG }))
   await page.route('**/auth/v1/user**', (r) => r.fulfill({ json: sessionFor(profile.id, profile.email).user }))
@@ -148,11 +161,12 @@ async function mockViewer(page, profile, received, sent) {
   })
   await page.route('**/rest/v1/film_tickets**', (r) => r.fulfill({ json: [{ balance: 1, unlimited: false }], headers: RANGE }))
   await page.route('**/rest/v1/films**', (r) => r.fulfill({ json: [FILM], headers: RANGE }))
+  const allRows = rows
   await page.route('**/rest/v1/invites**', (r) => {
     const url = r.request().url()
     let rows
     if (url.includes('sender_id=')) rows = sent
-    else if (url.includes('film_id=eq')) rows = ROWS
+    else if (url.includes('film_id=eq')) rows = allRows
     else rows = [{ ...received, token: null }]
     return r.fulfill({ json: rows, headers: rangeFor(rows) })
   })
@@ -245,11 +259,19 @@ const readGeometry = (page, inDialog) =>
     // dot clears its own incoming line).
     let minLineGapPx = Infinity
     let ownLineTouches = 0
+    const ownLineNames = []
     for (const nm of named) {
       for (const l of lines) {
         const g = segRectGap(l, nm.b) * ctm
         if (l.from === nm.id || l.to === nm.id) {
-          if (g <= 0) ownLineTouches++
+          // A name the LAYOUT hid (no side of its own clears) paints only
+          // as YOU — always on, its collision reported, never hidden (the
+          // founder's law) — so it is reported here, not counted.
+          if (g <= 0 && byId[nm.id]?.getAttribute('data-layout-hidden') === 'true' && byId[nm.id]?.getAttribute('data-you') === 'true') ownLineNames.push(`${nm.id} (${byId[nm.id]?.querySelector('text')?.textContent}) LAYOUT-HIDDEN, painted as always-on: touches its own line by ${(-g).toFixed(1)}px`)
+          else if (g <= 0) {
+            ownLineTouches++
+            ownLineNames.push(`${nm.id} (${byId[nm.id]?.querySelector('text')?.textContent}) side=${byId[nm.id]?.querySelector('text')?.getAttribute('data-side') ?? 'plan'} on ${l.from}→${l.to} gap=${g.toFixed(2)}px`)
+          }
           continue
         }
         minLineGapPx = Math.min(minLineGapPx, g)
@@ -289,7 +311,7 @@ const readGeometry = (page, inDialog) =>
     const labelPx = parseFloat(svg.getAttribute('data-label-px'))
     const planLabelPx = parseFloat(svg.getAttribute('data-plan-label-px'))
     const ground = getComputedStyle(svg.parentElement).backgroundColor
-    return { cx, cy, persons, labelSizes, renderedWidth: box.width, renderedHeight: box.height, viewBoxWidth: vbParts[2], viewBoxHeight: vbParts[3], paintedNames: named.length, minGapPx, namesOverDots, minLineGapPx, offThreadOpacity: offPerson ? offPerson.getAttribute('opacity') : null, groupOrder: order, onThreadInside: on ? on.querySelectorAll('g[data-node]').length : 0, threadCount: threadGroups.length, threadPainted, paintedPx, labelPx, planLabelPx, viewBox: vbParts, lineLaw, rings, settledPlan, ground, ownLineTouches, worstEndpointPx }
+    return { cx, cy, persons, labelSizes, renderedWidth: box.width, renderedHeight: box.height, viewBoxWidth: vbParts[2], viewBoxHeight: vbParts[3], paintedNames: named.length, minGapPx, namesOverDots, minLineGapPx, ownLineNames, offThreadOpacity: offPerson ? offPerson.getAttribute('opacity') : null, groupOrder: order, onThreadInside: on ? on.querySelectorAll('g[data-node]').length : 0, threadCount: threadGroups.length, threadPainted, paintedPx, labelPx, planLabelPx, viewBox: vbParts, lineLaw, rings, settledPlan, ground, ownLineTouches, worstEndpointPx }
   }, { inDialog })
 /** Wait until the map has measured its rendered width and counter-scaled
  *  its labels (the first paint uses the base size until the resize
@@ -323,6 +345,31 @@ const dirOf = (persons, id) => {
 }
 const INK = 'rgb(8, 12, 24)'
 
+/** THE PHONE OPENING FRAME is fitted to the largest canvas-shaped rectangle
+ *  inside the map box (the view box keeps the canvas's aspect, so a box of
+ *  another shape letterboxes it): the opening view's width is the one that
+ *  fit predicts from the layout's own thread frame — and NOT the one the
+ *  box's raw width and height would give, whenever the two differ (red
+ *  team, 17 September 2026; the two differ on Lena's Circles-shaped
+ *  thread, not on the fifty). Computed from the layout module in Node on
+ *  the same rows the page was given. */
+async function expectFittedFrame(page, map, label, rows, viewerInviteId) {
+  const lay = buildConstellationLayout({ filmInvites: rows, creatorId: OWNER_ID, creatorName: OWNER.name, viewerInviteId, includeGhosts: false })
+  const box = await map.boundingBox()
+  const cw = lay.width, ch = lay.height
+  const minScale = lay.plan?.scale || mapScaleFor(960, 576, cw, ch)
+  const frameW = (frame, boxW, boxH) => { const scaleToFit = Math.min(boxW / frame.w, boxH / frame.h); return { w: boxW / Math.max(scaleToFit, minScale), fits: scaleToFit >= minScale - 1e-9 } }
+  const openingW = (boxW, boxH) => { const full = frameW(lay.threadFrame.full, boxW, boxH); const chosen = full.fits ? full : frameW(lay.threadFrame.firstGeneration, boxW, boxH); return Math.min(Math.max(chosen.w, cw / 4), cw) }
+  const fitW = Math.min(box.width, (box.height * cw) / ch)
+  const fitted = openingW(fitW, (fitW * ch) / cw)
+  const unfitted = openingW(box.width, box.height)
+  const vbW = await page.evaluate(() => parseFloat(document.querySelector('svg.dc-constellation').getAttribute('viewBox').split(' ')[2]))
+  console.log(`[phone-frame] ${label}: opening view ${vbW.toFixed(1)} units wide; the fitted frame predicts ${fitted.toFixed(1)}, the box's raw size would give ${unfitted.toFixed(1)} (canvas ${cw}×${ch}, box ${Math.round(box.width)}×${Math.round(box.height)})`)
+  expect(Math.abs(vbW - fitted), `${label}: the opening view is the fitted frame`).toBeLessThan(0.5)
+  if (Math.abs(fitted - unfitted) > 1) expect(Math.abs(vbW - unfitted), `${label}: not the unfitted frame`).toBeGreaterThan(1)
+  return { fitted, unfitted }
+}
+
 test.describe('constellation shape — a branch’s length is its reach (10 September 2026)', () => {
   test('creator modal: the first ring is even; Lena’s ten sit beyond Lena in a fan on her limb, further from her than her leaf siblings are from Priya; Priya’s seven likewise; no rings', async ({ page }) => {
     const jsErrors = []
@@ -340,13 +387,37 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     const angles = geom.persons
     expect(geom.rings).toBe(0) // the generation rings are dropped
 
-    // Rule 1: nine first-ring tickets, nine equal 40° slots, at one radius.
-    const ring1Angles = ring1Rows.map((r) => angles[r.id]).sort((a, b) => a.theta - b.theta)
-    const r1 = ring1Angles[0].r
-    for (const a of ring1Angles) expect(Math.abs(a.r - r1)).toBeLessThan(0.5)
-    for (let i = 0; i < 9; i++) {
-      const next = i === 8 ? ring1Angles[0].theta + TWO_PI : ring1Angles[i + 1].theta
-      expect(next - ring1Angles[i].theta).toBeCloseTo(TWO_PI / 9, 3)
+    // Rule 1: THE DIFFUSION FIELD (founder, 16 September 2026) — the nine
+    // direct recipients sit on the sunflower spiral: each at radius
+    // FIELD_R0 + c·√k and angle k × 137.508° for some integer k, k rising
+    // in ticket order (the spread c is the plan's, on the svg).
+    const svgEl = dialog.locator('svg.dc-constellation')
+    const spread = parseFloat(await svgEl.getAttribute('data-plan-spread'))
+    const fieldR0 = parseFloat(await svgEl.getAttribute('data-plan-field-r0'))
+    const rim = parseFloat(await svgEl.getAttribute('data-plan-rim'))
+    expect(spread).toBeGreaterThan(0)
+    // Every dot is reported relative to the film's centre. THE RIM RULE:
+    // the two sharers (Noor, Priya) sit on the rim opposite each other
+    // from 12 o'clock; the seven leaves on the spiral, indices rising in
+    // ticket order.
+    const sharerIds = new Set(ring1Rows.filter((r) => ROWS.some((k) => k.parent_invite_id === r.id)).map((r) => r.id))
+    expect(sharerIds.size).toBe(2)
+    const onRim = ring1Rows.filter((r) => sharerIds.has(r.id))
+    onRim.forEach((r, i) => {
+      const a = angles[r.id]
+      expect(Math.hypot(a.x, a.y), `${r.recipient_name} on the rim`).toBeCloseTo(rim, 1)
+      expect(Math.abs(angDiff(Math.atan2(a.y, a.x), RIM_START + (i * TWO_PI) / onRim.length)), `${r.recipient_name} at rim slot ${i}`).toBeLessThan(1e-3)
+    })
+    let lastK = -1
+    for (const r of ring1Rows) {
+      if (sharerIds.has(r.id)) { lastK += 1; continue } // a sharer reserves a point
+      const a = angles[r.id]
+      const rr = Math.hypot(a.x, a.y)
+      const k = Math.round(((rr - fieldR0) / spread) ** 2)
+      expect(rr, `${r.recipient_name} on the spiral's radius`).toBeCloseTo(fieldR0 + spread * Math.sqrt(k), 1)
+      expect(Math.abs(angDiff(Math.atan2(a.y, a.x), k * GOLDEN_ANGLE)), `${r.recipient_name} at the spiral's angle`).toBeLessThan(1e-3)
+      expect(k, `${r.recipient_name}'s point comes after the ticket before`).toBeGreaterThan(lastK)
+      lastK = k
     }
 
     // Rule 2 (reach): Lena's ten sit BEYOND Lena — ahead of her limb
@@ -387,7 +458,10 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     // film → Priya → Lena → ten.
     // (force: the modal panel's rise animation and the dot's twinkle never
     // satisfy Playwright's stability wait; the pointer still moves there.)
-    await dialog.locator(`g[data-node="${LENA_ROW.id}"] > circle`).first().hover({ force: true })
+    // Under the field a neighbour's hit circle can sit over Lena's dot, so
+    // the pointer event is delivered to HER group directly (pointerover
+    // bubbles; React derives the enter from it).
+    await dialog.locator(`g[data-node="${LENA_ROW.id}"]`).dispatchEvent('pointerover', { pointerType: 'mouse', bubbles: true })
     await expect(dialog.locator('.lit-person')).toHaveCount(12)
     expect(jsErrors).toEqual([])
   })
@@ -432,7 +506,15 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     expect(modal.labelSizes).toHaveLength(1)
     expect(Math.abs(viewer.labelSizes[0] - expectedLabelSize(viewer))).toBeLessThan(0.02)
     expect(Math.abs(modal.labelSizes[0] - expectedLabelSize(modal))).toBeLessThan(0.02)
-    expect(viewer.labelPx).toBe(modal.labelPx)
+    // Each surface re-walks the size ladder at its own view (SHRINK BEFORE
+    // HIDE, 11 September): a rung on both, never below the plan's; the
+    // wider dashboard box may hold a larger rung than the modal's.
+    expect(LABEL_SIZE_LADDER).toContain(viewer.labelPx)
+    expect(LABEL_SIZE_LADDER).toContain(modal.labelPx)
+    // On a settled plan the view paints the plan's rung; on one that did
+    // not settle the view's own ladder may land lower (it hides what touches).
+    if (viewer.settledPlan) expect(viewer.labelPx).toBe(viewer.planLabelPx)
+    if (modal.settledPlan) expect(modal.labelPx).toBe(modal.planLabelPx)
 
     // THE HARD RULE, painted: on both desktop surfaces every painted name
     // keeps at least 6px from every other name, from every other person's
@@ -453,7 +535,8 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
       // LINES CONNECT DOT TO DOT: painted whole, and no painted name box
       // touches its own line either.
       expect(g.worstEndpointPx, `${label}: every segment's endpoints on its dots`).toBeLessThan(0.01)
-      expect(g.ownLineTouches, `${label}: no name on its own line`).toBe(0)
+      if (g.ownLineNames.length) console.log(`[constellation-reach] ${label}: own-line report — ${g.ownLineNames.join('; ')}`)
+      expect(g.ownLineTouches, `${label}: no name on its own line — ${g.ownLineNames.join('; ')}`).toBe(0)
       // Name size: a rung of the ladder (SHRINK BEFORE HIDE), never under
       // its bottom, on the TRUE scale — and the same rung on both desktop
       // surfaces (same height, same scale).
@@ -531,6 +614,7 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
       expect(viewer.persons[r.id].thread, r.recipient_name).toBe(threadIds.has(r.id))
       expect(viewer.persons[r.id].lit, r.recipient_name).toBe(threadIds.has(r.id))
     }
+    await page.mouse.move(0, 0) // the pointer rested where the modal's button was; under the field a person may sit there now
     await expect(map.locator('g.lit-person')).toHaveCount(12)
     await expect(map.locator('line.lineage')).toHaveCount(12)
     await expect(map.locator('line.lit-edge')).toHaveCount(12)
@@ -566,6 +650,12 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     const jsErrors = []
     page.on('pageerror', (err) => pushJsError(jsErrors, err))
     await mockLena(page)
+    // A desktop reference first: the thread names painted at 1440.
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('svg.dc-constellation g[data-node]')).toHaveCount(ROWS.length)
+    await settled(page, false)
+    const desktopThreadPainted = (await readGeometry(page, false)).threadPainted
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
     const map = page.locator('svg.dc-constellation')
@@ -573,6 +663,10 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     await expect(map.locator('g[data-node]')).toHaveCount(ROWS.length)
     await map.scrollIntoViewIfNeeded()
     await expect.poll(async () => (await readGeometry(page, false)).labelSizes.length).toBe(1)
+    // The fitted frame — on this tree the fit and the raw box DIFFER, so
+    // this is the assertion that fails without the fit.
+    const frame = await expectFittedFrame(page, map, 'Lena at 390 (Circles-shaped)', ROWS, LENA_ROW.id)
+    expect(Math.abs(frame.fitted - frame.unfitted), 'the Circles-shaped thread on a phone tells the fitted frame from the raw box').toBeGreaterThan(1)
     const opening = await page.evaluate(() => {
       const svg = document.querySelector('svg.dc-constellation')
       const vb = svg.getAttribute('viewBox').split(' ').map(parseFloat)
@@ -611,7 +705,10 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     expect(opening.pathInside).toBe(true)
     if (opening.threadFits) expect(opening.threadInside).toBe(opening.threadCount)
     else expect(opening.threadInside).toBeGreaterThan(opening.pathCount)
-    expect(opening.threadPainted).toBe(opening.threadCount)
+    // The phone opens at no smaller a scale than the plan's, so every
+    // thread name the DESKTOP paints paints here too (the plan does not
+    // settle on this tree, so the desktop itself hides some).
+    expect(opening.threadPainted).toBeGreaterThanOrEqual(desktopThreadPainted)
     // The phone follows the same ladder at its own width: a rung, never under the bottom.
     expect(opening.paintedPx).toBeGreaterThanOrEqual(MIN_LABEL_ON_SCREEN_PX - 0.15)
     expect(LABEL_SIZE_LADDER.some((px) => Math.abs(opening.paintedPx - px) < 0.15)).toBe(true)
@@ -695,12 +792,23 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     await expect(map.locator('line.lineage')).toHaveCount(12)
 
     const geom = await readGeometry(page, false)
-    const ring1 = ring1Rows.map((r) => geom.persons[r.id].theta).sort((a, b) => a - b)
-    for (let i = 0; i < 9; i++) {
-      const next = i === 8 ? ring1[0] + TWO_PI : ring1[i + 1]
-      expect(next - ring1[i]).toBeCloseTo(TWO_PI / 9, 3)
+    // THE DIFFUSION FIELD on the viewer's surface too: the nine direct
+    // recipients on the spiral, Noor (the first ticket) at its first point.
+    const spreadHere = parseFloat(await map.getAttribute('data-plan-spread'))
+    const r0Here = parseFloat(await map.getAttribute('data-plan-field-r0'))
+    const rimHere = parseFloat(await map.getAttribute('data-plan-rim'))
+    for (const r of ring1Rows) {
+      const a = geom.persons[r.id]
+      const rr = Math.hypot(a.x, a.y)
+      if (r.id === NOOR.id || r.id === PRIYA.id) {
+        expect(rr, `${r.recipient_name} on the rim`).toBeCloseTo(rimHere, 1)
+        continue
+      }
+      const k = Math.round(((rr - r0Here) / spreadHere) ** 2)
+      expect(rr, `${r.recipient_name} on the spiral's radius`).toBeCloseTo(r0Here + spreadHere * Math.sqrt(k), 1)
+      expect(Math.abs(angDiff(Math.atan2(a.y, a.x), k * GOLDEN_ANGLE)), `${r.recipient_name} at the spiral's angle`).toBeLessThan(1e-3)
     }
-    expect(Math.abs(angDiff(geom.persons[NOOR.id].theta, -Math.PI / 2))).toBeLessThan(1e-6)
+    expect(Math.abs(angDiff(Math.atan2(geom.persons[NOOR.id].y, geom.persons[NOOR.id].x), RIM_START))).toBeLessThan(1e-3)
     // The viewer's own fan: ten invitees beyond YOU on her limb, within the cap.
     const you = geom.persons[LENA_ROW.id]
     const youDir = dirOf(geom.persons, LENA_ROW.id)
@@ -708,6 +816,102 @@ test.describe('constellation shape — a branch’s length is its reach (10 Sept
     expect(offsets).toHaveLength(10)
     expect(offsets[9] - offsets[0]).toBeLessThanOrEqual(FAN_MAX_SPAN + 1e-6)
     for (const o of offsets) expect(Math.abs(o)).toBeLessThanOrEqual(Math.PI / 2 + 1e-6)
+    expect(jsErrors).toEqual([])
+  })
+
+  test('YOU ALWAYS PAINTS (founder law, 16 September 2026): on the fifty with ten sharers, Priya’s and Lena’s dashboards paint YOU at the opening view and at 1:1, on a desktop and on a phone', async ({ page }) => {
+    test.setTimeout(240000)
+    const jsErrors = []
+    page.on('pageerror', (err) => pushJsError(jsErrors, err))
+    const youAt = () =>
+      page.evaluate(() => {
+        const g = document.querySelector('svg.dc-constellation g[data-node][data-you="true"]')
+        const t = g?.querySelector('text')
+        return { exists: Boolean(g), painted: Boolean(t), text: t?.textContent ?? null, layoutHidden: g?.getAttribute('data-layout-hidden') === 'true', painted_all: document.querySelectorAll('svg.dc-constellation g[data-node] text').length }
+      })
+    for (const [who, profile, received, sent] of [['Priya', PRIYA_PROFILE, PRIYA, priyaKids], ['Lena', LENA, LENA_ROW, LENA_KIDS]]) {
+      for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+        const label = `${who} at ${viewport.width}`
+        await page.unrouteAll({ behavior: 'ignoreErrors' })
+        await mockViewer(page, profile, received, sent, ROWS_FIFTY)
+        await page.setViewportSize(viewport)
+        await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+        const map = page.locator('svg.dc-constellation')
+        await expect(map).toBeVisible({ timeout: 15000 })
+        await expect(map.locator('g[data-node]')).toHaveCount(ROWS_FIFTY.length, { timeout: 90000 })
+        await map.scrollIntoViewIfNeeded()
+        await expect.poll(async () => (await readGeometry(page, false)).labelSizes.length, { timeout: 30000 }).toBe(1)
+        const opening = await youAt()
+        expect(opening.exists, `${label}: YOU's node exists`).toBe(true)
+        expect(opening.painted, `${label}: YOU painted at the opening view`).toBe(true)
+        expect(opening.text, label).toBe('YOU')
+        console.log(`[you-always-paints] ${label}: opening view paints YOU (${opening.painted_all}/${ROWS_FIFTY.length} names painted${opening.layoutHidden ? '; YOU is layout-hidden, painted by the always-on rule' : ''})`)
+        if (viewport.width < PHONE_MAX_WIDTH_PX) await expectFittedFrame(page, map, label, ROWS_FIFTY, received.id)
+        await page.getByRole('button', { name: 'Reset zoom' }).click()
+        await expect.poll(async () => page.evaluate(() => document.querySelector('svg.dc-constellation').getAttribute('viewBox'))).toMatch(/^0 0 /)
+        const oneToOne = await youAt()
+        expect(oneToOne.painted, `${label}: YOU painted at 1:1`).toBe(true)
+        expect(oneToOne.text, label).toBe('YOU')
+        console.log(`[you-always-paints] ${label}: 1:1 paints YOU (${oneToOne.painted_all}/${ROWS_FIFTY.length} names painted)`)
+      }
+    }
+    expect(jsErrors).toEqual([])
+  })
+
+  test('ZOOM REVEALS EVERYTHING (founder law, 16 September 2026): in the creator modal on the fifty with ten sharers, zooming 1× → 2× → 3× → 4× never loses a painted name, and at 4× every name whose dot is in view is painted', async ({ page }) => {
+    test.setTimeout(240000)
+    const jsErrors = []
+    page.on('pageerror', (err) => pushJsError(jsErrors, err))
+    await mockCreator(page, ROWS_FIFTY)
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('People in this network')).toBeVisible({ timeout: 15000 })
+    await page.getByRole('button', { name: 'See network graph' }).click()
+    await expect(page.locator('dialog#network-graph-modal g[data-node]')).toHaveCount(ROWS_FIFTY.length, { timeout: 90000 })
+    await expect.poll(async () => (await readGeometry(page, true)).labelSizes.length, { timeout: 30000 }).toBe(1)
+    const state = () =>
+      page.evaluate(() => {
+        const svg = document.querySelector('dialog svg.dc-constellation')
+        const vb = svg.getAttribute('viewBox').split(' ').map(parseFloat)
+        const inside = (x, y) => x >= vb[0] && x <= vb[0] + vb[2] && y >= vb[1] && y <= vb[1] + vb[3]
+        const nodes = [...svg.querySelectorAll('g[data-node]')]
+        const inView = nodes.filter((g) => { const d = g.querySelector('circle.web-dot'); return inside(+d.getAttribute('cx'), +d.getAttribute('cy')) })
+        const unpainted = inView.filter((g) => !g.querySelector('text'))
+        const nameOf = (g) => `${g.getAttribute('data-node')}${g.getAttribute('data-layout-hidden') === 'true' ? ' (layout-hidden)' : ''}`
+        return { vbW: vb[2], painted: nodes.filter((g) => g.querySelector('text')).length, retried: nodes.filter((g) => g.querySelector('text[data-side]')).length, retriedInView: inView.filter((g) => g.querySelector('text[data-side]')).length, inView: inView.length, unpaintedInView: unpainted.map(nameOf), unpaintedInViewNotLayoutHidden: unpainted.filter((g) => g.getAttribute('data-layout-hidden') !== 'true').map((g) => g.getAttribute('data-node')), labelPx: svg.getAttribute('data-label-px') }
+      })
+    const box = await page.locator('dialog svg.dc-constellation').boundingBox()
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    const first = await state()
+    const W = first.vbW
+    const counts = [first.painted]
+    console.log(`[zoom-reveals] 1×: ${first.painted}/${ROWS_FIFTY.length} painted at ${first.labelPx}px`)
+    for (const z of [2, 3, 4]) {
+      // Wheel steps at the map's centre until the view is z× the opening
+      // view (the map zooms by exp(0.002 × deltaY) per wheel event; the
+      // deepest zoom is exactly 4×, the map's own limit).
+      for (let i = 0; i < 60 && (await state()).vbW > W / z + 1e-6; i++) await page.mouse.wheel(0, -40)
+      await expect.poll(async () => (await state()).vbW, { timeout: 10000 }).toBeLessThanOrEqual(W / z + 1e-6)
+      const s = await state()
+      counts.push(s.painted)
+      console.log(`[zoom-reveals] ${z}× (${(W / s.vbW).toFixed(2)}×): ${s.painted}/${ROWS_FIFTY.length} painted at ${s.labelPx}px (${s.retried} on a retried side, ${s.retriedInView} of them in view); dots in view ${s.inView}, of them unpainted ${s.unpaintedInView.length}${s.unpaintedInView.length ? ' — ' + s.unpaintedInView.join(', ') : ''}`)
+      // The retry itself: from 2× at least one name in view paints on a
+      // side the plan did not choose (`data-side`) — without the retry
+      // this tree's other assertions hold too (red team, 17 September).
+      if (z === 2) expect(s.retriedInView, 'at 2× a name in view paints on a retried side').toBeGreaterThanOrEqual(1)
+      if (z === 4) {
+        // Every name the collision pass hid at rest is revealed. From 2×
+        // on a hidden name may take another side — inward, then the
+        // perpendiculars (the founder's amendment) — so a name the layout
+        // could not clear on its planned side paints here. What may still
+        // hide at 4× — the map's deepest zoom — is a name no side of which
+        // clears even there; every such name must be one the layout
+        // itself could not clear (data-layout-hidden), and is reported.
+        expect(s.unpaintedInViewNotLayoutHidden, 'at 4× every name whose dot is in view is painted, unless no side of it clears at the deepest zoom (the layout hid it)').toEqual([])
+        console.log(`[zoom-reveals] at 4× ${s.unpaintedInView.length} name(s) in view have no clear side even at the deepest zoom`)
+      }
+    }
+    for (let i = 1; i < counts.length; i++) expect(counts[i], `painted names at ${i + 1}× never fewer than at ${i}×`).toBeGreaterThanOrEqual(counts[i - 1])
     expect(jsErrors).toEqual([])
   })
 

@@ -231,7 +231,7 @@ test.describe('creator dashboard — "See network graph" (mocked creator)', () =
     await expect(map.locator('line.lineage')).toHaveCount(0)
 
     // Hover Steve: film → Oliver → Steve lights (two edges, two people).
-    await map.locator(`g[data-node="${INV_STEVE.id}"]`).hover()
+    await map.locator(`g[data-node="${INV_STEVE.id}"] circle.web-dot`).hover({ force: true })
     await expect(map.locator('.lit-edge')).toHaveCount(2)
     await expect(map.locator('.lit-person')).toHaveCount(2)
     await expect(map.locator(`g[data-node="${INV_OLIVER.id}"].lit-person`)).toHaveCount(1)
@@ -243,11 +243,11 @@ test.describe('creator dashboard — "See network graph" (mocked creator)', () =
 
     // Tap Oliver: his whole lineage — film → Oliver → {Steve, Brian} — stays
     // lit after the pointer leaves; tapping again clears it.
-    await map.locator(`g[data-node="${INV_OLIVER.id}"]`).click()
+    await map.locator(`g[data-node="${INV_OLIVER.id}"] circle.web-dot`).click({ force: true })
     await dialog.getByText('Where this film has traveled').hover()
     await expect(map.locator('.lit-person')).toHaveCount(3)
     await expect(map.locator('.lit-edge')).toHaveCount(3)
-    await map.locator(`g[data-node="${INV_OLIVER.id}"]`).click()
+    await map.locator(`g[data-node="${INV_OLIVER.id}"] circle.web-dot`).click({ force: true })
     await dialog.getByText('Where this film has traveled').hover()
     await expect(map.locator('.lit-person')).toHaveCount(0)
 
