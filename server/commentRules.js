@@ -20,10 +20,28 @@
  *  - SOFT DELETE: a comment with deleted_at disappears for everyone, and
  *    its replies with it — decided at read time (visibleComments), so a
  *    stray reply row can never resurface a removed thread.
+ *  - OWN COMMENTS (founder decision 2026-09-16): any claimant may edit
+ *    and remove their OWN comments — author-only, decided on the verified
+ *    caller's id against the row's user_id (never an id from the client);
+ *    the founder keeps Remove on everything through the admin route. An
+ *    edit obeys the same body rules and the same rate window as posting;
+ *    removal is the existing soft delete with deleted_by = the author.
  *  - DEPLOY SAFETY: when the table does not exist yet, the read route
  *    returns an empty list and the post route a quiet 503 — never a crash.
+ *    When the edited_at column does not exist yet (the migration window),
+ *    reads and edits retry without it (isMissingColumnError).
+ *  - THE NUMBER ON EVERY COMMENT (2026-09-16, the live bug): the ticket
+ *    number beside a commenter's name is resolved from that person's claim
+ *    on THIS film — and the decision filters claims by film_id, so the
+ *    invite rows fed to it MUST carry film_id. Both routes select the ONE
+ *    column list below (COMMENT_CLAIM_COLUMNS); the author resolution is
+ *    the pure resolveCommentAuthorFacts, tested against rows shaped exactly
+ *    like that select. Before this, the read route's select dropped
+ *    film_id, every author's claims were filtered out, and nobody but the
+ *    filmmaker showed a number.
  */
 import { isVoidInvite } from '../src/lib/inviteExistence.js'
+import { safeFirstName } from '../src/lib/displayName.js'
 import {
   COMMENT_MAX_LENGTH,
   COMMENT_EMPTY_MESSAGE,
@@ -54,6 +72,17 @@ export const COMMENT_RATE_LIMIT_MESSAGE =
 const str = (v) => String(v ?? '').trim()
 
 /**
+ * The invite columns every comment route selects when it loads a person's
+ * claims on a film — the ONE list, because commentAccessDecision reads
+ * film_id, claimed_by, status, ticket_no, claimed_at and created_at from
+ * those rows. A select that drops one of them silently loses the number.
+ */
+export const COMMENT_CLAIM_COLUMNS = 'id, film_id, claimed_by, status, ticket_no, claimed_at, created_at'
+
+/** The columns commentAccessDecision reads from a claim row. */
+export const CLAIM_COLUMNS_THE_DECISION_READS = ['film_id', 'claimed_by', 'status', 'ticket_no', 'claimed_at', 'created_at']
+
+/**
  * May this verified caller read and write comments on this film?
  * `claimedInvites` = the caller's invite rows on this film (claimed_by =
  * caller, film_id = film.id), any status — the void rule is applied here.
@@ -77,6 +106,61 @@ export function commentAccessDecision({ callerId, film, claimedInvites = [] }) {
     .slice()
     .sort((a, b) => str(a.claimed_at || a.created_at).localeCompare(str(b.claimed_at || b.created_at)))[0]
   return { ok: true, role: 'claimant', ticketNo: oldest.ticket_no ?? null }
+}
+
+/**
+ * The comment row columns the routes select — with edited_at (2026-09-16),
+ * and the list to fall back to while that column does not exist yet.
+ */
+export const COMMENT_ROW_COLUMNS = 'id, film_id, user_id, parent_comment_id, body, created_at, deleted_at, edited_at'
+export const COMMENT_ROW_COLUMNS_LEGACY = 'id, film_id, user_id, parent_comment_id, body, created_at, deleted_at'
+
+/**
+ * May this verified caller edit or remove THIS comment? Author-only: the
+ * row's user_id must equal the verified caller's id, the row must belong
+ * to the film in the URL, and it must not already be removed. The founder's
+ * moderation is a separate, admin-pinned path — this rule never widens it.
+ */
+export function ownCommentDecision({ callerId, comment, filmId }) {
+  const caller = str(callerId)
+  if (!caller) return { ok: false, status: 401, error: 'Not authenticated' }
+  const gone = { ok: false, status: 404, error: 'That comment is no longer here' }
+  if (!comment || str(comment.film_id) !== str(filmId) || comment.deleted_at) return gone
+  if (str(comment.user_id) !== caller) {
+    return { ok: false, status: 403, error: 'Only the person who wrote a comment can change it' }
+  }
+  return { ok: true }
+}
+
+/**
+ * Display facts for a set of commenters, resolved at read time: first name
+ * through the one display rule (safeFirstName — never an email), the
+ * ticket number from that person's claim on THIS film (the creator's is
+ * films.creator_ticket_no). `users` = rows {id, name}; `claims` = invite
+ * rows selected with COMMENT_CLAIM_COLUMNS for these people on this film.
+ * Returns a Map of user id → { firstName, ticketNo, isCreator }. Nothing
+ * else about a person is produced here.
+ */
+export function resolveCommentAuthorFacts({ film, userIds = [], users = [], claims = [] }) {
+  const ids = [...new Set((Array.isArray(userIds) ? userIds : []).map((v) => str(v)).filter(Boolean))]
+  const nameById = new Map((Array.isArray(users) ? users : []).filter(Boolean).map((u) => [str(u.id), u.name]))
+  const claimsById = new Map()
+  for (const c of Array.isArray(claims) ? claims : []) {
+    if (!c) continue
+    const key = str(c.claimed_by)
+    if (!claimsById.has(key)) claimsById.set(key, [])
+    claimsById.get(key).push(c)
+  }
+  const authors = new Map()
+  for (const id of ids) {
+    const access = commentAccessDecision({ callerId: id, film, claimedInvites: claimsById.get(id) || [] })
+    authors.set(id, {
+      firstName: safeFirstName(nameById.get(id)),
+      ticketNo: access.ok ? access.ticketNo : null,
+      isCreator: access.ok && access.role === 'creator',
+    })
+  }
+  return authors
 }
 
 /** The start of the rate-limit window as an ISO timestamp. */
@@ -125,6 +209,15 @@ export function visibleComments(rows = []) {
       const t = str(a.created_at).localeCompare(str(b.created_at))
       return t !== 0 ? t : str(a.id).localeCompare(str(b.id))
     })
+}
+
+/** Is this PostgREST/Postgres error "that column does not exist" (the
+ *  edited_at migration window)? */
+export function isMissingColumnError(error) {
+  if (!error) return false
+  const code = str(error.code)
+  if (code === '42703' || code === 'PGRST204') return true
+  return /could not find the .* column|column .* does not exist/i.test(str(error.message))
 }
 
 /** Is this PostgREST/Postgres error "the comments table does not exist"? */

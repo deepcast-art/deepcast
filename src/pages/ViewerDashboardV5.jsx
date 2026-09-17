@@ -169,8 +169,29 @@ export default function ViewerDashboardV5({
   }
 
   const name = profile.name?.trim() || 'Welcome'
-  const remainingDisplay =
-    ticketsRemaining === Infinity ? 'Unlimited' : (ticketsRemaining ?? '—')
+  /* Unlimited (founder direction 2026-09-16): the numeral slot shows ∞ —
+     the glyph the creator's ticket controls already use — never the word.
+     Set at numeral size the glyph sits small and low (x-height), and
+     Phoenix's own ∞ is far heavier than its light digits. Measured against
+     the digits' ink (2026-09-16, canvas metrics): the ∞ is set in the
+     display face (Neue Haas Display 55, the thin stroke the light digits
+     have) at 2.125rem, riding inside the numeral's 24px line box
+     (line-height 0, so the two stat rows keep their rhythm) and lowered
+     0.06em so its ink centre meets the digits' ink centre. The mobile
+     identity line is unchanged. */
+  const remainingUnlimited = ticketsRemaining === Infinity
+  const remainingDisplay = remainingUnlimited ? (
+    <>
+      {/* The word for screen readers only (red-team finding, 2026-09-16:
+          aria-label is not permitted on a paragraph); the glyph is decorative. */}
+      <span className="sr-only">Unlimited</span>
+      <span aria-hidden className="relative top-[0.06em] inline-block font-display text-[2.125rem] font-light leading-[0]">
+        ∞
+      </span>
+    </>
+  ) : (
+    ticketsRemaining ?? '—'
+  )
   const mobileLine =
     ticketsRemaining === Infinity
       ? `Unlimited invitations · ${ticketsGiven} sent`
@@ -283,7 +304,10 @@ export default function ViewerDashboardV5({
 
           <div className="mt-7 flex flex-col gap-4 border-t border-mist/[0.12] pt-6">
             <div className="flex items-baseline gap-3">
-              <p className="min-w-5 font-sans text-2xl font-light leading-none text-gold-soft">
+              <p
+                data-remaining={remainingUnlimited ? 'unlimited' : 'count'}
+                className="min-w-5 font-sans text-2xl font-light leading-none text-gold-soft"
+              >
                 {remainingDisplay}
               </p>
               <p className="font-sans text-[0.625rem] uppercase tracking-[0.22em] text-smoke">

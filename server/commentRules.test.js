@@ -12,7 +12,17 @@ import {
   resolveThreadParent,
   visibleComments,
   isMissingTableError,
+  resolveCommentAuthorFacts,
+  ownCommentDecision,
+  isMissingColumnError,
+  COMMENT_CLAIM_COLUMNS,
+  CLAIM_COLUMNS_THE_DECISION_READS,
+  COMMENT_ROW_COLUMNS,
+  COMMENT_ROW_COLUMNS_LEGACY,
 } from './commentRules.js'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
 
 const FILM = { id: 'film-1', creator_id: 'creator-1', creator_ticket_no: 1 }
 const claim = (over = {}) => ({
@@ -203,5 +213,142 @@ describe('isMissingTableError — deploy safety before the migration runs', () =
   it('does not swallow other errors', () => {
     expect(isMissingTableError({ code: '23514', message: 'check constraint violated' })).toBe(false)
     expect(isMissingTableError(null)).toBe(false)
+  })
+})
+
+/**
+ * The live bug of 2026-09-16: the read route selected the claims WITHOUT
+ * film_id, commentAccessDecision filtered every claim out, and no comment
+ * but the filmmaker's showed a number. These tests pin the fix at the rule
+ * level — the one column list, the pure resolution fed rows shaped exactly
+ * like that select, and the routes' selects reading the constant.
+ */
+describe('resolveCommentAuthorFacts — the number beside every comment', () => {
+  /** A row shaped EXACTLY like `select(COMMENT_CLAIM_COLUMNS)` returns. */
+  const selectedRow = (over = {}) => {
+    const full = claim({ created_at: '2026-08-30T10:00:00Z', ...over })
+    return Object.fromEntries(COMMENT_CLAIM_COLUMNS.split(',').map((c) => c.trim()).map((c) => [c, full[c] ?? null]))
+  }
+
+  it('the shared column list carries every column the decision reads', () => {
+    const selected = COMMENT_CLAIM_COLUMNS.split(',').map((c) => c.trim())
+    for (const col of CLAIM_COLUMNS_THE_DECISION_READS) expect(selected).toContain(col)
+    expect(selected).toContain('film_id') // the column the read route had dropped
+  })
+
+  it('a claimant of this film gets their ticket number from a select-shaped row', () => {
+    const authors = resolveCommentAuthorFacts({
+      film: FILM,
+      userIds: ['user-1'],
+      users: [{ id: 'user-1', name: 'Sofia Ruiz' }],
+      claims: [selectedRow()],
+    })
+    expect(authors.get('user-1')).toEqual({ firstName: 'Sofia', ticketNo: 41, isCreator: false })
+  })
+
+  it('a row WITHOUT film_id (the old select) loses the number — the shape the bug had', () => {
+    const { film_id: _dropped, ...withoutFilm } = selectedRow()
+    const authors = resolveCommentAuthorFacts({
+      film: FILM,
+      userIds: ['user-1'],
+      users: [{ id: 'user-1', name: 'Sofia' }],
+      claims: [withoutFilm],
+    })
+    expect(authors.get('user-1').ticketNo).toBeNull()
+  })
+
+  it('the creator carries films.creator_ticket_no; a person with no claim on this film carries null; a name is never an email', () => {
+    const authors = resolveCommentAuthorFacts({
+      film: FILM,
+      userIds: ['creator-1', 'user-2', 'user-3'],
+      users: [
+        { id: 'creator-1', name: 'Ien Chi' },
+        { id: 'user-2', name: 'ghost@example.invalid' },
+        { id: 'user-3', name: 'Krist' },
+      ],
+      claims: [selectedRow({ claimed_by: 'user-3', ticket_no: 13, film_id: 'film-2' })],
+    })
+    expect(authors.get('creator-1')).toEqual({ firstName: 'Ien', ticketNo: 1, isCreator: true })
+    expect(authors.get('user-2').ticketNo).toBeNull()
+    expect(authors.get('user-2').firstName).not.toContain('@')
+    expect(authors.get('user-3')).toEqual({ firstName: 'Krist', ticketNo: null, isCreator: false })
+  })
+
+  it('several claims resolve per person: the oldest surviving one on this film, voids ignored', () => {
+    const authors = resolveCommentAuthorFacts({
+      film: FILM,
+      userIds: ['user-1', 'user-9'],
+      users: [{ id: 'user-1', name: 'Sofia' }, { id: 'user-9', name: 'Marcus' }],
+      claims: [
+        selectedRow({ id: 'a', ticket_no: 41, claimed_at: '2026-09-02T00:00:00Z' }),
+        selectedRow({ id: 'b', ticket_no: 39, claimed_at: '2026-09-01T00:00:00Z' }),
+        selectedRow({ id: 'c', ticket_no: 5, status: 'void', claimed_at: '2026-08-01T00:00:00Z' }),
+        selectedRow({ id: 'd', claimed_by: 'user-9', ticket_no: 9 }),
+      ],
+    })
+    expect(authors.get('user-1').ticketNo).toBe(39)
+    expect(authors.get('user-9').ticketNo).toBe(9)
+  })
+
+  it('tolerates junk input and duplicates', () => {
+    expect(resolveCommentAuthorFacts({ film: FILM, userIds: ['u', 'u', '', null], users: null, claims: null }).size).toBe(1)
+    expect(resolveCommentAuthorFacts({ film: FILM }).size).toBe(0)
+  })
+
+  it('BOTH comment routes select claims through COMMENT_CLAIM_COLUMNS — no inline column list can drop film_id again', () => {
+    const here = path.dirname(fileURLToPath(import.meta.url))
+    const src = readFileSync(path.join(here, 'index.js'), 'utf8')
+    const start = src.indexOf('COMMENTS on the watch page')
+    const end = src.indexOf('Claim a link invite', start)
+    expect(start).toBeGreaterThan(0)
+    expect(end).toBeGreaterThan(start)
+    const block = src.slice(start, end)
+    // requireCommentAccess (the caller's own number) + resolveCommentAuthors (everyone's).
+    expect(block.match(/\.from\('invites'\)/g)).toHaveLength(2)
+    expect(block.match(/\.select\(COMMENT_CLAIM_COLUMNS\)/g)).toHaveLength(2)
+    expect(block).not.toMatch(/\.select\('[^']*claimed_by[^']*'\)/)
+    expect(block).toContain('resolveCommentAuthorFacts(')
+  })
+})
+
+describe('ownCommentDecision — a claimant edits and removes their OWN comments (founder, 2026-09-16)', () => {
+  const row = (over = {}) => ({ id: 'c1', film_id: 'film-1', user_id: 'user-1', deleted_at: null, ...over })
+
+  it('admits the author of a live comment on this film', () => {
+    expect(ownCommentDecision({ callerId: 'user-1', comment: row(), filmId: 'film-1' })).toEqual({ ok: true })
+  })
+
+  it('refuses without a verified caller (401)', () => {
+    expect(ownCommentDecision({ callerId: '', comment: row(), filmId: 'film-1' })).toMatchObject({ ok: false, status: 401 })
+  })
+
+  it('refuses anyone but the author (403) — the founder included; his path is the admin route', () => {
+    expect(ownCommentDecision({ callerId: 'user-2', comment: row(), filmId: 'film-1' })).toMatchObject({ ok: false, status: 403 })
+    expect(ownCommentDecision({ callerId: 'creator-1', comment: row(), filmId: 'film-1' })).toMatchObject({ ok: false, status: 403 })
+  })
+
+  it('a missing, removed, or other-film comment is "no longer here" (404) — even for its author', () => {
+    expect(ownCommentDecision({ callerId: 'user-1', comment: null, filmId: 'film-1' })).toMatchObject({ ok: false, status: 404 })
+    expect(ownCommentDecision({ callerId: 'user-1', comment: row({ deleted_at: '2026-09-16T00:00:00Z' }), filmId: 'film-1' })).toMatchObject({ ok: false, status: 404 })
+    expect(ownCommentDecision({ callerId: 'user-1', comment: row({ film_id: 'film-2' }), filmId: 'film-1' })).toMatchObject({ ok: false, status: 404 })
+  })
+
+  it('never trusts a client-shaped id: only user_id on the row decides', () => {
+    expect(ownCommentDecision({ callerId: 'user-1', comment: row({ user_id: null, author: 'user-1' }), filmId: 'film-1' })).toMatchObject({ ok: false, status: 403 })
+  })
+})
+
+describe('the edited_at migration window', () => {
+  it('the full row list adds only edited_at to the legacy list', () => {
+    expect(COMMENT_ROW_COLUMNS).toBe(`${COMMENT_ROW_COLUMNS_LEGACY}, edited_at`)
+  })
+
+  it('isMissingColumnError recognises Postgres and PostgREST forms, and nothing else', () => {
+    expect(isMissingColumnError({ code: '42703' })).toBe(true)
+    expect(isMissingColumnError({ code: 'PGRST204', message: "Could not find the 'edited_at' column of 'comments' in the schema cache" })).toBe(true)
+    expect(isMissingColumnError({ message: 'column comments.edited_at does not exist' })).toBe(true)
+    expect(isMissingColumnError({ code: '42P01', message: 'relation "public.comments" does not exist' })).toBe(false)
+    expect(isMissingColumnError({ code: '23514', message: 'check constraint' })).toBe(false)
+    expect(isMissingColumnError(null)).toBe(false)
   })
 })

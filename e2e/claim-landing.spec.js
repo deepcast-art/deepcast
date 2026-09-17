@@ -259,7 +259,7 @@ test.describe('three-page claim arc', () => {
     // count, which the fixture deliberately sets to a different number.
     await expect(page.getByText('847', { exact: true })).toBeVisible()
     await expect(page.getByText('512', { exact: true })).toHaveCount(0)
-    await expect(page.getByText('Tickets shared of 1,000 goal')).toBeVisible()
+    await expect(page.getByText('People gifted of 1,000 goal')).toBeVisible()
     await expect(page.getByText('Milestones passed')).toBeVisible()
     // The path (founder design 2026-09-09, replacing the rule line):
     // fixture lineage ['Ien Chi'] + senderIsCreator → one hand — IEN
@@ -578,7 +578,7 @@ test.describe('three-page claim arc', () => {
     await page.goto('/watch/alex-h4k2', { waitUntil: 'domcontentloaded' })
 
     await expect(page.getByText('3', { exact: true })).toBeVisible()
-    await expect(page.getByText('Tickets shared of 100 goal')).toBeVisible()
+    await expect(page.getByText('People gifted of 100 goal')).toBeVisible()
     await expect(page.getByText('Milestones passed')).toHaveCount(0)
     await expect(page.getByText('✦')).toHaveCount(0)
     expect(jsErrors).toEqual([])

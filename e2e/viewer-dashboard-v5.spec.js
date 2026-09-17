@@ -653,6 +653,42 @@ test.describe('V5 viewer dashboard — signed-in account holder (mocked)', () =>
     }
   })
 
+  test('unlimited (founder, 2026-09-16): the numeral slot shows ∞ in the numeral’s line box; the mobile line is unchanged', async ({ page }) => {
+    // Registered after beforeEach's route, so it wins: this viewer is unlimited.
+    await page.route('**/rest/v1/film_tickets**', (route) =>
+      route.fulfill({
+        json: [{ balance: 0, unlimited: true }],
+        headers: { 'content-range': '0-0/1', 'access-control-expose-headers': 'Content-Range' },
+      })
+    )
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('A Sacred Pause')).toBeVisible({ timeout: 15000 })
+    const aside = page.locator('aside')
+    const slot = aside.locator('p[data-remaining="unlimited"]')
+    // The glyph is decorative; the word exists for screen readers only (sr-only) — never as visible text.
+    await expect(slot.locator('span[aria-hidden]')).toHaveText('∞')
+    await expect(slot.locator('span.sr-only')).toHaveText('Unlimited')
+    const unlimitedWords = aside.getByText('Unlimited', { exact: true })
+    await expect(unlimitedWords).toHaveCount(1)
+    await expect(unlimitedWords).toHaveClass(/sr-only/)
+    await expect(aside.getByText('Invitations remaining')).toBeVisible()
+    // The glyph rides inside the numeral's own line box: the two stat rows keep the same rhythm as a finite dashboard.
+    const geom = await page.evaluate(() => {
+      const rows = [...document.querySelectorAll('aside .flex.items-baseline')].slice(0, 2)
+      const [a, b] = rows.map((r) => r.querySelector('p').getBoundingClientRect())
+      const glyph = rows[0].querySelector('p span[aria-hidden]')
+      return { boxA: a.height, boxB: b.height, rowGap: b.top - a.top, glyphFont: getComputedStyle(glyph).fontSize, glyphLine: getComputedStyle(glyph).lineHeight }
+    })
+    expect(geom.boxA).toBe(geom.boxB)
+    expect(geom.rowGap).toBe(40)
+    expect(geom.glyphFont).toBe('34px')
+    expect(geom.glyphLine).toBe('0px')
+
+    await page.setViewportSize({ width: 375, height: 812 })
+    await expect(page.getByText('Ticket No. 59 · Unlimited invitations · 2 sent')).toBeVisible()
+  })
+
   test('mobile: identity line, bottom share bar, menu overlay', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 })
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })

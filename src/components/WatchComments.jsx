@@ -21,8 +21,15 @@ import { COMMENT_MAX_LENGTH, COMMENT_UNAVAILABLE_MESSAGE, commentBodyError } fro
  * time; this component never sends anything about a person. Oldest first,
  * always; no polling — the list loads with the page and refreshes after
  * the viewer posts. Replies render one level, indented under their
- * top-level comment. "Reply" and "Remove" (owner only) are bare
- * tracked-caps text — the affordance-law amendment of 2026-09-09.
+ * top-level comment. "Reply", "Edit" and "Remove" are bare tracked-caps
+ * text — the affordance-law amendment of 2026-09-09.
+ *
+ * OWN COMMENTS (founder decision 2026-09-16): the author of a comment sees
+ * "Edit" and "Remove" beside "Reply" (the server marks each row `own` —
+ * a boolean, no ids). Edit swaps the body for the prefilled composer with
+ * "Save" / "Cancel"; an edited comment's name line gains "· edited" after
+ * the time. Remove is the same two clicks as the founder's, on the
+ * author-only route; the founder keeps Remove on everything (admin route).
  */
 
 /** The composer's / a comment's circle: the filmmaker's photo frame at
@@ -49,9 +56,24 @@ function Circle({ initial, photoUrl, small = false }) {
 
 const initialOf = (name) => String(name || '').trim().charAt(0).toUpperCase() || '·'
 
-/** One composer, reused at the top and at the end of a thread (the reply). */
-function Composer({ viewer, photoUrl, small = false, onSubmit, busy, error, autoFocus = false, idSuffix }) {
-  const [value, setValue] = useState('')
+/** One composer, reused at the top, at the end of a thread (the reply),
+ *  and in place of a comment's body while its author edits it (`editing`:
+ *  prefilled, no circle and no identity line — the comment's own name line
+ *  stays above — "Save" in the Post box's place, "Cancel" beside it). */
+function Composer({
+  viewer,
+  photoUrl,
+  small = false,
+  onSubmit,
+  busy,
+  error,
+  autoFocus = false,
+  idSuffix,
+  editing = false,
+  initialValue = '',
+  onCancel = null,
+}) {
+  const [value, setValue] = useState(initialValue)
   const ref = useRef(null)
   const inputId = `comment-body-${idSuffix}`
 
@@ -63,8 +85,19 @@ function Composer({ viewer, photoUrl, small = false, onSubmit, busy, error, auto
     el.style.height = `${el.scrollHeight}px`
   }
   useEffect(() => {
-    if (autoFocus) ref.current?.focus()
-  }, [autoFocus])
+    if (autoFocus) {
+      const el = ref.current
+      if (!el) return
+      el.focus()
+      // Editing: the caret at the end of the existing text, the field
+      // already grown to fit it.
+      if (editing) {
+        el.setSelectionRange(el.value.length, el.value.length)
+        el.style.height = 'auto'
+        el.style.height = `${el.scrollHeight}px`
+      }
+    }
+  }, [autoFocus, editing])
 
   const submit = async (e) => {
     e.preventDefault()
@@ -77,10 +110,12 @@ function Composer({ viewer, photoUrl, small = false, onSubmit, busy, error, auto
 
   return (
     <form onSubmit={submit} className="flex items-start gap-4">
-      <Circle initial={initialOf(viewer.firstName)} photoUrl={viewer.isCreator ? photoUrl : null} small={small} />
+      {!editing && (
+        <Circle initial={initialOf(viewer.firstName)} photoUrl={viewer.isCreator ? photoUrl : null} small={small} />
+      )}
       <div className="min-w-0 flex-1">
         <label htmlFor={inputId} className="sr-only">
-          Write a comment
+          {editing ? 'Edit your comment' : 'Write a comment'}
         </label>
         <textarea
           ref={ref}
@@ -100,18 +135,25 @@ function Composer({ viewer, photoUrl, small = false, onSubmit, busy, error, auto
             nothing is lost from the field. */}
         {error && <p className="mt-2 font-sans text-xs text-error/90">{error}</p>}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-          <p className="font-sans font-normal text-[11px] uppercase tracking-[0.24em] text-muted">
-            You’ll appear as {viewer.firstName}
-            {viewer.ticketNo != null && <> · Ticket No. {viewer.ticketNo}</>}
-          </p>
+          {editing ? (
+            <button type="button" onClick={onCancel} disabled={busy} className={ACTION_CLASS}>
+              Cancel
+            </button>
+          ) : (
+            <p className="font-sans font-normal text-[11px] uppercase tracking-[0.24em] text-muted">
+              You’ll appear as {viewer.firstName}
+              {viewer.ticketNo != null && <> · Ticket No. {viewer.ticketNo}</>}
+            </p>
+          )}
           {/* The section's ONLY gold: the Post box (border accent/60, accent
-              text, caps 0.8125rem/0.28em, min-h 48). */}
+              text, caps 0.8125rem/0.28em, min-h 48) — "Save" in its place
+              while editing. */}
           <button
             type="submit"
             disabled={busy}
             className="min-h-[48px] cursor-pointer touch-manipulation border border-accent/60 px-7 py-3 font-sans font-normal text-[0.8125rem] uppercase tracking-[0.28em] text-accent transition-colors duration-300 hover:border-accent hover:bg-accent hover:text-ink focus-visible:border-accent focus-visible:bg-accent focus-visible:text-ink focus-visible:outline-none disabled:opacity-50"
           >
-            {busy ? 'One moment…' : 'Post'}
+            {busy ? 'One moment…' : editing ? 'Save' : 'Post'}
           </button>
         </div>
       </div>
@@ -122,43 +164,89 @@ function Composer({ viewer, photoUrl, small = false, onSubmit, busy, error, auto
 const ACTION_CLASS =
   'cursor-pointer touch-manipulation font-sans font-normal text-[11px] uppercase tracking-[0.24em] text-muted transition-colors hover:text-warm focus-visible:text-warm focus-visible:outline-none'
 
-function CommentItem({ comment, photoUrl, small = false, canModerate, onReply, onRemove, confirmingRemove, onArmRemove }) {
+function CommentItem({
+  comment,
+  photoUrl,
+  small = false,
+  canModerate,
+  viewer,
+  onReply,
+  onRemove,
+  confirmingRemove,
+  onArmRemove,
+  editing = false,
+  onEdit,
+  onSaveEdit,
+  onCancelEdit,
+  editBusy = false,
+  editError = '',
+}) {
   const { author } = comment
+  const own = comment.own === true
   return (
     <article className="flex items-start gap-4" data-comment-id={comment.id}>
       <Circle initial={initialOf(author.firstName)} photoUrl={author.isCreator ? photoUrl : null} small={small} />
       <div className="min-w-0 flex-1">
         {/* "SOFIA · Ticket No. 41 · 2 hours ago" — the name in caps warm/90,
-            the rest muted, one tracked line. */}
+            the rest muted, one tracked line; "· edited" after the time once
+            the author has changed it. */}
         <p className="font-sans font-normal text-xs tracking-[0.26em] text-muted">
           <span className="uppercase text-warm/90">{author.firstName}</span>
           {author.ticketNo != null && <> · Ticket No. {author.ticketNo}</>}
           {' · '}
           <time dateTime={comment.createdAt}>{relativeTime(comment.createdAt)}</time>
+          {comment.editedAt && <> · edited</>}
         </p>
-        <p className="mt-2.5 max-w-[62ch] whitespace-pre-wrap font-sans font-light text-[1.0625rem] leading-[1.85] text-warm/80">
-          {comment.body}
-        </p>
-        <p className="mt-3 flex gap-6">
-          {onReply && (
-            <button type="button" onClick={onReply} className={ACTION_CLASS}>
-              Reply
-            </button>
-          )}
-          {canModerate && (
-            /* Two clicks (founder, 2026-09-09): the first turns the text to
-               "Confirm remove", the second removes; clicking anywhere else
-               resets it (the parent's document listener). */
-            <button
-              type="button"
-              data-confirm-remove={comment.id}
-              onClick={confirmingRemove ? onRemove : onArmRemove}
-              className={ACTION_CLASS}
-            >
-              {confirmingRemove ? 'Confirm remove' : 'Remove'}
-            </button>
-          )}
-        </p>
+        {editing ? (
+          /* The author's edit: the body swapped for the prefilled composer
+             (founder, 2026-09-16). "Save" / "Cancel"; nothing is lost from
+             the field on a failed save. */
+          <div className="mt-2.5" data-comment-editing={comment.id}>
+            <Composer
+              viewer={viewer}
+              editing
+              autoFocus
+              initialValue={comment.body}
+              onSubmit={onSaveEdit}
+              onCancel={onCancelEdit}
+              busy={editBusy}
+              error={editError}
+              idSuffix={`edit-${comment.id}`}
+            />
+          </div>
+        ) : (
+          <>
+            <p className="mt-2.5 max-w-[62ch] whitespace-pre-wrap font-sans font-light text-[1.0625rem] leading-[1.85] text-warm/80">
+              {comment.body}
+            </p>
+            <p className="mt-3 flex gap-6">
+              {onReply && (
+                <button type="button" onClick={onReply} className={ACTION_CLASS}>
+                  Reply
+                </button>
+              )}
+              {own && (
+                <button type="button" onClick={onEdit} className={ACTION_CLASS}>
+                  Edit
+                </button>
+              )}
+              {(own || canModerate) && (
+                /* Two clicks (founder, 2026-09-09): the first turns the text to
+                   "Confirm remove", the second removes; clicking anywhere else
+                   resets it (the parent's document listener). The author's
+                   Remove is the same two clicks (founder, 2026-09-16). */
+                <button
+                  type="button"
+                  data-confirm-remove={comment.id}
+                  onClick={confirmingRemove ? onRemove : onArmRemove}
+                  className={ACTION_CLASS}
+                >
+                  {confirmingRemove ? 'Confirm remove' : 'Remove'}
+                </button>
+              )}
+            </p>
+          </>
+        )}
       </div>
     </article>
   )
@@ -171,6 +259,8 @@ export default function WatchComments({ filmId, filmmakerPhotoUrl = null }) {
   const [replyTo, setReplyTo] = useState(null) // the top-level comment id with an open reply composer
   const [replyError, setReplyError] = useState('')
   const [confirmRemoveId, setConfirmRemoveId] = useState(null) // the comment whose Remove is armed
+  const [editingId, setEditingId] = useState(null) // the author's own comment being edited
+  const [editError, setEditError] = useState('')
 
   /** An armed "Confirm remove" resets on any pointer-down outside that
    *  button, and on Escape. */
@@ -256,17 +346,67 @@ export default function WatchComments({ filmId, filmmakerPhotoUrl = null }) {
     }
   }
 
-  const remove = async (commentId) => {
+  /** The author's own route when the row is theirs; the founder's admin
+   *  route for everyone else's. */
+  const remove = async (comment) => {
     setConfirmRemoveId(null)
     try {
       const token = await sessionToken()
       if (!token) return
-      await api.adminRemoveComment(commentId, token)
+      if (comment.own === true) await api.removeFilmComment(filmId, comment.id, token)
+      else await api.adminRemoveComment(comment.id, token)
       await refresh()
     } catch {
-      /* the list simply keeps the comment; the founder can retry */
+      // A refusal (e.g. already removed in another tab → 404) still re-reads
+      // the list, so the screen never keeps a comment the server no longer
+      // shows (red-team finding, 2026-09-16); otherwise the person can retry.
+      await refresh().catch(() => {})
     }
   }
+
+  const saveEdit = async (comment, body) => {
+    const bodyError = commentBodyError(body)
+    if (bodyError) {
+      setEditError(bodyError)
+      return false
+    }
+    setBusyKey(`edit-${comment.id}`)
+    setEditError('')
+    let saved = false
+    try {
+      const token = await sessionToken()
+      if (!token) throw new Error(COMMENT_UNAVAILABLE_MESSAGE)
+      await api.editFilmComment(filmId, comment.id, { body }, token)
+      saved = true
+      setEditingId(null)
+      await refresh().catch(() => {})
+      return true
+    } catch (err) {
+      if (saved) return true
+      const message = err?.message
+      setEditError(message && message !== 'forbidden' ? message : COMMENT_UNAVAILABLE_MESSAGE)
+      return false
+    } finally {
+      setBusyKey(null)
+    }
+  }
+
+  const editProps = (c) => ({
+    viewer,
+    editing: editingId === c.id,
+    onEdit: () => {
+      setEditError('')
+      setConfirmRemoveId(null)
+      setEditingId(c.id)
+    },
+    onSaveEdit: (body) => saveEdit(c, body),
+    onCancelEdit: () => {
+      setEditError('')
+      setEditingId(null)
+    },
+    editBusy: busyKey === `edit-${c.id}`,
+    editError: editingId === c.id ? editError : '',
+  })
 
   const topLevel = comments.filter((c) => !c.parentId)
   const repliesOf = (id) => comments.filter((c) => c.parentId === id)
@@ -308,9 +448,10 @@ export default function WatchComments({ filmId, filmmakerPhotoUrl = null }) {
                     setReplyError('')
                     setReplyTo(replying ? null : c.id)
                   }}
-                  onRemove={() => remove(c.id)}
+                  onRemove={() => remove(c)}
                   confirmingRemove={confirmRemoveId === c.id}
                   onArmRemove={() => setConfirmRemoveId(c.id)}
+                  {...editProps(c)}
                 />
                 {(replies.length > 0 || replying) && (
                   /* Replies: indented 56px under their parent on a left
@@ -324,9 +465,10 @@ export default function WatchComments({ filmId, filmmakerPhotoUrl = null }) {
                           photoUrl={filmmakerPhotoUrl}
                           small
                           canModerate={viewer.canModerate === true}
-                          onRemove={() => remove(r.id)}
+                          onRemove={() => remove(r)}
                           confirmingRemove={confirmRemoveId === r.id}
                           onArmRemove={() => setConfirmRemoveId(r.id)}
+                          {...editProps(r)}
                         />
                       </div>
                     ))}

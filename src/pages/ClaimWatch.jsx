@@ -16,6 +16,7 @@ import {
   crossedTiers,
   tierFillPercent,
   formatTierNumber,
+  giftedCountLabel,
 } from '../lib/viewerTiers'
 import {
   chainHands,
@@ -24,6 +25,7 @@ import {
   chainForkFlags,
 } from '../lib/handsChain'
 import { filmStory, filmPosterUrl } from '../content/filmStory'
+import { STORY_EXPAND_LABEL, STORY_FADE_MASK, splitStoryBody } from '../lib/storyExpand'
 import { revealSentence } from '../lib/revealSentence'
 import { NO_TICKETS_MESSAGE } from '../lib/ticketRules'
 import FilmmakerLinks from '../components/FilmmakerLinks'
@@ -741,6 +743,13 @@ export default function ClaimWatch() {
    *  who exits fullscreen and keeps watching inline is never re-forced. */
   const fsAttempted = useRef(false)
   const [rotateHint, setRotateHint] = useState(false)
+  /* The story's expand control (founder direction 2026-09-16; design-gate
+     decision 2026-09-17): on desktop the story shows the epigraph and the
+     first paragraph — fading out toward its end — then one control that
+     reveals the rest and disappears; no re-collapse. Phones keep the full
+     story (the hiding and the fade are ≥900px-only). */
+  const [storyExpanded, setStoryExpanded] = useState(false)
+  const storyRestRef = useRef(null)
 
   /** The hint retires itself: after a few seconds, or as soon as the phone
    *  is actually rotated (legacy gotcha: some browsers fire only resize,
@@ -1047,6 +1056,7 @@ export default function ClaimWatch() {
   const sharesCount = Number.isFinite(link?.filmSharesCount) ? link.filmSharesCount : 0
   const goal = nextTier(sharesCount)
   const crossed = crossedTiers(sharesCount)
+  const countLabel = giftedCountLabel(sharesCount, goal)
 
   /* ── The rule line's chain depth (spec §3b.6) — from the same lineage the
      landing thread reads, id-verified collapse included. ── */
@@ -1065,6 +1075,7 @@ export default function ClaimWatch() {
   /* ── Per-film story + poster (founder amendments C/D) — one module,
      src/content/filmStory.js. No entry → no story section, nothing invented. ── */
   const story = filmStory(link?.muxPlaybackId)
+  const storyBody = splitStoryBody(story?.body)
 
   return (
     <div className={`relative min-h-dvh bg-bg-page text-warm${arrivalFade ? ' dc-watch-arrival' : ''}`}>
@@ -1169,10 +1180,10 @@ export default function ClaimWatch() {
                 Desktop only; mobile keeps natural block flow. */}
             <div className="mx-auto mt-9 w-full max-w-[26rem] text-left min-[900px]:mx-0 min-[900px]:mt-0 min-[900px]:flex min-[900px]:h-full min-[900px]:max-w-none min-[900px]:flex-col min-[900px]:justify-center min-[900px]:pb-10">
               {/* The record: bar → count → goal label. Squared ends, solid
-                  accent fill, progress toward the NEXT tier only. */}
-              <section
-                aria-label={`${formatTierNumber(sharesCount)} tickets shared of ${formatTierNumber(goal)} goal`}
-              >
+                  accent fill, progress toward the NEXT tier only. The words
+                  are the founder's verbatim (2026-09-17): "People gifted of
+                  {goal} goal" — one rule, giftedCountLabel. */}
+              <section aria-label={countLabel.aria}>
                 <div aria-hidden className="h-[2px] w-full bg-tint-track">
                   <div
                     className="h-full bg-accent"
@@ -1189,7 +1200,7 @@ export default function ClaimWatch() {
                   aria-hidden
                   className="mt-[0.625rem] font-sans font-normal text-[0.8125rem] uppercase leading-[1.6] tracking-[0.18em] text-warm/80"
                 >
-                  Tickets shared of {formatTierNumber(goal)} goal
+                  {countLabel.visible}
                 </p>
               </section>
 
@@ -1386,14 +1397,82 @@ export default function ClaimWatch() {
             </p>
 
             <div className="mt-7 max-w-[62ch]">
-              {story.body.map((paragraph, i) => (
-                <p
-                  key={i}
-                  className={`${i > 0 ? 'mt-[1.375rem] ' : ''}font-sans font-light text-[1.0625rem] leading-[1.85] text-warm/80`}
-                >
-                  {paragraph}
-                </p>
-              ))}
+              {storyBody.shown.map((paragraph, i) => {
+                /* The last visible paragraph fades out toward its end while
+                   collapsed on desktop (founder, 2026-09-17) — a mask, so
+                   the page's own background shows through; no colour here. */
+                const fades =
+                  !storyExpanded && storyBody.rest.length > 0 && i === storyBody.shown.length - 1
+                return (
+                  <p
+                    key={i}
+                    data-story-fade={fades ? 'true' : undefined}
+                    style={fades ? { '--story-fade': STORY_FADE_MASK } : undefined}
+                    className={`${i > 0 ? 'mt-[1.375rem] ' : ''}font-sans font-light text-[1.0625rem] leading-[1.85] text-warm/80${
+                      fades
+                        ? ' min-[900px]:[-webkit-mask-image:var(--story-fade)] min-[900px]:[mask-image:var(--story-fade)]'
+                        : ''
+                    }`}
+                  >
+                    {paragraph}
+                  </p>
+                )
+              })}
+              {storyBody.rest.length > 0 && (
+                <>
+                  {/* The rest: always in the DOM (phones read it in full),
+                      hidden on desktop until the control is pressed. */}
+                  <div
+                    id="story-rest"
+                    ref={storyRestRef}
+                    tabIndex={-1}
+                    data-story-rest={storyExpanded ? 'expanded' : 'collapsed'}
+                    className={`focus:outline-none${storyExpanded ? '' : ' min-[900px]:hidden'}`}
+                  >
+                    {storyBody.rest.map((paragraph, i) => (
+                      <p
+                        key={storyBody.shown.length + i}
+                        className="mt-[1.375rem] font-sans font-light text-[1.0625rem] leading-[1.85] text-warm/80"
+                      >
+                        {paragraph}
+                      </p>
+                    ))}
+                  </div>
+                  {!storyExpanded && (
+                    /* The control — bare tracked caps (the page's in-place
+                       action style) with a small chevron (the founder's
+                       pick at the 17 September design gate), sitting in the
+                       next paragraph's slot under the faded text; desktop
+                       only. Gone once pressed. Label PENDING the founder's
+                       stamp. */
+                    <button
+                      type="button"
+                      aria-expanded={false}
+                      aria-controls="story-rest"
+                      data-story-expand
+                      onClick={() => {
+                        setStoryExpanded(true)
+                        requestAnimationFrame(() => storyRestRef.current?.focus({ preventScroll: true }))
+                      }}
+                      className="group mt-[1.375rem] hidden cursor-pointer touch-manipulation items-center gap-2 text-muted transition-colors duration-300 min-[900px]:inline-flex hover:text-warm focus-visible:text-warm focus-visible:outline-none"
+                    >
+                      <span data-story-label className="font-sans font-normal text-[11px] uppercase tracking-[0.24em]">
+                        {STORY_EXPAND_LABEL}
+                      </span>
+                      <svg aria-hidden viewBox="0 0 12 12" width="10" height="10" className="shrink-0">
+                        <path
+                          d="M2 4.5 6 8.5 10 4.5"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </button>
+                  )}
+                </>
+              )}
             </div>
 
             {/* The sign-off was CUT 2026-07-25 (founder): the name lives in

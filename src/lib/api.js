@@ -150,6 +150,32 @@ export const api = {
     throw new Error(error.error || 'Request failed')
   },
 
+  // Own comments (founder decision 2026-09-16): the author edits or removes
+  // their own comment — author-only, decided on the server from the
+  // verified session; the client sends nothing about who it is.
+  editFilmComment: async (filmId, commentId, { body }, accessToken) => {
+    const res = await fetchWithTimeout(
+      `${API_BASE}/films/${encodeURIComponent(filmId)}/comments/${encodeURIComponent(commentId)}/edit`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({ body }),
+      }
+    )
+    if (res.ok) return res.json()
+    const error = await res.json().catch(() => ({ error: 'Request failed' }))
+    throw new Error(error.error || 'Request failed')
+  },
+  removeFilmComment: (filmId, commentId, accessToken) =>
+    request(`/films/${encodeURIComponent(filmId)}/comments/${encodeURIComponent(commentId)}/remove`, {
+      method: 'POST',
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      body: JSON.stringify({}),
+    }),
+
   // Owner-only soft delete (the ADMIN_USER_ID pin, server-enforced).
   adminRemoveComment: (commentId, accessToken) =>
     request('/admin/comments/remove', {
