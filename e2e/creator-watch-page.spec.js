@@ -104,15 +104,16 @@ const LINK_CLAIMED = {
    decision): the CTA's desktop margin is `min-[900px]:mt-7` (was `mt-9`) —
    ONE token in `ctaClass`, so the gap above the button equals the gap below
    it, measured glyph-to-button and button-to-dots. Nothing else changed.
-   DELIBERATELY RE-RECORDED AGAIN 2026-09-16 (branch `viewer-polish`, the
-   founder's words): the rail's count label reads "People have been gifted
-   this film of {goal} goal" (was "Tickets shared of {goal} goal"); the
-   count itself is unchanged. The ONE line of `main` below that changed. */
+   DELIBERATELY RE-RECORDED AGAIN 2026-09-16/17 (branch `viewer-polish`, the
+   founder's verbatim words at the design gate): the rail's count label
+   reads "People gifted of {goal} goal" (was "Tickets shared of {goal}
+   goal"); the count itself is unchanged. The ONE line of `main` below that
+   changed. */
 const BASELINE = {
   before: {
     header: 'deepcast\nYOUR DASHBOARD →',
     main:
-      'A Sacred Pause\n\n32 MINUTES. HEADPHONES RECOMMENDED.\n\n847\n\nPEOPLE HAVE BEEN GIFTED THIS FILM OF 1,000 GOAL\n\nMILESTONES PASSED\n\n✦100\n✦250\n✦500\n\nPASS IT ON\n\nFilms here spread by private invite and real humans only. No algorithms.\n\nThis film won’t reach anyone new, unless you pass it on.\n\nShare intentionally. Each ticket admits one person only.',
+      'A Sacred Pause\n\n32 MINUTES. HEADPHONES RECOMMENDED.\n\n847\n\nPEOPLE GIFTED OF 1,000 GOAL\n\nMILESTONES PASSED\n\n✦100\n✦250\n✦500\n\nPASS IT ON\n\nFilms here spread by private invite and real humans only. No algorithms.\n\nThis film won’t reach anyone new, unless you pass it on.\n\nShare intentionally. Each ticket admits one person only.',
     footer: 'YOUR DASHBOARD →',
     dashboardHrefs: ['/dashboard', '/dashboard'],
     ctaClass:
@@ -221,7 +222,7 @@ test.describe('the slug-based viewer watch page is unchanged by the film-scoped 
     // wait for PAYLOAD-driven content — the rail's tickets-shared number and
     // the hands line — so the capture can never race its own data (CI run
     // #1: webkit captured "0 TICKETS SHARED" once, then passed on retry).
-    await expect(page.locator('section[aria-label="847 people have been gifted this film of 1,000 goal"]')).toBeVisible()
+    await expect(page.locator('section[aria-label="847 people gifted of 1,000 goal"]')).toBeVisible()
     await expect(page.getByText('Milestones passed')).toBeVisible()
     await expect(page.locator('[data-rail-path] text').first()).toBeVisible()
 
@@ -314,10 +315,10 @@ test.describe('the filmmaker’s own watch page — /watch/film/:filmId', () => 
     expect(linkLookups).toBe(0)
     await expect(page.getByText('30 minutes. Headphones recommended.')).toBeVisible()
     // The rail: the same film-wide tickets-shared number and tier goal.
-    const rail = page.locator('section[aria-label="10 people have been gifted this film of 100 goal"]')
+    const rail = page.locator('section[aria-label="10 people gifted of 100 goal"]')
     await expect(rail).toBeVisible()
     await expect(rail.locator('p').first()).toHaveText('10')
-    await expect(page.getByText('People have been gifted this film of 100 goal')).toBeVisible()
+    await expect(page.getByText('People gifted of 100 goal')).toBeVisible()
     await expect(page.getByText('Milestones passed')).toHaveCount(0)
     // Depth 0: no path renders (as the rule line did not) — the filmmaker
     // is the origin; the film never "reached" him through anyone.

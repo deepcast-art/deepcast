@@ -65,19 +65,19 @@ export function formatTierNumber(n) {
 }
 
 /**
- * The count label under the rail's number (founder's words, 16 September
- * 2026 — replacing `Tickets shared of {goal} goal`): the count is unchanged
- * (countFilmShares — every counted link is made for a named person), only
- * the words. Visible: `People have been gifted this film of {goal} goal`
- * under the numeral; `Person has been gifted…` when the count is 1.
- * Accessible (the section's aria-label): `{n} people have been gifted this
- * film of {goal} goal` / `1 person has been gifted this film of {goal} goal`.
+ * The count label under the rail's number (founder's verbatim words,
+ * 17 September 2026 — replacing the 16th's `People have been gifted this
+ * film of {goal} goal`, itself replacing `Tickets shared of {goal} goal`):
+ * the count is unchanged (countFilmShares — every counted link is made for
+ * a named person), only the words. Visible: `People gifted of {goal} goal`
+ * under the numeral; `Person gifted of {goal} goal` when the count is 1.
+ * Accessible (the section's aria-label): `{n} people gifted of {goal}
+ * goal` / `1 person gifted of {goal} goal`.
  */
 export function giftedCountLabel(count, goal) {
   const n = cleanCount(count)
-  const g = formatTierNumber(goal)
-  const rest = `been gifted this film of ${g} goal`
+  const rest = `gifted of ${formatTierNumber(goal)} goal`
   return n === 1
-    ? { visible: `Person has ${rest}`, aria: `1 person has ${rest}` }
-    : { visible: `People have ${rest}`, aria: `${formatTierNumber(n)} people have ${rest}` }
+    ? { visible: `Person ${rest}`, aria: `1 person ${rest}` }
+    : { visible: `People ${rest}`, aria: `${formatTierNumber(n)} people ${rest}` }
 }

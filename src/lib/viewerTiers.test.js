@@ -89,22 +89,22 @@ describe('formatTierNumber', () => {
   })
 })
 
-describe('giftedCountLabel — the founder’s words under the number (2026-09-16)', () => {
+describe('giftedCountLabel — the founder’s verbatim words under the number (2026-09-17)', () => {
   it('plural: the visible line and the accessible sentence', () => {
     expect(giftedCountLabel(847, 1000)).toEqual({
-      visible: 'People have been gifted this film of 1,000 goal',
-      aria: '847 people have been gifted this film of 1,000 goal',
+      visible: 'People gifted of 1,000 goal',
+      aria: '847 people gifted of 1,000 goal',
     })
   })
   it('one person', () => {
     expect(giftedCountLabel(1, 100)).toEqual({
-      visible: 'Person has been gifted this film of 100 goal',
-      aria: '1 person has been gifted this film of 100 goal',
+      visible: 'Person gifted of 100 goal',
+      aria: '1 person gifted of 100 goal',
     })
   })
   it('zero and junk read as the honest plural zero', () => {
-    expect(giftedCountLabel(0, 100).aria).toBe('0 people have been gifted this film of 100 goal')
-    expect(giftedCountLabel(null, 100).visible).toBe('People have been gifted this film of 100 goal')
-    expect(giftedCountLabel(-3, 100).aria).toBe('0 people have been gifted this film of 100 goal')
+    expect(giftedCountLabel(0, 100).aria).toBe('0 people gifted of 100 goal')
+    expect(giftedCountLabel(null, 100).visible).toBe('People gifted of 100 goal')
+    expect(giftedCountLabel(-3, 100).aria).toBe('0 people gifted of 100 goal')
   })
 })
