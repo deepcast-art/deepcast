@@ -24,6 +24,7 @@ export function createEmailDispatcher({
   wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   now = () => Date.now(),
   onRetry = null,
+  recordEvent = null,
 } = {}) {
   if (typeof sendFn !== 'function') {
     throw new Error('createEmailDispatcher requires a sendFn')
@@ -57,8 +58,25 @@ export function createEmailDispatcher({
     throw lastError
   }
 
-  return function dispatch(payload) {
-    const result = tail.then(() => sendWithRetry(payload))
+  // Attribution (2026-09-17): a caller that passes `{ event }` gets ONE
+  // record written after — and only after — the provider accepted the email.
+  // Recording never fails the send: a broken record is logged by recordEvent
+  // itself and the accepted result still resolves.
+  async function recordAfterAccept(event, accepted) {
+    if (!event || typeof recordEvent !== 'function') return
+    try {
+      await recordEvent(event, accepted)
+    } catch {
+      /* recordEvent is expected to log its own failure */
+    }
+  }
+
+  return function dispatch(payload, { event = null } = {}) {
+    const result = tail.then(async () => {
+      const accepted = await sendWithRetry(payload)
+      await recordAfterAccept(event, accepted)
+      return accepted
+    })
     tail = result.catch(() => {})
     return result
   }

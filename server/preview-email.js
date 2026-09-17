@@ -1,7 +1,8 @@
 import { writeFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { join, dirname } from 'path'
-import { buildTicketEmail, buildReminderEmail, returnUrl, wordmarkUrl, clockUrl, dividerUrl } from './ticketEmail.js'
+import { buildTicketEmail, buildReminderEmail, buildPassItOnEmail, returnUrl, passItOnUrl, wordmarkUrl, clockUrl, dividerUrl, nodeUrls } from './ticketEmail.js'
+import { chainHands } from '../src/lib/handsChain.js'
 
 /**
  * `node server/preview-email.js ticket` / `… reminder` render the REAL
@@ -11,7 +12,7 @@ import { buildTicketEmail, buildReminderEmail, returnUrl, wordmarkUrl, clockUrl,
  * CLAUDE.md).
  */
 const mode = process.argv[2]
-if (mode === 'ticket' || mode === 'reminder') {
+if (mode === 'ticket' || mode === 'reminder' || mode === 'pass-it-on') {
   // The sample mirrors the REAL Circles row (title, synopsis =
   // films.transmission_hook, runtime, poster — read-only, 2026-09-16); the
   // names are fictional. `--base <url>` points the image assets elsewhere
@@ -27,11 +28,21 @@ if (mode === 'ticket' || mode === 'reminder') {
     synopsis: 'Five young believers gather at a table outside the church — beyond pulpit, doctrine, and dogma — for one unguarded conversation about Christ, God, and life itself.',
     durationSeconds: 1803.135633,
     watchUrl: returnUrl('https://deepcast.art', 'a'.repeat(64)),
+    passUrl: passItOnUrl('https://deepcast.art', 'a'.repeat(64)),
+    // `--hands "Ien Chi,Maya Ortiz"` for the pass-it-on path (origin first;
+    // default: gifted directly by the filmmaker — no path shown).
+    hands: (() => {
+      const i = process.argv.indexOf('--hands')
+      return chainHands(i < 0 ? ['Ien Chi'] : process.argv[i + 1].split(',').map((s) => s.trim()).filter(Boolean))
+    })(),
+    // The sharer named in the email is derived by the builder from `hands`
+    // (the last hand); `sharerName` above is only the lineage-less fallback.
+    nodes: nodeUrls(assetBase),
     wordmark: wordmarkUrl(assetBase),
     clock: clockUrl(assetBase),
     dividerImg: dividerUrl(assetBase),
   }
-  const message = mode === 'ticket' ? buildTicketEmail(sample) : buildReminderEmail(sample)
+  const message = mode === 'ticket' ? buildTicketEmail(sample) : mode === 'reminder' ? buildReminderEmail(sample) : buildPassItOnEmail(sample)
   const outPath = join(dirname(fileURLToPath(import.meta.url)), 'email-preview.html')
   writeFileSync(outPath, message.html, 'utf8')
   console.log(`Subject: ${message.subject}`)

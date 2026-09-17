@@ -8,7 +8,7 @@ import crypto from 'crypto'
 import { buildGraphLayout } from '../src/lib/graphLayout.js'
 import { createEmailDispatcher } from './emailDelivery.js'
 import { isInviteUsable } from './inviteValidation.js'
-import { CREATOR_SHARE_BLOCK_REASON, isShareToFilmCreator, isSenderFilmCreator } from './shareRules.js'
+import { CREATOR_SHARE_BLOCK_REASON, isShareToFilmCreator } from './shareRules.js'
 import { adminAuthDecision, ticketControlTargetDecision } from './adminAuth.js'
 import {
   deletePersonTargetDecision,
@@ -37,6 +37,7 @@ import { firstNameInputError, fullNameInputError, splitFullName, FULL_NAME_MESSA
 import { sanitizeClaimContext } from '../src/lib/claimContext.js'
 import { VOID_INVITE_STATUS } from '../src/lib/inviteExistence.js'
 import { buildLineageForks } from '../src/lib/lineageForks.js'
+import { buildLineage } from './lineage.js'
 import { buildFilmWatchFields, filmWatchDecision, buildOnward } from './watchPayload.js'
 import { refundOnVoidDecision } from './voidRules.js'
 import {
@@ -57,7 +58,7 @@ import {
   COMMENT_UNAVAILABLE_MESSAGE,
 } from './commentRules.js'
 import { safeFirstName } from '../src/lib/displayName.js'
-import { buildTicketEmail, buildReminderEmail, returnUrl, wordmarkUrl, clockUrl, dividerUrl, daysBetween } from './ticketEmail.js'
+import { buildTicketEmail, buildReminderEmail, buildPassItOnEmail, returnUrl, passItOnUrl, wordmarkUrl, clockUrl, dividerUrl, nodeUrls, daysBetween } from './ticketEmail.js'
 import {
   selectReminderRows,
   isDryRun,
@@ -70,6 +71,11 @@ import {
 } from './reminderRules.js'
 import { filmPosterUrl } from '../src/content/filmStory.js'
 import { returnLinkDecision, isWellFormedReturnToken, mayMintSession, RETURN_TOKEN_DAYS } from './returnLinkRules.js'
+import { emailEventRow, isEmailEventsMissing } from './emailEvents.js'
+import { markWatchedDecision } from './markWatchedRules.js'
+import { computeEmailStats } from '../src/lib/emailStats.js'
+import { passItOnLive } from './passItOnRules.js'
+import { loadPassItOnCandidates, previewEntry as passItOnPreview, tallyReasons as tallyPassItOnReasons } from './passItOnSweep.js'
 
 const app = express()
 app.use(cors())
@@ -388,8 +394,8 @@ async function sendInviteEmailResend(payload) {
   if (error) {
     const msg = formatResendError(error)
     const to = Array.isArray(payload?.to)
-      ? payload.to.join(', ')
-      : String(payload?.to || '')
+      ? payload.to.map(maskEmail).join(', ')
+      : maskEmail(String(payload?.to || ''))
     console.error('Resend API error:', msg, 'to:', to, error)
     const e = new Error(msg)
     e.resendError = error
@@ -397,8 +403,8 @@ async function sendInviteEmailResend(payload) {
   }
   if (data?.id) {
     const to = Array.isArray(payload?.to)
-      ? payload.to.join(', ')
-      : String(payload?.to || '')
+      ? payload.to.map(maskEmail).join(', ')
+      : maskEmail(String(payload?.to || ''))
     console.log('[email] Resend accepted — id:', data.id, 'to:', to)
   }
   return data
@@ -411,10 +417,31 @@ async function sendInviteEmailResend(payload) {
  * the email was not sent and the caller must report that honestly (never
  * answer success to the client before this resolves).
  */
+/**
+ * Attribution (2026-09-17, server/emailEvents.js): ONE append-only
+ * email_events row per ACCEPTED automated email to an invite — written by
+ * the dispatcher after acceptance, never before. A missing table (the
+ * 20260917 migration not applied yet) or a malformed event is logged and
+ * dropped; it never fails a send that already happened.
+ */
+async function recordEmailEvent(event) {
+  const { row, reason } = emailEventRow(event)
+  if (!row) {
+    console.warn('[email-events] not recorded:', reason)
+    return
+  }
+  const { error } = await supabase.from('email_events').insert(row)
+  if (error) {
+    if (isEmailEventsMissing(error)) console.warn('[email-events] not recorded (apply the 20260917 migration):', error.message)
+    else console.warn('[email-events] not recorded:', error.message)
+  }
+}
+
 const deliverEmail = createEmailDispatcher({
   sendFn: sendInviteEmailResend,
+  recordEvent: recordEmailEvent,
   onRetry: (err, attempt, payload) => {
-    const to = Array.isArray(payload?.to) ? payload.to.join(', ') : String(payload?.to || '')
+    const to = Array.isArray(payload?.to) ? payload.to.map(maskEmail).join(', ') : maskEmail(String(payload?.to || ''))
     console.warn(`[email] attempt ${attempt} failed (will retry) — to: ${to} — ${err?.message || err}`)
   },
 })
@@ -655,7 +682,7 @@ app.post('/api/invites/send', async (req, res) => {
     // a numbering failure never blocks the send (ticket_no stays NULL).
     const ticketNo = await nextTicketNo(supabase, filmId)
 
-    const { error: inviteError } = await supabase
+    const { data: insertedInvite, error: inviteError } = await supabase
       .from('invites')
       .insert({
         film_id: filmId,
@@ -674,6 +701,8 @@ app.post('/api/invites/send', async (req, res) => {
         // works against a database where the migration hasn't landed yet.
         ...(ticketNo != null ? { ticket_no: ticketNo } : {}),
       })
+      .select('id')
+      .maybeSingle()
 
     if (inviteError) {
       if (walletSpent && senderId) {
@@ -704,7 +733,7 @@ app.post('/api/invites/send', async (req, res) => {
     const ctx = encryptInviteCtx(senderFirst, recipientFirstName || '')
     const inviteUrl = ctx ? `${baseUrl}/i/${token}?ctx=${ctx}` : `${baseUrl}/i/${token}`
 
-    console.log(`Invite created: token=${token}, recipient=${recipientEmailNorm}, inviteUrl=${inviteUrl}`)
+    console.log(`Invite created: token=${token}, recipient=${maskEmail(recipientEmailNorm)}`)
 
     // Count was fetched before insert; +1 accounts for the invite just created
     const inviteOrdinal = preInsertCount != null ? preInsertCount + 1 : null
@@ -742,12 +771,12 @@ app.post('/api/invites/send', async (req, res) => {
     )
 
     try {
-      const accepted = await deliverEmail(emailPayload)
+      const accepted = await deliverEmail(emailPayload, { event: { inviteId: insertedInvite?.id, kind: 'invite_letter' } })
       res.json({ success: true, token, emailId: accepted?.id || null })
     } catch (emailErr) {
       console.error(
         `[invite/send] email failed after retries — rolling back invite\n` +
-        `  token: ${token}\n  to: ${recipientEmailNorm}\n  error: ${emailErr?.message || emailErr}`
+        `  token: ${token}\n  to: ${maskEmail(recipientEmailNorm)}\n  error: ${emailErr?.message || emailErr}`
       )
       // Undo everything this request created so a retry starts clean.
       const { error: deleteErr } = await supabase.from('invites').delete().eq('token', token)
@@ -1181,38 +1210,16 @@ app.get('/api/invites/link/:slug', async (req, res) => {
       return t < myCreatedAt || (t === myCreatedAt && r.id <= invite.id)
     }).length || 1
 
-    // Lineage: walk parent_invite_id from this invite up to the root. The
-    // chain ends at a creator-sent or parentless invite (canonical model:
-    // the filmmaker IS the root). Cycle-guarded; names resolve client-side
-    // to first-name-only by the thread renderer.
-    const byId = new Map(rows.map((r) => [r.id, r]))
+    // Lineage: ONE shared walk (server/lineage.js, 2026-09-17) — the same
+    // code the pass-it-on email's path reads. Names resolve client-side to
+    // first-name-only by the thread renderer.
     const creatorId = invite.films?.creator_id || null
-    const isCreatorSent = (row) => creatorId && row.sender_id != null && uuidStringEq(row.sender_id, creatorId)
-    const ancestors = [] // nearest (direct sharer's invite) → rootmost
-    const seen = new Set([invite.id])
-    let cur = invite
-    while (cur.parent_invite_id && byId.has(cur.parent_invite_id) && ancestors.length < 100) {
-      const parent = byId.get(cur.parent_invite_id)
-      if (seen.has(parent.id)) break
-      seen.add(parent.id)
-      ancestors.push(parent)
-      if (isCreatorSent(parent)) break
-      cur = parent
-    }
-    const creatorName =
-      (creatorUser?.name || '').trim() ||
-      (rows.find((r) => isCreatorSent(r) && (r.sender_name || '').trim())?.sender_name || '').trim() ||
-      (isCreatorSent(invite) ? (invite.sender_name || '').trim() : '') ||
-      'The filmmaker'
-    // Origin → direct sharer. For a creator-sent invite there are no
-    // ancestors and the chain is just [creator] — the depth-1 case.
-    const lineageNames = [
-      creatorName,
-      ...ancestors
-        .slice()
-        .reverse()
-        .map((r) => r.recipient_name || r.recipient_email || 'Someone'),
-    ]
+    const { ancestors, lineageNames, senderIsCreator, isCreatorSent } = buildLineage({
+      invite,
+      rows,
+      creatorId,
+      creatorUserName: creatorUser?.name || null,
+    })
 
     // Per-film ghost visibility, threaded once for both new watch-rail
     // fields (claims count + lineage forks).
@@ -1245,10 +1252,7 @@ app.get('/api/invites/link/:slug', async (req, res) => {
       // true only when the direct sharer's ACCOUNT is the film's creator.
       // The frontend collapses a two-entry chain on this flag alone — never
       // on name comparison.
-      senderIsCreator: isSenderFilmCreator({
-        senderId: invite.sender_id,
-        filmCreatorId: creatorId,
-      }),
+      senderIsCreator,
       lineageForks,
       // Watch-page needs on revisit (playback is public-policy; invites are
       // world-readable under RLS, so none of this is a new exposure class).
@@ -2142,7 +2146,8 @@ app.post('/api/invites/resend-last', async (req, res) => {
             displaySenderEmail
           ),
           inviteUrl
-        )
+        ),
+        { event: { inviteId: invite.id, kind: 'invite_letter' } }
       )
     } catch (emailErr) {
       const message = emailErr?.message || 'Email send failed'
@@ -2290,7 +2295,8 @@ app.post('/api/invites/resend', async (req, res) => {
             displaySenderEmail
           ),
           inviteUrl
-        )
+        ),
+        { event: { inviteId: invite.id, kind: 'invite_letter' } }
       )
     } catch (emailErr) {
       const message = emailErr?.message || 'Email send failed'
@@ -3978,6 +3984,18 @@ async function mintReturnToken(inviteId) {
   return token
 }
 
+/** Attribution: the email whose /r/ link was just spent has ARRIVED —
+ *  stamp its own email_events row (found by the token's hash), once. A
+ *  missing table (pre-migration) records nothing and says nothing. */
+async function stampEmailArrival(hash) {
+  const { error } = await supabase
+    .from('email_events')
+    .update({ arrived_at: new Date().toISOString() })
+    .eq('return_token_hash', hash)
+    .is('arrived_at', null)
+  if (error && !isEmailEventsMissing(error)) console.warn('[email-events] arrival not stamped:', error.message)
+}
+
 /** The stored token state of a row, so a failed reminder send can put the
  *  previous (still-live) link back (red-team, 2026-09-16). */
 async function readReturnTokenState(inviteId) {
@@ -4047,6 +4065,7 @@ app.post('/api/invites/return', async (req, res) => {
       .is('return_token_used_at', null)
       .select('id')
     if (!spent?.length) return res.json({ status: 'spent', email: invite.claimed_email })
+    await stampEmailArrival(hash)
     let sessionTokenHash = null
     // An accountless claim (account creation failed at claim time) never
     // mints a session: generateLink for an email with no auth user could
@@ -4078,6 +4097,55 @@ app.post('/api/invites/return', async (req, res) => {
   }
 })
 
+const INVITE_ID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * POST /api/invites/mark-watched { inviteId } — the watch crossed 70%
+ * (2026-09-17; replaces the page's anon status write, which stays only as
+ * the page's fallback). The decision is server/markWatchedRules.js: only a
+ * 'claimed' row moves to 'watched'; an already-watched row answers 200 and
+ * is left untouched; anything else is refused. A claim that holds an
+ * account needs that account's verified session; an accountless claim
+ * (claimed_by null) needs none. watched_at is the SERVER's clock; before
+ * the 20260917 migration the status still flips, unstamped.
+ */
+app.post('/api/invites/mark-watched', async (req, res) => {
+  const inviteId = typeof req.body?.inviteId === 'string' ? req.body.inviteId.trim() : ''
+  if (!INVITE_ID_SHAPE.test(inviteId)) return res.status(404).json({ error: 'Unknown invite' })
+  try {
+    let callerId = null
+    const jwt = (req.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
+    if (jwt) {
+      const { data: userData, error: userErr } = await supabase.auth.getUser(jwt)
+      if (userErr || !userData?.user?.id) return res.status(401).json({ error: 'Invalid session' })
+      callerId = userData.user.id
+    }
+    const { data: invite, error } = await supabase
+      .from('invites')
+      .select('id, status, claimed_by')
+      .eq('id', inviteId)
+      .maybeSingle()
+    if (error) throw error
+    const decision = markWatchedDecision({ invite, callerId })
+    if (!decision.ok) return res.status(decision.status).json({ error: decision.error })
+    if (decision.already) return res.json({ status: decision.status, already: true })
+    // Conditional on the status the decision saw: two tabs racing, one wins.
+    const apply = (update) =>
+      supabase.from('invites').update(update).eq('id', inviteId).eq('status', 'claimed').select('id')
+    let { data: rows, error: updErr } = await apply(decision.update)
+    if (updErr && isEmailEventsMissing(updErr)) {
+      console.warn('[mark-watched] watched_at not stored (apply the 20260917 migration):', updErr.message)
+      ;({ data: rows, error: updErr } = await apply({ status: decision.update.status }))
+    }
+    if (updErr) throw updErr
+    if (!rows?.length) return res.json({ status: 'watched', already: true })
+    return res.json({ status: 'watched', watchedAt: decision.update.watched_at })
+  } catch (err) {
+    console.error('[mark-watched] failed:', err)
+    return res.status(500).json({ error: 'Could not mark watched' })
+  }
+})
+
 /**
  * The ticket email, sent once after a claim commits (server/ticketEmail.js
  * builds it; deliverEmail is the ONE dispatch path). Mints the return token
@@ -4103,7 +4171,8 @@ async function sendTicketEmailAfterClaim({ invite, slug, emailNorm, recipientNam
     dividerImg: dividerUrl(baseUrl),
   })
   const accepted = await deliverEmail(
-    withReplyTo({ to: emailNorm, subject: message.subject, html: message.html, text: message.text }, filmmaker.email)
+    withReplyTo({ to: emailNorm, subject: message.subject, html: message.html, text: message.text }, filmmaker.email),
+    { event: { inviteId: invite.id, kind: 'ticket', returnTokenHash: token ? hashReturnToken(token) : null } }
   )
   console.log('[ticket-email] Resend accepted — id:', accepted?.id || '?', 'invite:', invite.id)
   return accepted
@@ -4198,13 +4267,14 @@ async function runReminderSweep({ send }) {
         })
         try {
           await deliverEmail(
-            withReplyTo({ to: r.claimed_email, subject: message.subject, html: message.html, text: message.text }, filmmaker.email)
+            withReplyTo({ to: r.claimed_email, subject: message.subject, html: message.html, text: message.text }, filmmaker.email),
+            { event: { inviteId: r.id, kind: which === 1 ? 'reminder1' : 'reminder2', returnTokenHash: token ? hashReturnToken(token) : null } }
           )
         } catch (e) {
           if (token) await restoreReturnTokenState(r.id, previous)
           throw e
         }
-        console.log(`[reminders] sent reminder ${which} — invite:`, r.id, 'to:', r.claimed_email)
+        console.log(`[reminders] sent reminder ${which} — invite:`, r.id, 'to:', maskEmail(r.claimed_email))
       },
       clearStamp: async (r) => {
         const { error } = await supabase.from('invites').update({ [column]: null }).eq('id', r.id)
@@ -4245,9 +4315,112 @@ async function reminderSweepTick() {
     reminderSweepInFlight = false
   }
 }
+/* ============ THE PASS-IT-ON EMAIL — the same hourly tick ============
+ * (founder decisions 2026-09-16/17 — a deliberate reversal of "never an
+ * unrequested email", recorded in docs/ledger/emails.md; rules in
+ * server/passItOnRules.js, the loader in server/passItOnSweep.js). Once per
+ * invite, ever: the row is STAMPED FIRST (pass_it_on_sent_at, conditional),
+ * then sent through the one dispatcher; a rejected send clears the stamp and
+ * restores the previous return token. SENDS only when PASS_IT_ON_LIVE ===
+ * '1'; otherwise logs the masked would-send list. */
+let passItOnSweepInFlight = false
+
+async function runPassItOnSweep({ send }) {
+  const now = new Date()
+  const baseUrl = resolveBaseUrl(APP_URL, null)
+  const { evaluated, selected, migrated } = await loadPassItOnCandidates(supabase, now)
+  const rows = selected.map((e) => passItOnPreview(e, now))
+  const excluded = tallyPassItOnReasons(evaluated)
+  const base = { live: false, baseUrl, migrated, count: rows.length, rows, excluded, sent: [], failed: [], skipped: [] }
+  if (!send) return base
+  if (!migrated) return { ...base, error: 'the 20260917 migration has not been applied; nothing sent' }
+  if (/localhost|127\.0\.0\.1/i.test(baseUrl)) {
+    console.warn('[pass-it-on] APP_URL is not the public site — nothing sent')
+    return { ...base, error: 'APP_URL is not set' }
+  }
+  const results = []
+  for (const entry of selected) {
+    const { row, holder, hands } = entry
+    const result = await sendReminderRow(row, 'pass_it_on', {
+      stampIfUnstamped: async (r) => {
+        const { data, error } = await supabase
+          .from('invites')
+          .update({ pass_it_on_sent_at: new Date().toISOString() })
+          .eq('id', r.id)
+          .is('pass_it_on_sent_at', null)
+          .select('id')
+        if (error) throw error
+        return (data || []).length
+      },
+      send: async (r) => {
+        const previous = await readReturnTokenState(r.id)
+        const [filmmaker, token] = await Promise.all([filmmakerContact(r.films?.creator_id), mintReturnToken(r.id)])
+        const trimmed = String(baseUrl || '').replace(/\/$/, '')
+        const message = buildPassItOnEmail({
+          // A claimed ticket's person is their account's current name (the
+          // canonical-name rule); the typed name only if the account has none.
+          receiverName: holder?.name || r.recipient_name,
+          // The direct sharer as stored on the row (the filmmaker's own name
+          // when he gifted it directly); first-named by the builder.
+          sharerName: r.sender_name,
+          ticketNo: r.ticket_no,
+          filmTitle: r.films?.title || 'this film',
+          posterUrl: r.films?.mux_playback_id ? filmPosterUrl(r.films.mux_playback_id) : null,
+          passUrl: token ? passItOnUrl(baseUrl, token) : `${trimmed}/watch/${encodeURIComponent(r.link_slug)}?pass=1`,
+          wordmark: wordmarkUrl(baseUrl),
+          dividerImg: dividerUrl(baseUrl),
+          hands,
+          nodes: nodeUrls(baseUrl),
+        })
+        try {
+          await deliverEmail(
+            withReplyTo({ to: r.claimed_email, subject: message.subject, html: message.html, text: message.text }, filmmaker.email),
+            { event: { inviteId: r.id, kind: 'pass_it_on', returnTokenHash: token ? hashReturnToken(token) : null } }
+          )
+        } catch (e) {
+          if (token) await restoreReturnTokenState(r.id, previous)
+          throw e
+        }
+        console.log('[pass-it-on] sent — invite:', r.id, 'to:', maskEmail(r.claimed_email))
+      },
+      clearStamp: async (r) => {
+        const { error } = await supabase.from('invites').update({ pass_it_on_sent_at: null }).eq('id', r.id)
+        if (error) throw error
+      },
+      log: (...args) => console.warn('[pass-it-on]', ...args),
+    })
+    results.push({ ...result, to: maskEmail(row.claimed_email) })
+  }
+  return {
+    ...base,
+    live: true,
+    sent: results.filter((x) => x.outcome === 'sent'),
+    failed: results.filter((x) => x.outcome === 'failed'),
+    skipped: results.filter((x) => x.outcome === 'skipped'),
+  }
+}
+
+async function passItOnSweepTick() {
+  if (passItOnSweepInFlight) return
+  passItOnSweepInFlight = true
+  try {
+    const live = passItOnLive()
+    const result = await runPassItOnSweep({ send: live })
+    if (live) {
+      console.log(`[pass-it-on] sweep — sent ${result.sent.length}, failed ${result.failed.length}, skipped ${result.skipped.length}${result.error ? ` — ${result.error}` : ''}`)
+    } else {
+      console.log(`[pass-it-on] sweep (PASS_IT_ON_LIVE is not 1 — nothing sent) — ${result.count} row(s) due:`, result.rows.map((r) => r.to).join(', ') || '(none)')
+    }
+  } catch (e) {
+    console.warn('[pass-it-on] sweep failed (next hour retries):', e?.message || e)
+  } finally {
+    passItOnSweepInFlight = false
+  }
+}
+
 const reminderFirstTimer = setTimeout(() => {
-  reminderSweepTick()
-  setInterval(reminderSweepTick, REMINDER_SWEEP_MS).unref()
+  reminderSweepTick().then(passItOnSweepTick)
+  setInterval(() => reminderSweepTick().then(passItOnSweepTick), REMINDER_SWEEP_MS).unref()
 }, REMINDER_FIRST_SWEEP_MS)
 reminderFirstTimer.unref()
 
@@ -4281,6 +4454,79 @@ app.post('/api/admin/reminders/run', async (req, res) => {
     }
     console.error('[reminders] run failed:', err)
     return res.status(500).json({ error: 'Reminder run failed' })
+  }
+})
+
+/**
+ * POST /api/admin/pass-it-on/run — the owner's window on the pass-it-on
+ * sweep (the ADMIN_USER_ID pin, verified session). Default (`?dry=1`): the
+ * would-send list, addresses masked, plus every exclusion reason tallied.
+ * `?dry=0`: run a sweep now — it still sends only when PASS_IT_ON_LIVE === '1'.
+ */
+app.post('/api/admin/pass-it-on/run', async (req, res) => {
+  try {
+    const caller = await requireAdminCaller(req, res)
+    if (!caller) return
+    const dry = isDryRun(req.query)
+    if (dry) {
+      const result = await runPassItOnSweep({ send: false })
+      return res.json({ dry: true, passItOnLive: passItOnLive(), ...result })
+    }
+    if (passItOnSweepInFlight) return res.status(409).json({ error: 'a sweep is already in flight' })
+    passItOnSweepInFlight = true
+    try {
+      const live = passItOnLive()
+      const result = await runPassItOnSweep({ send: live })
+      return res.json({ dry: false, passItOnLive: live, ...result })
+    } finally {
+      passItOnSweepInFlight = false
+    }
+  } catch (err) {
+    console.error('[pass-it-on] run failed:', err)
+    return res.status(500).json({ error: 'Pass-it-on run failed' })
+  }
+})
+
+/**
+ * GET /api/admin/email-stats — email attribution for the owner (the
+ * ADMIN_USER_ID pin, verified session; fails closed). Per film: the table
+ * src/lib/emailStats.js computes — kind · sent · arrived by this email ·
+ * watched after arriving · shared after — plus `since`, the first event.
+ * 503 with a plain message until the 20260917 migration is applied.
+ */
+app.get('/api/admin/email-stats', async (req, res) => {
+  try {
+    const caller = await requireAdminCaller(req, res)
+    if (!caller) return
+    const { data: events, error: evErr } = await supabase
+      .from('email_events')
+      .select('invite_id, kind, sent_at, arrived_at')
+      .order('sent_at', { ascending: true })
+      .limit(20000)
+    if (evErr) throw evErr
+    const { data: invites, error: invErr } = await supabase
+      .from('invites')
+      .select('id, film_id, status, claimed_by, watched_at, parent_invite_id, sender_id, created_at')
+      .limit(20000)
+    if (invErr) throw invErr
+    const byFilm = {}
+    const filmOfInvite = new Map((invites || []).map((i) => [String(i.id), String(i.film_id)]))
+    for (const ev of events || []) {
+      const filmId = filmOfInvite.get(String(ev.invite_id))
+      if (!filmId) continue
+      ;(byFilm[filmId] ||= []).push(ev)
+    }
+    const films = {}
+    for (const [filmId, evs] of Object.entries(byFilm)) {
+      films[filmId] = computeEmailStats(evs, (invites || []).filter((i) => String(i.film_id) === filmId))
+    }
+    return res.json({ films })
+  } catch (err) {
+    if (isEmailEventsMissing(err)) {
+      return res.status(503).json({ error: 'the 20260917 migration has not been applied; nothing counted yet' })
+    }
+    console.error('[email-stats] failed:', err)
+    return res.status(500).json({ error: 'Email stats failed' })
   }
 })
 

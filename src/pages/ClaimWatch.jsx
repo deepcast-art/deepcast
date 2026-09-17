@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams, useLocation, Link, Navigate } from 'react-router-dom'
 import { api } from '../lib/api'
+import { HOW_FILMS_TRAVEL } from '../content/howFilmsTravel.js'
 import { supabase } from '../lib/supabase'
 import DeepcastLogo from '../components/DeepcastLogo'
 import { filmConditionsLine } from '../lib/screeningConditions'
@@ -635,7 +636,7 @@ export default function ClaimWatch() {
   const filmMode = Boolean(filmId)
   const posKey = filmMode ? filmPositionKey(filmId) : positionKey(slug)
   const progKey = filmMode ? filmProgressKey(filmId) : progressKey(slug)
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const location = useLocation()
   /* Arrival-from-prologue fade (owner spec 2026-07-21) — COSMETIC only.
      The in-memory router marker makes this one arrival breathe in over 1s;
@@ -730,10 +731,27 @@ export default function ClaimWatch() {
    *  every close path. */
   const [shareOpen, setShareOpen] = useState(false)
   const ctaRef = useRef(null)
+  /** The pass-it-on email's button lands here as /watch/{slug}?pass=1
+   *  (2026-09-17): the modal opens by itself ONCE, when the link payload
+   *  (and so the ticket count) is in — exactly what the rail's CTA would
+   *  open. Closing clears the param, so a reload is an ordinary visit. */
+  const passParam = searchParams.get('pass')
+  const passOpened = useRef(false)
   const closeShare = () => {
     setShareOpen(false)
+    if (passParam) {
+      const next = new URLSearchParams(searchParams)
+      next.delete('pass')
+      setSearchParams(next, { replace: true })
+    }
     setTimeout(() => ctaRef.current?.focus(), 0)
   }
+  useEffect(() => {
+    if (passParam && link && !filmMode && !passOpened.current) {
+      passOpened.current = true
+      setShareOpen(true)
+    }
+  }, [passParam, link, filmMode])
 
   /* ── Phone fullscreen-landscape playback (2026-07-19; decisions in
      src/lib/playbackFullscreen.js). Desktop/tablet: nothing here ever runs —
@@ -968,7 +986,22 @@ export default function ClaimWatch() {
     const pct = d > 0 ? (t / d) * 100 : 0
     if (pct >= 70) {
       hasMarkedWatched.current = true
-      await supabase.from('invites').update({ status: 'watched' }).eq('id', ownInviteId)
+      // The server stamps watched_at by its own clock (2026-09-17) and only
+      // moves a 'claimed' row. The old anon write survives ONLY as the
+      // fallback for a transport failure (fetch itself threw — the API
+      // unreachable); a refusal the route makes (401/403/409) is final and
+      // is never undone here (red-team, 2026-09-17).
+      try {
+        const { data: { session } = {} } = await supabase.auth.getSession()
+        await api.markWatched(ownInviteId, session?.access_token || null)
+      } catch (e) {
+        if (!(e instanceof TypeError)) {
+          console.warn('[watch] mark-watched refused:', e?.message || e)
+          return
+        }
+        console.warn('[watch] mark-watched route unreachable (falling back to the direct write):', e?.message || e)
+        await supabase.from('invites').update({ status: 'watched' }).eq('id', ownInviteId)
+      }
     }
   }
 
@@ -1288,7 +1321,7 @@ export default function ClaimWatch() {
                 </svg>
               </div>
               <p className="mx-auto mt-3.5 max-w-[22rem] font-serif-v3 italic text-[1.125rem] leading-[1.7] text-warm/80">
-                Films here spread by private invite and real humans only. No algorithms.
+                {HOW_FILMS_TRAVEL.spread.text}
               </p>
             </div>
 
@@ -1308,8 +1341,9 @@ export default function ClaimWatch() {
                 </svg>
               </div>
               <p className="mx-auto mt-3.5 max-w-[22rem] font-serif-v3 italic text-[1.125rem] leading-[1.7] text-warm/80">
-                This film won’t reach anyone new, unless{' '}
-                <span className="text-accent">you</span> pass it on.
+                {HOW_FILMS_TRAVEL.reach.before}
+                <span className="text-accent">{HOW_FILMS_TRAVEL.reach.emphasis}</span>
+                {HOW_FILMS_TRAVEL.reach.after}
               </p>
             </div>
 
@@ -1326,7 +1360,7 @@ export default function ClaimWatch() {
                 </svg>
               </div>
               <p className="mx-auto mt-3.5 max-w-[22rem] font-serif-v3 italic text-[1.125rem] leading-[1.7] text-warm/80">
-                Share intentionally. Each ticket admits one person only.
+                {HOW_FILMS_TRAVEL.share.text}
               </p>
             </div>
           </div>

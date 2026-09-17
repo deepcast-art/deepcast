@@ -14,6 +14,7 @@ import { ensureHttpsUrl } from '../lib/httpsUrl.js'
 // Canonical share quota + per-film stats — one shared computation per stat.
 import { filmTicketsRemaining } from '../lib/shares.js'
 import { computeTicketFunnel } from '../lib/ticketFunnel.js'
+import EmailStatsTable from '../components/EmailStatsTable'
 import { buildNetworkPeople } from '../lib/networkPeople.js'
 import { safeLocalStorage, safeSessionStorage } from '../lib/safeStorage.js'
 import { countTicketsGiven } from '../lib/inviteExistence.js'
@@ -36,6 +37,9 @@ export default function Dashboard() {
     : null
   const [films, setFilms] = useState([])
   const [filmStats, setFilmStats] = useState({})
+  /** Owner-only email attribution per film (null until the owner's route
+   *  answers; a non-owner never sees the table). */
+  const [emailStats, setEmailStats] = useState(null)
   const [loading, setLoading] = useState(() => !profileLoaded)
   const [inviteFilmId, setInviteFilmId] = useState(null)
   /** "See network graph" (2026-09-03): the film whose viewer constellation
@@ -418,6 +422,26 @@ export default function Dashboard() {
       }
     })()
   }, [profile?.id, profile?.role, filmInvitesRaw, filmSenderUsers])
+
+  /** Email attribution (2026-09-17): one owner-only call; anyone else gets
+   *  401/403/503 and no table. */
+  useEffect(() => {
+    if (profile?.role !== 'creator') return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session?.access_token) return
+        const result = await api.adminEmailStats(session.access_token)
+        if (!cancelled && result?.films) setEmailStats(result.films)
+      } catch {
+        /* not the owner account, or the table is not migrated — no table shown */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [profile?.id, profile?.role])
 
   /** One server call per committed popover action; fresh per-film state comes
    *  back and updates both the cell and the Tickets-left column live. Returns
@@ -891,6 +915,8 @@ export default function Dashboard() {
                       </div>
                     ))}
                   </div>
+
+                  {emailStats && <EmailStatsTable stats={emailStats[film.id] || null} />}
 
                   {isTeamMember && filmInvitesRaw[film.id]?.length > 0 && (() => {
                     const gl = buildGraphLayout({
